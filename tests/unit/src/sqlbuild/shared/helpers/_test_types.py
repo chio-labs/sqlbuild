@@ -60,6 +60,13 @@ class SummaryFooterTestCase:
 
 
 @dataclass(frozen=True)
+class PrephaseCauseAnnotationTestCase:
+    description: str
+    caused_by_names: tuple[str, ...]
+    expected_annotation: str
+
+
+@dataclass(frozen=True)
 class RelationLookupTestCase:
     description: str
     warehouse_relations: tuple[tuple[str | None, str, bool | None], ...]

@@ -83,10 +83,10 @@ def run_dbt_defer_clone_prephase(
     current_manifest: DbtManifestIndex,
     unique_ids: tuple[str, ...],
     on_progress: Callable[[str], None] | None,
-) -> None:
+) -> CloneExecutionResult | None:
     if not unique_ids:
         _report_progress(on_progress, "defer-clone enabled but no clonable dbt boundary resolved.")
-        return
+        return None
     production_ref: DbtProductionRefConfig = discovered_inputs.project_config.dbt.production_ref
     if production_ref.git_ref is None or production_ref.generate_schema_name_override is None:
         raise DbtInteropConfigError(
@@ -149,6 +149,7 @@ def run_dbt_defer_clone_prephase(
         on_progress,
         f"Cloned deferred dbt boundary relations. ({time.monotonic() - clone_start:.2f}s)",
     )
+    return result
 
 
 def resolve_defer_clone_unique_ids(

@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -46,6 +46,7 @@ def append_eligible_standard_source_freshness_records(
 
     connection: Any = adapter.connect(connection_config)
     try:
+        records_by_location: dict[tuple[str | None, str], list[SourceFreshnessRecord]] = {}
         identity: SourceFreshnessIdentity
         affected_model_names: frozenset[str]
         for (
@@ -62,41 +63,57 @@ def append_eligible_standard_source_freshness_records(
             record: SourceFreshnessRecord | None = observed_records_by_identity.get(identity)
             if record is None:
                 continue
-            _append_record_to_affected_model_schemas(
-                adapter=adapter,
-                connection=connection,
+            _collect_record_for_affected_model_schemas(
+                records_by_location=records_by_location,
                 record=replace(record, run_id=run_id),
                 affected_model_names=affected_selected_model_names,
                 entries_by_name=entries_by_name,
             )
+        _append_records_by_location(
+            adapter=adapter,
+            connection=connection,
+            records_by_location=records_by_location,
+        )
     finally:
         adapter.close(connection)
 
 
-def _append_record_to_affected_model_schemas(
+def _collect_record_for_affected_model_schemas(
     *,
-    adapter: BaseAdapter,
-    connection: Any,
+    records_by_location: dict[tuple[str | None, str], list[SourceFreshnessRecord]],
     record: SourceFreshnessRecord,
     affected_model_names: frozenset[str],
     entries_by_name: dict[str, ModelPlanEntry],
 ) -> None:
-    written_locations: set[tuple[str | None, str]] = set()
+    recorded_locations: set[tuple[str | None, str]] = set()
     model_name: str
     for model_name in sorted(affected_model_names):
         entry: ModelPlanEntry | None = entries_by_name.get(model_name)
         if entry is None or entry.destination.schema is None:
             continue
         location: tuple[str | None, str] = (entry.destination.database, entry.destination.schema)
-        if location in written_locations:
+        if location in recorded_locations:
             continue
-        written_locations.add(location)
-        write_source_freshness_record(
+        recorded_locations.add(location)
+        records_by_location.setdefault(location, []).append(record)
+
+
+def _append_records_by_location(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    records_by_location: dict[tuple[str | None, str], list[SourceFreshnessRecord]],
+) -> None:
+    location: tuple[str | None, str]
+    records: list[SourceFreshnessRecord]
+    for location, records in records_by_location.items():
+        database, schema = location
+        write_source_freshness_records(
             connection=connection,
             execute=adapter.execute,
-            database=entry.destination.database,
-            schema=entry.destination.schema,
-            record=record,
+            database=database,
+            schema=schema,
+            records=tuple(records),
             render_qualified_name=adapter.render_qualified_name,
             render_framework_type=adapter.render_framework_type,
             render_create_index_sqls=adapter.render_create_source_freshness_index_sqls,

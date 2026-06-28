@@ -593,6 +593,8 @@ def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is
             expected_stdout_fragments=(
                 "Compiling dbt production ref git ref 'prod'",
                 "Cloning deferred dbt boundary relations",
+                "Prephase  dbt defer clone",
+                "[for downstream_orders]",
                 "Skipping dbt: no dbt work selected.",
                 "SQLBuild execution",
                 "downstream_orders",
@@ -665,6 +667,10 @@ def test_given_sqlbuild_downstream_when_dbt_building_with_defer_clone_then_clone
             expected_stdout_fragments=(
                 "Compiling dbt production ref git ref 'prod'",
                 "Cloning deferred dbt boundary relations",
+                "Prephase  dbt defer clone",
+                "[for dbt_bias]",
+                "Prephase  dbt defer clone views",
+                "dbt_order_summary",
                 "dbt execution",
                 "dbt_bias",
                 "SQLBuild (0 selected)",

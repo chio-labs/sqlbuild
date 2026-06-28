@@ -74,6 +74,25 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
+        description="reports singular source freshness writer usage",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/load.py": dedent(
+                """
+                from sqlbuild.compiler.source_freshness.main.write import (
+                    write_source_freshness_record,
+                )
+
+
+                def load_example() -> None:
+                    write_source_freshness_record()
+                """
+            ).strip()
+            + "\n"
+        },
+        expected_violation_codes=("SC057", "SC057"),
+    ),
+    CheckPathsTestCase(
         description="reports internal pure re-export module",
         repo_files=compliant_repo_files()
         | {

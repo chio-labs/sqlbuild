@@ -9,7 +9,7 @@ from textwrap import dedent
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
 
@@ -143,22 +143,24 @@ def create_direct_state_history(*, db_path: Path) -> None:
                 render_qualified_name=adapter.render_qualified_name,
                 render_framework_type=adapter.render_framework_type,
             )
-            write_source_freshness_record(
+            write_source_freshness_records(
                 connection=connection,
                 execute=lambda active_connection, sql: active_connection.execute(sql),
                 database=None,
                 schema="main",
-                record=SourceFreshnessRecord(
-                    source_name="raw.janitor_state_probe",
-                    target_database=None,
-                    target_schema=None,
-                    target_name=None,
-                    run_id=run_id,
-                    strategy="adapter_metadata",
-                    value_kind="timestamp",
-                    data_version=f"2026-01-15T{observed_hour:02d}:00:00",
-                    data_version_hash=f"source_{run_id}",
-                    observed_at=datetime(2026, 1, 15, observed_hour, 5, 0),
+                records=(
+                    SourceFreshnessRecord(
+                        source_name="raw.janitor_state_probe",
+                        target_database=None,
+                        target_schema=None,
+                        target_name=None,
+                        run_id=run_id,
+                        strategy="adapter_metadata",
+                        value_kind="timestamp",
+                        data_version=f"2026-01-15T{observed_hour:02d}:00:00",
+                        data_version_hash=f"source_{run_id}",
+                        observed_at=datetime(2026, 1, 15, observed_hour, 5, 0),
+                    ),
                 ),
                 render_qualified_name=adapter.render_qualified_name,
                 render_framework_type=adapter.render_framework_type,

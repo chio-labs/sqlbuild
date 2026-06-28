@@ -10,7 +10,7 @@ from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -35,17 +35,19 @@ SOURCE_FRESHNESS_ROUND_TRIP_TEST_CASES: list[SourceFreshnessRoundTripTestCase] =
         description="round trips null data version",
         database=None,
         schema="test_schema",
-        record=SourceFreshnessRecord(
-            source_name="raw.unknown_orders",
-            target_database=None,
-            target_schema="raw",
-            target_name="unknown_orders",
-            run_id="run_001",
-            strategy="unknown",
-            value_kind="unknown",
-            data_version=None,
-            data_version_hash="unknown_hash",
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+        records=(
+            SourceFreshnessRecord(
+                source_name="raw.unknown_orders",
+                target_database=None,
+                target_schema="raw",
+                target_name="unknown_orders",
+                run_id="run_001",
+                strategy="unknown",
+                value_kind="unknown",
+                data_version=None,
+                data_version_hash="unknown_hash",
+                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            ),
         ),
         expected_data_version=None,
         expected_data_version_hash="unknown_hash",
@@ -54,17 +56,19 @@ SOURCE_FRESHNESS_ROUND_TRIP_TEST_CASES: list[SourceFreshnessRoundTripTestCase] =
         description="round trips quoted source freshness values",
         database=None,
         schema="test_schema",
-        record=SourceFreshnessRecord(
-            source_name="raw.o'rders",
-            target_database=None,
-            target_schema="r'aw",
-            target_name="o'rders",
-            run_id="run_'001",
-            strategy="adapter_'metadata",
-            value_kind="time'stamp",
-            data_version="2026-01-15T12:00:00's",
-            data_version_hash="hash_'orders",
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+        records=(
+            SourceFreshnessRecord(
+                source_name="raw.o'rders",
+                target_database=None,
+                target_schema="r'aw",
+                target_name="o'rders",
+                run_id="run_'001",
+                strategy="adapter_'metadata",
+                value_kind="time'stamp",
+                data_version="2026-01-15T12:00:00's",
+                data_version_hash="hash_'orders",
+                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            ),
         ),
         expected_data_version="2026-01-15T12:00:00's",
         expected_data_version_hash="hash_'orders",
@@ -290,17 +294,15 @@ def test_given_source_freshness_records_when_writing_and_reading_then_returns_ex
     connection: Any,
     execute: Any,
 ) -> None:
-    record: SourceFreshnessRecord
-    for record in test_case.records:
-        write_source_freshness_record(
-            connection=connection,
-            execute=execute,
-            database=test_case.database,
-            schema=test_case.schema,
-            record=record,
-            render_qualified_name=RENDER_QUALIFIED_NAME,
-            render_framework_type=RENDER_FRAMEWORK_TYPE,
-        )
+    write_source_freshness_records(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+        records=test_case.records,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
+    )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
@@ -369,17 +371,19 @@ def test_given_no_table_when_reading_source_freshness_then_returns_empty_set(
             description="write creates source freshness table if it does not exist",
             database=None,
             schema="test_schema",
-            record=SourceFreshnessRecord(
-                source_name="raw.orders",
-                target_database=None,
-                target_schema="raw",
-                target_name="orders",
-                run_id="run_001",
-                strategy="adapter_metadata",
-                value_kind="timestamp",
-                data_version="2026-01-15T12:00:00",
-                data_version_hash="hash_orders",
-                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            records=(
+                SourceFreshnessRecord(
+                    source_name="raw.orders",
+                    target_database=None,
+                    target_schema="raw",
+                    target_name="orders",
+                    run_id="run_001",
+                    strategy="adapter_metadata",
+                    value_kind="timestamp",
+                    data_version="2026-01-15T12:00:00",
+                    data_version_hash="hash_orders",
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                ),
             ),
             expected_table_exists=True,
         )
@@ -391,12 +395,12 @@ def test_given_no_table_when_writing_source_freshness_then_creates_table(
     connection: Any,
     execute: Any,
 ) -> None:
-    write_source_freshness_record(
+    write_source_freshness_records(
         connection=connection,
         execute=execute,
         database=test_case.database,
         schema=test_case.schema,
-        record=test_case.record,
+        records=test_case.records,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
     )
@@ -426,17 +430,15 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
     connection: Any,
     execute: Any,
 ) -> None:
-    record: SourceFreshnessRecord
-    for record in test_case.records:
-        write_source_freshness_record(
-            connection=connection,
-            execute=execute,
-            database=test_case.database,
-            schema=test_case.schema,
-            record=record,
-            render_qualified_name=RENDER_QUALIFIED_NAME,
-            render_framework_type=RENDER_FRAMEWORK_TYPE,
-        )
+    write_source_freshness_records(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+        records=test_case.records,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
+    )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
@@ -562,17 +564,15 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
     connection: Any,
     execute: Any,
 ) -> None:
-    record: SourceFreshnessRecord
-    for record in test_case.records:
-        write_source_freshness_record(
-            connection=connection,
-            execute=execute,
-            database=test_case.database,
-            schema=test_case.schema,
-            record=record,
-            render_qualified_name=RENDER_QUALIFIED_NAME,
-            render_framework_type=RENDER_FRAMEWORK_TYPE,
-        )
+    write_source_freshness_records(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+        records=test_case.records,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
+    )
 
     execute(
         connection,
@@ -637,17 +637,15 @@ def test_given_same_source_name_with_different_targets_when_reading_then_keeps_i
     connection: Any,
     execute: Any,
 ) -> None:
-    record: SourceFreshnessRecord
-    for record in test_case.records:
-        write_source_freshness_record(
-            connection=connection,
-            execute=execute,
-            database=test_case.database,
-            schema=test_case.schema,
-            record=record,
-            render_qualified_name=RENDER_QUALIFIED_NAME,
-            render_framework_type=RENDER_FRAMEWORK_TYPE,
-        )
+    write_source_freshness_records(
+        connection=connection,
+        execute=execute,
+        database=test_case.database,
+        schema=test_case.schema,
+        records=test_case.records,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
+    )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
         connection=connection,
@@ -681,12 +679,12 @@ def test_given_source_freshness_edge_values_when_writing_and_reading_then_round_
     connection: Any,
     execute: Any,
 ) -> None:
-    write_source_freshness_record(
+    write_source_freshness_records(
         connection=connection,
         execute=execute,
         database=test_case.database,
         schema=test_case.schema,
-        record=test_case.record,
+        records=test_case.records,
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_framework_type=RENDER_FRAMEWORK_TYPE,
     )
@@ -705,7 +703,7 @@ def test_given_source_freshness_edge_values_when_writing_and_reading_then_round_
         render_qualified_name=RENDER_QUALIFIED_NAME,
         render_read_latest_sql=RENDER_READ_LATEST_SQL,
     )
-    latest: SourceFreshnessRecord = result.records[test_case.record.identity]
+    latest: SourceFreshnessRecord = result.records[test_case.records[0].identity]
 
     assert latest.data_version == test_case.expected_data_version
     assert latest.data_version_hash == test_case.expected_data_version_hash
