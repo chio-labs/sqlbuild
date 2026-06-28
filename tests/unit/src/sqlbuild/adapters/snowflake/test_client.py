@@ -191,10 +191,45 @@ def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bi
     )
 
     assert cursor.executed_params == test_case.expected_params
+    assert cursor.executed_sql is not None
+    assert "UPPER(table_" not in cursor.executed_sql
     assert len(relations) == 1
     assert relations[0].schema == "staging"
     assert relations[0].name == "race__stg_horse"
     assert relations[0].is_transient is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeInformationSchemaFilterTestCase(
+            description="uppercases relation existence filter bind values",
+            database="racing",
+            schemas=("staging",),
+            names=("race__stg_horse",),
+            expected_params=("RACE__STG_HORSE", "STAGING", "RACING"),
+        )
+    ],
+    ids=["uppercases relation existence filter bind values"],
+)
+def test_given_lowercase_schema_when_checking_relation_exists_then_uses_sargable_filters(
+    test_case: SnowflakeInformationSchemaFilterTestCase,
+) -> None:
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(row=(1,))
+    connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    exists: bool = adapter.relation_exists(
+        cast(Any, connection),
+        database=test_case.database,
+        schema=test_case.schemas[0],
+        name=test_case.names[0],
+    )
+
+    assert exists is True
+    assert cursor.executed_sql is not None
+    assert "UPPER(table_" not in cursor.executed_sql
+    assert cursor.executed_params == test_case.expected_params
 
 
 @pytest.mark.parametrize(
@@ -227,6 +262,8 @@ def test_given_lowercase_schema_when_getting_all_columns_then_uppercases_filter_
     )
 
     assert cursor.executed_params == test_case.expected_params
+    assert cursor.executed_sql is not None
+    assert "UPPER(table_" not in cursor.executed_sql
     assert tuple(columns) == ("race__stg_horse",)
     assert columns["race__stg_horse"][0].name == "id"
 
@@ -504,6 +541,7 @@ def test_given_physical_table_when_getting_freshness_metadata_then_returns_last_
     assert metadata.value_kind == test_case.expected_value_kind
     assert metadata.observed_at == test_case.expected_data_version
     assert cursor.executed_sql is not None
+    assert "UPPER(table_" not in cursor.executed_sql
     assert "information_schema.tables" in cursor.executed_sql
     assert "last_altered" in cursor.executed_sql
     assert cursor.executed_params == ("ORDERS", "RAW", "ANALYTICS")
@@ -521,7 +559,9 @@ def test_given_physical_table_when_getting_freshness_metadata_then_returns_last_
             ),
             expected_query_fragments=(
                 "SELECT table_catalog, table_schema, table_name, table_type, last_altered",
-                " OR ",
+                "table_catalog = %s",
+                "table_schema = %s",
+                "table_name IN (%s, %s)",
             ),
         )
     ],
@@ -555,7 +595,9 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_batches_last
     assert cursor.executed_sql is not None
     for fragment in test_case.expected_query_fragments:
         assert fragment in cursor.executed_sql
-    assert cursor.executed_params == ("ORDERS", "RAW", "ANALYTICS", "CUSTOMERS", "RAW", "ANALYTICS")
+    assert "UPPER(table_" not in cursor.executed_sql
+    assert " OR " not in cursor.executed_sql
+    assert cursor.executed_params == ("ANALYTICS", "RAW", "ORDERS", "CUSTOMERS")
     assert cursor.closed is True
 
 

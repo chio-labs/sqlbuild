@@ -300,6 +300,13 @@ class DbtModelSourceBlockingTestCase:
 
 
 @dataclass(frozen=True)
+class DbtSourceFreshnessScopeTestCase:
+    description: str
+    candidate_unique_ids: tuple[str, ...]
+    expected_freshness_request_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtExecutionArgvPruningTestCase:
     description: str
     expected_argv: tuple[str, ...] | None

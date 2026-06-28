@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, RelationInfo, RowDiffResult
+from sqlbuild.adapter.shared.models import (
+    ColumnInfo,
+    QueryResult,
+    RelationInfo,
+    RowDiffResult,
+    TableFreshnessMetadata,
+    TableFreshnessRequest,
+)
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.cli.commands.main.helpers.diff.output import has_diff_failures
 from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
@@ -1548,6 +1555,27 @@ class CountingModelPlanningAdapter(DuckDbAdapter):
             tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
         ] = []
         self.relation_exists_calls: list[tuple[str | None, str | None, str]] = []
+        self.table_freshness_requests: list[TableFreshnessRequest] = []
+
+    def supports_table_freshness_metadata(self) -> bool:
+        return True
+
+    def get_tables_freshness_metadata(
+        self,
+        connection: Any,
+        *,
+        requests: tuple[TableFreshnessRequest, ...],
+    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
+        del connection
+        self.table_freshness_requests.extend(requests)
+        return {
+            request: TableFreshnessMetadata(
+                data_version=datetime(2026, 1, 1),
+                value_kind="timestamp",
+                observed_at=datetime(2026, 1, 1),
+            )
+            for request in requests
+        }
 
     def list_relations(
         self,
