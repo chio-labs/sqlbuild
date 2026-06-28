@@ -50,6 +50,7 @@ def run_dbt_clone_from_project(
     project_dir: Path,
     args: tuple[str, ...],
     on_progress: Callable[[str], None] | None = None,
+    on_clone_start: Callable[[str, str, int], None] | None = None,
     on_item: Callable[[int, int, CloneItemResult], None] | None = None,
 ) -> DbtCloneRun:
     """Compile current and reuse manifests and clone selected dbt models."""
@@ -131,8 +132,26 @@ def run_dbt_clone_from_project(
         discovered_inputs=discovered_inputs,
     )
     _report_progress(on_progress, f"Connecting to {adapter_name}...")
+    connect_start: float = time.monotonic()
     connection: Any = adapter.connect(connection_config)
+    _report_progress(
+        on_progress, f"Connected to {adapter_name}. ({time.monotonic() - connect_start:.2f}s)"
+    )
+    origin_label: str = production_ref.git_ref
+    destination_label: str = (
+        dbt_options.target
+        or discovered_inputs.local_config.target
+        or discovered_inputs.project_config.default_target
+        or "current"
+    )
     try:
+        _report_progress(on_progress, "Applying clone plan...")
+        clone_start: float = time.monotonic()
+
+        def _on_start(total: int) -> None:
+            if on_clone_start is not None:
+                on_clone_start(origin_label, destination_label, total)
+
         result: CloneExecutionResult = execute_dbt_clone(
             adapter=adapter,
             connection=connection,
@@ -140,19 +159,18 @@ def run_dbt_clone_from_project(
             reuse_manifest=reuse_manifest,
             selected_nodes=selected_nodes,
             hard_copy=options.hard_copy,
+            on_start=_on_start,
             on_item=on_item,
+        )
+        _report_progress(
+            on_progress, f"Applied clone plan. ({time.monotonic() - clone_start:.2f}s)"
         )
     finally:
         adapter.close(connection)
     return DbtCloneRun(
         result=result,
-        origin_label=production_ref.git_ref,
-        destination_label=(
-            dbt_options.target
-            or discovered_inputs.local_config.target
-            or discovered_inputs.project_config.default_target
-            or "current"
-        ),
+        origin_label=origin_label,
+        destination_label=destination_label,
     )
 
 
