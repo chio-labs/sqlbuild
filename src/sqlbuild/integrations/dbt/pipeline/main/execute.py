@@ -74,8 +74,6 @@ from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
 from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone_progress import (
     run_dbt_defer_clone_view_chain_prephase,
     selected_dbt_defer_clone_cause_names,
-    write_dbt_defer_clone_prephase_header,
-    write_dbt_defer_clone_prephase_row,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     append_manifest_seed_warnings,
@@ -339,27 +337,6 @@ def execute_dbt_interop_from_project(
             selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
             selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
         )
-        write_dbt_defer_clone_prephase_header(stream=output_stream, use_color=use_color)
-        run_dbt_defer_clone_prephase(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            dbt_options=dbt_options,
-            runner=runner,
-            adapter=adapter,
-            project=project,
-            connection_config=connection_config,
-            current_manifest=manifest,
-            unique_ids=tuple(sorted(defer_clone_unique_ids)),
-            on_progress=on_progress,
-            on_item=lambda index, total, item: write_dbt_defer_clone_prephase_row(
-                stream=output_stream,
-                item=item,
-                index=index,
-                total=total,
-                caused_by_names=dbt_defer_clone_cause_names,
-                use_color=use_color,
-            ),
-        )
     defer_clone_view_chain_terms: tuple[str, ...] = (
         resolve_defer_clone_view_chain_terms(
             graph=graph,
@@ -390,19 +367,6 @@ def execute_dbt_interop_from_project(
         replay_on_change=discovered_inputs.project_config.dbt.replay_on_change,
         defer_clone_unique_ids=defer_clone_unique_ids,
     )
-    if defer_clone_view_chain_terms:
-        view_chain_execution: DbtCommandExecutionResult = run_dbt_defer_clone_view_chain_prephase(
-            dbt_options=dbt_options,
-            dbt_executable=plan.dbt_command_argv[0],
-            view_chain_terms=defer_clone_view_chain_terms,
-            view_chain_unique_ids=defer_clone_view_chain_unique_ids,
-            caused_by_names=dbt_defer_clone_cause_names,
-            output_stream=output_stream,
-            use_color=use_color,
-            on_progress=on_progress,
-        )
-        if view_chain_execution.returncode != 0:
-            return view_chain_execution.returncode
     missing_dbt_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]] = {}
     if merged_dbt_argv is None and plan.sqlbuild_skip_reason is None:
         missing_dbt_relation_blocked_models = find_and_report_missing_dbt_relation_blocks(
@@ -417,6 +381,7 @@ def execute_dbt_interop_from_project(
                 (
                     *plan.dbt_selected_unique_ids,
                     *plan.selection.dbt_required_unique_ids,
+                    *defer_clone_unique_ids,
                     *defer_clone_view_chain_unique_ids,
                 )
             ),
@@ -475,6 +440,39 @@ def execute_dbt_interop_from_project(
             display_options=DisplayOptions(max_entries_per_section=None if verbose else 10),
         )
         output_stream.write(rendered_plan + "\n\n")
+        output_stream.flush()
+
+    if effective_defer_clone_from:
+        run_dbt_defer_clone_prephase(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            dbt_options=dbt_options,
+            runner=runner,
+            adapter=adapter,
+            project=project,
+            connection_config=connection_config,
+            current_manifest=manifest,
+            unique_ids=tuple(sorted(defer_clone_unique_ids)),
+            on_progress=on_progress,
+            output_stream=output_stream,
+            use_color=use_color,
+            caused_by_names=dbt_defer_clone_cause_names,
+        )
+    if defer_clone_view_chain_terms:
+        view_chain_execution: DbtCommandExecutionResult = run_dbt_defer_clone_view_chain_prephase(
+            dbt_options=dbt_options,
+            dbt_executable=plan.dbt_command_argv[0],
+            view_chain_terms=defer_clone_view_chain_terms,
+            view_chain_unique_ids=defer_clone_view_chain_unique_ids,
+            caused_by_names=dbt_defer_clone_cause_names,
+            output_stream=output_stream,
+            use_color=use_color,
+            on_progress=on_progress,
+        )
+        if view_chain_execution.returncode != 0:
+            return view_chain_execution.returncode
+    if effective_defer_clone_from or defer_clone_view_chain_terms:
+        output_stream.write("\n")
         output_stream.flush()
 
     buffered_dbt_results: list[DbtNodeExecutionResult] = []
@@ -614,6 +612,7 @@ def execute_dbt_interop_from_project(
                 (
                     *plan.dbt_selected_unique_ids,
                     *plan.selection.dbt_required_unique_ids,
+                    *defer_clone_unique_ids,
                     *defer_clone_view_chain_unique_ids,
                 )
             ),
