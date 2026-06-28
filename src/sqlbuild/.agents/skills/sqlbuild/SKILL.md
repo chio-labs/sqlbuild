@@ -16,7 +16,6 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `feature-comparison`
 - `concepts/dbt-compatibility/overview`
 - `concepts/dbt-compatibility/selection`
-- `concepts/dbt-compatibility/reuse-from`
 - `concepts/dbt-compatibility/change-aware-builds`
 - `concepts/dbt-compatibility/column-lineage`
 - `concepts/dbt-compatibility/testing`
@@ -108,9 +107,80 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 
 Source: `index.mdx`
 
-A change-aware SQL framework: only rebuild what changed, with all state in the warehouse.
+Verify early, test properly, and deploy reversibly. SQL pipelines with the rigor of real software - on your existing dbt project, free and open source.
 
-Every build fingerprints models, seeds, functions, and Python nodes, tracks source freshness, and skips anything that hasn't changed, including audits that already passed for the same version. The same change-aware planning extends to an existing [dbt project](/concepts/dbt-compatibility/overview): SQLBuild prunes unchanged dbt models from the dbt run and can reuse already-built tables from production. It also adds ingestion, Python nodes, and opt-in virtual environments for more advanced use cases.
+**Valid isn't the same as correct.** Your SQL compiles, runs, and returns rows - none of that means the number is right, and a silently-wrong number a stakeholder already trusted is the bug that actually hurts.
+
+SQLBuild brings software-engineering rigor to SQL pipelines: **verify early, test properly, deploy reversibly.** Catch errors before the warehouse runs them, test your logic locally, and only build what actually changed. It works on a standalone SQL project or [points at your existing dbt project](/concepts/dbt-compatibility/overview) with no migration - free and open source.
+
+### Test properly
+
+Most data testing checks for nulls and uniqueness. That tells you a column isn't empty, not that your logic is right. SQLBuild tests the logic.
+
+- **Chained unit tests.** Mock your sources, assert on the model you care about, and SQLBuild resolves every intermediate model from its real SQL. One test file can be a full integration test across your pipeline.
+- **E2E scenario tests with local replay.** Build the real model graph against coherent fixtures in isolated relations, capture the result as JSONL, and replay it locally through DuckDB. CI runs full end-to-end tests with zero warehouse credentials or compute.
+- **Macro-powered mocks.** Tests are SQL, so they support macro calls - write reusable mock generators instead of copy-pasting fixtures.
+
+```sql
+-- Mock two sources, assert on the final mart.
+-- stg_orders and stg_payments resolve automatically from their real SQL.
+TEST();
+
+WITH
+__source__raw__orders AS (
+  @mock_orders()
+),
+__source__raw__payments AS (
+  SELECT
+    1 AS payment_id,
+    1 AS order_id,
+    1500 AS amount_cents,
+    'credit_card' AS method
+),
+__expected__fact_orders AS (
+  SELECT
+    1 AS order_id,
+    100 AS customer_id,
+    1500 AS total_cents,
+    'credit_card' AS payment_method
+)
+SELECT 1
+```
+
+See [Testing](/concepts/scenarios) for unit tests, scenarios, and local replay.
+
+### Verify early
+
+Before any model runs, SQLBuild does static analysis of your project - offline, no warehouse connection needed.
+
+- **Catch errors at compile.** SQL syntax, type inference, contract checks, and column lineage all run before execution. A bad reference or a type mismatch fails at compile, with an error that points at the line - not halfway through a warehouse run.
+- **Fast, because it's Rust where it counts.** Static analysis runs on [Polyglot](https://github.com/tobilg/polyglot), a Rust SQL engine (MIT, 32+ dialects), so compile stays quick even on large projects.
+- **Open, not paywalled.** The static analysis is part of the Apache-2.0 core - no proprietary engine, no separate login, and no paid tier gating the smart checks.
+
+### Only build what changed
+
+Verification tells you the work is right; change detection makes sure you only pay for the work you need.
+
+Every model, seed, function, and Python node has a versioned identity. SQLBuild compares it against state stored in your own warehouse and skips anything unchanged.
+
+- **Models and functions:** fingerprinted by query hash, config, and upstream function hashes. Unchanged models are skipped entirely.
+- **Seeds:** content and load-affecting config are hashed. Unchanged seeds are not reloaded.
+- **Audits:** audits that already passed for the same model version are not re-run.
+- **Source freshness:** external source data versions are tracked automatically. Models downstream of unchanged sources are skipped, with lag tolerance to avoid jitter.
+- **Cascade propagation:** when a model does change, the signal propagates downstream, with configurable replay windows (`replay_on_change`).
+- **Python nodes:** loaders, tasks, assets, checks, and hooks are fingerprinted by source and dependency hashes; skip/run is user-controlled via `ctx.skip()`.
+
+State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) - no external state database, no manifest files, no state machine that can corrupt. Point SQLBuild at an [existing dbt project](/concepts/dbt-compatibility/overview) and the same change detection prunes unchanged dbt models from the run - nothing metered, no account, nothing to log into.
+
+### Deploy reversibly (opt-in)
+
+By default, SQLBuild runs in standard mode with state as append-only rows in your warehouse. When you want more, [virtual environments](/concepts/virtual-environments) add a reversibility layer on top:
+
+- **Instant branching, promotion, and rollback** as low-copy pointer operations.
+- **Partial promotion.** Promote the models that are ready without re-running everything downstream of them - you don't have to rebuild the whole closure to ship one fix.
+- **Checkpoints and reconciliation** so a bad change is something you undo, not an incident.
+
+Virtual environments are opt-in, not a tax you pay upfront - standard mode stays the default, so the floor stays low and you reach for them only when a workflow needs them.
 
 ### Supported adapters
 
@@ -118,32 +188,7 @@ SQLBuild works with **DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, Postg
 
 DuckDB runs entirely locally, so you can try SQLBuild and run full E2E tests without any warehouse credentials. Head to the [Quickstart](/quickstart) to get a project running in minutes, or see [Adapters](/concepts/adapters) for connection setup.
 
-### How it works
-
-1. **Define** your models as SQL files with `MODEL()` headers that declare configuration, schema, and audits inline
-2. **Compile** to resolve references, validate SQL, infer column types, check contracts, and compute column lineage - all offline
-3. **Plan** what needs to change by comparing fingerprints, source freshness, seed content, and Python node identities against the warehouse state. Unchanged models, seeds, audits, and Python nodes are skipped. Production relations can optionally be reused when version identities match.
-4. **Build** by executing the plan: materializing only what changed, validating data before promotion, and ensuring bad data never reaches production
-5. **Test** with chained unit tests, E2E scenario tests, and local replay through DuckDB - no warehouse required
-
-### Why SQLBuild?
-
-#### Change-aware builds
-
-Every node in the graph has a versioned identity. SQLBuild compares identities against warehouse state on every build and only runs what has actually changed.
-
-- **Models and functions:** Fingerprinted by query hash, config, and upstream function hashes. Unchanged models are skipped entirely.
-- **Seeds:** Content and load-affecting config are hashed. Unchanged seeds are not reloaded.
-- **Python nodes:** Loaders, tasks, assets, checks, and hooks are fingerprinted by source code hash and dependency hashes (scoped to the git root). The plan shows source and dependency diffs when a node's identity changes. Skip/run decisions are user-controlled via `ctx.skip()`, since only the node's own logic knows whether its external inputs have changed.
-- **Audits:** Audits that already passed for the same model version are not re-run. A version identity change triggers re-validation.
-- **Source freshness:** External source data versions are tracked automatically (via adapter metadata, column queries, or custom SQL). Models downstream of unchanged sources are skipped. Lag tolerance prevents jitter from triggering unnecessary rebuilds.
-- **Cascade propagation:** When a model does change, the signal propagates downstream through the DAG. Upstream changes cascade with configurable replay windows (`replay_on_change`).
-- **Reuse from production:** Dev targets can opt into `reuse_from` to clone or copy relations from another target (e.g. prod) when version identities match, instead of rebuilding from scratch.
-
-#### Warehouse-native state
-
-- **Standard mode:** all state lives in the warehouse as append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) in the same schemas as your data. No external state database, no manifest files, no state machine that can corrupt. The planner reads the latest row per identity, compares it against the compiled project, and writes new rows after successful builds. Old rows are retained as history and can be pruned by the janitor.
-- **Virtual environments:** the same identity and freshness data is stored in the VDE state backend (PostgreSQL or DuckDB), scoped per environment.
+### More in SQLBuild
 
 #### Familiar SQL models
 
@@ -188,36 +233,13 @@ def grant_target(target):
 - **Microbatch mode:** Split large replay windows into configurable batches, each with its own audit cycle. Or process the full range in one pass, the choice is per-model.
 - **Replay on change:** When a model's version identity changes, `replay_on_change` controls how much data to reprocess: `forward` (default, just run the next delta), `bounded-14d` (replay a window), or `full` (rebuild the table).
 
-#### Python you can read, Rust where it counts
+#### Python you can read and extend
 
-- **The framework is Python.** Adapters, macros, hooks, providers, custom materializations, and Python nodes are all plain Python you can read and extend.
-- **SQL analysis is Rust.** For SQL parsing, validation, column inference, lineage, and transpilation, SQLBuild uses [Polyglot](https://github.com/tobilg/polyglot), a Rust reimplementation of SQLGlot's SQL analysis capabilities (MIT, 32+ dialects). This keeps compile fast even on large projects while the code you actually work with stays Python.
+- **The framework is Python.** Adapters, macros, hooks, providers, custom materializations, and Python nodes are all plain Python you can read and extend. (The SQL analysis underneath runs on Rust via Polyglot - see [Verify early](#verify-early) - so the code you work with stays Python while compile stays fast.)
 
-#### SQL unit tests that scale
+#### Testing in depth
 
-- **Chain across models:** Mock your sources, assert on the model you care about, and SQLBuild automatically resolves every intermediate model using its real SQL. One test file can be a full integration test across your entire pipeline.
-- **Macro-powered mocks:** Because unit tests are written in SQL, they support macro calls, so you can write reusable mock generators and fixture builders instead of copy-pasting mock inputs across test files.
-
-```sql
--- Mock two sources, assert on the final mart.
--- stg_orders and stg_payments resolve automatically from their real SQL.
-TEST();
-
-WITH
-__source__raw__orders AS (
-  @mock_orders()
-),
-__source__raw__payments AS (
-  SELECT 1 AS payment_id, 1 AS order_id, 1500 AS amount_cents, 'credit_card' AS method
-),
-__expected__fact_orders AS (
-  SELECT 1 AS order_id, 100 AS customer_id, 1500 AS total_cents,
-         'credit_card' AS payment_method
-)
-SELECT 1
-```
-
-#### E2E scenario tests with local replay
+Beyond the chained unit tests shown above, SQLBuild runs end-to-end scenario tests against the real model graph, with local replay and property assertions.
 
 - **Real graph execution:** Define coherent fixture inputs, and SQLBuild builds the real model graph against them in isolated warehouse relations. Test end-to-end business logic across your entire pipeline, not just one model at a time.
 - **Local replay without a warehouse:** Capture scenario fixtures as JSONL snapshots, then replay them locally through DuckDB. CI pipelines run full E2E tests with zero warehouse credentials or compute cost.
@@ -234,10 +256,16 @@ __ref__stg_orders AS (
   SELECT 1 AS order_id, 10 AS customer_id, 'completed' AS status
 ),
 __ref__stg_payments AS (
-  SELECT 1 AS payment_id, 1 AS order_id, 1700 AS amount_cents, 'success' AS payment_status
+  SELECT
+    1 AS payment_id,
+    1 AS order_id,
+    1700 AS amount_cents,
+    'success' AS payment_status
 ),
 __expected__daily_revenue AS (
-  SELECT CAST('2026-04-01' AS DATE) AS revenue_date, 1700 AS total_revenue_cents
+  SELECT
+    CAST('2026-04-01' AS DATE) AS revenue_date,
+    1700 AS total_revenue_cents
 ),
 __assert__all_orders_have_payments AS (
   SELECT * FROM __ref("fact_orders") WHERE payment_amount_cents IS NULL
@@ -274,10 +302,6 @@ SQL models never depend on Python nodes - the only path from Python into SQL is 
 - **Zero-copy cloning:** Branch targets instantly with `sqb clone` without duplicating data.
 - **Deferred references:** Compile and plan against a production target with `--defer-to` while building in dev.
 - **No manifest required:** Clone, diff, and defer work directly against live targets. No `manifest.json` generation, no artifact management, no stale state.
-
-#### Virtual environments
-
-- **Opt-in, not forced:** Virtual environments give you instant low-copy branching, promotion, and rollback - but they are an opt-in mode, not a tax you pay upfront. Standard mode stays the default, so the floor stays low and you reach for virtual environments only when a workflow actually needs them. See [Virtual Environments](/concepts/virtual-environments).
 
 #### Extensibility
 
@@ -692,12 +716,13 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 Source: `concepts/dbt-compatibility/overview.mdx`
 
-Stop rebuilding your dbt project in dev. Reuse already-built tables from production and skip unchanged models, with no SQLBuild models.
+Skip unchanged models in your existing dbt project. Change-aware dbt builds with no SQLBuild models and no migration.
 
-Point SQLBuild at your existing dbt project to stop rebuilding it from scratch in dev. No SQLBuild models, no migration, no edits to your dbt files. It adds two things on a plain dbt project:
+Point SQLBuild at your existing dbt project to stop rebuilding what hasn't changed. No SQLBuild models, no migration, no edits to your dbt files.
 
-- **Reuse from production.** Building a branch in dev usually rebuilds the whole project, even though most models are identical to production. SQLBuild compiles a production-shaped git branch, copies its already-built tables into your target, and seeds incremental models from a production baseline, so dbt only builds what your branch actually changed. See [Reuse from production](/concepts/dbt-compatibility/reuse-from).
-- **Change-aware builds.** SQLBuild fingerprints your dbt models in the warehouse and prunes the ones that have not changed, so a second build skips everything already current. See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds).
+**Change-aware builds.** SQLBuild fingerprints your dbt models in the warehouse and prunes the ones that have not changed, so a second build skips everything already current and a single edit rebuilds only that model and whatever depends on it. This works on a plain dbt project with no SQLBuild models. See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds).
+
+It also adds standalone operations that work against a production-shaped git ref: [`sqb dbt clone`](/concepts/dbt-compatibility/clone) to populate a target from production, and [`sqb dbt diff`](/concepts/dbt-compatibility/diff) to compare a build against a production baseline.
 
 SQLBuild reads your dbt manifest and drives the `dbt` CLI as a subprocess. It never edits, patches, or moves files in your dbt project, and it does not reimplement Jinja, profiles, or dbt's selection language. Your dbt project runs exactly as it does today.
 
@@ -720,6 +745,9 @@ my-workspace/
       manifest.json
   sqlbuild_project/           # created by SQLBuild
     sqlbuild_project.toml     # points at the dbt project, no models of its own
+    dbt/
+      macros/
+        generate_schema_name.sql  # schema override used by clone/diff
 ```
 
 The generated `sqlbuild_project.toml` looks like this:
@@ -735,6 +763,10 @@ profiles_dir = "/Users/you/.dbt"
 target_path = "../analytics/target"
 target = "dev"
 
+[dbt.production_ref]
+git_ref = "main"
+generate_schema_name_override = "dbt/macros/generate_schema_name.sql"
+
 [targets.dev]
 schema = "analytics"
 
@@ -745,6 +777,8 @@ target = "dev"
 ```
 
 `source = "dbt_profile"` tells SQLBuild to connect using your dbt profile, so it talks to the same warehouse dbt does.
+
+The `[dbt.production_ref]` block configures where your production-shaped relations live, and is used by [`sqb dbt clone`](/concepts/dbt-compatibility/clone) and [`sqb dbt diff`](/concepts/dbt-compatibility/diff). It is not used by ordinary `sqb dbt build`, which is change-aware off warehouse fingerprints alone. See [Configuration](#configuration) for the field reference and the schema-name override.
 
 Run `sqb dbt build --select path:models/marts` once to build your selected dbt models with state recorded, then plan again. Once everything in the selection is current, the dbt side reports nothing to do:
 
@@ -773,24 +807,49 @@ The next `sqb dbt build` skips the dbt run entirely because nothing changed. Cha
 1. SQLBuild runs `dbt compile` to produce a `manifest.json` with model metadata
 2. SQLBuild reads the manifest to understand dbt model names and their qualified warehouse tables
 3. SQLBuild resolves your `--select`/`--exclude` against dbt by running `dbt ls`, so dbt-native selectors like `state:modified` and `package:` are evaluated by dbt itself, not reimplemented
-4. SQLBuild plans which dbt models actually need to run, using warehouse-stored fingerprints and source freshness, and optionally reuses already-built relations from production
+4. SQLBuild plans which dbt models actually need to run, using warehouse-stored fingerprints and source freshness
 5. `sqb dbt plan/run/build/test` orchestrates the run: dbt builds only the models that changed, pruning everything that is current
 6. (Optional) any SQLBuild models you have added run last, against the dbt outputs
 
 Each step calls the `dbt` CLI directly: `dbt compile` for the manifest, `dbt ls` for selection, and `dbt build`/`dbt run` for execution.
 
-#### Passing dbt flags through
+#### Flags
 
-`sqb dbt` execution commands accept common flags directly, including `--select`/`--exclude` (dbt selection) and `--full-refresh`:
+`sqb dbt plan/run/build/test` declare the common flags directly. Anything declared goes **before** a `--` separator; any other raw dbt flag goes **after** it and is forwarded verbatim. A flag placed on the wrong side errors rather than silently reaching dbt.
 
 ```bash
 sqb dbt build --select path:models/marts --full-refresh
 ```
 
-To forward any other native dbt flag straight to the underlying `dbt` invocation, put it after a `--` separator:
+Declared flags are routed to the right place automatically:
+
+| Flag | Routed to | Notes |
+| ---- | --------- | ----- |
+| `--select` / `--exclude` | dbt | dbt resolves selection (see [Selection](/concepts/dbt-compatibility/selection)). |
+| `--vars` | dbt **and** SQLBuild | The same vars feed dbt's compile and SQLBuild's own variable resolution, so both sides see identical values. |
+| `--full-refresh` | dbt **and** SQLBuild | Forces a full rebuild of selected models and tells SQLBuild's planner not to skip them. |
+| `--threads` | dbt (`--threads`) and SQLBuild (`--concurrency`) | |
+| `--target` / `--project-dir` / `--profiles-dir` / `--profile` / `--target-path` | dbt | Standard dbt locators. |
+| `--force` | SQLBuild | Bypasses change detection: plans and runs every selected model even if its fingerprint is unchanged. See below. |
+
+##### `--force`
+
+By default SQLBuild skips any model whose fingerprint and relation are unchanged. `--force` overrides that for the current run: every selected model is planned and run regardless of whether it changed. It is the dbt-interop equivalent of native `sqb build --force`, and is useful when you want to rebuild despite a clean plan (for example, to re-materialize after an out-of-band warehouse change). It does not alter fingerprints permanently; the next run without `--force` is change-aware again.
+
+##### `--vars`
+
+`--vars` accepts the same JSON object dbt accepts, and SQLBuild passes it to **both** the underlying `dbt` invocation and its own variable resolution. That means a value referenced as `@@my_var` in SQLBuild model SQL (see [Interpolation](/concepts/interpolation)) and as `{{ var('my_var') }}` in a dbt model both resolve to the value you passed. CLI vars take precedence over project and local config vars. You do not need to declare vars twice.
 
 ```bash
-sqb dbt build -- --vars '{"my_var": 1}'
+sqb dbt build --select path:models/marts --vars '{"my_var": 1}'
+```
+
+##### Forwarding other dbt flags
+
+For any native dbt flag SQLBuild does not declare, put it after `--` and it is passed straight to the `dbt` invocation untouched:
+
+```bash
+sqb dbt build -- --log-level debug
 ```
 
 ### Configuration
@@ -804,9 +863,38 @@ The auto-generated project above is editable, and you can write `sqlbuild_projec
 | `target_path` | Path to dbt's `target/` directory (where `manifest.json` is written) |
 | `target` | dbt target name override (optional) |
 | `replay_on_change` | Project-wide policy for rerunning changed dbt models: `forward_only` (default) or `full` (optional). See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds#replay-on-change). |
-| `reuse_from` | Production reuse configuration (optional). See [Reuse from production](/concepts/dbt-compatibility/reuse-from). |
+| `production_ref` | Where your production-shaped relations live, used by [`sqb dbt clone`](/concepts/dbt-compatibility/clone) and [`sqb dbt diff`](/concepts/dbt-compatibility/diff). Written by auto-init. |
 
 Paths can be absolute or relative to the SQLBuild project root.
+
+#### The production ref block
+
+`sqb dbt clone` and `sqb dbt diff` need to know your production-shaped relations. They find them by compiling your dbt project at a configured git ref in an isolated checkout (your working tree is never touched) and reading the relation names from the resulting manifest. The block accepts:
+
+| Field | Description |
+|-------|-------------|
+| `git_ref` | The production-shaped git branch or tag to compile (`main` by default). |
+| `generate_schema_name_override` | Path (relative to the SQLBuild project root) to a `generate_schema_name` macro injected into the isolated compile so it resolves production schema names. Auto-init generates one at `dbt/macros/generate_schema_name.sql`. |
+
+##### The schema-name override macro
+
+SQLBuild compiles the production ref with your configured target and deliberately knows nothing about your environments. If that target resolves to your dev schemas, the manifest points at dev tables, not the production ones. The override fixes this: you provide a `generate_schema_name` macro that resolves to your production schema layout with no environment branching, and SQLBuild injects it into the isolated checkout only, never your real dbt project.
+
+Take your project's existing `generate_schema_name`, keep only what it does in production, and delete the dev/CI branching. Auto-init writes a default that works for dbt's stock unsuffixed layout:
+
+```sql
+{% macro generate_schema_name(custom_schema_name, node) -%}
+    {%- if custom_schema_name is none -%}
+        {{ target.schema }}
+    {%- else -%}
+        {{ custom_schema_name | trim }}
+    {%- endif -%}
+{%- endmacro %}
+```
+
+The macro must be named `generate_schema_name` (so it shadows your project's own) and live under `dbt/macros/` in your SQLBuild project.
+
+The override must produce production's schema names regardless of which target SQLBuild compiles with. The example above uses `target.schema` as the base, which only resolves to production when your configured target's schema is the production one. If your production base schema is a fixed value that differs from the active target, write that literal value instead of `target.schema`.
 
 ### Prerequisites
 
@@ -828,7 +916,6 @@ sqb dbt debug
 ### On this topic
 
 - [Selection](/concepts/dbt-compatibility/selection) - how `--select` and `--exclude` route work across both graphs.
-- [Reuse from production](/concepts/dbt-compatibility/reuse-from) - pull already-built tables from a production-shaped git branch instead of rebuilding.
 - [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds) - fingerprinting, cascade propagation, source freshness, and pruning unchanged dbt models.
 - [Column lineage](/concepts/dbt-compatibility/column-lineage) - trace a column through dbt and SQLBuild models, plus model-level lineage.
 - [Testing](/concepts/dbt-compatibility/testing) - unit tests against dbt models, with mocks and model chaining.
@@ -908,9 +995,8 @@ sqb dbt build --select path:marts
 
 For `sqb dbt run` and `sqb dbt build`:
 
-1. **Reuse pre-phase** (if [reuse from production](/concepts/dbt-compatibility/reuse-from) is configured) - already-built relations are pulled from the production branch before dbt runs
-2. **dbt runs** - a single `dbt run/build` command executes with the user's selectors merged with any additional dbt models required by selected SQLBuild models, pruned to only the models that [actually changed](/concepts/dbt-compatibility/change-aware-builds)
-3. **SQLBuild runs** - selected SQLBuild models execute against the now-built dbt tables
+1. **dbt runs** - a single `dbt run/build` command executes with the user's selectors merged with any additional dbt models required by selected SQLBuild models, pruned to only the models that [actually changed](/concepts/dbt-compatibility/change-aware-builds)
+2. **SQLBuild runs** - selected SQLBuild models execute against the now-built dbt tables
 
 For `sqb dbt test`:
 
@@ -919,195 +1005,6 @@ For `sqb dbt test`:
 3. **SQLBuild audit runs** - audits for selected SQLBuild models
 
 The `test_type:data` and `test_type:unit` selectors from dbt are mapped to SQLBuild equivalents: `test_type:data` runs SQLBuild audits, `test_type:unit` runs SQLBuild unit tests.
-
-## Reuse from production
-
-Source: `concepts/dbt-compatibility/reuse-from.mdx`
-
-Pull already-built dbt tables from a production-shaped git branch instead of rebuilding them in dev.
-
-Building a dbt project in a dev or branch environment usually rebuilds everything, even though most models are identical to production. Reuse from production avoids that:
-
-- SQLBuild copies the already-built tables from a production-shaped git branch into your target.
-- It seeds incremental models from production so they only need to catch up, not rebuild.
-- dbt then builds only the models your branch actually changed.
-
-This is the dbt-compatibility counterpart to SQLBuild's native [reuse from production](/concepts/reuse-from-production), which reuses relations from another live target in the same warehouse. This version reuses the dbt-built tables described by a different git branch.
-
-### How it works
-
-When `reuse_from` is configured, SQLBuild runs a reuse pre-phase before dbt executes:
-
-1. SQLBuild git-archives the configured `git_ref` into an isolated temporary checkout (your working tree is never touched).
-2. It compiles that checkout's dbt project on its own, producing a second manifest that describes the production-shaped relations.
-3. For each in-scope dbt model, SQLBuild compares the current manifest against the production manifest and the warehouse state, and decides whether the model can be reused.
-4. Reusable tables are copied into your target, and incremental models get a production baseline, before dbt runs. dbt then only builds the models that genuinely changed on your branch.
-
-Because reuse runs as a pre-phase, the models it satisfies are already current by the time the [change-aware](/concepts/dbt-compatibility/change-aware-builds) dbt run starts, so they are pruned from the dbt command.
-
-### Configuration
-
-Configure reuse in the `[dbt]` block of `sqlbuild_project.toml`:
-
-```toml
-[dbt]
-project_dir = "../dbt_project"
-profiles_dir = "../profiles"
-target_path = "../dbt_project/target"
-
-[dbt.reuse_from]
-git_ref = "main"
-generate_schema_name_override = "dbt/macros/generate_schema_name.sql"
-```
-
-| Field | Description |
-|-------|-------------|
-| `git_ref` | The production-shaped git branch or tag whose built tables you want to reuse. Must differ from the current branch. |
-| `generate_schema_name_override` | Relative path to a `generate_schema_name` macro that resolves to your production schema layout, used when compiling the reuse ref. Must live under `dbt/macros/`. See [The schema-name override macro](#the-schema-name-override-macro). |
-
-The override macro is injected into the isolated checkout when SQLBuild compiles the reuse ref, so the production manifest resolves to the production warehouse relations rather than your dev schema.
-
-### The schema-name override macro
-
-To reuse a production table, SQLBuild needs its exact warehouse location. It gets this by compiling the production git ref in isolation and reading the relation names from the resulting manifest, which dbt computes with its `generate_schema_name` macro.
-
-The problem: SQLBuild compiles the ref with your configured target and deliberately knows nothing about your environments. If that target resolves to your dev schemas, the manifest points at dev tables, not the production ones you want to copy from.
-
-The override fixes this:
-
-- You provide a `generate_schema_name` macro that resolves to your production schema layout, with no environment branching.
-- SQLBuild injects it into the isolated checkout only, never your real dbt project.
-- The macro must be named `generate_schema_name` (so it shadows your project's own) and live under `dbt/macros/` in your SQLBuild project.
-
-**The rule:** take your project's existing `generate_schema_name`, keep only what it does in production, and delete the dev/CI branching.
-
-Most projects have a macro that switches on the environment, building clean schema names in production and suffixed ones in dev or CI:
-
-```sql
--- your dbt project's existing macro
-{% macro generate_schema_name(custom_schema_name, node) -%}
-    {%- if target.name == 'prod' -%}
-        {%- if custom_schema_name is none -%}
-            {{ target.schema }}
-        {%- else -%}
-            {{ custom_schema_name | trim }}
-        {%- endif -%}
-    {%- else -%}
-        {{ target.schema }}_{{ target.name }}
-    {%- endif -%}
-{%- endmacro %}
-```
-
-The override is just the production branch, with the conditional removed:
-
-```sql
--- dbt/macros/generate_schema_name.sql
-{% macro generate_schema_name(custom_schema_name, node) -%}
-    {%- if custom_schema_name is none -%}
-        {{ target.schema }}
-    {%- else -%}
-        {{ custom_schema_name | trim }}
-    {%- endif -%}
-{%- endmacro %}
-```
-
-If your production uses dbt's default unsuffixed layout (everything in the base schema, custom schemas concatenated), the override is just dbt's stock `generate_schema_name`:
-
-```sql
--- dbt/macros/generate_schema_name.sql
-{% macro generate_schema_name(custom_schema_name, node) -%}
-    {%- if custom_schema_name is none -%}
-        {{ target.schema }}
-    {%- else -%}
-        {{ target.schema }}_{{ custom_schema_name | trim }}
-    {%- endif -%}
-{%- endmacro %}
-```
-
-The override must produce production's schema names regardless of which target SQLBuild compiles with. The examples above use `target.schema` as the base, which only resolves to production when your configured target's schema is the production one. If your production base schema is a fixed value that differs from the active target, write that literal value instead of `target.schema`.
-
-### Reuse modes
-
-SQLBuild picks the mode per model based on its dbt materialization.
-
-#### Complete reuse (tables)
-
-For `table` models, SQLBuild reuses the production table outright:
-
-- Creates a staging table from the production relation.
-- Promotes it atomically into the destination.
-- Writes a fingerprint so the model counts as current.
-
-dbt does not rebuild it.
-
-#### Baseline reuse (incremental, microbatch, snapshot)
-
-For `incremental`, `microbatch`, and `snapshot` models, SQLBuild seeds a baseline from production and lets dbt catch up:
-
-- If the destination does not exist, it copies the production relation as the baseline.
-- If the destination already has data, it appends only the rows past the destination's current cursor value.
-- dbt then runs the incremental model on top, catching up to the latest data.
-
-The cursor column is read from the model's `meta.sqlbuild.reuse_cursor` in the manifest:
-
-```yaml
-models:
-  - name: fct_orders
-    config:
-      materialized: incremental
-      meta:
-        sqlbuild:
-          reuse_cursor: order_ts
-```
-
-### What qualifies for reuse
-
-Only physical materializations are reuse candidates: `table`, `incremental`, `microbatch`, and `snapshot`. The following are skipped:
-
-| Materialization | Result |
-|-----------------|--------|
-| `view` | skipped (no physical table to reuse) |
-| `ephemeral` | skipped (no relation) |
-| anything else | skipped (unsupported materialization) |
-
-A qualifying model is still rebuilt instead of reused when:
-
-- a full refresh is requested,
-- an upstream source is stale and blocks it, or
-- its reuse metadata no longer matches the current relations or cursor.
-
-### Plan output
-
-The reuse pre-phase reports what it pulled, separately from the dbt run:
-
-```
-dbt reuse  pre-phase before dbt execution
-  model.analytics.fct_orders          OK     reuse
-  model.analytics.fct_daily_activity  OK     baseline reuse before dbt catch-up
-
-REUSED=1  BASELINE_REUSED=1  TOTAL=2
-```
-
-- `REUSED` counts complete table reuses.
-- `BASELINE_REUSED` counts incremental baselines that dbt will catch up on.
-
-### Requirements and guards
-
-Reuse uses git to read the production ref, with guards that fail fast on misconfiguration:
-
-- The SQLBuild project must be inside a git repository, and the dbt project directory must be under the same git root.
-- `git_ref` must not be the current branch. Choose a production-shaped branch or tag that differs from your active worktree branch.
-- If `git_ref` tracks a remote branch, SQLBuild refreshes it from the remote before archiving, so reuse reflects the latest production state.
-- `git` must be installed and available on `PATH`.
-
-### Distinct from target-level reuse
-
-There are two reuse mechanisms with the same name, operating at different layers:
-
-- **dbt reuse** (`[dbt].reuse_from`, this page) reuses dbt-built tables described by a production git branch, with an isolated reuse compile.
-- **Native reuse** (`targets.<name>.reuse_from`, see [Reuse from production](/concepts/reuse-from-production)) reuses SQLBuild relations from another live target in the same warehouse, keyed on SQLBuild version identity, with optional zero-copy cloning.
-
-They are configured independently and can be used in the same project for their respective model kinds.
 
 ## Change-aware builds
 
@@ -1134,6 +1031,16 @@ The version identity comes from dbt's own `checksum` for the model node in the m
 | Everything matches and relation exists | skip | no change |
 
 After dbt runs, SQLBuild writes an updated fingerprint for each dbt model that executed, so the next plan sees them as current.
+
+#### Overriding change detection with `--force`
+
+`--force` bypasses the table above for the current run: every selected dbt model is planned and run regardless of whether its fingerprint matches or its relation exists.
+
+```bash
+sqb dbt build --select path:models/marts --force
+```
+
+Use it when you want to rebuild despite a clean plan, for example after an out-of-band change to the warehouse that SQLBuild's fingerprints cannot see. `--force` does not change fingerprints permanently or disable tracking; it just ignores the skip decision this once, and the next run without it is change-aware again. It is distinct from `--full-refresh`: `--force` decides *whether* a model runs, while `--full-refresh` decides *how* (a full rebuild rather than an incremental run). This mirrors native `sqb build --force`. See [Flags](/concepts/dbt-compatibility/overview#flags) for how flags route across dbt and SQLBuild.
 
 #### What SQLBuild creates in your warehouse
 
@@ -1506,7 +1413,7 @@ Source: `concepts/dbt-compatibility/diff.mdx`
 
 Compare your dbt build against a production baseline with sqb dbt diff.
 
-`sqb dbt diff` compares the relations your dbt build produces against a production baseline, so you can confirm dev matches prod before you promote. It resolves the production-shaped relations the same way reuse does (by compiling your dbt project at a configured git ref), then compares each model.
+`sqb dbt diff` compares the relations your dbt build produces against a production baseline, so you can confirm dev matches prod before you promote. It resolves the production-shaped relations by compiling your dbt project at the configured [`[dbt.production_ref]`](/concepts/dbt-compatibility/overview#the-production-ref-block) git ref, then compares each model.
 
 Every run requires exactly one comparison mode:
 
@@ -1562,7 +1469,7 @@ The model must define SQLBuild cursor metadata for `--bounded` to apply; without
 
 ### On this topic
 
-- [Reuse from production](/concepts/dbt-compatibility/reuse-from) - how the production baseline is resolved and reused.
+- [Configuration](/concepts/dbt-compatibility/overview#the-production-ref-block) - the `[dbt.production_ref]` git ref and schema-name override that diff resolves against.
 - [Clone](/concepts/dbt-compatibility/clone) - copy or clone production relations into a target.
 - [Testing](/concepts/dbt-compatibility/testing) - unit tests against dbt models.
 
@@ -1572,7 +1479,7 @@ Source: `concepts/dbt-compatibility/clone.mdx`
 
 Copy or zero-copy clone production-shaped dbt relations into a target with sqb dbt clone.
 
-`sqb dbt clone` populates a target with the already-built relations from your production baseline, without running dbt. It resolves the production-shaped relations the same way reuse does (by compiling your dbt project at the configured `reuse_from` git ref), then clones or copies each one into the target schema.
+`sqb dbt clone` populates a target with the already-built relations from your production baseline, without running dbt. It resolves the production-shaped relations by compiling your dbt project at the configured [`[dbt.production_ref]`](/concepts/dbt-compatibility/overview#the-production-ref-block) git ref, then clones or copies each one into the target schema.
 
 ```bash
 sqb dbt clone
@@ -1589,9 +1496,9 @@ sqb clone  origin=main destination=dev
 CLONED=0  COPIED=10  RECREATED_VIEWS=0  PASS=10  WARN=0  FAIL=0  TOTAL=10
 ```
 
-The origin is the `reuse_from.git_ref` from your configuration; the destination is the active target. Where the warehouse supports zero-copy cloning, relations are cloned (`CLONED`); otherwise they are copied (`COPIED`). Views are recreated to point at the cloned relations (`RECREATED_VIEWS`).
+The origin is the `production_ref.git_ref` from your configuration; the destination is the active target. Where the warehouse supports zero-copy cloning, relations are cloned (`CLONED`); otherwise they are copied (`COPIED`). Views are recreated to point at the cloned relations (`RECREATED_VIEWS`).
 
-This differs from [reuse from production](/concepts/dbt-compatibility/reuse-from), which runs as a pre-phase inside a build and only brings over the unchanged relations a build needs. `sqb dbt clone` is a standalone operation that populates the whole target (or a selected subset) up front.
+`sqb dbt clone` is a standalone operation that populates the whole target (or a selected subset) from production up front, without running dbt.
 
 ### Options
 
@@ -1609,7 +1516,7 @@ sqb dbt clone --hard-copy
 
 ### On this topic
 
-- [Reuse from production](/concepts/dbt-compatibility/reuse-from) - reuse unchanged relations as a build pre-phase.
+- [Configuration](/concepts/dbt-compatibility/overview#the-production-ref-block) - the `[dbt.production_ref]` git ref and schema-name override that clone resolves against.
 - [Diff](/concepts/dbt-compatibility/diff) - compare a build against the production baseline.
 
 ## Adding SQLBuild models
@@ -1618,7 +1525,7 @@ Source: `concepts/dbt-compatibility/adding-sqlbuild-models.mdx`
 
 Grow into SQLBuild's own models, tests, audits, and scenarios downstream of your dbt project.
 
-The [change-aware builds](/concepts/dbt-compatibility/change-aware-builds) and [reuse from production](/concepts/dbt-compatibility/reuse-from) workflows need no SQLBuild models. This page is the optional next step: once that workflow is in place, you can write SQLBuild models, tests, audits, and scenarios downstream of your dbt project without leaving it.
+The [change-aware builds](/concepts/dbt-compatibility/change-aware-builds) workflow needs no SQLBuild models. This page is the optional next step: once that workflow is in place, you can write SQLBuild models, tests, audits, and scenarios downstream of your dbt project without leaving it.
 
 This is purely additive. Your dbt models stay in dbt, and the layout gains a `models/` directory in the SQLBuild project.
 
@@ -1962,7 +1869,7 @@ target_path = "../dbt_project/target"
 target = "dev"
 replay_on_change = "full"
 
-[dbt.reuse_from]
+[dbt.production_ref]
 git_ref = "main"
 generate_schema_name_override = "dbt/macros/generate_schema_name.sql"
 ```
@@ -1974,8 +1881,8 @@ generate_schema_name_override = "dbt/macros/generate_schema_name.sql"
 | `target_path` | Path to dbt's `target/` directory (where `manifest.json` is written) |
 | `target` | dbt target name override (optional) |
 | `replay_on_change` | Project-wide policy for rerunning changed dbt models: `forward_only` (default) or `full` (optional). See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds#replay-on-change). |
-| `reuse_from.git_ref` | Production-shaped git branch or tag whose built tables are reused (optional). See [Reuse from production](/concepts/dbt-compatibility/reuse-from). |
-| `reuse_from.generate_schema_name_override` | Relative path under `dbt/macros/` to the `generate_schema_name` macro used when compiling the reuse ref. |
+| `production_ref.git_ref` | Production-shaped git branch or tag compiled to locate production relations, used by `sqb dbt clone` and `sqb dbt diff` (optional). See [Configuration](/concepts/dbt-compatibility/overview#the-production-ref-block). |
+| `production_ref.generate_schema_name_override` | Relative path under `dbt/macros/` to the `generate_schema_name` macro injected when compiling the production ref. |
 
 Paths can be absolute or relative to the SQLBuild project root. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for setup and usage details.
 
@@ -11367,7 +11274,7 @@ Run SQLBuild alongside an existing dbt project.
 
 ## sqb dbt
 
-Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic that works across both project graphs. `sqb dbt build`, `sqb dbt run`, and `sqb dbt plan` are [change-aware](/concepts/dbt-compatibility/change-aware-builds): they prune dbt models that have not changed, and honor [reuse from production](/concepts/dbt-compatibility/reuse-from) when configured. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for concepts and selection behavior.
+Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic that works across both project graphs. `sqb dbt build`, `sqb dbt run`, and `sqb dbt plan` are [change-aware](/concepts/dbt-compatibility/change-aware-builds): they prune dbt models that have not changed. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for concepts and selection behavior.
 
 ### sqb dbt plan
 
@@ -11377,7 +11284,7 @@ Preview combined dbt and SQLBuild work without executing.
 sqb dbt plan [--select <selector>...] [--exclude <selector>...] [--json] [--verbose]
 ```
 
-Shows which dbt models will run, which dbt models are current and pruned, which relations will be reused from production, which SQLBuild models will run, and the dbt/SQLBuild commands that would be executed.
+Shows which dbt models will run, which dbt models are current and pruned, which SQLBuild models will run, and the dbt/SQLBuild commands that would be executed.
 
 ### sqb dbt run
 
@@ -11450,7 +11357,7 @@ profiles_dir = "../profiles"
 target_path = "../dbt_project/target"
 ```
 
-See [Project Configuration](/concepts/project-configuration#dbt) for all fields, including `replay_on_change` and `reuse_from`.
+See [Project Configuration](/concepts/project-configuration#dbt) for all fields, including `replay_on_change` and `production_ref`.
 
 ## state
 
