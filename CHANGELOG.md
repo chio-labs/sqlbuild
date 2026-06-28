@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.45.5](https://github.com/chio-labs/sqlbuild/compare/v0.45.4...v0.45.5) (2026-06-28)
+
+
+### Bug Fixes
+
+* polish defer clone prephase output ([f533d1f](https://github.com/chio-labs/sqlbuild/commit/f533d1f578c06ab7e2b90936a993d2a9d0bf1e30))
+* polish defer clone prephase output ([97436cb](https://github.com/chio-labs/sqlbuild/commit/97436cbb57ac9b5e64982fc5d4172d593b15e843))
+
 ## [0.45.4](https://github.com/chio-labs/sqlbuild/compare/v0.45.3...v0.45.4) (2026-06-28)
 
 
