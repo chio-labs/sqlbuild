@@ -470,7 +470,7 @@ class DbtInteropParsedArgs:
     state: str | None = None
     indirect_selection: str | None = None
     defer: bool = False
-    defer_clone_from: bool = False
+    defer_clone_from: bool | None = None
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
     start_cursor_int: str | None = None
@@ -491,7 +491,7 @@ class DbtInteropRoutedArgs:
     exclude: tuple[str, ...] = field(default_factory=tuple)
     dbt_args: tuple[str, ...] = field(default_factory=tuple)
     sqlbuild_args: tuple[str, ...] = field(default_factory=tuple)
-    defer_clone_from: bool = False
+    defer_clone_from: bool | None = None
 
 
 @dataclass(frozen=True)

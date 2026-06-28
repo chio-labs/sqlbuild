@@ -65,6 +65,11 @@ def resolve_target_config(
             if local_target.defer_sources_to is not None
             else project_target.defer_sources_to
         ),
+        defer_clone_from=(
+            local_target.defer_clone_from
+            if local_target.defer_clone_from is not None
+            else project_target.defer_clone_from
+        ),
         reuse_from=(
             local_target.reuse_from
             if local_target.reuse_from is not None

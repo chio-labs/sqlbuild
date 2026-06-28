@@ -52,6 +52,7 @@ class TargetConfig:
     database: str | None = None
     schema: str | None = None
     defer_sources_to: str | None = None
+    defer_clone_from: str | None = None
     reuse_from: str | None = None
     force: bool | None = None
     reuse_hard_copy: bool = False
@@ -68,6 +69,7 @@ class LocalTargetConfig:
     database: str | None = None
     schema: str | None = None
     defer_sources_to: str | None = None
+    defer_clone_from: str | None = None
     reuse_from: str | None = None
     force: bool | None = None
     reuse_hard_copy: bool | None = None
@@ -176,6 +178,7 @@ class DbtConfig:
     target_path: str | None = None
     vars: dict[str, object] = field(default_factory=dict)
     replay_on_change: str | None = None
+    defer_clone_from: bool = False
     production_ref: DbtProductionRefConfig = field(default_factory=DbtProductionRefConfig)
 
 
@@ -185,6 +188,7 @@ class LocalDbtConfig:
 
     target: str | None = None
     vars: dict[str, object] = field(default_factory=dict)
+    defer_clone_from: bool | None = None
 
 
 @dataclass(frozen=True)
