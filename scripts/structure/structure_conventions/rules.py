@@ -105,6 +105,7 @@ _DOCSTRING_BEARING_NODE_TYPES: tuple[type[ast.AST], ...] = (
     ast.AsyncFunctionDef,
     ast.ClassDef,
 )
+_SOURCE_FRESHNESS_SINGULAR_WRITER_NAME: str = "write_source_freshness_record"
 
 
 def parse_python_module(file_path: Path) -> ast.Module:
@@ -214,6 +215,54 @@ def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> li
                         )
                     )
     return violations
+
+
+def check_no_singular_source_freshness_writer(
+    file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Reject per-record source freshness writer imports and calls."""
+
+    violations: list[Violation] = []
+    for node in ast.walk(module):
+        if isinstance(node, ast.ImportFrom):
+            alias: ast.alias
+            for alias in node.names:
+                if alias.name == _SOURCE_FRESHNESS_SINGULAR_WRITER_NAME:
+                    violations.append(
+                        Violation(
+                            code="SC057",
+                            path=file_path,
+                            line=node.lineno,
+                            message=(
+                                "source freshness state writes must use "
+                                "write_source_freshness_records() batch writes"
+                            ),
+                        )
+                    )
+        if (
+            isinstance(node, ast.Call)
+            and _call_name(node) == _SOURCE_FRESHNESS_SINGULAR_WRITER_NAME
+        ):
+            violations.append(
+                Violation(
+                    code="SC057",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "source freshness state writes must use "
+                        "write_source_freshness_records() batch writes"
+                    ),
+                )
+            )
+    return violations
+
+
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return None
 
 
 def check_no_internal_reexport_modules(

@@ -247,13 +247,15 @@ def run_build(
                 origin_target_name=effective_defer_clone_from,
                 destination_target_name=cloned_project.effective_target_name,
                 no_sql_validation=no_sql_validation,
-                select=boundary_selectors,
+                select=(*boundary_selectors, *view_chain_selectors),
+                caused_by_names=select,
                 cli_vars=cli_vars,
                 connection_config=connection_config,
                 project_dir=effective_project_dir,
                 on_progress=planning_progress.on_progress,
+                progress_stream=progress_stream,
+                use_color=use_color,
             )
-            select = (*select, *view_chain_selectors)
 
         progress_stream.write("\n")
         progress_stream.flush()

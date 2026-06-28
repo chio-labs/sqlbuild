@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
@@ -28,12 +28,14 @@ from sqlbuild.compiler.planner.main.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
-from sqlbuild.executor.clone.models import CloneExecutionResult
-from sqlbuild.executor.clone.types import CloneStatus
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.shared.helpers.graph_algorithms import (
     resolve_clone_boundary,
     resolve_skipped_view_chain,
 )
+from sqlbuild.shared.helpers.prephase_progress import write_prephase_header, write_prephase_rows
+from sqlbuild.shared.models import PrephaseProgressRow
 
 
 def build_defer_clone_boundary_selectors(
@@ -117,10 +119,13 @@ def run_defer_clone_prephase(
     destination_target_name: str | None,
     no_sql_validation: bool,
     select: tuple[str, ...],
+    caused_by_names: tuple[str, ...],
     cli_vars: dict[str, object] | None,
     connection_config: dict[str, object],
     project_dir: Path,
     on_progress: Any,
+    progress_stream: TextIO | None = None,
+    use_color: bool = False,
 ) -> None:
     """Clone selected boundary relations from origin before build planning."""
 
@@ -202,6 +207,47 @@ def run_defer_clone_prephase(
             on_progress(
                 f"Cloned deferred boundary relations. ({time.monotonic() - clone_start:.2f}s)"
             )
+        if progress_stream is not None:
+            write_prephase_header(stream=progress_stream, title="defer clone", use_color=use_color)
+            write_prephase_rows(
+                stream=progress_stream,
+                rows=_prephase_rows_from_clone_result(
+                    result=result,
+                    caused_by_names=caused_by_names,
+                ),
+                use_color=use_color,
+            )
     finally:
         adapter.close(origin_connection)
         adapter.close(destination_connection)
+
+
+def _prephase_rows_from_clone_result(
+    *, result: CloneExecutionResult, caused_by_names: tuple[str, ...]
+) -> tuple[PrephaseProgressRow, ...]:
+    return tuple(
+        PrephaseProgressRow(
+            label=_clone_item_label(item),
+            name=item.name,
+            status=_clone_item_status(item),
+            duration_seconds=item.duration_seconds,
+            caused_by_names=caused_by_names,
+        )
+        for item in result.item_results
+    )
+
+
+def _clone_item_label(item: CloneItemResult) -> str:
+    if item.action == CloneAction.RECREATED_VIEW:
+        return "view"
+    if item.action == CloneAction.COPIED:
+        return "copy"
+    return "clone"
+
+
+def _clone_item_status(item: CloneItemResult) -> str:
+    if item.status == CloneStatus.SUCCESS:
+        return "OK"
+    if item.status == CloneStatus.WARNING:
+        return "WARN"
+    return "FAIL"

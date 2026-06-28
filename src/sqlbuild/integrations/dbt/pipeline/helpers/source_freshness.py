@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 
@@ -40,19 +40,17 @@ def append_dbt_source_freshness_records(
         on_progress("Recording dbt source freshness...")
     connection: Any = adapter.connect(connection_config)
     try:
-        record: SourceFreshnessRecord
-        for record in observed_records:
-            write_source_freshness_record(
-                connection=connection,
-                execute=adapter.execute,
-                database=project.effective_target_database,
-                schema=project.effective_target_schema,
-                record=replace(record, run_id=project.run_id),
-                render_qualified_name=adapter.render_qualified_name,
-                render_framework_type=adapter.render_framework_type,
-                render_create_index_sqls=adapter.render_create_source_freshness_index_sqls,
-                transient=adapter.state_tables_transient,
-            )
+        write_source_freshness_records(
+            connection=connection,
+            execute=adapter.execute,
+            database=project.effective_target_database,
+            schema=project.effective_target_schema,
+            records=tuple(replace(record, run_id=project.run_id) for record in observed_records),
+            render_qualified_name=adapter.render_qualified_name,
+            render_framework_type=adapter.render_framework_type,
+            render_create_index_sqls=adapter.render_create_source_freshness_index_sqls,
+            transient=adapter.state_tables_transient,
+        )
     finally:
         adapter.close(connection)
     if on_progress is not None:

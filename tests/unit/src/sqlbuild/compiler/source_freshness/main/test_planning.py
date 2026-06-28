@@ -15,7 +15,7 @@ from sqlbuild.compiler.source_freshness.main.data_version_hash import (
 from sqlbuild.compiler.source_freshness.main.planning import (
     build_standard_source_freshness_planning_result,
 )
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     StandardSourceFreshnessPlanningResult,
@@ -358,27 +358,29 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
     previous_data_version: str = "2026-01-15T12:00:00"
     try:
         connection.execute("CREATE SCHEMA state_schema")
-        write_source_freshness_record(
+        write_source_freshness_records(
             connection=connection,
             execute=adapter.execute,
             database=None,
             schema="state_schema",
-            record=SourceFreshnessRecord(
-                source_name="raw.orders",
-                target_database=None,
-                target_schema=None,
-                target_name=None,
-                run_id="previous",
-                strategy=SourceFreshnessStrategy.SQL.value,
-                value_kind=SourceFreshnessValueKind.TIMESTAMP.value,
-                data_version=previous_data_version,
-                data_version_hash=source_freshness_data_version_hash(
+            records=(
+                SourceFreshnessRecord(
                     source_name="raw.orders",
-                    strategy=SourceFreshnessStrategy.SQL,
-                    value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                    target_database=None,
+                    target_schema=None,
+                    target_name=None,
+                    run_id="previous",
+                    strategy=SourceFreshnessStrategy.SQL.value,
+                    value_kind=SourceFreshnessValueKind.TIMESTAMP.value,
                     data_version=previous_data_version,
+                    data_version_hash=source_freshness_data_version_hash(
+                        source_name="raw.orders",
+                        strategy=SourceFreshnessStrategy.SQL,
+                        value_kind=SourceFreshnessValueKind.TIMESTAMP,
+                        data_version=previous_data_version,
+                    ),
+                    observed_at=datetime(2026, 1, 15, 12, 0, 0),
                 ),
-                observed_at=datetime(2026, 1, 15, 12, 0, 0),
             ),
             render_qualified_name=RENDER_QUALIFIED_NAME,
             render_framework_type=RENDER_FRAMEWORK_TYPE,

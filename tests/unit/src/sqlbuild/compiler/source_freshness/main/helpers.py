@@ -13,7 +13,7 @@ from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
 from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import build_read_latest_sql
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_record
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -130,12 +130,12 @@ def write_optional_previous_record(
         ),
         observed_at=datetime(2026, 1, 15, 10, 0, 0),
     )
-    write_source_freshness_record(
+    write_source_freshness_records(
         connection=connection,
         execute=adapter.execute,
         database=None,
         schema="state_schema",
-        record=previous_record,
+        records=(previous_record,),
         render_qualified_name=render_qualified_name,
         render_framework_type=render_framework_type,
     )
@@ -152,27 +152,29 @@ def write_previous_record_to_schema(
     data_version: str,
     observed_at: datetime = datetime(2026, 1, 15, 10, 0, 0),
 ) -> None:
-    write_source_freshness_record(
+    write_source_freshness_records(
         connection=connection,
         execute=adapter.execute,
         database=None,
         schema=schema,
-        record=SourceFreshnessRecord(
-            source_name=source_name,
-            target_database=None,
-            target_schema=None,
-            target_name=None,
-            run_id="previous",
-            strategy=SourceFreshnessStrategy.SQL.value,
-            value_kind=SourceFreshnessValueKind.INTEGER.value,
-            data_version=data_version,
-            data_version_hash=source_freshness_data_version_hash(
+        records=(
+            SourceFreshnessRecord(
                 source_name=source_name,
-                strategy=SourceFreshnessStrategy.SQL,
-                value_kind=SourceFreshnessValueKind.INTEGER,
+                target_database=None,
+                target_schema=None,
+                target_name=None,
+                run_id="previous",
+                strategy=SourceFreshnessStrategy.SQL.value,
+                value_kind=SourceFreshnessValueKind.INTEGER.value,
                 data_version=data_version,
+                data_version_hash=source_freshness_data_version_hash(
+                    source_name=source_name,
+                    strategy=SourceFreshnessStrategy.SQL,
+                    value_kind=SourceFreshnessValueKind.INTEGER,
+                    data_version=data_version,
+                ),
+                observed_at=observed_at,
             ),
-            observed_at=observed_at,
         ),
         render_qualified_name=render_qualified_name,
         render_framework_type=render_framework_type,

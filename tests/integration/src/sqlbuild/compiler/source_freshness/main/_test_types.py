@@ -27,7 +27,7 @@ class SourceFreshnessWriteCreatesTableTestCase:
     description: str
     database: str | None
     schema: str
-    record: SourceFreshnessRecord
+    records: tuple[SourceFreshnessRecord, ...]
     expected_table_exists: bool
 
 
@@ -48,7 +48,7 @@ class SourceFreshnessRoundTripTestCase:
     description: str
     database: str | None
     schema: str
-    record: SourceFreshnessRecord
+    records: tuple[SourceFreshnessRecord, ...]
     expected_data_version: str | None
     expected_data_version_hash: str
 
