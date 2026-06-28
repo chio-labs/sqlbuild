@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 
 import pytest
 
@@ -16,6 +17,7 @@ from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMess
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtEventParseTestCase,
     DbtEventStreamTestCase,
+    DbtSilentStatusRefreshTestCase,
 )
 
 DBT_RESULT_PARSE_TEST_CASES: list[DbtEventParseTestCase] = [
@@ -328,7 +330,7 @@ DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
         expected_output_fragments=(
             "Running dbt model bias__stg_hkjc...",
             "model     bias__stg_hkjc                 START",
-            "model     bias__stg_hkjc                 OK 20.40s",
+            "model     bias__stg_hkjc                 OK     20.40s",
         ),
         expected_rendered_rows=2,
     ),
@@ -347,7 +349,7 @@ DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
         expected_output_fragments=(
             "Running dbt model bias__stg_hkjc...",
             "model     bias__stg_hkjc                 START",
-            "model     bias__stg_hkjc                 OK 20.40s",
+            "model     bias__stg_hkjc                 OK     20.40s",
         ),
         expected_rendered_rows=2,
     ),
@@ -398,6 +400,96 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
         test_case.expected_unique_ids
     )
     assert rendered_rows == expected_rendered_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtSilentStatusRefreshTestCase(
+            description="active node elapsed refreshes without dbt events",
+            silent_seconds=1.15,
+            refresh_seconds=0.05,
+            expected_initial_status="running 1 dbt node: slow_model <1s",
+            expected_refreshed_status="running 1 dbt node: slow_model 1s",
+        )
+    ],
+    ids=["active node elapsed refreshes without dbt events"],
+)
+def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_updates(
+    test_case: DbtSilentStatusRefreshTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    status_messages: list[str] = []
+
+    class CapturingStatusReporter:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def start(self, message: str) -> None:
+            status_messages.append(message)
+
+        def update(self, message: str) -> None:
+            status_messages.append(message)
+
+        def close(self) -> None:
+            pass
+
+    class TtyStream(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    class DelayedStdout:
+        def __enter__(self) -> DelayedStdout:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def __iter__(self) -> object:
+            yield (
+                '{"data":{"index":1,"total":1,"node_info":{"node_name":"slow_model",'
+                '"resource_type":"model","unique_id":"model.analytics.slow_model"}},'
+                '"info":{"level":"info","name":"LogStartLine","msg":"START"}}\n'
+            )
+            time.sleep(test_case.silent_seconds)
+            yield (
+                '{"data":{"execution_time":1.2,"index":1,"total":1,"status":"success",'
+                '"node_info":{"node_name":"slow_model","resource_type":"model",'
+                '"node_status":"success","unique_id":"model.analytics.slow_model"}},'
+                '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n'
+            )
+
+    class StubProcess:
+        stdout: DelayedStdout = DelayedStdout()
+
+        def wait(self) -> int:
+            return 0
+
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.TransientStatusReporter",
+        CapturingStatusReporter,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.helpers.runtime.event_stream._DBT_STATUS_REFRESH_SECONDS",
+        test_case.refresh_seconds,
+    )
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        lambda *args, **kwargs: StubProcess(),
+    )
+
+    returncode: int
+    returncode, _ = execute_dbt_json_event_stream(
+        argv=("dbt", "run"),
+        cwd=None,
+        stream=TtyStream(),
+        use_color=False,
+        target_path=None,
+    )
+
+    assert returncode == 0
+    assert test_case.expected_initial_status in status_messages
+    assert test_case.expected_refreshed_status in status_messages
 
 
 @pytest.mark.parametrize(
