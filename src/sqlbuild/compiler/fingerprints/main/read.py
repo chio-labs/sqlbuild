@@ -27,12 +27,7 @@ def read_latest_fingerprints(
     render_read_latest_sql: Callable[..., str],
     require_table: bool = False,
 ) -> FingerprintSet:
-    """Read the latest fingerprint per node identity from adapter-rendered SQL.
-
-    Callers pass `table_exists` resolved from already-gathered relations so the read
-    issues no existence precheck of its own; operational failures from the read still
-    propagate instead of being misread as "no fingerprint state".
-    """
+    """Read the latest fingerprint per node identity from adapter-rendered SQL."""
 
     qualified_name: str = build_qualified_table_name(
         database=database,

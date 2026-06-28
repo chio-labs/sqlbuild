@@ -12,6 +12,9 @@ from sqlbuild.compiler.planner.helpers.graph.core import (
 )
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
+from sqlbuild.shared.exceptions.errors import SharedInputError
+from sqlbuild.shared.helpers.selector_expansion import split_selector_expansion
+from sqlbuild.shared.models import SelectorExpansion
 
 _SELECTOR_KIND_BY_PREFIX: dict[str, SelectorKind] = {
     SelectorKind.SEED: SelectorKind.SEED,
@@ -31,26 +34,22 @@ _RESOURCE_TYPE_BY_SELECTOR_KIND: dict[SelectorKind, CompiledResourceType] = {
 
 
 def parse_selector(raw: str) -> ParsedSelector | PathSelector:
-    """Parse one raw selector token into a structured form.
-
-    Returns a ParsedSelector for normal selectors, or a (start, end) tuple
-    for path selectors using the a~b syntax.
-    """
+    """Parse one raw selector token into a structured form."""
 
     stripped: str = raw.strip()
-    if not stripped:
-        raise PlannerInputError("empty selector", code="S001")
+    try:
+        expansion: SelectorExpansion = split_selector_expansion(raw)
+    except SharedInputError as error:
+        code: str = "S001" if not stripped else "S002"
+        if "no name" in str(error):
+            code = "S004"
+        raise PlannerInputError(str(error), code=code) from None
 
-    upstream: bool = stripped.startswith("+")
-    downstream: bool = stripped.endswith("+")
-    core: str = stripped.lstrip("+").rstrip("+")
+    upstream: bool = expansion.upstream
+    downstream: bool = expansion.downstream
+    core: str = expansion.core
 
     if "~" in core:
-        if "+" in core:
-            raise PlannerInputError(
-                f"selector '{stripped}' contains '+' in an unsupported position",
-                code="S002",
-            )
         parts: list[str] = core.split("~", 1)
         start_name: str = parts[0].strip()
         end_name: str = parts[1].strip()
@@ -67,17 +66,6 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
         )
 
     name: str = core
-    if not name:
-        raise PlannerInputError(
-            f"selector '{stripped}' has no name after removing '+' markers",
-            code="S004",
-        )
-    if "+" in name:
-        raise PlannerInputError(
-            f"selector '{stripped}' contains '+' in an unsupported position",
-            code="S002",
-        )
-
     if ":" in name:
         prefix: str
         value: str
@@ -112,12 +100,7 @@ def resolve_selectors(
     tag_index: dict[str, frozenset[CompiledObjectKey]] | None = None,
     path_index: dict[CompiledObjectKey, str] | None = None,
 ) -> frozenset[CompiledObjectKey]:
-    """Resolve raw select/exclude strings into a final set of object keys.
-
-    Multiple --select values and space-separated tokens within one --select
-    are unioned. Comma within a token means intersection. --exclude is
-    subtracted from the union.
-    """
+    """Resolve raw select/exclude strings into a final set of object keys."""
 
     effective_tag_index: dict[str, frozenset[CompiledObjectKey]] = tag_index or {}
     effective_path_index: dict[CompiledObjectKey, str] = path_index or {}

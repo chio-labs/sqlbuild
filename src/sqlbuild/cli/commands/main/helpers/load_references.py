@@ -38,7 +38,11 @@ def validate_reference_source_targets(
         reference_source: SourceEntry
         for reference_source in reference_sources:
             target_name: str = reference_source.table or reference_source.name
-            if relation_lookup.exists(schema=reference_source.schema, name=target_name):
+            if relation_lookup.exists(
+                database=reference_source.database,
+                schema=reference_source.schema,
+                name=target_name,
+            ):
                 continue
             raise CliUserError(
                 f"Selected source load requires intermediate loader '{reference_source.name}', "

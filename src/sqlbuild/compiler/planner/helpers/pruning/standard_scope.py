@@ -20,6 +20,7 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,
     FunctionChangeResult,
+    GraphChangesOnlyPropagationInput,
     GraphChangesOnlyPropagationResult,
     GraphNodeKey,
     PlannerChangeResults,
@@ -134,26 +135,28 @@ def mark_direct_parent_run_actions(
         key for key in scope.selected_keys if key.resource_type in _RUN_PARENT_TYPES
     )
     propagation: GraphChangesOnlyPropagationResult = build_graph_changes_only_propagation(
-        upstream_deps=_neutral_upstream_deps(scope=scope),
-        model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
-        selected_model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
-        current_model_keys=frozenset(
-            _graph_key(key)
-            for key in scope.selected_keys
-            if key.resource_type == CompiledResourceType.MODEL
-            and (resolved := models.get(key.name)) is not None
-            and _can_mark_upstream_cascade(resolved)
-        ),
-        run_model_keys=frozenset(
-            _graph_key(key)
-            for key in run_parent_keys
-            if key.resource_type == CompiledResourceType.MODEL
-            and (resolved := models.get(key.name)) is not None
-            and not _can_mark_upstream_cascade(resolved)
-        ),
-        run_parent_keys=frozenset(_graph_key(key) for key in run_parent_keys),
-        selected_parent_keys=frozenset(_graph_key(key) for key in scope.selected_keys),
-        version_mismatch_model_keys=frozenset(),
+        request=GraphChangesOnlyPropagationInput(
+            upstream_deps=_neutral_upstream_deps(scope=scope),
+            model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
+            selected_model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
+            current_model_keys=frozenset(
+                _graph_key(key)
+                for key in scope.selected_keys
+                if key.resource_type == CompiledResourceType.MODEL
+                and (resolved := models.get(key.name)) is not None
+                and _can_mark_upstream_cascade(resolved)
+            ),
+            run_model_keys=frozenset(
+                _graph_key(key)
+                for key in run_parent_keys
+                if key.resource_type == CompiledResourceType.MODEL
+                and (resolved := models.get(key.name)) is not None
+                and not _can_mark_upstream_cascade(resolved)
+            ),
+            run_parent_keys=frozenset(_graph_key(key) for key in run_parent_keys),
+            selected_parent_keys=frozenset(_graph_key(key) for key in scope.selected_keys),
+            version_mismatch_model_keys=frozenset(),
+        )
     )
     key: CompiledObjectKey
     for key in scope.selected_keys:
@@ -188,29 +191,31 @@ def _add_neutral_propagated_model_keys(
     identity_stale_keys: frozenset[CompiledObjectKey],
 ) -> frozenset[CompiledObjectKey]:
     propagation: GraphChangesOnlyPropagationResult = build_graph_changes_only_propagation(
-        upstream_deps=_neutral_upstream_deps(scope=scope),
-        model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
-        selected_model_keys=_neutral_model_keys(scope=scope, keys=original_selected_keys),
-        current_model_keys=frozenset(
-            _graph_key(key)
-            for key in original_selected_keys
-            if key.resource_type == CompiledResourceType.MODEL and key not in selected_keys
-        ),
-        run_model_keys=frozenset(
-            _graph_key(key)
-            for key in selected_keys
-            if key.resource_type == CompiledResourceType.MODEL
-        ),
-        run_parent_keys=frozenset(
-            _graph_key(key) for key in selected_keys if key.resource_type in _RUN_PARENT_TYPES
-        ),
-        selected_parent_keys=frozenset(
-            _graph_key(key)
-            for key in original_selected_keys
-            if key.resource_type in _RUN_PARENT_TYPES
-        ),
-        identity_stale_model_keys=frozenset(_graph_key(key) for key in identity_stale_keys),
-        version_mismatch_model_keys=frozenset(_graph_key(key) for key in identity_stale_keys),
+        request=GraphChangesOnlyPropagationInput(
+            upstream_deps=_neutral_upstream_deps(scope=scope),
+            model_keys=_neutral_model_keys(scope=scope, keys=scope.selected_keys),
+            selected_model_keys=_neutral_model_keys(scope=scope, keys=original_selected_keys),
+            current_model_keys=frozenset(
+                _graph_key(key)
+                for key in original_selected_keys
+                if key.resource_type == CompiledResourceType.MODEL and key not in selected_keys
+            ),
+            run_model_keys=frozenset(
+                _graph_key(key)
+                for key in selected_keys
+                if key.resource_type == CompiledResourceType.MODEL
+            ),
+            run_parent_keys=frozenset(
+                _graph_key(key) for key in selected_keys if key.resource_type in _RUN_PARENT_TYPES
+            ),
+            selected_parent_keys=frozenset(
+                _graph_key(key)
+                for key in original_selected_keys
+                if key.resource_type in _RUN_PARENT_TYPES
+            ),
+            identity_stale_model_keys=frozenset(_graph_key(key) for key in identity_stale_keys),
+            version_mismatch_model_keys=frozenset(_graph_key(key) for key in identity_stale_keys),
+        )
     )
     expanded: set[CompiledObjectKey] = set(selected_keys) | set(identity_stale_keys)
     upstream_changed_keys: frozenset[GraphNodeKey] = propagation.upstream_changed_model_keys

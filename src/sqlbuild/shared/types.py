@@ -48,6 +48,23 @@ class SqlResourceRefKind(StrEnum):
     SOURCE = "source"
 
 
+class LocalNodePlanAction(StrEnum):
+    """Neutral action for one locally classified graph node."""
+
+    RUN = "run"
+    CURRENT = "current"
+
+
+class LocalNodePlanReason(StrEnum):
+    """Neutral reason for one locally classified graph node."""
+
+    FIRST_RUN = "first_run"
+    FULL_REFRESH = "full_refresh"
+    RELATION_MISSING = "relation_missing"
+    LOCAL_CHANGED = "local_changed"
+    NO_CHANGE = "no_change"
+
+
 class SqlReferenceKind(StrEnum):
     REF = "ref"
     SEED = "seed"
@@ -89,13 +106,7 @@ class ExecutionResourceKind(StrEnum):
 
 
 class ExternalSqlReferenceResolver(Protocol):
-    """Resolve first-class SQLBuild references backed by external metadata.
-
-    Core compiler and planner code owns parsing and dependency semantics for
-    supported syntax such as ``__dbt_ref(...)``. Provider integrations own the
-    metadata needed to resolve those references, such as DBT manifest loading and
-    model lookup, and expose that behavior through this protocol.
-    """
+    """Resolve first-class SQLBuild references backed by external metadata."""
 
     def validate_model_names(self, *, known_model_names: set[str]) -> None:
         """Validate SQLBuild model names against external integration resources."""

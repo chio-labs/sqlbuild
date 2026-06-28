@@ -218,16 +218,19 @@ def run_build(
         if defer_clone_from is not None:
             cloned_project: CompiledProject
             boundary_selectors: tuple[str, ...]
-            cloned_project, boundary_selectors = build_defer_clone_boundary_selectors(
-                discovered_inputs=discovered_inputs,
-                adapter=adapter,
-                selected_target=selected_target,
-                no_sql_validation=no_sql_validation,
-                select=select,
-                exclude=exclude,
-                cli_vars=cli_vars,
-                project_dir=effective_project_dir,
-                auto_load_sources=should_load_sources,
+            view_chain_selectors: tuple[str, ...]
+            cloned_project, boundary_selectors, view_chain_selectors = (
+                build_defer_clone_boundary_selectors(
+                    discovered_inputs=discovered_inputs,
+                    adapter=adapter,
+                    selected_target=selected_target,
+                    no_sql_validation=no_sql_validation,
+                    select=select,
+                    exclude=exclude,
+                    cli_vars=cli_vars,
+                    project_dir=effective_project_dir,
+                    auto_load_sources=should_load_sources,
+                )
             )
             run_defer_clone_prephase(
                 discovered_inputs=discovered_inputs,
@@ -241,6 +244,7 @@ def run_build(
                 project_dir=effective_project_dir,
                 on_progress=planning_progress.on_progress,
             )
+            select = (*select, *view_chain_selectors)
 
         progress_stream.write("\n")
         progress_stream.flush()

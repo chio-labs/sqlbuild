@@ -1144,7 +1144,11 @@ def _read_available_seed_physical_relations(
             ),
         )
         for seed_name, relation in records_by_seed.items():
-            if relation_lookup.exists(schema=relation.schema_name, name=relation.relation_name):
+            if relation_lookup.exists(
+                database=relation.database_name,
+                schema=relation.schema_name,
+                name=relation.relation_name,
+            ):
                 relations[seed_name] = relation
     finally:
         adapter.close(warehouse_connection)

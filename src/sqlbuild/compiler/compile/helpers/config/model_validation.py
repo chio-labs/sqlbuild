@@ -80,11 +80,7 @@ def validate_incremental_config(
     ref_count: int,
     known_input_names: frozenset[str],
 ) -> None:
-    """Validate incremental model config rules after layering.
-
-    Only runs for models with materialized=incremental. Raises CompileInputError
-    on invalid config combinations.
-    """
+    """Validate incremental model config rules after layering."""
 
     materialized: str | None = _str(config, "materialized")
     if materialized != MaterializationType.INCREMENTAL:

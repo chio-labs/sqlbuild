@@ -35,12 +35,7 @@ class StrictAdapter(
     MaterializationMixin,
     DiffMixin,
 ):
-    """All-abstract adapter interface.
-
-    Subclass this to be forced to implement every adapter method explicitly.
-    The concrete defaults from ConnectionMixin (begin, commit, rollback,
-    transaction, supports_transactions) are inherited but may be overridden.
-    """
+    """All-abstract adapter interface."""
 
     adapter_name: ClassVar[str]
 

@@ -4,11 +4,7 @@ from __future__ import annotations
 
 
 def build_version_identity_config(config_values: dict[str, object]) -> dict[str, object]:
-    """Return config fields that affect produced model version identity.
-
-    Validation/readiness concerns such as audits and contracts are intentionally
-    excluded unless they affect the produced physical version identity.
-    """
+    """Return config fields that affect produced model version identity."""
 
     version_identity_config_keys: tuple[str, ...] = (
         "append_cursor_inclusive",

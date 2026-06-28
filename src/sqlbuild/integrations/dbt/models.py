@@ -567,11 +567,7 @@ class DbtModelPlanningResult:
 
     @property
     def displayed_entries(self) -> tuple[DbtModelPlanEntry, ...]:
-        """Plan entries that should be shown to the user.
-
-        Restricts to originally-selected candidates when known; upstream nodes
-        pulled in only for change propagation are kept out of the display.
-        """
+        """Return plan entries that should be shown to the user."""
 
         if not self.selected_unique_ids:
             return self.entries

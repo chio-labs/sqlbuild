@@ -396,6 +396,7 @@ def build_merged_dbt_execution_argv(
     plan: DbtInteropPlan,
     replay_on_change: str | None = None,
     defer_clone_unique_ids: frozenset[str] = frozenset(),
+    defer_clone_view_chain_terms: tuple[str, ...] = (),
 ) -> tuple[str, ...] | None:
     """Build the single dbt argv used for execution."""
 
@@ -405,6 +406,7 @@ def build_merged_dbt_execution_argv(
         command=command,
         plan=plan,
         defer_clone_unique_ids=defer_clone_unique_ids,
+        defer_clone_view_chain_terms=defer_clone_view_chain_terms,
     )
     if plan.dbt_model_plan is not None:
         if not planned_select_terms:
@@ -660,6 +662,7 @@ def _planned_dbt_select_terms(
     command: DbtInteropCommand,
     plan: DbtInteropPlan,
     defer_clone_unique_ids: frozenset[str] = frozenset(),
+    defer_clone_view_chain_terms: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     if plan.dbt_model_plan is None:
         return ()
@@ -680,7 +683,7 @@ def _planned_dbt_select_terms(
         for entry in plan.dbt_model_plan.entries
         if entry.action == DbtModelPlanAction.RUN and entry.unique_id in executable_model_unique_ids
     )
-    return tuple(sorted(frozenset((*model_terms, *non_model_terms))))
+    return tuple(sorted(frozenset((*model_terms, *defer_clone_view_chain_terms, *non_model_terms))))
 
 
 def _selected_non_model_unique_ids(

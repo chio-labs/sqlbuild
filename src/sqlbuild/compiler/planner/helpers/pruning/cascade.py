@@ -110,12 +110,7 @@ def resolve_cascade(
     effective_cascades: dict[str, CascadeResult],
     model_cursor_types: dict[str, str | None],
 ) -> CascadeResult | None:
-    """Resolve the effective backfill for a model after upstream cascade propagation.
-
-    Returns None if no upstream changes the model's effective propagated
-    backfill. Returns a CascadeResult with the effective window, all
-    contributing upstream causes, and the nominated root decider.
-    """
+    """Resolve the effective backfill for a model after upstream cascade propagation."""
 
     candidates: list[CascadeCause] = _gather_cascade_candidates(
         own_cursor_type=own_cursor_type,
@@ -236,10 +231,7 @@ def _pick_winner(
     *,
     candidates: list[CascadeCause],
 ) -> CascadeCause | None:
-    """Pick the strongest incoming candidate.
-
-    Among tied candidates, pick alphabetically by model name.
-    """
+    """Pick the strongest incoming candidate."""
 
     best: CascadeCause | None = None
     best_rank: tuple[int, int] | None = None
@@ -284,12 +276,7 @@ def _backfills_match(a: BackfillResult, b: BackfillResult) -> bool:
 
 
 def _backfill_rank(action: BackfillAction, duration: str | None) -> tuple[int, int]:
-    """Produce a comparable rank tuple for a backfill action.
-
-    Returns (action_rank, duration_seconds) where action_rank orders
-    FORWARD_ONLY < BOUNDED < FULL, and duration_seconds orders bounded
-    durations by total size.
-    """
+    """Produce a comparable rank tuple for a backfill action."""
 
     action_rank: int = _ACTION_RANK[action]
     duration_seconds: int = 0

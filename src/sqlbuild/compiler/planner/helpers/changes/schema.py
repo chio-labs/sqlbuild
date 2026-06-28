@@ -15,12 +15,7 @@ def detect_schema_changes(
     warehouse_columns: tuple[ColumnInfo, ...],
     type_enforcement: bool,
 ) -> tuple[SchemaFinding, ...]:
-    """Compare yml and inferred columns against warehouse columns and return findings.
-
-    When type_enforcement is True, yml types take precedence over inferred types
-    for overlapping columns. When False, inferred types take precedence since yml
-    types may be stale.
-    """
+    """Compare yml and inferred columns against warehouse columns and return findings."""
 
     warehouse_map: dict[str, str] = {col.name: col.type for col in warehouse_columns}
     findings: list[SchemaFinding] = []
@@ -122,11 +117,7 @@ def _compare_yml_columns_non_enforced(
     warehouse_map: dict[str, str],
     seen_names: set[str],
 ) -> list[SchemaFinding]:
-    """Compare yml columns against warehouse when type enforcement is off.
-
-    Only covers columns not already seen by inferred. For overlapping columns,
-    inferred takes precedence via seen_names.
-    """
+    """Compare yml columns against warehouse when type enforcement is off."""
 
     findings: list[SchemaFinding] = []
     col: ColumnInfo

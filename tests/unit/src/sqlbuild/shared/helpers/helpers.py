@@ -26,7 +26,7 @@ class RecordingRelationAdapter(BaseAdapter):
 
     def __init__(self, *, relations: tuple[RelationInfo, ...]) -> None:
         self._relations = relations
-        self.list_relations_calls: list[tuple[str, ...]] = []
+        self.list_relations_calls: list[tuple[str | None, tuple[str, ...]]] = []
 
     def connect(self, config: dict[str, Any]) -> object:
         del config
@@ -46,11 +46,11 @@ class RecordingRelationAdapter(BaseAdapter):
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
-        del connection, database, names
-        self.list_relations_calls.append(tuple(schemas) if schemas is not None else ())
+        del connection, names
+        self.list_relations_calls.append((database, tuple(schemas) if schemas is not None else ()))
         requested: frozenset[str] | None = frozenset(schemas) if schemas is not None else None
         return tuple(
             relation
             for relation in self._relations
-            if requested is None or relation.schema in requested
+            if relation.database == database and (requested is None or relation.schema in requested)
         )

@@ -38,11 +38,7 @@ from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settin
 
 
 class BaseAdapter(StrictAdapter):
-    """Adapter base with ANSI SQL defaults.
-
-    Built-in adapters and most user adapters should subclass this.
-    Override only the methods your engine requires.
-    """
+    """Adapter base with ANSI SQL defaults."""
 
     adapter_name: ClassVar[str]
     sql_analysis_dialect_name: ClassVar[str | None] = None

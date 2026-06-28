@@ -263,10 +263,7 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
     database, schemas, names = adapter.list_relation_calls[0]
     assert database is None
     assert schemas == ("main",)
-    scanned_names: frozenset[str] = frozenset(names or ())
-    model_relation_names: frozenset[str] = frozenset({"base_orders", "stg_orders", "fact_orders"})
-    assert model_relation_names <= scanned_names
-    assert frozenset({"_sqlbuild_fingerprints", "_sqlbuild_source_freshness"}) <= scanned_names
+    assert names is None
     assert len(adapter.relation_exists_calls) == test_case.expected_relation_exists_call_count
 
 
@@ -355,7 +352,7 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
     listed_names: frozenset[str] = frozenset(
         name for call in adapter.list_relation_calls for name in (call[2] or ())
     )
-    assert seed_relation_names <= listed_names
+    assert not listed_names
     changed_seed_short_names: frozenset[str] = frozenset(
         unique_id.split(".")[-1] for unique_id in result.stale_out_of_selection_seed_unique_ids
     )

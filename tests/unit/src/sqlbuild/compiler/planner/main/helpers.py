@@ -2,9 +2,17 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject, CompileModelConfig
+from sqlbuild.compiler.compile.models.core import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompileModelConfig,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -89,3 +97,48 @@ def write_standard_model_state(
 def model_definition_hash(project: CompiledProject, name: str) -> str:
     model: CompiledModel = next(model for model in project.models if model.name == name)
     return compute_query_hash(model.query_sql)
+
+
+def build_sqlbuild_model_selector_project() -> CompiledProject:
+    return CompiledProject(
+        run_id="selector-test-run",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        models=(
+            build_sqlbuild_model_selector_model(
+                name="fact_orders",
+                relative_path=Path("models/marts/fact_orders.sql"),
+                tags=("nightly",),
+            ),
+            build_sqlbuild_model_selector_model(
+                name="dim_customers",
+                relative_path=Path("models/marts/dim_customers.sql"),
+                tags=("nightly", "customer"),
+            ),
+            build_sqlbuild_model_selector_model(
+                name="stg_orders",
+                relative_path=Path("models/staging/stg_orders.sql"),
+                tags=("staging",),
+            ),
+        ),
+    )
+
+
+def build_sqlbuild_model_selector_model(
+    *, name: str, relative_path: Path, tags: tuple[str, ...]
+) -> CompiledModel:
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
+        deps=(),
+        name=name,
+        relative_path=relative_path,
+        query_sql=f"SELECT 1 AS {name}",
+        config=CompileModelConfig(values={"tags": tags}),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema=None,
+            name=name,
+            qualified_name=None,
+        ),
+    )

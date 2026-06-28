@@ -127,6 +127,17 @@ class DbtModeGuardTestCase:
 
 
 @dataclass(frozen=True)
+class DbtSelectionErrorTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    sqlbuild_model_sql_by_name: dict[str, str]
+    sqlbuild_model_tags_by_name: dict[str, tuple[str, ...]]
+    sqlbuild_model_path_by_name: dict[str, str]
+    select: tuple[str, ...]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class DbtExecutionSpacingTestCase:
     description: str
     expected_spacing_fragment: str
@@ -477,6 +488,16 @@ class DbtSelectionTestCase:
     expected_dbt_anchor_terms: tuple[str, ...] = ()
     expected_dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] | None = None
     expected_path_translations: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtDeferCloneViewChainTermsTestCase:
+    description: str
+    manifest_data: dict[str, object]
+    sqlbuild_model_sql_by_name: dict[str, str]
+    selected_sqlbuild_model_names: tuple[str, ...]
+    expected_terms: tuple[str, ...]
+    expected_unique_ids: frozenset[str]
 
 
 @dataclass(frozen=True)

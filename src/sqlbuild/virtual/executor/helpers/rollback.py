@@ -287,7 +287,9 @@ def validate_physical_relations_exist(
             ),
         )
         for model_name, target in targets_by_model.items():
-            if not relation_lookup.exists(schema=target.schema, name=target.name):
+            if not relation_lookup.exists(
+                database=target.database, schema=target.schema, name=target.name
+            ):
                 raise PlannerInputError(
                     f"checkpoint references missing warehouse relation for model '{model_name}'",
                     code="S024",

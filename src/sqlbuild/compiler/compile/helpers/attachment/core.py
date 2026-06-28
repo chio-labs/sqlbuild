@@ -143,7 +143,6 @@ def build_model_inputs(
             hook_functions=discovered_inputs.hook_functions,
             provider_names=frozenset(provider.name for provider in discovered_inputs.providers),
         )
-        # Keep the interpolated-but-unexpanded form for SQL test macro mocks.
         var_substituted_sql: str = substitute_sql_vars(
             sql=model_file.query_sql,
             file_path=model_file.file_path,
@@ -1422,10 +1421,7 @@ def _bool_from_dict(values: dict[str, object], key: str) -> bool:
 
 
 def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:
-    """Resolve whether SQL validation is active for a model.
-
-    Per-model override in MODEL header takes precedence over project setting.
-    """
+    """Resolve whether SQL validation is active for a model."""
 
     raw: object | None = model_config.values.get("sql_validation")
     if isinstance(raw, bool):

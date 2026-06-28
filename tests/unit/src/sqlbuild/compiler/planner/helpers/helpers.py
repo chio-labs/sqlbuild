@@ -222,7 +222,7 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
-        del connection, database, names
+        del connection, names
         requested: frozenset[str] | None = frozenset(schemas) if schemas is not None else None
         listed: list[RelationInfo] = [
             RelationInfo(
@@ -232,14 +232,14 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
                 relation_type="base table",
             )
             for relation_database, relation_schema, relation_name in self.existing_relations
-            if requested is None or relation_schema in requested
+            if relation_database == database and (requested is None or relation_schema in requested)
         ]
         if self.fingerprint_table_exists and requested is not None:
             requested_schema: str
             for requested_schema in requested:
                 listed.append(
                     RelationInfo(
-                        database=None,
+                        database=database,
                         schema=requested_schema,
                         name=FINGERPRINT_TABLE_NAME,
                         relation_type="base table",
