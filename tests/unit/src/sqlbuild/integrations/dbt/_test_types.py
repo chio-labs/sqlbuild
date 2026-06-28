@@ -513,8 +513,10 @@ class DbtDeferCloneViewChainTermsTestCase:
     manifest_data: dict[str, object]
     sqlbuild_model_sql_by_name: dict[str, str]
     selected_sqlbuild_model_names: tuple[str, ...]
+    selected_dbt_unique_ids: tuple[str, ...]
     expected_terms: tuple[str, ...]
     expected_unique_ids: frozenset[str]
+    expected_clone_unique_ids: frozenset[str]
 
 
 @dataclass(frozen=True)
