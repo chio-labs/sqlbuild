@@ -38,7 +38,6 @@ class ColumnInfo:
 class NormalizedType:
     """Semantic type shape used for schema comparison and numeric-family checks."""
 
-    # Dialect-local representative spelling, not a closed enum of warehouse types.
     normalized_name: str
     family: TypeFamily
     precision: int | None = None
