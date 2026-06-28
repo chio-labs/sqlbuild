@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -55,6 +56,7 @@ _DBT_OUTCOME_STATUSES: frozenset[str] = frozenset(
     }
 )
 _DBT_DURATION_WIDTH: int = 7
+_DBT_STATUS_REFRESH_SECONDS: float = 1.0
 
 
 def execute_dbt_json_event_stream(
@@ -86,6 +88,18 @@ def execute_dbt_json_event_stream(
         if enable_status
         else None
     )
+    status_box: dict[str, TransientStatusReporter | None] = {"status": status}
+    status_lock: threading.Lock = threading.Lock()
+    status_stop: threading.Event = threading.Event()
+    status_thread: threading.Thread | None = _start_active_node_status_refresher(
+        stream=stream,
+        use_color=use_color,
+        enabled=enable_status,
+        active_nodes=active_nodes,
+        status_box=status_box,
+        status_lock=status_lock,
+        status_stop=status_stop,
+    )
     try:
         process: subprocess.Popen[str] = subprocess.Popen(
             argv,
@@ -116,22 +130,21 @@ def execute_dbt_json_event_stream(
                     continue
                 node_start_message: str | None = parse_dbt_node_start_message(event=event)
                 if node_start_message is not None:
-                    if not enable_status:
-                        pass
-                    elif status is None:
-                        status = TransientStatusReporter(stream=stream, use_color=use_color)
-                        status.start(node_start_message)
-                    else:
-                        status.update(node_start_message)
+                    if enable_status:
+                        with status_lock:
+                            status_box["status"] = _update_message_status(
+                                status=status_box["status"],
+                                message=node_start_message,
+                                stream=stream,
+                                use_color=use_color,
+                            )
                     start_result: DbtNodeExecutionResult | None = parse_dbt_node_start_result(
                         event=event
                     )
                     if start_result is not None and start_result.unique_id not in started_indexes:
                         display_index += 1
                         started_indexes[start_result.unique_id] = display_index
-                        if status is not None:
-                            status.close()
-                            status = None
+                        _close_status(status_box=status_box, status_lock=status_lock)
                         render_dbt_node_result(
                             stream=stream,
                             style=style,
@@ -143,17 +156,18 @@ def execute_dbt_json_event_stream(
                                 detail_by_unique_id=detail_by_unique_id,
                             ),
                         )
-                        active_nodes[start_result.unique_id] = (
-                            start_result.node_name,
-                            time.monotonic(),
-                        )
                         if enable_status:
-                            status = _update_active_node_status(
-                                status=status,
-                                active_nodes=active_nodes,
-                                stream=stream,
-                                use_color=use_color,
-                            )
+                            with status_lock:
+                                active_nodes[start_result.unique_id] = (
+                                    start_result.node_name,
+                                    time.monotonic(),
+                                )
+                                status_box["status"] = _update_active_node_status(
+                                    status=status_box["status"],
+                                    active_nodes=active_nodes,
+                                    stream=stream,
+                                    use_color=use_color,
+                                )
                     continue
                 result: DbtNodeExecutionResult | None = parse_dbt_node_result(
                     event=event,
@@ -164,10 +178,11 @@ def execute_dbt_json_event_stream(
                 if result.unique_id in recorded_unique_ids:
                     continue
                 recorded_unique_ids.add(result.unique_id)
-                if status is not None:
-                    status.close()
-                    status = None
-                active_nodes.pop(result.unique_id, None)
+                with status_lock:
+                    if status_box["status"] is not None:
+                        status_box["status"].close()
+                        status_box["status"] = None
+                    active_nodes.pop(result.unique_id, None)
                 results.append(result)
                 if on_node_result is not None:
                     on_node_result(result)
@@ -187,16 +202,19 @@ def execute_dbt_json_event_stream(
                     ),
                 )
                 if enable_status:
-                    status = _update_active_node_status(
-                        status=status,
-                        active_nodes=active_nodes,
-                        stream=stream,
-                        use_color=use_color,
-                    )
+                    with status_lock:
+                        status_box["status"] = _update_active_node_status(
+                            status=status_box["status"],
+                            active_nodes=active_nodes,
+                            stream=stream,
+                            use_color=use_color,
+                        )
 
     returncode: int = process.wait()
-    if status is not None:
-        status.close()
+    status_stop.set()
+    if status_thread is not None:
+        status_thread.join(timeout=1)
+    _close_status(status_box=status_box, status_lock=status_lock)
     return returncode, tuple(results)
 
 
@@ -209,6 +227,85 @@ def _start_dbt_status(*, stream: TextIO, use_color: bool) -> TransientStatusRepo
     )
     status.start("Waiting for dbt node output...")
     return status
+
+
+def _start_active_node_status_refresher(
+    *,
+    stream: TextIO,
+    use_color: bool,
+    enabled: bool,
+    active_nodes: dict[str, tuple[str, float]],
+    status_box: dict[str, TransientStatusReporter | None],
+    status_lock: threading.Lock,
+    status_stop: threading.Event,
+    refresh_seconds: float | None = None,
+) -> threading.Thread | None:
+    if not enabled or not stream.isatty():
+        return None
+    actual_refresh_seconds: float = (
+        _DBT_STATUS_REFRESH_SECONDS if refresh_seconds is None else refresh_seconds
+    )
+    thread: threading.Thread = threading.Thread(
+        target=_run_active_node_status_refresher,
+        kwargs={
+            "stream": stream,
+            "use_color": use_color,
+            "active_nodes": active_nodes,
+            "status_box": status_box,
+            "status_lock": status_lock,
+            "status_stop": status_stop,
+            "refresh_seconds": actual_refresh_seconds,
+        },
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
+def _run_active_node_status_refresher(
+    *,
+    stream: TextIO,
+    use_color: bool,
+    active_nodes: dict[str, tuple[str, float]],
+    status_box: dict[str, TransientStatusReporter | None],
+    status_lock: threading.Lock,
+    status_stop: threading.Event,
+    refresh_seconds: float,
+) -> None:
+    while not status_stop.wait(refresh_seconds):
+        with status_lock:
+            status_box["status"] = _update_active_node_status(
+                status=status_box["status"],
+                active_nodes=active_nodes,
+                stream=stream,
+                use_color=use_color,
+            )
+
+
+def _update_message_status(
+    *,
+    status: TransientStatusReporter | None,
+    message: str,
+    stream: TextIO,
+    use_color: bool,
+) -> TransientStatusReporter | None:
+    if status is None:
+        status = TransientStatusReporter(stream=stream, use_color=use_color)
+        status.start(message)
+        return status
+    status.update(message)
+    return status
+
+
+def _close_status(
+    *,
+    status_box: dict[str, TransientStatusReporter | None],
+    status_lock: threading.Lock,
+) -> None:
+    with status_lock:
+        if status_box["status"] is not None:
+            status_box["status"].close()
+            status_box["status"] = None
 
 
 def _update_active_node_status(
@@ -235,12 +332,18 @@ def _format_active_node_status(*, active_nodes: dict[str, tuple[str, float]]) ->
         sorted(active_nodes.values(), key=lambda item: item[1])
     )
     displayed: tuple[str, ...] = tuple(
-        f"{name} {max(0, int(now - started_at))}s" for name, started_at in ordered[:3]
+        f"{name} {_format_elapsed_seconds(now=now, started_at=started_at)}"
+        for name, started_at in ordered[:3]
     )
     extra_count: int = len(ordered) - len(displayed)
     suffix: str = f", +{extra_count} more" if extra_count > 0 else ""
     node_label: str = "node" if len(active_nodes) == 1 else "nodes"
     return f"running {len(active_nodes)} dbt {node_label}: {', '.join(displayed)}{suffix}"
+
+
+def _format_elapsed_seconds(*, now: float, started_at: float) -> str:
+    elapsed: int = max(0, int(now - started_at))
+    return "<1s" if elapsed == 0 else f"{elapsed}s"
 
 
 def parse_dbt_node_start_message(*, event: dict[str, object]) -> str | None:

@@ -189,6 +189,15 @@ class DbtEventStreamTestCase:
 
 
 @dataclass(frozen=True)
+class DbtSilentStatusRefreshTestCase:
+    description: str
+    silent_seconds: float
+    refresh_seconds: float
+    expected_initial_status: str
+    expected_refreshed_status: str
+
+
+@dataclass(frozen=True)
 class DbtDebugPipelineTestCase:
     description: str
     args: tuple[str, ...]
