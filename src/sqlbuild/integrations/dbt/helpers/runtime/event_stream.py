@@ -54,6 +54,7 @@ _DBT_OUTCOME_STATUSES: frozenset[str] = frozenset(
         "warning",
     }
 )
+_DBT_DURATION_WIDTH: int = 7
 
 
 def execute_dbt_json_event_stream(
@@ -395,12 +396,17 @@ def render_dbt_node_result(
     name: str = result.node_name[:30]
     status: str = _display_status(result.status)
     duration: str = f"{result.execution_time:.2f}s" if result.execution_time is not None else ""
+    rendered_detail: str = style.muted(detail) if detail else ""
+    value: str = (
+        f"{_pad_styled(value=style.status(status), plain_value=status, width=6)} "
+        f"{duration:<{_DBT_DURATION_WIDTH}}{rendered_detail}"
+    ).rstrip()
     stream.write(
         f"  {ctr:<5} {resource_type:<9}"
         + format_aligned_name_value(
             plain_name=name,
             styled_name=style.dbt_object_name(name),
-            value=f"{style.status(status)} {duration}{detail}".rstrip(),
+            value=value,
             name_column_width=30,
             prefix=" ",
         )
@@ -433,6 +439,10 @@ def _display_status(status: str) -> str:
     if normalized == "start":
         return "START"
     return status.upper()
+
+
+def _pad_styled(*, value: str, plain_value: str, width: int) -> str:
+    return value + " " * max(0, width - len(plain_value))
 
 
 def _trusted_status(value: object | None) -> str | None:
