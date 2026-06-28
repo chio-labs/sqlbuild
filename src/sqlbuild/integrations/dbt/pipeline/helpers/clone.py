@@ -109,6 +109,7 @@ def execute_dbt_clone(
         and dbt_manifest_model_materialization(model=current_model) != DBT_MATERIALIZATION_EPHEMERAL
         and (reuse_model := reuse_manifest.models_by_unique_id.get(node.unique_id)) is not None
     )
+    clonable_models = _order_clone_models(current_manifest=current_manifest, models=clonable_models)
     total: int = len(clonable_models)
     if on_start is not None:
         on_start(total)
@@ -160,6 +161,43 @@ def execute_dbt_clone(
         if on_item is not None:
             on_item(index, total, item_result)
     return CloneExecutionResult(item_results=tuple(results))
+
+
+def _order_clone_models(
+    *,
+    current_manifest: DbtManifestIndex,
+    models: tuple[tuple[DbtManifestModel, DbtManifestModel], ...],
+) -> tuple[tuple[DbtManifestModel, DbtManifestModel], ...]:
+    selected_by_unique_id: dict[str, tuple[DbtManifestModel, DbtManifestModel]] = {
+        current_model.unique_id: (current_model, reuse_model)
+        for current_model, reuse_model in models
+    }
+    ordered: list[tuple[DbtManifestModel, DbtManifestModel]] = []
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit(unique_id: str) -> None:
+        if unique_id in visited or unique_id in visiting:
+            return
+        selected_pair: tuple[DbtManifestModel, DbtManifestModel] | None = selected_by_unique_id.get(
+            unique_id
+        )
+        if selected_pair is None:
+            return
+        visiting.add(unique_id)
+        current_model: DbtManifestModel = selected_pair[0]
+        dependency_unique_id: str
+        for dependency_unique_id in current_model.depends_on_nodes:
+            if dependency_unique_id in current_manifest.models_by_unique_id:
+                visit(dependency_unique_id)
+        visiting.remove(unique_id)
+        visited.add(unique_id)
+        ordered.append(selected_pair)
+
+    current_model: DbtManifestModel
+    for current_model, _ in models:
+        visit(current_model.unique_id)
+    return tuple(ordered)
 
 
 def _consume_one_value(*, args: tuple[str, ...], index: int) -> tuple[str, int]:
