@@ -1428,7 +1428,7 @@ class SnowflakeAdapter(BaseAdapter):
         if schemas:
             placeholders: str = ", ".join(["%s"] * len(schemas))
             query += f" AND UPPER(table_schema) IN ({placeholders})"
-            params.extend(schemas)
+            params.extend(schema.upper() for schema in schemas)
         if names:
             placeholders = ", ".join(["%s"] * len(names))
             query += f" AND UPPER(table_name) IN ({placeholders})"
@@ -1551,7 +1551,7 @@ class SnowflakeAdapter(BaseAdapter):
         if schemas:
             placeholders: str = ", ".join(["%s"] * len(schemas))
             query += f" AND UPPER(table_schema) IN ({placeholders})"
-            params.extend(schemas)
+            params.extend(schema.upper() for schema in schemas)
         if names:
             placeholders = ", ".join(["%s"] * len(names))
             query += f" AND UPPER(table_name) IN ({placeholders})"

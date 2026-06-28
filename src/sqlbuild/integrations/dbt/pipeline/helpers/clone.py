@@ -57,14 +57,34 @@ def parse_dbt_clone_options(args: tuple[str, ...]) -> DbtCloneOptions:
             value, index = _consume_one_value(args=args, index=index)
             dbt_args.extend((token, value))
             continue
+        if not token.startswith("--"):
+            raise DbtInteropArgumentError(
+                f"unexpected positional argument {token!r}",
+                code="C350",
+                help=f"Use --select {token} to choose dbt models for clone.",
+            )
         dbt_args.append(token)
         index += 1
-    return DbtCloneOptions(
+    options: DbtCloneOptions = DbtCloneOptions(
         dbt_args=tuple(dbt_args),
         select=tuple(select),
         exclude=tuple(exclude),
         hard_copy=hard_copy,
         no_sql_validation=no_sql_validation,
+    )
+    validate_dbt_clone_selection(options=options)
+    return options
+
+
+def validate_dbt_clone_selection(*, options: DbtCloneOptions) -> None:
+    """Reject dbt clone requests that would otherwise expand to the whole project."""
+
+    if options.select:
+        return
+    raise DbtInteropArgumentError(
+        "sqb dbt clone requires an explicit --select",
+        code="C350",
+        help="Refusing to clone the entire dbt project. Use --select to choose dbt models.",
     )
 
 

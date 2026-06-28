@@ -7,6 +7,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCloneOptions
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import (
@@ -15,6 +16,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.clone import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtCloneExecuteTestCase,
+    DbtCloneOptionsErrorTestCase,
     DbtCloneOptionsTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
@@ -59,6 +61,21 @@ CLONE_OPTIONS_TEST_CASES: tuple[DbtCloneOptionsTestCase, ...] = (
             "--profiles-dir",
             "profiles",
         ),
+    ),
+)
+
+CLONE_OPTIONS_ERROR_TEST_CASES: tuple[DbtCloneOptionsErrorTestCase, ...] = (
+    DbtCloneOptionsErrorTestCase(
+        description="rejects clone without explicit select",
+        args=(),
+        expected_error_fragment="requires an explicit --select",
+        expected_help_fragment="Refusing to clone the entire dbt project",
+    ),
+    DbtCloneOptionsErrorTestCase(
+        description="rejects bare positional selector with select hint",
+        args=("tag:unicron",),
+        expected_error_fragment="unexpected positional argument 'tag:unicron'",
+        expected_help_fragment="Use --select tag:unicron",
     ),
 )
 
@@ -167,6 +184,22 @@ def test_given_clone_args_when_parsing_then_returns_expected_options(
     assert options.hard_copy == test_case.expected_hard_copy
     assert options.no_sql_validation == test_case.expected_no_sql_validation
     assert options.dbt_args == test_case.expected_dbt_args
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    CLONE_OPTIONS_ERROR_TEST_CASES,
+    ids=[case.description for case in CLONE_OPTIONS_ERROR_TEST_CASES],
+)
+def test_given_unsafe_clone_args_when_parsing_then_raises_argument_error(
+    test_case: DbtCloneOptionsErrorTestCase,
+) -> None:
+    with pytest.raises(DbtInteropArgumentError) as exc_info:
+        parse_dbt_clone_options(test_case.args)
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
+    assert exc_info.value.help is not None
+    assert test_case.expected_help_fragment in exc_info.value.help
 
 
 @pytest.mark.parametrize(
