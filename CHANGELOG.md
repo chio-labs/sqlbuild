@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.45.3](https://github.com/chio-labs/sqlbuild/compare/v0.45.2...v0.45.3) (2026-06-28)
+
+
+### Bug Fixes
+
+* stream defer clone prephase progress ([bb2956f](https://github.com/chio-labs/sqlbuild/commit/bb2956f99bd742c7bcc80120c32e4d3daaa4684c))
+* stream defer clone prephase progress ([f3c1398](https://github.com/chio-labs/sqlbuild/commit/f3c139803c6b1a6d58d14fe9bfac0b851aa0cbc7))
+
 ## [0.45.2](https://github.com/chio-labs/sqlbuild/compare/v0.45.1...v0.45.2) (2026-06-28)
 
 
