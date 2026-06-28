@@ -111,6 +111,7 @@ def prepare_dbt_diff_workspace(
     production_ref_git_ref: str = "prod",
     include_second_model: bool = False,
     include_view_model: bool = False,
+    include_defer_clone_chain: bool = False,
 ) -> Path:
     """Build a dbt diff workspace with prod and feature branch order tables."""
 
@@ -144,6 +145,8 @@ def prepare_dbt_diff_workspace(
         _write_dbt_diff_customers_model(workspace=workspace)
     if include_view_model:
         write_dbt_clone_summary_view_model(workspace=workspace, amount_cents=900)
+    if include_defer_clone_chain:
+        write_dbt_defer_clone_chain_models(workspace=workspace)
     (profiles_dir / "profiles.yml").write_text(
         "analytics:\n"
         "  target: dev\n"
@@ -215,6 +218,22 @@ def write_dbt_clone_summary_view_model(*, workspace: Path, amount_cents: int) ->
 
     workspace.joinpath("dbt_project", "models", "dbt_order_summary.sql").write_text(
         f"{{{{ config(materialized='view') }}}}\n\nselect {amount_cents} as total_amount_cents\n",
+        encoding="utf-8",
+    )
+
+
+def write_dbt_defer_clone_chain_models(*, workspace: Path) -> None:
+    """Write a dbt-only selected model behind a deferred view chain."""
+
+    workspace.joinpath("dbt_project", "models", "dbt_order_summary.sql").write_text(
+        "{{ config(materialized='view') }}\n\n"
+        "select order_id, amount_cents from {{ ref('dbt_orders') }}\n",
+        encoding="utf-8",
+    )
+    workspace.joinpath("dbt_project", "models", "dbt_bias.sql").write_text(
+        "{{ config(materialized='table') }}\n\n"
+        "select order_id, amount_cents as bias_amount_cents "
+        "from {{ ref('dbt_order_summary') }}\n",
         encoding="utf-8",
     )
 

@@ -320,6 +320,7 @@ def execute_dbt_interop_from_project(
             manifest=manifest,
             project=project,
             selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
+            selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
             required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
         )
         if effective_defer_clone_from
@@ -344,6 +345,7 @@ def execute_dbt_interop_from_project(
             manifest=manifest,
             project=project,
             selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
+            selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
         )
         if effective_defer_clone_from
         else ()
@@ -354,6 +356,7 @@ def execute_dbt_interop_from_project(
             manifest=manifest,
             project=project,
             selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
+            selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
         )
         if effective_defer_clone_from
         else frozenset()

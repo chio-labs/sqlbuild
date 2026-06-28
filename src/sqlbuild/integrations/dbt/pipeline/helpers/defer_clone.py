@@ -20,6 +20,7 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
     build_dbt_combined_graph,
     combined_graph_node_is_clonable,
     combined_graph_node_is_view,
+    dbt_model_graph_key,
     sqlbuild_model_graph_key,
 )
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
@@ -84,6 +85,7 @@ def run_dbt_defer_clone_prephase(
     on_progress: Callable[[str], None] | None,
 ) -> None:
     if not unique_ids:
+        _report_progress(on_progress, "defer-clone enabled but no clonable dbt boundary resolved.")
         return
     production_ref: DbtProductionRefConfig = discovered_inputs.project_config.dbt.production_ref
     if production_ref.git_ref is None or production_ref.generate_schema_name_override is None:
@@ -155,12 +157,14 @@ def resolve_defer_clone_unique_ids(
     manifest: DbtManifestIndex,
     project: CompiledProject,
     selected_sqlbuild_model_names: tuple[str, ...],
+    selected_dbt_unique_ids: tuple[str, ...],
     required_dbt_unique_ids: tuple[str, ...],
 ) -> frozenset[str]:
-    """Resolve the first non-view dbt ancestors to clone for SQLBuild-selected boundaries."""
+    """Resolve the first non-view dbt ancestors to clone for selected boundaries."""
 
-    selected: frozenset[DbtCombinedGraphKey] = frozenset(
-        sqlbuild_model_graph_key(model_name) for model_name in selected_sqlbuild_model_names
+    selected: frozenset[DbtCombinedGraphKey] = _defer_clone_seed_keys(
+        selected_sqlbuild_model_names=selected_sqlbuild_model_names,
+        selected_dbt_unique_ids=selected_dbt_unique_ids,
     )
 
     def is_clonable(key: DbtCombinedGraphKey) -> bool:
@@ -190,6 +194,7 @@ def resolve_defer_clone_view_chain_terms(
     manifest: DbtManifestIndex,
     project: CompiledProject,
     selected_sqlbuild_model_names: tuple[str, ...],
+    selected_dbt_unique_ids: tuple[str, ...],
 ) -> tuple[str, ...]:
     """Return dbt model selector terms for view ancestors that must rebuild over clones."""
 
@@ -198,6 +203,7 @@ def resolve_defer_clone_view_chain_terms(
         manifest=manifest,
         project=project,
         selected_sqlbuild_model_names=selected_sqlbuild_model_names,
+        selected_dbt_unique_ids=selected_dbt_unique_ids,
     )
     terms: set[str] = set()
     view_key: DbtCombinedGraphKey
@@ -216,6 +222,7 @@ def resolve_defer_clone_view_chain_unique_ids(
     manifest: DbtManifestIndex,
     project: CompiledProject,
     selected_sqlbuild_model_names: tuple[str, ...],
+    selected_dbt_unique_ids: tuple[str, ...],
 ) -> frozenset[str]:
     """Return dbt model unique IDs for view ancestors that must rebuild over clones."""
 
@@ -224,6 +231,7 @@ def resolve_defer_clone_view_chain_unique_ids(
         manifest=manifest,
         project=project,
         selected_sqlbuild_model_names=selected_sqlbuild_model_names,
+        selected_dbt_unique_ids=selected_dbt_unique_ids,
     )
     return frozenset(
         view_key.name for view_key in view_chain if view_key.owner == DbtCombinedGraphOwner.DBT
@@ -236,9 +244,11 @@ def _resolve_defer_clone_view_chain_keys(
     manifest: DbtManifestIndex,
     project: CompiledProject,
     selected_sqlbuild_model_names: tuple[str, ...],
+    selected_dbt_unique_ids: tuple[str, ...],
 ) -> frozenset[DbtCombinedGraphKey]:
-    selected: frozenset[DbtCombinedGraphKey] = frozenset(
-        sqlbuild_model_graph_key(model_name) for model_name in selected_sqlbuild_model_names
+    selected: frozenset[DbtCombinedGraphKey] = _defer_clone_seed_keys(
+        selected_sqlbuild_model_names=selected_sqlbuild_model_names,
+        selected_dbt_unique_ids=selected_dbt_unique_ids,
     )
 
     def is_clonable(key: DbtCombinedGraphKey) -> bool:
@@ -254,6 +264,19 @@ def _resolve_defer_clone_view_chain_keys(
         upstream=graph.upstream_deps,
         is_clonable=is_clonable,
         is_view=is_view,
+    )
+
+
+def _defer_clone_seed_keys(
+    *,
+    selected_sqlbuild_model_names: tuple[str, ...],
+    selected_dbt_unique_ids: tuple[str, ...],
+) -> frozenset[DbtCombinedGraphKey]:
+    return frozenset(
+        (
+            *(sqlbuild_model_graph_key(model_name) for model_name in selected_sqlbuild_model_names),
+            *(dbt_model_graph_key(unique_id) for unique_id in selected_dbt_unique_ids),
+        )
     )
 
 
