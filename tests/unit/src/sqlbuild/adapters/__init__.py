@@ -1,1 +1,1 @@
-"""Adapter unit tests."""
+"""Adapter tests."""
