@@ -77,6 +77,10 @@ _SC045_ALLOWED_PATH_MARKERS_BY_TERM: dict[str, tuple[str, ...]] = {
 }
 _MAX_SOURCE_FILE_LINES: int = 2000
 _MAX_HELPER_FLAT_MODULES: int = 10
+_HELPERS_PACKAGE_LAYOUT_ALLOWED_DIRS: tuple[str, ...] = (
+    "src/sqlbuild/cli/commands/main/helpers",
+    "src/sqlbuild/shared/helpers",
+)
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/client.py",
     "src/sqlbuild/adapters/shared/classes/*.py",
@@ -385,18 +389,20 @@ def check_source_file_line_count(repo_root: Path, file_path: Path) -> list[Viola
 def check_helpers_package_layout(repo_root: Path, file_path: Path) -> list[Violation]:
     """Enforce consistent flat-or-subfolder helper package layout."""
 
-    if file_path.name != "__init__.py" or file_path.parent.name != "helpers":
+    helpers_dir: Path | None = _helpers_package_layout_dir(file_path=file_path)
+    if helpers_dir is None:
+        return []
+    relative_helpers_dir: str = helpers_dir.relative_to(repo_root).as_posix()
+    if relative_helpers_dir in _HELPERS_PACKAGE_LAYOUT_ALLOWED_DIRS:
         return []
 
     direct_modules: list[Path] = sorted(
         child
-        for child in file_path.parent.glob("*.py")
+        for child in helpers_dir.glob("*.py")
         if child.name != "__init__.py" and child.is_file()
     )
     concern_subfolders: list[Path] = sorted(
-        child
-        for child in file_path.parent.iterdir()
-        if child.is_dir() and child.name != "__pycache__"
+        child for child in helpers_dir.iterdir() if child.is_dir() and child.name != "__pycache__"
     )
 
     violations: list[Violation] = []
@@ -427,6 +433,26 @@ def check_helpers_package_layout(repo_root: Path, file_path: Path) -> list[Viola
             )
         )
     return violations
+
+
+def _helpers_package_layout_dir(*, file_path: Path) -> Path | None:
+    if file_path.parent.name == "helpers":
+        helpers_dir: Path = file_path.parent
+    elif file_path.parent.parent.name == "helpers":
+        helpers_dir = file_path.parent.parent
+    else:
+        return None
+    init_file: Path = helpers_dir / "__init__.py"
+    if init_file.exists():
+        return helpers_dir if file_path == init_file else None
+    direct_modules: list[Path] = sorted(
+        child
+        for child in helpers_dir.glob("*.py")
+        if child.name != "__init__.py" and child.is_file()
+    )
+    if not direct_modules:
+        return None
+    return helpers_dir if file_path == direct_modules[0] else None
 
 
 def check_banned_generic_filename(file_path: Path) -> list[Violation]:

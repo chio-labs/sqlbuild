@@ -226,6 +226,19 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC049",),
     ),
     CheckPathsTestCase(
+        description="reports mixed helper layout without init module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/build.py": (
+                "def build() -> str:\n    return 'demo'\n"
+            ),
+            "src/sqlbuild/example/widget/helpers/render/name.py": (
+                "def render() -> str:\n    return 'demo'\n"
+            ),
+        },
+        expected_violation_codes=("SC049",),
+    ),
+    CheckPathsTestCase(
         description="reports shared subfolder mixed with flat helper modules",
         repo_files=compliant_repo_files()
         | {
@@ -258,6 +271,19 @@ TEST_CASES: list[CheckPathsTestCase] = [
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+            **{
+                f"src/sqlbuild/example/widget/helpers/module_{index}.py": (
+                    f"def build_{index}() -> int:\n    return {index}\n"
+                )
+                for index in range(11)
+            },
+        },
+        expected_violation_codes=("SC050",),
+    ),
+    CheckPathsTestCase(
+        description="reports helpers package without init module with too many flat modules",
+        repo_files=compliant_repo_files()
+        | {
             **{
                 f"src/sqlbuild/example/widget/helpers/module_{index}.py": (
                     f"def build_{index}() -> int:\n    return {index}\n"
