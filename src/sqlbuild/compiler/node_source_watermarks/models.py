@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild.compiler.node_source_watermarks.types import WatermarkGraphResourceKind
+
 
 @dataclass(frozen=True)
 class NodeSourceWatermarkIdentity:
@@ -81,3 +83,43 @@ class NodeSourceWatermarkSet:
     records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord] = field(
         default_factory=dict
     )
+
+
+@dataclass(frozen=True)
+class WatermarkGraphKey:
+    """Framework-neutral graph key for watermark frontier analysis."""
+
+    node_type: str
+    node_name: str
+
+
+@dataclass(frozen=True)
+class WatermarkGraphNode:
+    """Framework-neutral graph node metadata for watermark frontier analysis."""
+
+    key: WatermarkGraphKey
+    resource_kind: WatermarkGraphResourceKind | str
+    materialized: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "resource_kind",
+            WatermarkGraphResourceKind(self.resource_kind),
+        )
+
+
+@dataclass(frozen=True)
+class WatermarkFrontierMember:
+    """One materialized/source frontier node reached from a selected root."""
+
+    root_key: WatermarkGraphKey
+    frontier_key: WatermarkGraphKey
+
+
+@dataclass(frozen=True)
+class WatermarkSourceAncestryMember:
+    """One raw source ancestor reached from a graph node."""
+
+    node_key: WatermarkGraphKey
+    source_key: WatermarkGraphKey
