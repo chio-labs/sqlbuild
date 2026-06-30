@@ -317,13 +317,13 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC061",),
     ),
     CheckPathsTestCase(
-        description="allows legacy CLI command main support folders",
+        description="reports CLI command main support folders",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/cli/commands/main/__init__.py": '"""Entrypoints."""\n',
             "src/sqlbuild/cli/commands/main/shared/__init__.py": '"""Shared."""\n',
         },
-        expected_violation_codes=(),
+        expected_violation_codes=("SC061",),
     ),
     CheckPathsTestCase(
         description="reports main package with too many flat modules",

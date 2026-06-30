@@ -11,7 +11,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     LifecycleCommandsBuildE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_fragments_in_order,
     prepare_waffle_shop,
     run_sqb,

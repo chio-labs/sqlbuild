@@ -7,39 +7,39 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.check.core import (
+from sqlbuild.cli.commands.helpers.check.core import (
     check_results_failed,
     load_results_by_loader_name,
     record_python_run_state_results,
     relevant_check_functions,
     write_check_results,
 )
-from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
-from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
-from sqlbuild.cli.commands.main.shared.helpers.config.parsers import (
+from sqlbuild.cli.commands.helpers.compile.target_writer import write_compile_target
+from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
+from sqlbuild.cli.commands.shared.helpers.config.parsers import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )
-from sqlbuild.cli.commands.main.shared.helpers.output.execution_json import (
+from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
     format_build_execution_json,
     write_execution_json_output,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.connection import (
+from sqlbuild.cli.commands.shared.helpers.progress.connection import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.core import (
+from sqlbuild.cli.commands.shared.helpers.progress.core import (
     BuildProgressCallbacks,
     format_build_footer,
     write_execution_header,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.planning import (
+from sqlbuild.cli.commands.shared.helpers.progress.planning import (
     PlanningProgressReporter,
 )
-from sqlbuild.cli.commands.main.shared.helpers.python_nodes.core import write_python_node_results
-from sqlbuild.cli.commands.main.shared.helpers.snapshots.full_refresh import (
+from sqlbuild.cli.commands.shared.helpers.python_nodes.core import write_python_node_results
+from sqlbuild.cli.commands.shared.helpers.snapshots.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
-from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import (
+from sqlbuild.cli.commands.shared.helpers.targets.runtime import (
     write_python_check_runtime_target,
     write_runtime_target,
 )

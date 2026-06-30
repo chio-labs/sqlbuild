@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     fetch_postgres_rows,
     relation_name,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     run_sqb,
 )

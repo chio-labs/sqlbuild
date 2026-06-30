@@ -8,26 +8,26 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.clone.output import (
+from sqlbuild.cli.commands.helpers.clone.output import (
     is_clone_success,
     render_clone_header,
     render_clone_item_line,
     render_clone_output,
 )
-from sqlbuild.cli.commands.main.helpers.clone.validation import validate_clone_request
-from sqlbuild.cli.commands.main.helpers.clone.virtual_output import (
+from sqlbuild.cli.commands.helpers.clone.validation import validate_clone_request
+from sqlbuild.cli.commands.helpers.clone.virtual_output import (
     is_virtual_clone_success,
     render_virtual_clone_output,
 )
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.shared.helpers.connection.core import (
     resolve_target_connection_config,
 )
-from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
+from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline

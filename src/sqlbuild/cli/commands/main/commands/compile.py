@@ -6,25 +6,25 @@ import time
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.compile.dag import resolve_compile_dag_path
-from sqlbuild.cli.commands.main.helpers.compile.lineage import (
+from sqlbuild.cli.commands.helpers.compile.dag import resolve_compile_dag_path
+from sqlbuild.cli.commands.helpers.compile.lineage import (
     build_compile_lineage,
     compile_analysis_lineage_mode,
 )
-from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
-from sqlbuild.cli.commands.main.helpers.compile.output import (
+from sqlbuild.cli.commands.helpers.compile.models import WrittenTarget
+from sqlbuild.cli.commands.helpers.compile.output import (
     format_compile_json,
     format_compile_text,
 )
-from sqlbuild.cli.commands.main.helpers.compile.status import (
+from sqlbuild.cli.commands.helpers.compile.status import (
     complete_compile_phase,
     elapsed_ms,
     start_compile_phase,
     start_compile_status,
 )
-from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_static_compile_target
-from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.helpers.compile.target_writer import write_static_compile_target
+from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import LoadedMacro
 from sqlbuild.compiler.contracts.main.validate import validate_model_contracts

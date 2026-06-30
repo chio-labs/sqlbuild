@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
+from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult, CursorBounds

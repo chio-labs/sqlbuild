@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     scenario_relation_row_count,
     write_committed_order_totals_pass_snapshot,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     prepare_waffle_shop,
     query_duckdb,

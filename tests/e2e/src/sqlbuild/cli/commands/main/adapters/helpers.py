@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
 
 def prepare_project_with_local_adapter(*, tmp_path: Path) -> Path:

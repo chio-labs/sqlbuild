@@ -5,12 +5,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.dbt_init.branch_detection import (
+from sqlbuild.cli.commands.helpers.dbt_init.branch_detection import (
     detect_default_production_git_ref,
 )
-from sqlbuild.cli.commands.main.helpers.dbt_init.progress import DbtInitProgressReporter
-from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.helpers.dbt_init.progress import DbtInitProgressReporter
+from sqlbuild.cli.commands.helpers.dbt_init.prompt import resolve_production_git_ref
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.integrations.dbt.main.profile_init import (
     _validate_dbt_profile_init_request,
     run_dbt_profile_init,

@@ -16,7 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     build_scenario_project_files,
     list_scenario_relation_names,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 SCENARIO_CAPTURE_SAFETY_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
     ScenarioCliE2ETestCase(

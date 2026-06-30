@@ -8,25 +8,25 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.freshness.models import FreshnessCommandResult
-from sqlbuild.cli.commands.main.helpers.freshness.observe import (
+from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandResult
+from sqlbuild.cli.commands.helpers.freshness.observe import (
     observe_source_freshness_for_command,
 )
-from sqlbuild.cli.commands.main.helpers.freshness.output import (
+from sqlbuild.cli.commands.helpers.freshness.output import (
     format_freshness_json,
     format_freshness_text,
 )
-from sqlbuild.cli.commands.main.helpers.freshness.selection import resolve_freshness_source_names
-from sqlbuild.cli.commands.main.helpers.freshness.state import (
+from sqlbuild.cli.commands.helpers.freshness.selection import resolve_freshness_source_names
+from sqlbuild.cli.commands.helpers.freshness.state import (
     read_standard_freshness_state_for_command,
     read_virtual_freshness_state_for_command,
 )
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.shared.helpers.connection.core import (
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands.main.shared.helpers.output.execution_json import (
+from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
     write_execution_json_output,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs

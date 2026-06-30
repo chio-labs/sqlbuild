@@ -335,7 +335,7 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.helpers.dbt.auto_init.run_dbt_profile_init",
+        "sqlbuild.cli.commands.helpers.dbt.auto_init.run_dbt_profile_init",
         run_dbt_profile_init,
     )
     monkeypatch.setattr(
@@ -426,7 +426,7 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.helpers.dbt.auto_init.run_dbt_profile_init",
+        "sqlbuild.cli.commands.helpers.dbt.auto_init.run_dbt_profile_init",
         run_dbt_profile_init,
     )
     monkeypatch.setattr(

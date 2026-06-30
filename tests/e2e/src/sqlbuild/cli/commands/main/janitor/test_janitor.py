@@ -30,7 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_repo_files,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
     query_duckdb,

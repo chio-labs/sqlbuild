@@ -16,7 +16,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtLineageErrorE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT, execute_duckdb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import REPO_ROOT, execute_duckdb
 
 DBT_INTEROP_FIXTURE_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "dbt_interop"
 
@@ -703,7 +703,7 @@ def write_real_source_fixture_dbt_scenario(*, project_dir: Path) -> None:
 def seed_real_dbt_source_orders(*, project_dir: Path) -> None:
     """Create the physical raw.orders source table the dbt source points at."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb
 
     db_path: Path = project_dir / "dbt_interop.duckdb"
     execute_duckdb(db_path=db_path, sql="CREATE SCHEMA IF NOT EXISTS raw")
@@ -1346,7 +1346,7 @@ def write_dbt_phase11_star_lineage_models(project_dir: Path) -> None:
 def drop_dbt_phase11_orders_source_table(project_dir: Path) -> None:
     """Remove the physical source table while keeping the dbt source definition."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb
 
     execute_duckdb(
         db_path=project_dir / "dbt_phase11.duckdb",
@@ -1366,7 +1366,7 @@ def apply_dbt_lineage_error_setup(
 def query_dbt_phase11_source_freshness_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
     """Return dbt Phase 11 source freshness state rows when the state table exists."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, table_exists
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, table_exists
 
     db_path: Path = project_dir / "dbt_phase11.duckdb"
     if not table_exists(db_path=db_path, table_name="_sqlbuild_source_freshness"):
@@ -1385,7 +1385,7 @@ def query_dbt_phase11_schema_source_freshness_rows(
 ) -> list[tuple[object, ...]]:
     """Return dbt Phase 11 source freshness state rows for a specific schema."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, table_exists
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, table_exists
 
     db_path: Path = project_dir / "dbt_phase11.duckdb"
     if not table_exists(db_path=db_path, table_name="_sqlbuild_source_freshness", schema=schema):
@@ -1695,7 +1695,7 @@ def write_dbt_phase11_fact_orders_model(*, project_dir: Path, amount_expression:
 def seed_dbt_phase11_sources(*, project_dir: Path, stale_orders: bool) -> None:
     """Create raw DuckDB tables for the focused Phase 11 dbt project."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb
 
     loaded_at: str = "2000-01-01 00:00:00" if stale_orders else "2999-01-01 00:00:00"
     db_path: Path = project_dir / "dbt_phase11.duckdb"
@@ -1762,7 +1762,7 @@ def assert_dbt_local_replay_rows(
 ) -> None:
     """Assert replayed rows in the retained local DuckDB for a dbt scenario."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
 
     if not rows_sql:
         return
@@ -1879,7 +1879,7 @@ def append_dbt_seed_change_order(
 def query_dbt_seed_change_revenue_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
     """Return fct_customer_revenue rows for the seed-change project."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
 
     return query_duckdb(
         db_path=project_dir / "dbt_seed_change.duckdb",
@@ -1892,7 +1892,7 @@ def run_dbt_seed_change_build(
 ) -> subprocess.CompletedProcess[str]:
     """Run `sqb dbt build --select <select>` for the seed-change project."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
     return run_sqb(
         command=("--no-color", "dbt", "build", "--select", select),
@@ -1905,7 +1905,7 @@ def run_dbt_seed_change_command(
 ) -> subprocess.CompletedProcess[str]:
     """Run an arbitrary `sqb dbt ...` command for the seed-change project."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
     return run_sqb(command=command, project_dir=project_dir)
 
@@ -1913,7 +1913,7 @@ def run_dbt_seed_change_command(
 def drop_dbt_seed_change_relation(*, project_dir: Path, relation: str) -> None:
     """Drop a warehouse relation in the seed-change project's DuckDB."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import execute_duckdb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb
 
     execute_duckdb(
         db_path=project_dir / "dbt_seed_change.duckdb",

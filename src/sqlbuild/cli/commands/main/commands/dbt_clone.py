@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.cli.commands.main.helpers.clone.output import (
+from sqlbuild.cli.commands.helpers.clone.output import (
     is_clone_success,
     render_clone_header,
     render_clone_item_line,
     render_clone_output,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.integrations.dbt.models import DbtCloneRun
 from sqlbuild.integrations.dbt.pipeline.main.clone import run_dbt_clone_from_project

@@ -37,7 +37,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     write_dbt_phase11_fact_orders_model,
     write_dbt_phase11_invalid_downstream_model,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     query_duckdb,
     run_sqb,

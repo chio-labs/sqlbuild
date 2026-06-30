@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.check.core import (
+from sqlbuild.cli.commands.helpers.check.core import (
     build_check_relation_targets,
     format_check_json,
     load_results_by_loader_name,
@@ -16,20 +16,20 @@ from sqlbuild.cli.commands.main.helpers.check.core import (
     run_check_read_side_dependencies,
     write_check_results,
 )
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.shared.helpers.connection.core import (
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
+from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.main.shared.helpers.output.execution_json import (
+from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
     write_execution_json_output,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.connection import ConnectionProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.progress.core import write_execution_header
-from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import (
+from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.commands.shared.helpers.progress.core import write_execution_header
+from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.commands.shared.helpers.targets.runtime import (
     write_python_check_runtime_target,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs

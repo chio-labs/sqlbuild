@@ -11,7 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.debug._test_types import (
     DebugCliTestCase,
     DebugJsonCliTestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     run_sqb,
 )

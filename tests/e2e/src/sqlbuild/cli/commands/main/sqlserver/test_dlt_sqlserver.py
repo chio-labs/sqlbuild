@@ -10,10 +10,6 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
     write_sqlite_orders_source_database,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    prepare_inline_project,
-    run_sqb,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerDltE2ETestCase,
 )
@@ -25,6 +21,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
     ensure_sqlserver_schema_ready,
     fetch_sqlserver_rows,
     relation_name,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    prepare_inline_project,
+    run_sqb,
 )
 
 

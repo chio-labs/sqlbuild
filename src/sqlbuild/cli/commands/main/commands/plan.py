@@ -7,22 +7,22 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.config.mode import (
+from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.shared.helpers.config.mode import (
     enforce_no_defer_to_in_virtual_mode,
 )
-from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.shared.helpers.connection.core import (
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
+from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.main.shared.helpers.output.json import format_plan_json
-from sqlbuild.cli.commands.main.shared.helpers.progress.connection import (
+from sqlbuild.cli.commands.shared.helpers.output.json import format_plan_json
+from sqlbuild.cli.commands.shared.helpers.progress.connection import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

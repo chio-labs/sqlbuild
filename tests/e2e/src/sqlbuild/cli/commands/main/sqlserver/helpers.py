@@ -7,15 +7,15 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
+    SqlServerDependencyBaselineE2ETestCase,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     run_sqb,
     stringify_warehouse_rows,
-)
-from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
-    SqlServerDependencyBaselineE2ETestCase,
 )
 
 

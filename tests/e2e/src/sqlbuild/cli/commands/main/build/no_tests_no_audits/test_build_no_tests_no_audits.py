@@ -13,7 +13,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build.no_tests_no_audits._test_types import (
     RunE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     prepare_waffle_shop,
     query_duckdb,

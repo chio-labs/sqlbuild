@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.scenario.runner import run_scenario as run_scenario_command
+from sqlbuild.cli.commands.helpers.scenario.runner import run_scenario as run_scenario_command
 
 
 def run_scenario(

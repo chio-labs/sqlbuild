@@ -23,7 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     SnapshotTimestampFailureBuildE2ETestCase,
     SnapshotWaffleShopRerunBuildE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_snapshot_scd2_invariants,
     prepare_inline_project,
     query_duckdb,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.scenario.dbt_run import (
+from sqlbuild.cli.commands.helpers.scenario.dbt_run import (
     run_dbt_scenario_capture,
     run_dbt_scenario_test,
 )
