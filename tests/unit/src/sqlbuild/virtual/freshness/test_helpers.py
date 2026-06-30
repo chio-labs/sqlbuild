@@ -9,10 +9,10 @@ from sqlbuild.adapter.shared.models import TableFreshnessMetadata
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
-from sqlbuild.compiler.source_freshness.main.operations.normalization import (
+from sqlbuild.compiler.source_freshness.main.normalization import (
     normalize_source_freshness_data_version,
 )
-from sqlbuild.compiler.source_freshness.main.operations.observation import (
+from sqlbuild.compiler.source_freshness.main.observation import (
     observe_configured_source_freshness,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation

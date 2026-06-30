@@ -12,8 +12,8 @@ from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compi
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.operations.graph import build_project_graph
-from sqlbuild.compiler.pipeline.main.operations.project import compile_project
+from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (

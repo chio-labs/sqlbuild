@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
-from sqlbuild.integrations.dbt.main.api.lineage import build_dbt_lineage_output
+from sqlbuild.integrations.dbt.main.lineage import build_dbt_lineage_output
 from sqlbuild.shared.helpers.output.colors import supports_color
 
 

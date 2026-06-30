@@ -18,7 +18,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.executor.build.models import BuildExecutionResult, FunctionExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.testing.main.operations.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 
 _RUN_DIR: str = "run"

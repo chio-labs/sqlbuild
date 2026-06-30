@@ -34,7 +34,7 @@ from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.operations.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle

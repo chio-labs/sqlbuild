@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.source_freshness.main.operations.data_version_hash import (
+from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
-from sqlbuild.compiler.source_freshness.main.operations.normalization import (
+from sqlbuild.compiler.source_freshness.main.normalization import (
     normalize_source_freshness_data_version,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation

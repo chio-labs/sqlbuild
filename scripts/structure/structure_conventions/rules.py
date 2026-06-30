@@ -77,6 +77,9 @@ _SC045_ALLOWED_PATH_MARKERS_BY_TERM: dict[str, tuple[str, ...]] = {
 }
 _MAX_SOURCE_FILE_LINES: int = 2000
 _MAX_HELPER_FLAT_MODULES: int = 10
+_MAX_MAIN_FLAT_MODULES: int = 20
+_MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "helpers", "shared"})
+_MAIN_SUPPORT_FOLDER_ALLOWED_PREFIXES: tuple[str, ...] = ("src/sqlbuild/cli/commands/main/",)
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/client.py",
     "src/sqlbuild/adapters/shared/classes/*.py",
@@ -398,24 +401,60 @@ def check_helpers_package_layout(repo_root: Path, file_path: Path) -> list[Viola
         mixed_code="SC049",
         too_many_code="SC050",
         module_label="helper",
+        max_flat_modules=_MAX_HELPER_FLAT_MODULES,
+        ignored_subfolder_names=frozenset(),
     )
 
 
 def check_main_package_layout(repo_root: Path, file_path: Path) -> list[Violation]:
     """Enforce consistent flat-or-subfolder main package layout."""
 
+    support_violation: Violation | None = _main_support_folder_violation(
+        repo_root=repo_root,
+        file_path=file_path,
+    )
     package_dir: Path | None = _role_package_layout_dir(file_path=file_path, package_name="main")
     if package_dir is None:
-        return []
+        return [support_violation] if support_violation is not None else []
 
-    return _role_package_layout_violations(
+    violations: list[Violation] = _role_package_layout_violations(
         package_dir=package_dir,
         file_path=file_path,
         package_name="main",
         mixed_code="SC059",
         too_many_code="SC060",
         module_label="entry",
+        max_flat_modules=_MAX_MAIN_FLAT_MODULES,
+        ignored_subfolder_names=_MAIN_SUPPORT_FOLDER_NAMES,
     )
+    if support_violation is not None:
+        violations.append(support_violation)
+    return violations
+
+
+def _main_support_folder_violation(*, repo_root: Path, file_path: Path) -> Violation | None:
+    relative_path: Path = file_path.resolve().relative_to(repo_root.resolve())
+    relative_text: str = relative_path.as_posix()
+    if relative_text.startswith(_MAIN_SUPPORT_FOLDER_ALLOWED_PREFIXES):
+        return None
+    parts: tuple[str, ...] = relative_path.parts
+    index: int
+    for index, part in enumerate(parts[:-1]):
+        if (
+            part == "main"
+            and index + 1 < len(parts)
+            and parts[index + 1] in _MAIN_SUPPORT_FOLDER_NAMES
+        ):
+            return Violation(
+                code="SC061",
+                path=file_path,
+                line=None,
+                message=(
+                    "main package must not contain support folders like helpers/, shared/, "
+                    "or classes/; move support code beside main/"
+                ),
+            )
+    return None
 
 
 def _role_package_layout_violations(
@@ -426,6 +465,8 @@ def _role_package_layout_violations(
     mixed_code: str,
     too_many_code: str,
     module_label: str,
+    max_flat_modules: int,
+    ignored_subfolder_names: frozenset[str],
 ) -> list[Violation]:
     direct_modules: list[Path] = sorted(
         child
@@ -433,7 +474,11 @@ def _role_package_layout_violations(
         if child.name != "__init__.py" and child.is_file()
     )
     concern_subfolders: list[Path] = sorted(
-        child for child in package_dir.iterdir() if child.is_dir() and child.name != "__pycache__"
+        child
+        for child in package_dir.iterdir()
+        if child.is_dir()
+        and child.name != "__pycache__"
+        and child.name not in ignored_subfolder_names
     )
 
     violations: list[Violation] = []
@@ -450,7 +495,7 @@ def _role_package_layout_violations(
                 ),
             )
         )
-    if len(direct_modules) > _MAX_HELPER_FLAT_MODULES:
+    if len(direct_modules) > max_flat_modules:
         violations.append(
             Violation(
                 code=too_many_code,
@@ -458,7 +503,7 @@ def _role_package_layout_violations(
                 line=None,
                 message=(
                     f"{package_name} package has too many direct {module_label} modules "
-                    f"({len(direct_modules)} > {_MAX_HELPER_FLAT_MODULES}); organize the "
+                    f"({len(direct_modules)} > {max_flat_modules}); organize the "
                     f"entire {package_name} package into concern subfolders consistently, not just "
                     "one file"
                 ),

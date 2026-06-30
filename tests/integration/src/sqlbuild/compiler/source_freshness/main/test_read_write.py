@@ -9,8 +9,8 @@ import pytest
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.compiler.source_freshness.main.operations.read import read_latest_source_freshness
-from sqlbuild.compiler.source_freshness.main.operations.write import write_source_freshness_records
+from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,

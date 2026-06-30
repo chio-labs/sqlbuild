@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
-from sqlbuild.integrations.dbt.main.api.profile_connection import resolve_raw_dbt_profile_connection
+from sqlbuild.integrations.dbt.main.profile_connection import resolve_raw_dbt_profile_connection
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 

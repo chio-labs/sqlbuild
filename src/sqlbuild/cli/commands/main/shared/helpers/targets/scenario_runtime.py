@@ -10,7 +10,7 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, ScenarioExecutionPlan
-from sqlbuild.executor.scenario.main.operations.expected_comparison_sql import (
+from sqlbuild.executor.scenario.main.expected_comparison_sql import (
     build_scenario_expected_comparison_sql,
 )
 from sqlbuild.executor.scenario.models import (

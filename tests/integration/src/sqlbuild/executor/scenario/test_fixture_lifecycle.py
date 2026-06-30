@@ -29,8 +29,8 @@ from sqlbuild.executor.scenario.helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
 )
-from sqlbuild.executor.scenario.main.operations.cleanup import execute_scenario_cleanup
-from sqlbuild.executor.scenario.main.operations.fixtures import execute_scenario_fixture
+from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
+from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionExpectationExecutionResult,
     ScenarioCleanupExecutionResult,

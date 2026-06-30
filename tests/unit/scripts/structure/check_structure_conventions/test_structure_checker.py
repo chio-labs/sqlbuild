@@ -79,7 +79,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         | {
             "src/sqlbuild/example/widget/main/load.py": dedent(
                 """
-                from sqlbuild.compiler.source_freshness.main.operations.write import (
+                from sqlbuild.compiler.source_freshness.main.write import (
                     write_source_freshness_record,
                 )
 
@@ -308,6 +308,24 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC059",),
     ),
     CheckPathsTestCase(
+        description="reports main package support folders outside CLI commands",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/__init__.py": '"""Entrypoints."""\n',
+            "src/sqlbuild/example/widget/main/shared/__init__.py": '"""Shared."""\n',
+        },
+        expected_violation_codes=("SC061",),
+    ),
+    CheckPathsTestCase(
+        description="allows legacy CLI command main support folders",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/cli/commands/main/__init__.py": '"""Entrypoints."""\n',
+            "src/sqlbuild/cli/commands/main/shared/__init__.py": '"""Shared."""\n',
+        },
+        expected_violation_codes=(),
+    ),
+    CheckPathsTestCase(
         description="reports main package with too many flat modules",
         repo_files=compliant_repo_files()
         | {
@@ -316,7 +334,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
                 f"src/sqlbuild/example/widget/main/module_{index}.py": (
                     f"def build_{index}() -> int:\n    return {index}\n"
                 )
-                for index in range(11)
+                for index in range(21)
             },
         },
         expected_violation_codes=("SC060",),

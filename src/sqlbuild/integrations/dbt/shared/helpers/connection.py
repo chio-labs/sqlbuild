@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.main.api.profile_connection import resolve_raw_dbt_profile_connection
+from sqlbuild.integrations.dbt.main.profile_connection import resolve_raw_dbt_profile_connection
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
 
 _DBT_PROFILE_CONNECTION_ROUTING_KEYS: frozenset[str] = frozenset(

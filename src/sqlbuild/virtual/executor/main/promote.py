@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.operations.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
@@ -27,15 +27,15 @@ from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_s
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.main.upstreams import build_virtual_stale_required_upstream_closure
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.operations.checkpoints import (
+from sqlbuild.virtual.state.main.checkpoints.checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )
-from sqlbuild.virtual.state.main.operations.locks import (
+from sqlbuild.virtual.state.main.environments.record_operation import record_state_operation
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.locks.locks import (
     acquire_virtual_environment_lease,
 )
-from sqlbuild.virtual.state.main.operations.record_operation import record_state_operation
-from sqlbuild.virtual.state.main.operations.release_lock import release_state_lease
-from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,

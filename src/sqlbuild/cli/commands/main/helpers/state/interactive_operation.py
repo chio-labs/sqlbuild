@@ -20,7 +20,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.shared.helpers.output.colors import supports_color
 from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
-from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.types import StateCommand
 
 

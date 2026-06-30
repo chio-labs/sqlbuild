@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.node_source_watermarks.main.operations.source_ancestry import (
+from sqlbuild.compiler.node_source_watermarks.main.source_ancestry import (
     build_watermark_source_ancestry,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

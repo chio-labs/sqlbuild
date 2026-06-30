@@ -12,10 +12,10 @@ from sqlbuild.shared.classes.cli_document import CliDocument
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.helpers.output.colors import supports_color
 from sqlbuild.spec.models.targets import resolve_target_name
-from sqlbuild.virtual.state.main.operations.list_checkpoints import (
+from sqlbuild.virtual.state.main.checkpoints.list_checkpoints import (
     list_virtual_environment_checkpoints,
 )
-from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,

@@ -27,7 +27,7 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_MODEL,
     NODE_TYPE_SEED,
 )
-from sqlbuild.compiler.fingerprints.main.operations.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError

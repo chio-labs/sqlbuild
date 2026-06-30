@@ -12,7 +12,7 @@ from sqlbuild.cli.commands.main.helpers.dbt_init.branch_detection import (
 from sqlbuild.cli.commands.main.helpers.dbt_init.progress import DbtInitProgressReporter
 from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
-from sqlbuild.integrations.dbt.main.api.profile_init import run_dbt_profile_init
+from sqlbuild.integrations.dbt.main.profile_init import run_dbt_profile_init
 from sqlbuild.integrations.dbt.models import DbtInitProgressCallbacks, DbtInitRequest, DbtInitResult
 from sqlbuild.shared.classes.cli_document import CliDocument
 from sqlbuild.shared.helpers.output.cli_style import CliStyle

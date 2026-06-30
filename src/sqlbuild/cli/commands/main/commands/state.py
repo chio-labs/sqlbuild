@@ -11,9 +11,9 @@ from sqlbuild.cli.commands.main.helpers.state.interactive_operation import (
 )
 from sqlbuild.cli.commands.main.shared.helpers.progress.connection import ConnectionProgressReporter
 from sqlbuild.shared.helpers.output.colors import supports_color
-from sqlbuild.virtual.state.main.operations.adopt import run_state_adopt
-from sqlbuild.virtual.state.main.operations.detach import run_state_detach
-from sqlbuild.virtual.state.main.operations.lifecycle import run_state_lifecycle
+from sqlbuild.virtual.state.main.environments.adopt import run_state_adopt
+from sqlbuild.virtual.state.main.environments.detach import run_state_detach
+from sqlbuild.virtual.state.main.environments.lifecycle import run_state_lifecycle
 from sqlbuild.virtual.state.types import StateCommand
 
 

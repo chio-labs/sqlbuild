@@ -7,7 +7,7 @@ import pytest
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import (
+from sqlbuild.compiler.source_freshness.helpers.sql import (
     build_create_table_sql,
     build_qualified_table_name,
     build_read_latest_sql,

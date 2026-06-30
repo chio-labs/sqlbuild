@@ -13,12 +13,12 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.planning.scenario import build_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.executor.scenario.main.operations.capture_steps import (
+from sqlbuild.executor.scenario.main.capture_steps import (
     execute_scenario_snapshot_capture_run,
 )
-from sqlbuild.executor.scenario.main.operations.local import execute_local_scenario_load_only_run
-from sqlbuild.executor.scenario.main.operations.run import execute_scenario_run
-from sqlbuild.executor.scenario.main.operations.snapshots import classify_scenario_snapshot_state
+from sqlbuild.executor.scenario.main.local import execute_local_scenario_load_only_run
+from sqlbuild.executor.scenario.main.run import execute_scenario_run
+from sqlbuild.executor.scenario.main.snapshots import classify_scenario_snapshot_state
 from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
     ScenarioSnapshotCaptureLimits,

@@ -49,7 +49,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress.connection import (
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.operations.project import compile_project
+from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
@@ -64,17 +64,17 @@ from sqlbuild.shared.helpers.output.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_target_config
 from sqlbuild.virtual.executor.main.virtual_target import build_virtual_destination
-from sqlbuild.virtual.state.main.operations.delete_checkpoint import (
+from sqlbuild.virtual.state.main.checkpoints.delete_checkpoint import (
     delete_virtual_environment_checkpoint,
 )
-from sqlbuild.virtual.state.main.operations.delete_lock import delete_lock
-from sqlbuild.virtual.state.main.operations.delete_state_backup import delete_state_backup
-from sqlbuild.virtual.state.main.operations.delete_virtual_environment import (
+from sqlbuild.virtual.state.main.environments.delete_virtual_environment import (
     delete_virtual_environment,
 )
-from sqlbuild.virtual.state.main.operations.prune_python_node_identities import (
+from sqlbuild.virtual.state.main.locks.delete_lock import delete_lock
+from sqlbuild.virtual.state.main.python_identities.prune_python_node_identities import (
     prune_unreferenced_python_node_versions,
 )
+from sqlbuild.virtual.state.main.retention.delete_state_backup import delete_state_backup
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
     DetachedVirtualEnvironmentInspection,

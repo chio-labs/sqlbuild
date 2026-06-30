@@ -13,7 +13,7 @@ from sqlbuild.cli.commands.main.helpers.compile.target_writer import (
 )
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.executor.testing.main.operations.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     TargetWriterTestCase,
 )
