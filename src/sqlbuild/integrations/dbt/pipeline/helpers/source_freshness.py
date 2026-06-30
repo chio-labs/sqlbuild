@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.source_freshness.main.operations.write import write_source_freshness_records
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 

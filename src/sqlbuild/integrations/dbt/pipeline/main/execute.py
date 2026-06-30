@@ -19,8 +19,8 @@ from sqlbuild.compiler.compile.main.effective_config import build_effective_conn
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.operations.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.main.operations.plan_work import plan_has_executable_work
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.planner.models import (
     GraphNodeKey,
     PlanOutput,

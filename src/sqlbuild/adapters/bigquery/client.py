@@ -122,7 +122,7 @@ class BigQueryAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.operations.read_latest_sql import (
+        from sqlbuild.compiler.fingerprints.main.read_latest_sql import (
             build_read_latest_sql,
         )
 
@@ -147,7 +147,7 @@ class BigQueryAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.source_freshness.main.operations.read_latest_sql import (
+        from sqlbuild.compiler.source_freshness.main.read_latest_sql import (
             build_read_latest_sql,
         )
 
@@ -1519,7 +1519,7 @@ class BigQueryAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.operations.create_table_sql import (
+        from sqlbuild.compiler.fingerprints.main.create_table_sql import (
             build_create_table_sql,
         )
 

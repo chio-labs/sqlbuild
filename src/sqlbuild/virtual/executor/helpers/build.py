@@ -22,12 +22,12 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.pipeline.main.operations.graph import build_project_graph
-from sqlbuild.compiler.pipeline.main.operations.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline.main.operations.prepare_versions import (
+from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
+from sqlbuild.compiler.pipeline.main.prepare_versions import (
     load_custom_prepare_version_functions,
 )
-from sqlbuild.compiler.pipeline.main.operations.relation_targets import (
+from sqlbuild.compiler.pipeline.main.relation_targets import (
     build_python_relation_targets,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
@@ -125,13 +125,13 @@ from sqlbuild.virtual.planner.main.semantics import (
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
-from sqlbuild.virtual.state.main.operations.checkpoints import (
+from sqlbuild.virtual.state.main.checkpoints.checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )
-from sqlbuild.virtual.state.main.operations.python_node_identity_write import (
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.python_identities.python_node_identity_write import (
     try_record_virtual_python_node_identity,
 )
-from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,

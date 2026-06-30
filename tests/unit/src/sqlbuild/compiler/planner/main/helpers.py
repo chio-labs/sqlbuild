@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
-from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.identity.standard import (

@@ -6,7 +6,9 @@ from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.executor.janitor.models import JanitorCheckpointCandidate, JanitorRelationKey
-from sqlbuild.virtual.state.main.operations.checkpoint_retention import inspect_checkpoint_retention
+from sqlbuild.virtual.state.main.checkpoints.checkpoint_retention import (
+    inspect_checkpoint_retention,
+)
 from sqlbuild.virtual.state.models import CheckpointRetentionInspection, PhysicalRelationRecord
 
 

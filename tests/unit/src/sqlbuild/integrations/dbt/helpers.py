@@ -47,7 +47,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
-from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput

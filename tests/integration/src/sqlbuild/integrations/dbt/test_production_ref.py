@@ -13,7 +13,7 @@ from sqlbuild.integrations.dbt.exceptions import (
 )
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.reuse import production_ref
-from sqlbuild.integrations.dbt.main.api.compile_production_ref_manifest import (
+from sqlbuild.integrations.dbt.main.compile_production_ref_manifest import (
     compile_production_ref_dbt_manifest,
 )
 from sqlbuild.integrations.dbt.models import (

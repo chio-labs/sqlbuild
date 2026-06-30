@@ -25,7 +25,7 @@ from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_ad
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.main.operations.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.shared.helpers.output.colors import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name

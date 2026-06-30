@@ -10,7 +10,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
-from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType

@@ -21,8 +21,8 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.fingerprints.main.operations.create_table_sql import build_create_table_sql
-from sqlbuild.compiler.fingerprints.main.operations.write import build_insert_sql
+from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+from sqlbuild.compiler.fingerprints.main.write import build_insert_sql
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import (
     MaterializationType,

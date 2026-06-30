@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
+from sqlbuild.compiler.fingerprints.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
 )

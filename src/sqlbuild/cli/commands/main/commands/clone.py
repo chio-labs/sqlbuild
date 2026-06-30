@@ -30,7 +30,7 @@ from sqlbuild.cli.commands.main.shared.helpers.connection.external_refs import (
 from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.operations.clone import run_clone_pipeline
+from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone

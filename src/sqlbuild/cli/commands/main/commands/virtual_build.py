@@ -57,7 +57,7 @@ from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.classes.node_result_store import VirtualNodeResultStore
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
 from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks, VirtualBuildPipelineResult
-from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 
 
 def run_virtual_build(

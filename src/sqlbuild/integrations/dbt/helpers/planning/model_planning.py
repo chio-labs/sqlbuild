@@ -11,7 +11,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
-from sqlbuild.compiler.fingerprints.main.operations.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.main.planning.graph_changes_only import (
     build_graph_changes_only_propagation,
@@ -35,7 +35,7 @@ from sqlbuild.compiler.planner.models import (
     SelectionStalenessWarning,
 )
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.compiler.source_freshness.main.operations.planning import (
+from sqlbuild.compiler.source_freshness.main.planning import (
     build_standard_source_freshness_planning_result,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult

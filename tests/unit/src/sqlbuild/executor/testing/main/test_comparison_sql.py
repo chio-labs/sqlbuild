@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.executor.testing.main.helpers import comparison_sql as comparison_sql_helpers
-from sqlbuild.executor.testing.main.operations.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.executor.testing.helpers import comparison_sql as comparison_sql_helpers
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.executor.testing.main._test_types import (
     BuildComparisonSqlTestCase,
 )

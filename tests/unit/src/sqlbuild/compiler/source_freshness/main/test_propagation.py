@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.planner.models import PlannerScope
-from sqlbuild.compiler.source_freshness.main.operations.propagation import (
+from sqlbuild.compiler.source_freshness.main.propagation import (
     build_standard_source_freshness_propagation_result,
 )
 from sqlbuild.compiler.source_freshness.models import (

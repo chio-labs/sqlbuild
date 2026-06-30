@@ -10,10 +10,10 @@ from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
     ScenarioExpectedExpectationPlan,
 )
-from sqlbuild.executor.scenario.main.operations.assertion_expectations import (
+from sqlbuild.executor.scenario.main.assertion_expectations import (
     execute_scenario_assertion_expectation,
 )
-from sqlbuild.executor.scenario.main.operations.expected_expectations import (
+from sqlbuild.executor.scenario.main.expected_expectations import (
     execute_scenario_expected_expectation,
 )
 from sqlbuild.executor.scenario.models import (

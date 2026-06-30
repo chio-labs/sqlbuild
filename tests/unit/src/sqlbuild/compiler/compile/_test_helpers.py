@@ -4,7 +4,7 @@ from sqlbuild.compiler.compile.models.sql_tests import (
     CompileModelSqlTestInputPayload,
     CompileSqlTestInput,
 )
-from sqlbuild.integrations.dbt.main.api.build_compile_reference_resolver import (
+from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
 from sqlbuild.shared.types import ExternalSqlReferenceResolver

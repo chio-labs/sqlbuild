@@ -9,13 +9,13 @@ import pytest
 from sqlbuild.adapter.shared.models import TableFreshnessMetadata, TableFreshnessRequest
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.source_freshness.main.operations.data_version_hash import (
+from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
-from sqlbuild.compiler.source_freshness.main.operations.planning import (
+from sqlbuild.compiler.source_freshness.main.planning import (
     build_standard_source_freshness_planning_result,
 )
-from sqlbuild.compiler.source_freshness.main.operations.write import write_source_freshness_records
+from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     StandardSourceFreshnessPlanningResult,

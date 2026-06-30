@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.main.planning.sql_test_assembly import build_sql_test_plan_entry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
-from sqlbuild.executor.testing.main.operations.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
 _COMPILED_DIR: str = "compiled"
 _RUN_DIR: str = "run"

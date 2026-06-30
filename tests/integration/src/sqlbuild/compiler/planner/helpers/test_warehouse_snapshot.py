@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.helpers.output.plan_entry import gather_source_columns

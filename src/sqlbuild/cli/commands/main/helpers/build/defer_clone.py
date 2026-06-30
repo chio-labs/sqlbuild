@@ -21,8 +21,8 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.operations.clone import run_clone_pipeline
-from sqlbuild.compiler.pipeline.main.operations.compiled_project import build_compiled_project
+from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
 from sqlbuild.compiler.planner.main.planning.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope

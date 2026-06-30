@@ -34,7 +34,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
 )
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
-from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.identity.functions import (
