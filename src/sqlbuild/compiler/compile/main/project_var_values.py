@@ -1,12 +1,10 @@
-"""Helpers for rendering project variable values in text contexts."""
+"""Public project variable text rendering entrypoint."""
 
 from __future__ import annotations
 
 import json
 
 from sqlbuild.shared.exceptions.errors import SharedInputError
-
-_PREVIEW_LIMIT: int = 120
 
 
 def render_project_var_text(*, value: object, label: str) -> str:
@@ -34,7 +32,8 @@ def render_project_var_text(*, value: object, label: str) -> str:
 
 
 def _preview_json(value: object) -> str:
+    preview_limit: int = 120
     preview: str = json.dumps(value, separators=(",", ":"), sort_keys=True)
-    if len(preview) <= _PREVIEW_LIMIT:
+    if len(preview) <= preview_limit:
         return preview
-    return f"{preview[: _PREVIEW_LIMIT - 3]}..."
+    return f"{preview[: preview_limit - 3]}..."

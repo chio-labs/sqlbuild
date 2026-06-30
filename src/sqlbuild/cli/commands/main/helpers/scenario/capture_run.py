@@ -23,9 +23,9 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureResult,
     ScenarioSnapshotCaptureRunResult,
 )
+from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.status import TransientStatusReporter
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
+from sqlbuild.shared.main.summary_footer import format_summary_footer
 
 _SCENARIO_NAME_WIDTH: int = 64
 _CAPTURE_RELATION_KIND_WIDTH: int = 8

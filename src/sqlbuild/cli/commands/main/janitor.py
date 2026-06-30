@@ -57,10 +57,10 @@ from sqlbuild.executor.janitor.models import (
     JanitorPlan,
     JanitorRelationKey,
 )
+from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.helpers.status import TransientStatusReporter
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_target_config
 from sqlbuild.virtual.executor.main.virtual_target import build_virtual_destination

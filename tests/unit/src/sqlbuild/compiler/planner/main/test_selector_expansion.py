@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.shared.helpers.selector_expansion import split_selector_expansion
+from sqlbuild.compiler.planner.main.selector_expansion import split_selector_expansion
 from sqlbuild.shared.models import SelectorExpansion
-from tests.unit.src.sqlbuild.shared.helpers._test_types import (
+from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     SelectorExpansionErrorTestCase,
     SelectorExpansionTestCase,
 )

@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 
 from sqlbuild.cli.commands.main.plan_format import format_plan
+from sqlbuild.compiler.planner.main.query_diff import format_query_diff
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
@@ -26,7 +27,6 @@ from sqlbuild.integrations.dbt.types import (
 from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
-from sqlbuild.shared.helpers.query_diff import format_query_diff
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
 

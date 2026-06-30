@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
+from sqlbuild.shared.main.summary_footer import format_summary_footer
 
 
 def render_clone_header(

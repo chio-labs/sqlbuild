@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
-from tests.unit.src.sqlbuild.shared.helpers._test_types import SummaryFooterTestCase
+from sqlbuild.shared.main.summary_footer import format_summary_footer
+from tests.unit.src.sqlbuild.shared.main._test_types import SummaryFooterTestCase
 
 SUMMARY_FOOTER_TEST_CASES: tuple[SummaryFooterTestCase, ...] = (
     SummaryFooterTestCase(

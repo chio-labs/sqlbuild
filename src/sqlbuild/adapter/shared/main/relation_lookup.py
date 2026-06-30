@@ -1,4 +1,4 @@
-"""Gather existing warehouse relations once for in-memory existence and metadata lookups."""
+"""Public relation lookup batching entrypoint."""
 
 from __future__ import annotations
 

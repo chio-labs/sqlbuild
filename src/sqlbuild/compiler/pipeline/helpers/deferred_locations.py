@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
+from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
@@ -17,7 +18,6 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 from sqlbuild.spec.models.project import TargetConfig
 
 _CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")

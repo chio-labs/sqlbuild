@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.shared.helpers.local_node_planning import classify_local_node_plan
+from sqlbuild.compiler.planner.main.local_node_planning import classify_local_node_plan
 from sqlbuild.shared.models import LocalNodePlanInput, LocalNodePlanOutcome
 from sqlbuild.shared.types import LocalNodePlanAction, LocalNodePlanReason
-from tests.unit.src.sqlbuild.shared.helpers._test_types import LocalNodePlanningTestCase
+from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
+    LocalNodePlanningTestCase,
+)
 
 LOCAL_NODE_PLANNING_TEST_CASES: list[LocalNodePlanningTestCase] = [
     LocalNodePlanningTestCase(

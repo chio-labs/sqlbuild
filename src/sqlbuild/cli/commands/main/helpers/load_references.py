@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.source import SourceEntry
 

@@ -1,4 +1,4 @@
-"""Small document builder for simple human CLI output."""
+"""CLI document builder class."""
 
 from __future__ import annotations
 

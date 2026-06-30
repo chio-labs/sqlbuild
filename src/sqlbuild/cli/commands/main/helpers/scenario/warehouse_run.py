@@ -17,9 +17,9 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.pipeline.main.run import run_scenario_test_pipeline
 from sqlbuild.executor.scenario.models import ScenarioRunResult
+from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.status import TransientStatusReporter
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
+from sqlbuild.shared.main.summary_footer import format_summary_footer
 
 
 def run_warehouse_scenarios(

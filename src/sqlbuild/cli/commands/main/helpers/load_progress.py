@@ -9,7 +9,7 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
+from sqlbuild.shared.main.summary_footer import format_summary_footer
 from sqlbuild.spec.models.source import SourceEntry
 
 _SPINNER_TICK_SECONDS: float = 0.1

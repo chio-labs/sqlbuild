@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
@@ -30,7 +31,6 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup, SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind, SqlResourceRefKind
 from sqlbuild.spec.models.source import SourceEntry

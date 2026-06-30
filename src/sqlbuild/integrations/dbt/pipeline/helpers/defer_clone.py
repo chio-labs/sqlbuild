@@ -12,6 +12,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import GraphNodeKey
+from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
@@ -53,7 +54,6 @@ from sqlbuild.shared.helpers.graph_algorithms import (
     resolve_clone_boundary,
     resolve_skipped_view_chain,
 )
-from sqlbuild.shared.helpers.prephase_progress import run_prephase_clone_stream
 from sqlbuild.spec.models.project import DbtProductionRefConfig
 
 

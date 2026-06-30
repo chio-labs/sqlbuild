@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
@@ -27,7 +28,6 @@ from sqlbuild.compiler.source_freshness.main.propagation import (
     build_standard_source_freshness_propagation_result,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
 
 

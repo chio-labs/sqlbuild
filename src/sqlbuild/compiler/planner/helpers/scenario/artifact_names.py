@@ -1,4 +1,4 @@
-"""Shared scenario artifact physical-name helpers."""
+"""Scenario artifact physical-name helper implementations."""
 
 from __future__ import annotations
 
@@ -29,8 +29,6 @@ def build_scenario_artifact_physical_name(
     logical_name: str,
     identifier_limit: int,
 ) -> str:
-    """Build one deterministic scenario artifact physical relation name."""
-
     fixed_prefix: str = f"{SCENARIO_ARTIFACT_PREFIX}{hash_prefix}__{kind}__"
     logical_part: str = fit_scenario_artifact_logical_name(
         logical_name=logical_name,
@@ -41,8 +39,6 @@ def build_scenario_artifact_physical_name(
 
 
 def parse_scenario_artifact_physical_name(name: str) -> ParsedScenarioArtifactName | None:
-    """Parse a SQLBuild scenario artifact physical relation name, if it matches."""
-
     match: re.Match[str] | None = _SCENARIO_ARTIFACT_NAME_RE.fullmatch(name)
     if match is None:
         return None
@@ -54,16 +50,12 @@ def parse_scenario_artifact_physical_name(name: str) -> ParsedScenarioArtifactNa
 
 
 def is_scenario_artifact_physical_name(name: str) -> bool:
-    """Return whether a relation name matches SQLBuild's scenario artifact shape."""
-
     return parse_scenario_artifact_physical_name(name) is not None
 
 
 def fit_scenario_artifact_logical_name(
     *, logical_name: str, fixed_prefix: str, identifier_limit: int
 ) -> str:
-    """Fit the logical part of a scenario artifact name within an identifier limit."""
-
     max_logical_length: int = identifier_limit - len(fixed_prefix)
     if max_logical_length < 1:
         raise SharedInputError(

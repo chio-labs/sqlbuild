@@ -7,7 +7,7 @@ from typing import TextIO
 
 from sqlbuild.cli.commands.main.shared.models import NestedProgressChildRow
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.coded_errors import format_coded_error
+from sqlbuild.shared.main.coded_error_text import format_coded_error
 
 _LABEL_WIDTH: int = 10
 _NAME_WIDTH: int = 50

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.classes.cli_document import CliDocument
 from sqlbuild.shared.helpers.cli_style import CliStyle
 
 _MODEL_SET_CAP: int = 20

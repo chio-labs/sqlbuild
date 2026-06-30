@@ -10,12 +10,12 @@ import yaml
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
+from sqlbuild.adapter.shared.main.project_adapters import discover_project_adapters
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.config.core import resolve_dbt_config
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, DbtCliOptions, ResolvedDbtConfig
-from sqlbuild.shared.helpers.adapters import discover_project_adapters
 from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
 
 

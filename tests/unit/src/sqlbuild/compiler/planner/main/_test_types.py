@@ -84,6 +84,34 @@ class StandardSelectionAwareStalenessTestCase:
 
 
 @dataclass(frozen=True)
+class LocalNodePlanningTestCase:
+    description: str
+    fingerprint_exists: bool
+    relation_exists: bool
+    full_refresh: bool
+    local_hash: str | None
+    previous_hash: str | None
+    expected_action: str
+    expected_reason: str
+
+
+@dataclass(frozen=True)
+class SelectorExpansionTestCase:
+    description: str
+    raw: str
+    expected_core: str
+    expected_upstream: bool
+    expected_downstream: bool
+
+
+@dataclass(frozen=True)
+class SelectorExpansionErrorTestCase:
+    description: str
+    raw: str
+    expected_error_type: type[Exception]
+
+
+@dataclass(frozen=True)
 class SelectionStalenessClassifierTestCase:
     description: str
     graph: SelectionStalenessGraph

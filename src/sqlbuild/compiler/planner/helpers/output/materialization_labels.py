@@ -1,4 +1,4 @@
-"""Shared model materialization display labels."""
+"""Model materialization display label implementations."""
 
 from __future__ import annotations
 
@@ -22,8 +22,6 @@ _INCREMENTAL_ACTIONS: frozenset[PlanAction] = frozenset(
 
 
 def model_materialization_label(entry: ModelPlanEntry) -> str:
-    """Return the full materialization label used in plan summaries."""
-
     reuse_label: str = relation_reuse_label(entry)
     if entry.materialization_type == MaterializationType.VIEW:
         return _append_reuse_label(MaterializationType.VIEW.value, reuse_label)
@@ -40,8 +38,6 @@ def model_materialization_label(entry: ModelPlanEntry) -> str:
 
 
 def model_resource_type(entry: ModelPlanEntry | None) -> str:
-    """Return the left-column resource type used in execution progress rows."""
-
     if entry is None:
         return MaterializationType.TABLE.value
     if entry.materialization_type == MaterializationType.VIEW:
@@ -54,14 +50,10 @@ def model_resource_type(entry: ModelPlanEntry | None) -> str:
 
 
 def materialization_type_display(resource_kind: ExecutionResourceKind) -> str:
-    """Return the left-column resource type for active progress rows."""
-
     return resource_kind.value
 
 
 def model_execution_annotation(entry: ModelPlanEntry | None) -> str:
-    """Return the parenthesized model annotation used in execution progress rows."""
-
     if entry is None:
         return ""
     reuse_label: str = relation_reuse_label(entry)
@@ -83,8 +75,6 @@ def model_execution_annotation(entry: ModelPlanEntry | None) -> str:
 
 
 def relation_reuse_label(entry: ModelPlanEntry | None) -> str:
-    """Return a concise human label for relation reuse behavior."""
-
     if entry is None or entry.relation_reuse is None:
         return ""
     copy_mode: str = "hard-copy" if entry.relation_reuse.hard_copy else "cheap"

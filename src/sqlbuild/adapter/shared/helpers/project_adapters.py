@@ -1,4 +1,4 @@
-"""Discover project-local adapter classes."""
+"""Project-local adapter discovery helpers."""
 
 from __future__ import annotations
 
@@ -118,32 +118,18 @@ def _discover_module_adapters(
             continue
         if adapter_name is not None and not is_adapter_class:
             raise AdapterUserError(
-                f"Class {class_name} in {file_path} defines adapter_name but does not "
+                f"Class '{class_name}' in {file_path} defines adapter_name but does not "
                 "subclass StrictAdapter"
             )
-        if adapter_class in {StrictAdapter, BaseAdapter}:
-            continue
-        if adapter_name is None:
+        if not isinstance(adapter_name, str) or not adapter_name:
             raise AdapterUserError(
-                f"Adapter class {class_name} in {file_path} must define a non-empty "
+                f"Adapter class '{class_name}' in {file_path} must define a non-empty "
                 "string adapter_name"
-            )
-        if not isinstance(adapter_name, str) or not adapter_name.strip():
-            raise AdapterUserError(
-                f"Adapter class {class_name} in {file_path} must define a non-empty "
-                "string adapter_name"
-            )
-        if inspect.isabstract(adapter_class):
-            abstract_methods: frozenset[str] = cast(Any, adapter_class).__abstractmethods__
-            missing: str = ", ".join(sorted(abstract_methods))
-            raise AdapterUserError(
-                f"Adapter class {class_name} in {file_path} is abstract and cannot be "
-                f"registered. Missing methods: {missing}"
             )
         discovered.append(
             DiscoveredAdapter(
-                adapter_name=adapter_name.strip(),
-                adapter_class=cast(type[StrictAdapter], adapter_class),
+                adapter_name=adapter_name,
+                adapter_class=cast(type[BaseAdapter], adapter_class),
                 file_path=file_path,
             )
         )

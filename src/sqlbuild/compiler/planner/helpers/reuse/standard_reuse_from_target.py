@@ -6,7 +6,9 @@ import logging
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
+from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
@@ -23,8 +25,6 @@ from sqlbuild.compiler.planner.models import (
     StandardReuseFromTargetSnapshot,
 )
 from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
-from sqlbuild.shared.helpers.project_var_values import render_project_var_text
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from sqlbuild.spec.models.targets import resolve_target_config

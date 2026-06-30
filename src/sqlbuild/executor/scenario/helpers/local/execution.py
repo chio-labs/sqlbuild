@@ -62,7 +62,9 @@ from sqlbuild.shared.constants import (
     SCENARIO_LOCAL_SNAPSHOT_MISSING,
     SCENARIO_LOCAL_SNAPSHOT_STALE,
 )
-from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
+from sqlbuild.shared.main.error_code import error_code
+from sqlbuild.shared.main.error_help import error_help
+from sqlbuild.shared.main.error_message import error_message
 from sqlbuild.spec.models.source import SourceEntry
 
 

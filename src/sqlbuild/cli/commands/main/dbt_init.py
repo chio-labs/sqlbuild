@@ -20,7 +20,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtInitRequest,
     DbtInitResult,
 )
-from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.classes.cli_document import CliDocument
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 

@@ -27,7 +27,7 @@ def run_dbt_clone_command(
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stderr
-    item_stream: TextIO = progress_stream
+    item_stream: TextIO = sys.stdout
     progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
         use_color=use_color,

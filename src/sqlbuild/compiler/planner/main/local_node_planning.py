@@ -1,4 +1,4 @@
-"""Neutral local node action classification for planner adapters."""
+"""Public local node planning classification entrypoint."""
 
 from __future__ import annotations
 

@@ -3,11 +3,17 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.helpers.scenario.artifact_names import (
+    parse_scenario_artifact_physical_name,
+)
 from sqlbuild.compiler.planner.helpers.scenario.artifacts import (
     build_scenario_artifact_name,
     build_scenario_hash_index,
     build_scenario_relation_map,
     compute_scenario_hash_prefix,
+)
+from sqlbuild.compiler.planner.main.is_scenario_artifact_physical_name import (
+    is_scenario_artifact_physical_name,
 )
 from sqlbuild.compiler.planner.models import (
     ScenarioArtifactIdentity,
@@ -17,10 +23,6 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.shared.constants import (
     SCENARIO_PLAN_HASH_COLLISION,
     SCENARIO_PLAN_RELATION_COLLISION,
-)
-from sqlbuild.shared.helpers.scenario_artifact_names import (
-    is_scenario_artifact_physical_name,
-    parse_scenario_artifact_physical_name,
 )
 from sqlbuild.shared.models import ParsedScenarioArtifactName
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
