@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
@@ -16,6 +17,7 @@ from sqlbuild.compiler.planner.main.graph_changes_only import (
     build_graph_changes_only_propagation,
 )
 from sqlbuild.compiler.planner.main.graph_identity import build_expected_graph_identity_hashes
+from sqlbuild.compiler.planner.main.local_node_planning import classify_local_node_plan
 from sqlbuild.compiler.planner.main.selection_staleness import (
     classify_selection_staleness_warnings,
 )
@@ -72,8 +74,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.shared.helpers.local_node_planning import classify_local_node_plan
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import LocalNodePlanInput, LocalNodePlanOutcome, RelationLookup
 from sqlbuild.shared.types import LocalNodePlanAction, LocalNodePlanReason
 from sqlbuild.spec.models.source import SourceEntry
@@ -430,24 +430,7 @@ def _freshness_sources_by_unique_id(
     candidate_unique_ids: Sequence[str],
     graph: DbtCombinedGraph | None,
 ) -> dict[str, DbtManifestSource]:
-    if graph is None:
-        return manifest.sources_by_unique_id
-    source_unique_ids: set[str] = set()
-    unique_id: str
-    for unique_id in candidate_unique_ids:
-        key: DbtCombinedGraphKey
-        for key in expand_combined_upstream(dbt_model_graph_key(unique_id), graph.upstream_deps):
-            if (
-                key.owner == DbtCombinedGraphOwner.DBT
-                and key.resource_type == DbtCombinedGraphResourceType.SOURCE
-                and key.name in manifest.sources_by_unique_id
-            ):
-                source_unique_ids.add(key.name)
-    return {
-        unique_id: source
-        for unique_id, source in manifest.sources_by_unique_id.items()
-        if unique_id in source_unique_ids
-    }
+    return manifest.sources_by_unique_id
 
 
 def _apply_graph_propagation(

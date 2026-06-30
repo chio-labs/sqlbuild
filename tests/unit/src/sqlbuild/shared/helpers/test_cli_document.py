@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.classes.cli_document import CliDocument
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from tests.unit.src.sqlbuild.shared.helpers._test_types import CliDocumentTestCase
 

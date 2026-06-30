@@ -35,7 +35,7 @@ _WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
     }
 )
 _SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
-    "src/sqlbuild/shared/helpers/relation_lookup.py": "shared single-query lookup builder",
+    "src/sqlbuild/adapter/shared/main/relation_lookup.py": "shared single-query lookup builder",
     "src/sqlbuild/executor/janitor/helpers/plan.py": "one list_relations per database",
     "src/sqlbuild/integrations/dbt/helpers/planning/model_planning.py": (
         "one list_relations per database"
@@ -92,7 +92,7 @@ _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
     "src/sqlbuild/integrations/dbt/helpers/manifest/compile_refs.py",
 )
 _SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS: tuple[str, ...] = (
-    "src/sqlbuild/shared/helpers/selector_expansion.py",
+    "src/sqlbuild/compiler/planner/main/selector_expansion.py",
 )
 _SC056_COMMENT_ALLOWED_PREFIXES: tuple[str, ...] = (
     "#!",
@@ -1158,7 +1158,7 @@ def check_no_ad_hoc_selector_plus_parsing(file_path: Path, module: ast.Module) -
                 line=node.lineno,
                 message=(
                     "planner and dbt selector code must parse + markers with "
-                    "sqlbuild.shared.helpers.selector_expansion.split_selector_expansion"
+                    "sqlbuild.compiler.planner.main.selector_expansion.split_selector_expansion"
                 ),
             )
         )

@@ -37,7 +37,8 @@ from sqlbuild.shared.constants import (
     SCENARIO_LOCAL_SNAPSHOT_MISSING,
     SCENARIO_LOCAL_SNAPSHOT_STALE,
 )
-from sqlbuild.shared.helpers.coded_errors import error_code, error_message
+from sqlbuild.shared.main.error_code import error_code
+from sqlbuild.shared.main.error_message import error_message
 
 _SNAPSHOT_ROOT_PARTS: tuple[str, ...] = ("tests", "_scenario_snapshots")
 _MANIFEST_FILE_NAME: str = "scenario.json"

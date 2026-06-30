@@ -1,4 +1,4 @@
-"""Shared selector expansion marker parsing."""
+"""Public selector expansion marker parsing entrypoint."""
 
 from __future__ import annotations
 

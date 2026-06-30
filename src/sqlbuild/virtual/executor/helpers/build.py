@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
@@ -78,7 +79,6 @@ from sqlbuild.shared.helpers.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup, SqlResourceRef
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import SnapshotsConfig

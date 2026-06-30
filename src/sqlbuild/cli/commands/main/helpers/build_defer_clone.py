@@ -28,13 +28,13 @@ from sqlbuild.compiler.planner.main.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
+from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneStatus
 from sqlbuild.shared.helpers.graph_algorithms import (
     resolve_clone_boundary,
     resolve_skipped_view_chain,
 )
-from sqlbuild.shared.helpers.prephase_progress import run_prephase_clone_stream
 
 
 def build_defer_clone_boundary_selectors(

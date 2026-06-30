@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.helpers.init.scaffold import scaffold_blank_project
 from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
-from sqlbuild.shared.helpers.cli_document import CliDocument
+from sqlbuild.shared.classes.cli_document import CliDocument
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
 

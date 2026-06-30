@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import time
 
-from sqlbuild.shared.helpers.status import TransientStatusReporter
+from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 
 
 def elapsed_ms(start: float) -> int:

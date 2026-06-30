@@ -1,4 +1,4 @@
-"""SQL builders for scenario expected-output checks."""
+"""Public scenario expected-output comparison SQL entrypoint."""
 
 from __future__ import annotations
 

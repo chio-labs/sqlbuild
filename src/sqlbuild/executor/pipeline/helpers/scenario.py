@@ -29,8 +29,10 @@ from sqlbuild.shared.constants import (
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_INTERNAL,
 )
-from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
 from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
+from sqlbuild.shared.main.error_code import error_code
+from sqlbuild.shared.main.error_help import error_help
+from sqlbuild.shared.main.error_message import error_message
 from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")

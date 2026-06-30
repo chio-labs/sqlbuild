@@ -1,12 +1,9 @@
-"""Shared transient status rendering helpers."""
+"""Transient status reporter class."""
 
 from __future__ import annotations
 
 import atexit
-import os
-import sys
-from collections.abc import Iterator
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractContextManager
 from typing import TextIO
 
 from rich.console import Console
@@ -14,16 +11,7 @@ from rich.status import Status
 
 from sqlbuild.shared.exceptions.errors import SharedInputError
 from sqlbuild.shared.helpers.cli_style import CliStyle
-
-_NO_PROGRESS_ENV_VAR: str = "SQLBUILD_NO_PROGRESS"
-_NO_PROGRESS_TRUTHY: frozenset[str] = frozenset({"1", "true", "yes", "on"})
-
-
-def progress_spinners_disabled() -> bool:
-    """Return True when transient spinners are disabled via the environment."""
-
-    value: str | None = os.environ.get(_NO_PROGRESS_ENV_VAR)
-    return value is not None and value.strip().lower() in _NO_PROGRESS_TRUTHY
+from sqlbuild.shared.main.progress_spinners_disabled import progress_spinners_disabled
 
 
 class TransientStatusReporter:
@@ -95,22 +83,3 @@ class TransientStatusReporter:
         formatted_message: str = self._style.muted(message) if dim_output else message
         self._stream.write(f"{formatted_message}\n")
         self._stream.flush()
-
-
-@contextmanager
-def maybe_status(message: str, *, enabled: bool) -> Iterator[None]:
-    """Render a stderr spinner for long-running interactive operations."""
-
-    if not enabled or progress_spinners_disabled() or not sys.stderr.isatty():
-        yield
-        return
-
-    reporter: TransientStatusReporter = TransientStatusReporter(
-        stream=sys.stderr,
-        enabled=enabled,
-    )
-    reporter.start(message)
-    try:
-        yield
-    finally:
-        reporter.close()

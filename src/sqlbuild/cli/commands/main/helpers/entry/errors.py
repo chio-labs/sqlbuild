@@ -8,7 +8,7 @@ from collections.abc import Callable, Sequence
 from typing import NoReturn
 
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.coded_errors import format_coded_error
+from sqlbuild.shared.main.coded_error_text import format_coded_error
 
 
 class SqlbuildArgumentParser(argparse.ArgumentParser):

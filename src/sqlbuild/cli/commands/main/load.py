@@ -42,7 +42,7 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.cli_style import CliStyle
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
+from sqlbuild.shared.main.summary_footer import format_summary_footer
 from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
 from sqlbuild.spec.models.source import SourceEntry
 

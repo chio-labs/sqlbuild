@@ -1,4 +1,4 @@
-"""Unified SQL/text diff formatting helpers."""
+"""Public SQL/text diff formatting entrypoint."""
 
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ def format_query_diff(previous: str, current: str) -> list[str]:
     for line in diff_lines:
         stripped: str = line.rstrip("\n")
         formatted: str = f"      {stripped}"
-        if stripped.startswith("+") and not stripped.startswith("+++"):
+        if stripped[:1] == "+" and stripped[:3] != "+++":
             result.append(style.success(formatted))
-        elif stripped.startswith("-") and not stripped.startswith("---"):
+        elif stripped[:1] == "-" and stripped[:3] != "---":
             result.append(style.error(formatted))
         elif stripped.startswith(("---", "+++", "@@")):
             result.append(style.muted(formatted))

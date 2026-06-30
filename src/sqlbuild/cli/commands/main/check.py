@@ -52,7 +52,7 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.shared.helpers.colors import supports_color
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
+from sqlbuild.shared.main.summary_footer import format_summary_footer
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 

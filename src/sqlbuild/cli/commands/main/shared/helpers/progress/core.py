@@ -16,6 +16,11 @@ from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.main.materialization_type_display import (
+    materialization_type_display,
+)
+from sqlbuild.compiler.planner.main.model_execution_annotation import model_execution_annotation
+from sqlbuild.compiler.planner.main.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -32,13 +37,8 @@ from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.materialization_labels import (
-    materialization_type_display,
-    model_execution_annotation,
-    model_resource_type,
-)
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
+from sqlbuild.shared.main.coded_error_text import format_coded_error
+from sqlbuild.shared.main.summary_footer import format_summary_footer
 from sqlbuild.shared.types import ExecutionResourceKind
 
 _TYPE_WIDTH: int = 10

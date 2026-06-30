@@ -1,4 +1,4 @@
-"""Shared prephase progress output."""
+"""Clone prephase progress output implementations."""
 
 from __future__ import annotations
 
@@ -28,8 +28,6 @@ def run_prephase_clone_stream[RESULT](
     use_color: bool,
     run_clone: Callable[[Callable[[int, int, CloneItemResult], None]], RESULT],
 ) -> RESULT:
-    """Run clone work with shared prephase streaming output."""
-
     write_prephase_header(stream=stream, title=title, use_color=use_color)
     stop_spinner: threading.Event = threading.Event()
     write_lock: threading.Lock = threading.Lock()
@@ -69,8 +67,6 @@ def run_prephase_clone_stream[RESULT](
 def prephase_row_from_clone_item(
     *, item: CloneItemResult, caused_by_names: tuple[str, ...]
 ) -> PrephaseProgressRow:
-    """Build a shared prephase row from a clone item result."""
-
     return PrephaseProgressRow(
         label=clone_item_label(item),
         name=item.name,
@@ -81,8 +77,6 @@ def prephase_row_from_clone_item(
 
 
 def clone_item_label(item: CloneItemResult) -> str:
-    """Return the shared prephase row label for a clone item action."""
-
     if item.action == CloneAction.RECREATED_VIEW:
         return "view"
     if item.action == CloneAction.COPIED:
@@ -91,8 +85,6 @@ def clone_item_label(item: CloneItemResult) -> str:
 
 
 def clone_item_status(item: CloneItemResult) -> str:
-    """Return the shared prephase row status token for a clone item status."""
-
     if item.status == CloneStatus.SUCCESS:
         return "OK"
     if item.status == CloneStatus.WARNING:
@@ -101,8 +93,6 @@ def clone_item_status(item: CloneItemResult) -> str:
 
 
 def write_prephase_header(*, stream: TextIO, title: str, use_color: bool) -> None:
-    """Write a shared prephase header."""
-
     style: CliStyle = CliStyle(use_color=use_color)
     stream.write(f"\n{style.object_name('Prephase')}  {style.muted(title)}\n")
     stream.flush()
@@ -111,8 +101,6 @@ def write_prephase_header(*, stream: TextIO, title: str, use_color: bool) -> Non
 def write_prephase_rows(
     *, stream: TextIO, rows: tuple[PrephaseProgressRow, ...], use_color: bool
 ) -> None:
-    """Write shared prephase result rows."""
-
     if not rows:
         return
     total: int = len(rows)
@@ -131,8 +119,6 @@ def write_prephase_rows(
 def write_prephase_row(
     *, stream: TextIO, row: PrephaseProgressRow, index: int, total: int, use_color: bool
 ) -> None:
-    """Write one shared prephase result row."""
-
     style: CliStyle = CliStyle(use_color=use_color)
     index_width: int = len(str(total)) * 2 + 1
     ctr: str = f"{index}/{total}".rjust(index_width)
@@ -148,8 +134,6 @@ def write_prephase_row(
 
 
 def format_prephase_cause_annotation(caused_by_names: tuple[str, ...]) -> str:
-    """Format selected-model causes for a prephase row."""
-
     names: tuple[str, ...] = tuple(sorted(frozenset(name for name in caused_by_names if name)))
     if not names:
         return ""
