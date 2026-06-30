@@ -8,42 +8,42 @@ from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.cli.commands.main.helpers.janitor.checkpoints import (
+from sqlbuild.cli.commands.helpers.janitor.checkpoints import (
     checkpoint_candidates,
     checkpoint_protected_relation_keys,
     checkpoint_protected_relation_reasons,
     checkpoint_retention,
 )
-from sqlbuild.cli.commands.main.helpers.janitor.detached_environments import (
+from sqlbuild.cli.commands.helpers.janitor.detached_environments import (
     detached_environment_candidates,
     detached_environment_protected_relation_keys,
     detached_environment_protected_relation_reasons,
     detached_environment_retention,
     detached_environment_scan_relation_keys,
 )
-from sqlbuild.cli.commands.main.helpers.janitor.expired_environments import (
+from sqlbuild.cli.commands.helpers.janitor.expired_environments import (
     expired_environment_candidates,
     expired_environment_protected_relation_keys,
     expired_environment_protected_relation_reasons,
     expired_environment_retention,
     expired_environment_scan_relation_keys,
 )
-from sqlbuild.cli.commands.main.helpers.janitor.output import (
+from sqlbuild.cli.commands.helpers.janitor.output import (
     confirmation_text,
     environment_label,
     write_disabled,
     write_plan,
 )
-from sqlbuild.cli.commands.main.helpers.janitor.state_cleanup import (
+from sqlbuild.cli.commands.helpers.janitor.state_cleanup import (
     expired_lock_candidates,
     state_backup_candidates,
     state_janitor_retention,
     virtual_state_prune_candidates,
 )
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.connection.core import resolve_connection_config
-from sqlbuild.cli.commands.main.shared.helpers.progress.connection import (
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.shared.helpers.connection.core import resolve_connection_config
+from sqlbuild.cli.commands.shared.helpers.progress.connection import (
     ConnectionProgressReporter,
 )
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation

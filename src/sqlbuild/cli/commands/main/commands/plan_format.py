@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan as _format_plan
+from sqlbuild.cli.commands.helpers.plan.formatter import format_plan as _format_plan
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.shared.helpers.output.display import DisplayOptions
 

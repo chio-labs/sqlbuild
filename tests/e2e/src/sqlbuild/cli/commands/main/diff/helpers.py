@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from textwrap import dedent
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 
 def prepare_diff_project(tmp_path: Path) -> Path:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.init.scaffold import scaffold_blank_project
-from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
+from sqlbuild.cli.commands.helpers.init.scaffold import scaffold_blank_project
+from sqlbuild.cli.commands.helpers.skills.update import update_sqlbuild_skills
 from sqlbuild.shared.classes.cli_document import CliDocument
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.helpers.output.colors import supports_color
@@ -18,7 +18,7 @@ def run_init(project_dir: Path | None) -> int:
     project_file: Path = base_dir / "sqlbuild_project.toml"
 
     if project_file.exists():
-        from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+        from sqlbuild.cli.commands.shared.exceptions import CliUserError
 
         raise CliUserError(
             "sqlbuild_project.toml already exists in this directory",

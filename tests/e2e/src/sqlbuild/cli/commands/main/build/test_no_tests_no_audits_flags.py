@@ -11,7 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     prepare_build_test_audit_flag_project,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 TEST_CASES: tuple[BuildNoTestsNoAuditsFlagE2ETestCase, ...] = (
     BuildNoTestsNoAuditsFlagE2ETestCase(

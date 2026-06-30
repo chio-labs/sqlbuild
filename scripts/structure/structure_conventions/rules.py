@@ -79,7 +79,6 @@ _MAX_SOURCE_FILE_LINES: int = 2000
 _MAX_HELPER_FLAT_MODULES: int = 10
 _MAX_MAIN_FLAT_MODULES: int = 20
 _MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "helpers", "shared"})
-_MAIN_SUPPORT_FOLDER_ALLOWED_PREFIXES: tuple[str, ...] = ("src/sqlbuild/cli/commands/main/",)
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/client.py",
     "src/sqlbuild/adapters/shared/classes/*.py",
@@ -434,9 +433,6 @@ def check_main_package_layout(repo_root: Path, file_path: Path) -> list[Violatio
 
 def _main_support_folder_violation(*, repo_root: Path, file_path: Path) -> Violation | None:
     relative_path: Path = file_path.resolve().relative_to(repo_root.resolve())
-    relative_text: str = relative_path.as_posix()
-    if relative_text.startswith(_MAIN_SUPPORT_FOLDER_ALLOWED_PREFIXES):
-        return None
     parts: tuple[str, ...] = relative_path.parts
     index: int
     for index, part in enumerate(parts[:-1]):

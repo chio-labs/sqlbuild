@@ -32,7 +32,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     raw_orders_setup_sql,
     table_upstream_model_sql,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
     prepare_waffle_shop,

@@ -7,12 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    assert_fragments_in_order,
-    prepare_inline_project,
-    prepare_waffle_shop,
-    run_sqb,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     SqlAnalysisChainSqlTestE2ETestCase,
     SqlTestE2ETestCase,
@@ -21,6 +15,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_assertion_test_project_files,
     build_chain_test_project_files,
     build_macro_test_project_files,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    assert_fragments_in_order,
+    prepare_inline_project,
+    prepare_waffle_shop,
+    run_sqb,
 )
 
 SQL_ANALYSIS_CHAIN_TEST_CASES: list[SqlAnalysisChainSqlTestE2ETestCase] = [

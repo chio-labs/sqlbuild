@@ -5,9 +5,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.debug.checks import build_debug_result
-from sqlbuild.cli.commands.main.helpers.debug.models import DebugResult
-from sqlbuild.cli.commands.main.helpers.debug.output import format_debug_json, format_debug_text
+from sqlbuild.cli.commands.helpers.debug.checks import build_debug_result
+from sqlbuild.cli.commands.helpers.debug.models import DebugResult
+from sqlbuild.cli.commands.helpers.debug.output import format_debug_json, format_debug_text
 from sqlbuild.shared.helpers.output.colors import supports_color
 
 

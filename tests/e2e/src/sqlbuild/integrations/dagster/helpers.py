@@ -14,7 +14,7 @@ from dagster import (
     ExecuteInProcessResult,
 )
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import REPO_ROOT
 
 
 def prepare_python_nodes_integration_project(root: Path) -> Path:

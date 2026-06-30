@@ -26,7 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     write_snapshot_boundary_dbt_scenario,
     write_spanning_sqlbuild_dbt_ref_scenario,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb, table_exists
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb, table_exists
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 

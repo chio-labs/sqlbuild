@@ -11,7 +11,7 @@ from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
 
 def prepare_janitor_project(

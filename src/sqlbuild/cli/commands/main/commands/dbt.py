@@ -6,15 +6,15 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild.cli.commands.helpers.dbt.auto_init import (
+    ensure_sqlbuild_project_for_dbt_command,
+)
 from sqlbuild.cli.commands.main.commands.dbt_clone import run_dbt_clone_command
 from sqlbuild.cli.commands.main.commands.dbt_debug import run_dbt_debug_command
 from sqlbuild.cli.commands.main.commands.dbt_diff import run_dbt_diff_command
 from sqlbuild.cli.commands.main.commands.dbt_lineage import run_dbt_lineage_command
 from sqlbuild.cli.commands.main.commands.dbt_scenario import run_dbt_scenario_command
-from sqlbuild.cli.commands.main.helpers.dbt.auto_init import (
-    ensure_sqlbuild_project_for_dbt_command,
-)
-from sqlbuild.cli.commands.main.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.integrations.dbt.main.validate_execution_args import validate_dbt_execution_args
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.integrations.dbt.pipeline.main.execute import execute_dbt_interop_from_project

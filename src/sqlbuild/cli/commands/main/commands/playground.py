@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.playground.copy import create_playground_project
-from sqlbuild.cli.commands.main.helpers.playground.types import PlaygroundTemplate
-from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
+from sqlbuild.cli.commands.helpers.playground.copy import create_playground_project
+from sqlbuild.cli.commands.helpers.playground.types import PlaygroundTemplate
+from sqlbuild.cli.commands.helpers.skills.update import update_sqlbuild_skills
 from sqlbuild.shared.classes.cli_document import CliDocument
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.helpers.output.colors import supports_color

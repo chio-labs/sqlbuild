@@ -15,7 +15,7 @@ from typing import cast
 from tests.e2e.src.sqlbuild.cli.commands.main.load._test_types import (
     SourceOnlyIngressDependencyE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     query_duckdb,
     run_sqb,

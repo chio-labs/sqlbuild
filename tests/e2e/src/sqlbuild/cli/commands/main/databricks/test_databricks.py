@@ -55,7 +55,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     build_real_warehouse_remote_scenario_project_files,
     maybe_corrupt_scenario_snapshot_dialect,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_dbt_profile_lifecycle,
     assert_real_adapter_dependency_baseline_case,
     build_current_check_customers_model_sql,

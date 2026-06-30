@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.dbt.sqlbuild_work import (
+from sqlbuild.cli.commands.helpers.dbt.sqlbuild_work import (
     execute_sqlbuild_build_work,
     execute_sqlbuild_test_work,
 )

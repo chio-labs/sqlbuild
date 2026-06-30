@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from tests.e2e.src.sqlbuild.cli.commands.main.check._test_types import CheckCommandTestCase
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 
 def prepare_python_check_project(*, tmp_path: Path) -> Path:

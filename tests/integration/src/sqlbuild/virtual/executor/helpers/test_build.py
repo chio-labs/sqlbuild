@@ -18,7 +18,7 @@ from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     build_virtual_wide_dag_repo_files,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     run_sqb,
 )

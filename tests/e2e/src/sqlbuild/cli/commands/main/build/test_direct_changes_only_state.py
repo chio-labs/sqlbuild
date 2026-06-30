@@ -23,7 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     prepare_direct_snapshot_reuse_from_project,
     write_direct_changes_only_stg_orders,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
     query_duckdb,

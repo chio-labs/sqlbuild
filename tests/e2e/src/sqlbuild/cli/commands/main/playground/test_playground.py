@@ -14,7 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.playground._test_types import (
     PythonNodesPlaygroundLifecycleTestCase,
     VirtualPlaygroundLifecycleTestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 
 @pytest.mark.parametrize(

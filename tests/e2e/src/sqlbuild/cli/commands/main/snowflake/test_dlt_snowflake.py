@@ -10,10 +10,6 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
     write_sqlite_orders_source_database,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    prepare_inline_project,
-    run_sqb,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeDltE2ETestCase,
 )
@@ -24,6 +20,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     ensure_query_schema_ready,
     fetch_snowflake_rows,
     relation_name,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    prepare_inline_project,
+    run_sqb,
 )
 
 

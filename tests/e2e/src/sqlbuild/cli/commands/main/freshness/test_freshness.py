@@ -18,7 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.freshness.helpers import (
     prepare_multi_schema_freshness_project,
     prepare_virtual_freshness_project,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     query_duckdb,
     run_sqb,

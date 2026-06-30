@@ -16,7 +16,7 @@ from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
 from sqlbuild.integrations.rivers.helpers.assets import build_asset_defs
 from sqlbuild.integrations.rivers.helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     REPO_ROOT,
     prepare_waffle_shop,
     table_exists,

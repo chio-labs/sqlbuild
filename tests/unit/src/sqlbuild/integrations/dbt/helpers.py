@@ -18,7 +18,7 @@ from sqlbuild.adapter.shared.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.cli.commands.main.helpers.diff.output import has_diff_failures
+from sqlbuild.cli.commands.helpers.diff.output import has_diff_failures
 from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (

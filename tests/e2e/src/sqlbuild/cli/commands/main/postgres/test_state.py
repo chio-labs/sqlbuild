@@ -33,14 +33,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     quote_identifier,
     quoted_relation_name,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    prepare_inline_project,
-    run_sqb,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.state.helpers import (
     assert_state_cli_error,
     build_postgres_local_state_connection_toml,
     build_postgres_state_project_toml,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    prepare_inline_project,
+    run_sqb,
 )
 
 POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[

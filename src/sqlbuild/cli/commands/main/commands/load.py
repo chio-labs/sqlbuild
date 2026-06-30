@@ -8,29 +8,29 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.load.progress import (
+from sqlbuild.cli.commands.helpers.load.progress import (
     LoadProgressReporter,
     format_load_footer,
 )
-from sqlbuild.cli.commands.main.helpers.load.references import validate_reference_source_targets
-from sqlbuild.cli.commands.main.helpers.load.selection import (
+from sqlbuild.cli.commands.helpers.load.references import validate_reference_source_targets
+from sqlbuild.cli.commands.helpers.load.selection import (
     select_load_entries,
     select_load_reference_entries,
 )
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.main.shared.helpers.config.parsers import (
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.shared.helpers.config.parsers import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )
-from sqlbuild.cli.commands.main.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.shared.helpers.connection.core import (
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands.main.shared.helpers.output.execution_json import (
+from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
     format_load_execution_json,
     write_execution_json_output,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.connection import ConnectionProgressReporter
-from sqlbuild.cli.commands.main.shared.helpers.progress.core import write_execution_header
+from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.commands.shared.helpers.progress.core import write_execution_header
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config

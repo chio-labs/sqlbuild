@@ -5,11 +5,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.state.checkpoints import run_state_checkpoints
-from sqlbuild.cli.commands.main.helpers.state.interactive_operation import (
+from sqlbuild.cli.commands.helpers.state.checkpoints import run_state_checkpoints
+from sqlbuild.cli.commands.helpers.state.interactive_operation import (
     run_interactive_state_operation,
 )
-from sqlbuild.cli.commands.main.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
 from sqlbuild.shared.helpers.output.colors import supports_color
 from sqlbuild.virtual.state.main.environments.adopt import run_state_adopt
 from sqlbuild.virtual.state.main.environments.detach import run_state_detach

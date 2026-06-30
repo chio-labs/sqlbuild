@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.lineage.models import ColumnLineageTrace, LineageGraph
-from sqlbuild.cli.commands.main.helpers.lineage.output import (
+from sqlbuild.cli.commands.helpers.lineage.models import ColumnLineageTrace, LineageGraph
+from sqlbuild.cli.commands.helpers.lineage.output import (
     format_column_lineage_json,
     format_column_lineage_list,
     format_column_lineage_tree,
@@ -14,14 +14,14 @@ from sqlbuild.cli.commands.main.helpers.lineage.output import (
     format_lineage_list,
     format_lineage_tree,
 )
-from sqlbuild.cli.commands.main.helpers.lineage.selection import (
+from sqlbuild.cli.commands.helpers.lineage.selection import (
     parse_depth,
     select_column_target_lineage,
     select_selector_lineage,
     select_target_lineage,
 )
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode

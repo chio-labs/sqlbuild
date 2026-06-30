@@ -8,20 +8,20 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
-from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.main.helpers.diff.validation import parse_diff_name_range
-from sqlbuild.cli.commands.main.helpers.entry.errors import (
+from sqlbuild.cli.commands.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
+from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.helpers.diff.validation import parse_diff_name_range
+from sqlbuild.cli.commands.helpers.entry.errors import (
     SqlbuildArgumentParser,
     build_argument_parser_class,
     cli_error_use_color,
     format_expected_error,
 )
-from sqlbuild.cli.commands.main.helpers.entry.models import CliEntrypointHandlers, CliNamespace
-from sqlbuild.cli.commands.main.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
-from sqlbuild.cli.commands.main.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.config.parsers import (
+from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers, CliNamespace
+from sqlbuild.cli.commands.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
+from sqlbuild.cli.commands.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.shared.helpers.config.parsers import (
     add_cursor_override_args,
     add_dbt_config_args,
     add_execution_args,
@@ -32,7 +32,7 @@ from sqlbuild.cli.commands.main.shared.helpers.config.parsers import (
     read_selector_files,
     resolve_env_default_concurrency,
 )
-from sqlbuild.cli.commands.main.shared.types import CliCommand
+from sqlbuild.cli.commands.shared.types import CliCommand
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -457,6 +457,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI entrypoint."""
 
+    from sqlbuild.cli.commands.helpers.scenario.capture import run_scenario_capture
     from sqlbuild.cli.commands.main.commands.audit import run_audit
     from sqlbuild.cli.commands.main.commands.build import run_build
     from sqlbuild.cli.commands.main.commands.check import run_check
@@ -483,7 +484,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.commands.skills import run_skills_update
     from sqlbuild.cli.commands.main.commands.state import run_state
     from sqlbuild.cli.commands.main.commands.test import run_test
-    from sqlbuild.cli.commands.main.helpers.scenario.capture import run_scenario_capture
 
     def run_dbt_init_positional(
         cwd: Path,

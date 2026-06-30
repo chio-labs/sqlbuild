@@ -26,7 +26,7 @@ from sqlbuild.integrations.dagster import (
     sqlbuild_assets,
     sqlbuild_scenario_checks,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     REPO_ROOT,
     prepare_inline_project,
     prepare_source_loader_strategies,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.helpers.skills.models import SkillUpdateResult
-from sqlbuild.cli.commands.main.helpers.skills.update import update_sqlbuild_skills
+from sqlbuild.cli.commands.helpers.skills.models import SkillUpdateResult
+from sqlbuild.cli.commands.helpers.skills.update import update_sqlbuild_skills
 
 
 def run_skills_update(
