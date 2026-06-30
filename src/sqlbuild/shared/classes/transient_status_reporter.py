@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.status import Status
 
 from sqlbuild.shared.exceptions.errors import SharedInputError
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.progress_spinners_disabled import progress_spinners_disabled
 
 

@@ -11,18 +11,22 @@ from sqlbuild.cli.commands.main.helpers.freshness.models import (
     FreshnessSourceResult,
 )
 from sqlbuild.cli.commands.main.helpers.freshness.types import FreshnessSourceStatus
-from sqlbuild.compiler.source_freshness.main.adapter_observation import (
+from sqlbuild.compiler.source_freshness.main.operations.adapter_observation import (
     observe_adapter_sources_freshness,
 )
-from sqlbuild.compiler.source_freshness.main.age_policy import evaluate_source_freshness_age_policy
-from sqlbuild.compiler.source_freshness.main.data_version_hash import (
+from sqlbuild.compiler.source_freshness.main.operations.age_policy import (
+    evaluate_source_freshness_age_policy,
+)
+from sqlbuild.compiler.source_freshness.main.operations.data_version_hash import (
     source_freshness_data_version_hash,
 )
-from sqlbuild.compiler.source_freshness.main.normalization import (
+from sqlbuild.compiler.source_freshness.main.operations.normalization import (
     normalize_source_freshness_data_version,
 )
-from sqlbuild.compiler.source_freshness.main.observation import observe_configured_source_freshness
-from sqlbuild.compiler.source_freshness.main.record_equivalence import (
+from sqlbuild.compiler.source_freshness.main.operations.observation import (
+    observe_configured_source_freshness,
+)
+from sqlbuild.compiler.source_freshness.main.operations.record_equivalence import (
     source_freshness_records_equivalent,
 )
 from sqlbuild.compiler.source_freshness.models import (

@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands.main.helpers.build_defer_clone import defer_clone_boundary_selectors
+from sqlbuild.cli.commands.main.helpers.build.defer_clone import defer_clone_boundary_selectors
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlannerScope
 from tests.unit.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBoundaryTestCase,
 )
-from tests.unit.src.sqlbuild.cli.commands.main.build.helpers import build_compiled_object_key
+from tests.unit.src.sqlbuild.cli.commands.main.build.helpers import (
+    build_compiled_object_key,
+)
 
 MODEL_A: CompiledObjectKey = build_compiled_object_key(CompiledResourceType.MODEL, "a")
 MODEL_B: CompiledObjectKey = build_compiled_object_key(CompiledResourceType.MODEL, "b")

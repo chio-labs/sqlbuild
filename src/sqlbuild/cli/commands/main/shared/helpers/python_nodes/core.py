@@ -12,7 +12,7 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 
 
 def task_asset_python_node_names(

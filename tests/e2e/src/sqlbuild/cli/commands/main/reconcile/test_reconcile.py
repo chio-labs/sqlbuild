@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_repo_files
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_repo_files,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.reconcile._test_types import (
     ReconcileE2ETestCase,
 )

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_repo_files
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_repo_files,
+)
 
 
 def build_virtual_seed_reconcile_repo_files() -> dict[str, str]:

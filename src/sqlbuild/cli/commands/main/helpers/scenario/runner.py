@@ -38,7 +38,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress.planning import Planning
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.operations.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.pipeline.main.run import (
     run_scenario_capture_pipeline,
@@ -55,8 +55,8 @@ from sqlbuild.shared.constants import (
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
 )
-from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.colors import supports_color
 from sqlbuild.shared.main.summary_footer import format_summary_footer
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,

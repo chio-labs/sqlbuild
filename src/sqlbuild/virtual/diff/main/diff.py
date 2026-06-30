@@ -10,7 +10,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.operations.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.executor.diff.main.execute import execute_diff
@@ -26,7 +26,7 @@ from sqlbuild.virtual.diff.helpers.diff import (
 )
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,

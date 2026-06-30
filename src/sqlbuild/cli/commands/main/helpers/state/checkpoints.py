@@ -9,11 +9,13 @@ from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.classes.cli_document import CliDocument
-from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.colors import supports_color
 from sqlbuild.spec.models.targets import resolve_target_name
-from sqlbuild.virtual.state.main.list_checkpoints import list_virtual_environment_checkpoints
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.operations.list_checkpoints import (
+    list_virtual_environment_checkpoints,
+)
+from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,

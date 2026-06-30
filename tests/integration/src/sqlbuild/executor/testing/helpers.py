@@ -8,7 +8,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
-from sqlbuild.executor.testing.main.execute import execute_sql_test
+from sqlbuild.executor.testing.main.operations.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from tests.integration.src.sqlbuild.executor.testing._test_types import (

@@ -9,7 +9,7 @@ from sqlbuild.compiler.planner.helpers.pruning.selection_classifier import (
     classify_selection_staleness_warnings,
     format_stale_upstream_warning_message,
 )
-from sqlbuild.compiler.planner.main.model_changes import detect_model_changes
+from sqlbuild.compiler.planner.main.planning.model_changes import detect_model_changes
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlannerChangeResults,

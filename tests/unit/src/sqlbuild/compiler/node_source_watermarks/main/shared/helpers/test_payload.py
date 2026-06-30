@@ -7,10 +7,10 @@ import pytest
 from sqlbuild.compiler.node_source_watermarks.exceptions import (
     NodeSourceWatermarkInputError,
 )
-from sqlbuild.compiler.node_source_watermarks.main.decode_payload import (
+from sqlbuild.compiler.node_source_watermarks.main.operations.decode_payload import (
     decode_watermark_payload,
 )
-from sqlbuild.compiler.node_source_watermarks.main.encode_payload import (
+from sqlbuild.compiler.node_source_watermarks.main.operations.encode_payload import (
     encode_watermark_payload,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

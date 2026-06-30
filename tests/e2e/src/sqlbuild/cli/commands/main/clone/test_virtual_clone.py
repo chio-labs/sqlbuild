@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.clone._test_types import VirtualCloneE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.clone._test_types import (
+    VirtualCloneE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.clone.helpers import (
     build_dev_target_versions,
     build_prod_source_versions,

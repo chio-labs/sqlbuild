@@ -7,13 +7,13 @@ from typing import cast
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers import dbt_sqlbuild_work as work_module
-from sqlbuild.cli.commands.main.helpers.dbt_sqlbuild_work import execute_sqlbuild_test_work
+from sqlbuild.cli.commands.main.helpers.dbt import sqlbuild_work as work_module
+from sqlbuild.cli.commands.main.helpers.dbt.sqlbuild_work import execute_sqlbuild_test_work
 from sqlbuild.compiler.planner.models import PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.dbt.types import DbtInteropSqlbuildTestAction
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from tests.unit.src.sqlbuild.cli.commands.main.helpers._test_types import (
     DbtSqlbuildWorkOutputTestCase,
 )

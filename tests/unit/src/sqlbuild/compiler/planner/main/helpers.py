@@ -14,14 +14,14 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.identity.standard import (
     build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.models import StandardModelVersionIdentities
-from sqlbuild.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
 

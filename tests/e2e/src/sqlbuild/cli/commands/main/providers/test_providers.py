@@ -11,7 +11,9 @@ from typing import cast
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_project_toml
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_project_toml,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
     ProviderCommandConcurrencyE2ETestCase,
     ProviderCommandDiagnosticE2ETestCase,

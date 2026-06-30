@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands.main.helpers.load_selection import (
+from sqlbuild.cli.commands.main.helpers.load.selection import (
     select_load_entries,
     select_load_reference_entries,
 )

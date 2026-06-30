@@ -13,7 +13,7 @@ from sqlbuild.adapters.shared.helpers.node_source_watermarks import (
 from sqlbuild.compiler.node_source_watermarks.constants import (
     NODE_SOURCE_WATERMARK_TABLE_NAME,
 )
-from sqlbuild.compiler.node_source_watermarks.main.encode_payload import (
+from sqlbuild.compiler.node_source_watermarks.main.operations.encode_payload import (
     encode_watermark_payload,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

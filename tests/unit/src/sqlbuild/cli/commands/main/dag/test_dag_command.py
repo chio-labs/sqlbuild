@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.main import dag as dag_command
-from sqlbuild.cli.commands.main.dag import run_dag
+from sqlbuild.cli.commands.main.commands import dag as dag_command
+from sqlbuild.cli.commands.main.commands.dag import run_dag
 from tests.unit.src.sqlbuild.cli.commands.main.dag._test_types import (
     DagCommandTestCase,
     PythonDagCommandTestCase,

@@ -9,7 +9,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorDetachedVirtualEnvironmentCandidate,
     JanitorRelationKey,
 )
-from sqlbuild.virtual.state.main.detached_environment_retention import (
+from sqlbuild.virtual.state.main.operations.detached_environment_retention import (
     inspect_detached_environment_retention,
 )
 from sqlbuild.virtual.state.models import (

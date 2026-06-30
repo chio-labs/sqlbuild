@@ -16,9 +16,11 @@ from sqlbuild.cli.commands.main.shared.models import StandardPythonLifecycleStat
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
+from sqlbuild.compiler.pipeline.main.operations.relation_targets import (
+    build_python_relation_targets,
+)
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.main.loader_dag import build_intermediate_source_map
+from sqlbuild.compiler.planner.main.planning.loader_dag import build_intermediate_source_map
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle

@@ -50,7 +50,7 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import execute_dbt_clone
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtSupportedResourceType
-from sqlbuild.shared.helpers.graph_algorithms import (
+from sqlbuild.shared.helpers.graph.algorithms import (
     resolve_clone_boundary,
     resolve_skipped_view_chain,
 )

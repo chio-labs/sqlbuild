@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 

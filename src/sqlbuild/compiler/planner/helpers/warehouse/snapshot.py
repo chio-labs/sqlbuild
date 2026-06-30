@@ -27,7 +27,7 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_MODEL,
     NODE_TYPE_SEED,
 )
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.main.operations.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -45,7 +45,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
+from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 

@@ -9,7 +9,9 @@ from typing import Any
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_project_toml
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_project_toml,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.seed._test_types import (
     SeedE2ETestCase,
     VirtualSeedE2ETestCase,

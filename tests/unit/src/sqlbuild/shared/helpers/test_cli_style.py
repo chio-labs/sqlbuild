@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from tests.unit.src.sqlbuild.shared.helpers._test_types import CliStyleTestCase
 
 TEST_CASES: list[CliStyleTestCase] = [

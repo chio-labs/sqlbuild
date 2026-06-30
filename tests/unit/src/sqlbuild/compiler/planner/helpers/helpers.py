@@ -79,7 +79,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     StandardSourceFreshnessPlanningResult,
 )
-from sqlbuild.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import (
     SchemaColumn,

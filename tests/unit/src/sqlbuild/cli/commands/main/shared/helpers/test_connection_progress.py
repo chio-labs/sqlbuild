@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.cli.commands.main.shared.helpers.progress.connection import (
     ConnectionProgressReporter,
 )
-from sqlbuild.shared.helpers.colors import dim
+from sqlbuild.shared.helpers.output.colors import dim
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     ConnectionProgressTestCase,
 )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.main.local_node_planning import classify_local_node_plan
+from sqlbuild.compiler.planner.main.planning.local_node_planning import classify_local_node_plan
 from sqlbuild.shared.models import LocalNodePlanInput, LocalNodePlanOutcome
 from sqlbuild.shared.types import LocalNodePlanAction, LocalNodePlanReason
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (

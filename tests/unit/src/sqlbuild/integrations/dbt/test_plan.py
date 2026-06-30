@@ -24,7 +24,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.shared.helpers.display import DisplayOptions
+from sqlbuild.shared.helpers.output.display import DisplayOptions
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtPlanHumanFormatterTestCase,
     DbtPlanTestCase,

@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.graph_algorithms import (
+from sqlbuild.shared.helpers.graph.algorithms import (
     invert_edges,
     path_nodes,
     transitive_closure,

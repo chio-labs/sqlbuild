@@ -7,8 +7,8 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.operations.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from tests.unit.src.sqlbuild.compiler.fingerprints.main._test_types import (
     ReadLatestFingerprintsErrorTestCase,

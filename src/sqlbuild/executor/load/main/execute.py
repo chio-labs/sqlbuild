@@ -43,7 +43,7 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy

@@ -18,7 +18,7 @@ from sqlbuild.compiler.node_source_watermarks.constants import (
     COLUMN_WATERMARKS_JSON_B64,
     NODE_SOURCE_WATERMARK_TABLE_NAME,
 )
-from sqlbuild.compiler.node_source_watermarks.main.encode_payload import (
+from sqlbuild.compiler.node_source_watermarks.main.operations.encode_payload import (
     encode_watermark_payload,
 )
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord

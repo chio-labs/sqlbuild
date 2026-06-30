@@ -11,7 +11,7 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.operations.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult

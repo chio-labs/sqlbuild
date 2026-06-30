@@ -13,7 +13,7 @@ from sqlbuild.diagnostics.shared.helpers.logging import (
     DiagnosticsConsoleFormatter,
     DiagnosticsFileFormatter,
 )
-from sqlbuild.shared.helpers.diagnostics_logging import (
+from sqlbuild.shared.helpers.diagnostics.logging import (
     get_diagnostics_logger,
 )
 

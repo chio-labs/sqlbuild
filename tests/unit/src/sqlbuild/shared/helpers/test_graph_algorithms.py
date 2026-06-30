@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.shared.helpers.graph_algorithms import (
+from sqlbuild.shared.helpers.graph.algorithms import (
     invert_edges,
     path_nodes,
     resolve_clone_boundary,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.shared.helpers.sql_resolution import assert_no_unresolved_sql_markers
+from sqlbuild.shared.helpers.sql.resolution import assert_no_unresolved_sql_markers
 from tests.unit.src.sqlbuild.shared.helpers.sql_resolution._test_types import (
     AssertNoUnresolvedSqlMarkersTestCase,
 )

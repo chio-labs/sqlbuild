@@ -8,15 +8,15 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.operations.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_destination
 from sqlbuild.virtual.executor.main.relation_type import resolve_model_relation_type
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.main.record_operation import record_state_operation
+from sqlbuild.virtual.state.main.operations.record_operation import record_state_operation
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateBackendConfig,

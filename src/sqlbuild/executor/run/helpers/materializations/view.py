@@ -24,8 +24,8 @@ from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResu
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.spec.models.source import SourceEntry
 
 

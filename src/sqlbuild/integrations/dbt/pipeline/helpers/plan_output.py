@@ -15,8 +15,8 @@ from sqlbuild.compiler.compile.main.effective_config import build_effective_conn
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.display_plan import build_display_only_sqlbuild_plan
-from sqlbuild.compiler.planner.main.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.planning.display_plan import build_display_only_sqlbuild_plan
+from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
     DependencyBaselinePlanEntry,

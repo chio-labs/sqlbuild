@@ -34,7 +34,7 @@ from sqlbuild.shared.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
 )
-from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.output.colors import supports_color
 
 
 def run_dbt_scenario_test(

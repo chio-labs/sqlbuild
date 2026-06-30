@@ -9,7 +9,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorExpiredVirtualEnvironmentCandidate,
     JanitorRelationKey,
 )
-from sqlbuild.virtual.state.main.expired_environment_retention import (
+from sqlbuild.virtual.state.main.operations.expired_environment_retention import (
     inspect_expired_environment_retention,
 )
 from sqlbuild.virtual.state.models import (

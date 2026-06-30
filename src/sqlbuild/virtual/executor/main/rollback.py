@@ -12,7 +12,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.operations.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
@@ -31,9 +31,9 @@ from sqlbuild.virtual.executor.helpers.rollback import (
     validate_physical_relations_exist,
 )
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
-from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
-from sqlbuild.virtual.state.main.release_lock import release_state_lease
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.operations.locks import acquire_virtual_environment_lease
+from sqlbuild.virtual.state.main.operations.release_lock import release_state_lease
+from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     PhysicalRelationRecord,

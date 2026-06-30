@@ -76,11 +76,11 @@ from sqlbuild.executor.shared.helpers.load_execution import (
 from sqlbuild.executor.shared.helpers.worker_completion import run_worker_with_completion
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
-from sqlbuild.executor.testing.main.execute import execute_sql_test
+from sqlbuild.executor.testing.main.operations.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
+from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context, log_debug_event
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.source import SourceEntry

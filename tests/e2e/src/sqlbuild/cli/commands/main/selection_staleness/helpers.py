@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import skip_unless_dbt_is_runnable
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    skip_unless_dbt_is_runnable,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.selection_staleness._test_types import (
     SelectionStalenessE2ETestCase,
     SelectionStalenessEngine,

@@ -63,7 +63,7 @@ from sqlbuild.adapters.shared.helpers.source_freshness import (
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.shared.helpers.diagnostics_logging import log_sql
+from sqlbuild.shared.helpers.diagnostics.logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
@@ -1326,7 +1326,9 @@ class PostgresAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+        from sqlbuild.compiler.fingerprints.main.operations.create_table_sql import (
+            build_create_table_sql,
+        )
 
         return build_create_table_sql(
             database=database,
@@ -1362,7 +1364,9 @@ class PostgresAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.read_latest_sql import build_read_latest_sql
+        from sqlbuild.compiler.fingerprints.main.operations.read_latest_sql import (
+            build_read_latest_sql,
+        )
 
         return build_read_latest_sql(
             database=database,
@@ -1525,7 +1529,9 @@ class PostgresAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.source_freshness.main.read_latest_sql import build_read_latest_sql
+        from sqlbuild.compiler.source_freshness.main.operations.read_latest_sql import (
+            build_read_latest_sql,
+        )
 
         return build_read_latest_sql(
             database=database,

@@ -10,7 +10,7 @@ from typing import TextIO
 
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.models import PrephaseProgressRow
 
 _TYPE_WIDTH: int = 10

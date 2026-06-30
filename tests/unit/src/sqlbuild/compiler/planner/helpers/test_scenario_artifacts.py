@@ -12,7 +12,7 @@ from sqlbuild.compiler.planner.helpers.scenario.artifacts import (
     build_scenario_relation_map,
     compute_scenario_hash_prefix,
 )
-from sqlbuild.compiler.planner.main.is_scenario_artifact_physical_name import (
+from sqlbuild.compiler.planner.main.planning.is_scenario_artifact_physical_name import (
     is_scenario_artifact_physical_name,
 )
 from sqlbuild.compiler.planner.models import (

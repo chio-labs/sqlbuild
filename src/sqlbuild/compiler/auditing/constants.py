@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.shared.helpers.sql_reference_patterns import quoted_reference_call_pattern
+from sqlbuild.shared.helpers.sql.reference_patterns import quoted_reference_call_pattern
 from sqlbuild.shared.types import SqlReferenceKind
 
 REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)

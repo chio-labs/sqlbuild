@@ -1779,7 +1779,9 @@ class BaseAdapter(StrictAdapter):
     ) -> str:
         """Render DDL that creates the fingerprint table when it is missing."""
 
-        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+        from sqlbuild.compiler.fingerprints.main.operations.create_table_sql import (
+            build_create_table_sql,
+        )
 
         return build_create_table_sql(
             database=database,
@@ -1797,7 +1799,9 @@ class BaseAdapter(StrictAdapter):
     ) -> str:
         """Render SQL that reads latest fingerprint rows per identity."""
 
-        from sqlbuild.compiler.fingerprints.main.read_latest_sql import build_read_latest_sql
+        from sqlbuild.compiler.fingerprints.main.operations.read_latest_sql import (
+            build_read_latest_sql,
+        )
 
         return build_read_latest_sql(
             database=database,
@@ -1813,7 +1817,9 @@ class BaseAdapter(StrictAdapter):
     ) -> str:
         """Render SQL that reads latest source freshness rows per identity."""
 
-        from sqlbuild.compiler.source_freshness.main.read_latest_sql import build_read_latest_sql
+        from sqlbuild.compiler.source_freshness.main.operations.read_latest_sql import (
+            build_read_latest_sql,
+        )
 
         return build_read_latest_sql(
             database=database,

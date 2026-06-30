@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.source_freshness.main.data_version_hash import (
+from sqlbuild.compiler.source_freshness.main.operations.data_version_hash import (
     source_freshness_data_version_hash as _source_freshness_data_version_hash,
 )
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind

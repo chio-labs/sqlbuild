@@ -4,10 +4,12 @@ import time
 
 import pytest
 
-from sqlbuild.compiler.planner.main.graph_identity import (
+from sqlbuild.compiler.planner.main.planning.graph_identity import (
     build_expected_graph_identity_hashes,
 )
-from sqlbuild.compiler.planner.main.graph_write_identity import build_graph_write_identity_hashes
+from sqlbuild.compiler.planner.main.planning.graph_write_identity import (
+    build_graph_write_identity_hashes,
+)
 from sqlbuild.compiler.planner.models import GraphIdentityNode, GraphNodeKey
 from sqlbuild.compiler.planner.types import GraphResourceKind
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (

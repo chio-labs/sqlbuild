@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.main.record_operation import record_state_operation
+from sqlbuild.virtual.state.main.operations.record_operation import record_state_operation
 from sqlbuild.virtual.state.models import StateOperationRecord
 from sqlbuild.virtual.state.types import StateOperationStatus, StateOperationType
 from tests.unit.src.sqlbuild.virtual.state.main._test_types import (

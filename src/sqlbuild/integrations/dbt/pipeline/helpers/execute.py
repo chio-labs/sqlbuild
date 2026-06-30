@@ -45,7 +45,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtSupportedResourceType,
 )
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.summary_footer import format_summary_footer
 
 _DBT_SUCCESS_STATUSES: frozenset[str] = frozenset(

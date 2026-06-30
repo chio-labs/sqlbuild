@@ -13,7 +13,7 @@ from sqlbuild.integrations.dbt.helpers.manifest.core import (
     resolve_dbt_manifest_model,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.shared.helpers.sql_reference_patterns import reference_call_prefix_pattern_text
+from sqlbuild.shared.helpers.sql.reference_patterns import reference_call_prefix_pattern_text
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
