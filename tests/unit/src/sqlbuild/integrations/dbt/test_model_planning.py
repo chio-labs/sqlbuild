@@ -11,9 +11,9 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.main.operations.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
+from sqlbuild.compiler.source_freshness.main.operations.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
@@ -1389,14 +1389,14 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
     "test_case",
     [
         DbtSourceFreshnessScopeTestCase(
-            description="observes only sources upstream of selected candidate branch",
+            description="observes all manifest sources while candidates stay scoped",
             candidate_unique_ids=("model.analytics.fact_orders",),
-            expected_freshness_request_names=("orders",),
+            expected_freshness_request_names=("customers", "orders"),
         )
     ],
-    ids=["observes only sources upstream of selected candidate branch"],
+    ids=["observes all manifest sources while candidates stay scoped"],
 )
-def test_given_candidate_branch_when_planning_then_observes_only_upstream_sources(
+def test_given_candidate_branch_when_planning_then_observes_all_manifest_sources(
     test_case: DbtSourceFreshnessScopeTestCase,
     tmp_path: Path,
 ) -> None:

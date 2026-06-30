@@ -22,16 +22,24 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
-from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline.main.prepare_versions import load_custom_prepare_version_functions
-from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
+from sqlbuild.compiler.pipeline.main.operations.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.operations.materializations import load_custom_materializations
+from sqlbuild.compiler.pipeline.main.operations.prepare_versions import (
+    load_custom_prepare_version_functions,
+)
+from sqlbuild.compiler.pipeline.main.operations.relation_targets import (
+    build_python_relation_targets,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.build_resources import expand_build_resource_selection
-from sqlbuild.compiler.planner.main.plan_entry import build_plan_output_from_model_changes_phase
-from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
-from sqlbuild.compiler.planner.main.warehouse_snapshot import build_warehouse_snapshot_phase
+from sqlbuild.compiler.planner.main.planning.build_resources import expand_build_resource_selection
+from sqlbuild.compiler.planner.main.planning.plan_entry import (
+    build_plan_output_from_model_changes_phase,
+)
+from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.planning.warehouse_snapshot import (
+    build_warehouse_snapshot_phase,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -75,7 +83,7 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.helpers.naming import (
+from sqlbuild.shared.helpers.identity.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )
@@ -117,11 +125,13 @@ from sqlbuild.virtual.planner.main.semantics import (
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
-from sqlbuild.virtual.state.main.checkpoints import create_finalized_virtual_environment_checkpoint
-from sqlbuild.virtual.state.main.python_node_identity_write import (
+from sqlbuild.virtual.state.main.operations.checkpoints import (
+    create_finalized_virtual_environment_checkpoint,
+)
+from sqlbuild.virtual.state.main.operations.python_node_identity_write import (
     try_record_virtual_python_node_identity,
 )
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,

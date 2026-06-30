@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.helpers.source_freshness import (
+from sqlbuild.cli.commands.main.helpers.freshness.source_freshness import (
     append_eligible_standard_source_freshness_records,
 )
 from sqlbuild.compiler.planner.models import PlanOutput

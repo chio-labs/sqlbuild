@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.shared.classes.cli_document import CliDocument
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 

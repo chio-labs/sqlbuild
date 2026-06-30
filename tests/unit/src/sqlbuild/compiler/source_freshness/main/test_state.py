@@ -4,10 +4,10 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.compiler.source_freshness.main.data_version_hash import (
+from sqlbuild.compiler.source_freshness.main.operations.data_version_hash import (
     source_freshness_data_version_hash,
 )
-from sqlbuild.compiler.source_freshness.main.normalization import (
+from sqlbuild.compiler.source_freshness.main.operations.normalization import (
     normalize_source_freshness_data_version,
 )
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind

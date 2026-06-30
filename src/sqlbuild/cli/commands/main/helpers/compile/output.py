@@ -25,7 +25,7 @@ from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLoca
 from sqlbuild.compiler.diagnostics.types import DiagnosticSeverity
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.spec.models.schema import SourceLocation
 

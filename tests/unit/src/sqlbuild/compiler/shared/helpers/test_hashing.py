@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.shared.helpers.hashing import (
+from sqlbuild.shared.helpers.identity.hashing import (
     compute_query_hash,
     compute_schema_fingerprint,
     normalize_query_sql,

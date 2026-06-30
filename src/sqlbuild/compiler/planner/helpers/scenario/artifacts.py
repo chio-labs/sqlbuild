@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.constants import (
     SCENARIO_HASH_PREFIX_LENGTH,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.build_scenario_artifact_physical_name import (
+from sqlbuild.compiler.planner.main.planning.build_scenario_artifact_physical_name import (
     build_scenario_artifact_physical_name,
 )
 from sqlbuild.compiler.planner.models import (

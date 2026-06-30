@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.main.shared.helpers.progress.planning import (
     PlanningProgressReporter,
     _is_planning_completion_message,
 )
-from sqlbuild.shared.helpers.colors import dim
+from sqlbuild.shared.helpers.output.colors import dim
 from tests.unit.src.sqlbuild.cli.commands.main.shared.helpers._test_types import (
     PlanningCompletionMessageTestCase,
     PlanningFinishTestCase,

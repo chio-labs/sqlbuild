@@ -6,8 +6,8 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.cli.commands.main import compile as compile_command
-from sqlbuild.cli.commands.main.compile import run_compile
+from sqlbuild.cli.commands.main.commands import compile as compile_command
+from sqlbuild.cli.commands.main.commands.compile import run_compile
 from sqlbuild.cli.commands.main.helpers.compile import lineage as compile_lineage
 from sqlbuild.cli.commands.main.helpers.compile import status as compile_status
 from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode

@@ -21,10 +21,10 @@ from sqlbuild.compiler.planner.models import (
     StandardReuseFromTargetSnapshot,
 )
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.compiler.source_freshness.main.planning import (
+from sqlbuild.compiler.source_freshness.main.operations.planning import (
     build_standard_source_freshness_planning_result,
 )
-from sqlbuild.compiler.source_freshness.main.propagation import (
+from sqlbuild.compiler.source_freshness.main.operations.propagation import (
     build_standard_source_freshness_propagation_result,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult

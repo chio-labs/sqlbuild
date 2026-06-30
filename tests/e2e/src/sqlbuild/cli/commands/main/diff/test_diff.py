@@ -17,7 +17,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.diff.helpers import (
     execute_duckdb,
     prepare_diff_project,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_repo_files
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_repo_files,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project, run_sqb
 
 DIFF_COMMAND_E2E_TEST_CASES: list[DiffCommandE2ETestCase] = [

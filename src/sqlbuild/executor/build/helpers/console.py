@@ -6,8 +6,8 @@ import sys
 import time
 from typing import IO
 
-from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.colors import supports_color
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.colors import supports_color
 
 
 class BuildConsole:

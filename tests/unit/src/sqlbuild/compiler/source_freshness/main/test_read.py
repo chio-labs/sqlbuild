@@ -6,8 +6,8 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
-from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
-from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
+from sqlbuild.compiler.source_freshness.main.operations.read import read_latest_source_freshness
+from sqlbuild.compiler.source_freshness.main.operations.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,

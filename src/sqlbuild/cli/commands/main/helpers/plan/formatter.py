@@ -9,10 +9,10 @@ from collections.abc import Callable, Sequence
 from typing import cast
 
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
-from sqlbuild.compiler.planner.main.model_materialization_label import (
+from sqlbuild.compiler.planner.main.planning.model_materialization_label import (
     model_materialization_label,
 )
-from sqlbuild.compiler.planner.main.query_diff import format_query_diff
+from sqlbuild.compiler.planner.main.planning.query_diff import format_query_diff
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     DependencyBaselinePlanEntry,
@@ -35,9 +35,16 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus, PythonRunPhase
-from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
-from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.display import DisplayOptions, append_overflow_line, visible_entries
+from sqlbuild.shared.helpers.output.alignment import (
+    format_aligned_name_value,
+    resolve_name_column_width,
+)
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.display import (
+    DisplayOptions,
+    append_overflow_line,
+    visible_entries,
+)
 from sqlbuild.shared.types import ExecutionResourceKind
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (

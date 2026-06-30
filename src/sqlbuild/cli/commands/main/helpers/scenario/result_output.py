@@ -19,7 +19,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
 )
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.coded_error_text import format_coded_error
 
 _SCENARIO_NAME_WIDTH: int = 64

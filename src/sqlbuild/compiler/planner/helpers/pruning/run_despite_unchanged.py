@@ -8,7 +8,9 @@ from datetime import UTC, datetime, timedelta
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.model_downstream_closure import build_downstream_model_names
+from sqlbuild.compiler.planner.main.planning.model_downstream_closure import (
+    build_downstream_model_names,
+)
 from sqlbuild.compiler.planner.models import (
     PlannerScope,
     RunDespiteUnchangedDecision,

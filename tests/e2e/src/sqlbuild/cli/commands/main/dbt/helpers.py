@@ -13,7 +13,9 @@ from typing import cast
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import DbtLineageErrorE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtLineageErrorE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import REPO_ROOT, execute_duckdb
 
 DBT_INTEROP_FIXTURE_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "dbt_interop"

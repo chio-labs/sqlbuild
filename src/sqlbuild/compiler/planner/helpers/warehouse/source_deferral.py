@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSource,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.sql_reference_patterns import quoted_reference_call_pattern
+from sqlbuild.shared.helpers.sql.reference_patterns import quoted_reference_call_pattern
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import (
     ClonePolicy,

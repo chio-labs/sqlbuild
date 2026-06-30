@@ -21,8 +21,8 @@ from sqlbuild.adapter.shared.models import (
 from sqlbuild.adapter.shared.types import FunctionNullabilityRule
 from sqlbuild.adapters.databricks.client import DatabricksAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.operations.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.main.operations.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin

@@ -25,7 +25,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraphKey,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
-from sqlbuild.shared.helpers.graph_algorithms import invert_edges, transitive_closure
+from sqlbuild.shared.helpers.graph.algorithms import invert_edges, transitive_closure
 
 _SQLBUILD_VIEW_MATERIALIZATION: str = "view"
 

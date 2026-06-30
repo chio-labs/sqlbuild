@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.helpers.analysis.columns import (
     _replace_refs_with_stubs,
     substitute_placeholder_defaults,
 )
-from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
+from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
 _VALID_HOOK_ROOT_KEYS: frozenset[str] = frozenset(

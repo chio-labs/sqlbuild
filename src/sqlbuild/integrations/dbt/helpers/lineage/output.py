@@ -19,7 +19,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineageNode,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtLineageDirection
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 
 _HUMAN_COLUMN_TRACE_LIMIT: int = 25
 

@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSeed,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
+from sqlbuild.compiler.pipeline.main.operations.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult, ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.models import RelationLookup
@@ -37,7 +37,7 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
 from sqlbuild.virtual.executor.models import VirtualCloneItemResult, VirtualCloneResult
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.operations.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SeedVersionRecord,

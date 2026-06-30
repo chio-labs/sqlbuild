@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
+from sqlbuild.integrations.dbt.main.api.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
 from sqlbuild.shared.types import ExternalSqlReferenceResolver

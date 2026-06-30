@@ -10,17 +10,19 @@ from typing import TextIO
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
-from sqlbuild.cli.commands.main.helpers.sql_test_progress import (
+from sqlbuild.cli.commands.main.helpers.test.sql_progress import (
     format_expectation_detail,
     format_expectation_name,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.main.materialization_type_display import (
+from sqlbuild.compiler.planner.main.planning.materialization_type_display import (
     materialization_type_display,
 )
-from sqlbuild.compiler.planner.main.model_execution_annotation import model_execution_annotation
-from sqlbuild.compiler.planner.main.model_resource_type import model_resource_type
+from sqlbuild.compiler.planner.main.planning.model_execution_annotation import (
+    model_execution_annotation,
+)
+from sqlbuild.compiler.planner.main.planning.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -36,7 +38,7 @@ from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResu
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.shared.helpers.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.coded_error_text import format_coded_error
 from sqlbuild.shared.main.summary_footer import format_summary_footer
 from sqlbuild.shared.types import ExecutionResourceKind

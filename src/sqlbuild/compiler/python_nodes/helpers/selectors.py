@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selector_parse import parse_project_selector
+from sqlbuild.compiler.planner.main.planning.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph

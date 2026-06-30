@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-import sqlbuild.cli.commands.main.dbt_init as dbt_init_module
+import sqlbuild.cli.commands.main.commands.dbt_init as dbt_init_module
 from sqlbuild.cli.commands.main.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
@@ -150,7 +150,7 @@ def test_given_dbt_init_when_running_then_outputs_progress_and_dbt_first_next_st
         )
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt_init.run_dbt_profile_init",
+        "sqlbuild.cli.commands.main.commands.dbt_init.run_dbt_profile_init",
         run_dbt_profile_init,
     )
     monkeypatch.setattr(
@@ -229,7 +229,7 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
         )
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt_init.run_dbt_profile_init",
+        "sqlbuild.cli.commands.main.commands.dbt_init.run_dbt_profile_init",
         run_dbt_profile_init,
     )
     monkeypatch.setattr(

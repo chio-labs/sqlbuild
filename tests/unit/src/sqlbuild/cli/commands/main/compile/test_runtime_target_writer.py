@@ -7,7 +7,9 @@ import pytest
 from sqlbuild.cli.commands.main.shared.helpers.targets.runtime import write_runtime_target
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
-from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import TargetWriterTestCase
+from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    TargetWriterTestCase,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_runtime_target_execution_result,
     build_target_writer_plan_output,

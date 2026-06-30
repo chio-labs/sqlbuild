@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
-from sqlbuild.compiler.planner.main.selector_expansion import split_selector_expansion
-from sqlbuild.compiler.planner.main.sqlbuild_model_selectors import (
+from sqlbuild.compiler.planner.main.planning.selector_expansion import split_selector_expansion
+from sqlbuild.compiler.planner.main.planning.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError

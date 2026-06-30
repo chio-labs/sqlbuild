@@ -7,7 +7,9 @@ import pytest
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject, CompiledSource
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
-from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
+from sqlbuild.compiler.pipeline.main.operations.relation_targets import (
+    build_python_relation_targets,
+)
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.refs import source
 from sqlbuild.shared.models import SqlResourceRef

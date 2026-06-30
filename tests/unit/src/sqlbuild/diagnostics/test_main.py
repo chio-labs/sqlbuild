@@ -9,7 +9,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
-from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
+from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
 from tests.unit.src.sqlbuild.diagnostics._test_types import (
     DiagnosticsContextualSqlTestCase,
     DiagnosticsLogTestCase,

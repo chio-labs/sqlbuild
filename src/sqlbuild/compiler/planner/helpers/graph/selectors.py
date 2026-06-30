@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner.helpers.graph.core import (
     expand_upstream,
     find_path_keys,
 )
-from sqlbuild.compiler.planner.main.selector_expansion import split_selector_expansion
+from sqlbuild.compiler.planner.main.planning.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.shared.exceptions.errors import SharedInputError

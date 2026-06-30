@@ -13,7 +13,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario.helpers.snapshots.core import read_scenario_snapshot_manifest
-from sqlbuild.executor.scenario.main.capture import execute_scenario_snapshot_capture
+from sqlbuild.executor.scenario.main.operations.capture import execute_scenario_snapshot_capture
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotCaptureRelationPlan,

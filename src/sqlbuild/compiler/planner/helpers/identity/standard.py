@@ -9,14 +9,16 @@ from sqlbuild.compiler.planner.helpers.shared.identity_hashing import (
     compose_native_graph_identity,
     graph_key_for_compiled_resource,
 )
-from sqlbuild.compiler.planner.main.graph_identity import build_expected_graph_identity_hashes
-from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
+from sqlbuild.compiler.planner.main.planning.graph_identity import (
+    build_expected_graph_identity_hashes,
+)
+from sqlbuild.compiler.planner.main.planning.version_identity_function_hashes import (
     build_function_local_hashes,
 )
-from sqlbuild.compiler.planner.main.version_identity_local_hash import (
+from sqlbuild.compiler.planner.main.planning.version_identity_local_hash import (
     build_model_local_identity_hash,
 )
-from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
+from sqlbuild.compiler.planner.main.planning.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import (

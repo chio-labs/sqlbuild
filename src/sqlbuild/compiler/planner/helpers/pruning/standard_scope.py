@@ -15,7 +15,9 @@ from sqlbuild.compiler.planner.helpers.shared.identity_hashing import (
 from sqlbuild.compiler.planner.helpers.shared.version_staleness import (
     build_stale_model_names_from_version_identities,
 )
-from sqlbuild.compiler.planner.main.graph_changes_only import build_graph_changes_only_propagation
+from sqlbuild.compiler.planner.main.planning.graph_changes_only import (
+    build_graph_changes_only_propagation,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,

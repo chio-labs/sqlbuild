@@ -11,7 +11,9 @@ from sqlbuild.executor.janitor.models import (
     JanitorVirtualStatePruneCandidate,
 )
 from sqlbuild.virtual.state.constants import PYTHON_NODE_VERSION_TABLE
-from sqlbuild.virtual.state.main.state_janitor_retention import inspect_state_janitor_retention
+from sqlbuild.virtual.state.main.operations.state_janitor_retention import (
+    inspect_state_janitor_retention,
+)
 from sqlbuild.virtual.state.models import StateJanitorInspection
 
 
