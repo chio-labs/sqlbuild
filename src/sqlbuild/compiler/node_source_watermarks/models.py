@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild.compiler.node_source_watermarks.types import WatermarkGraphResourceKind
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessIdentity,
+    SourceFreshnessRecord,
+)
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,56 @@ class NodeSourceWatermarkSet:
     records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord] = field(
         default_factory=dict
     )
+
+
+@dataclass(frozen=True)
+class NodeSourceWatermarkTarget:
+    """Physical target relation for a materialized node watermark row."""
+
+    database: str | None
+    schema: str | None
+    name: str | None
+
+
+@dataclass
+class NodeSourceWatermarkExecutionContext:
+    """In-memory source watermark state for one execution."""
+
+    direct_source_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
+    direct_source_identities_by_node: dict[
+        NodeSourceWatermarkIdentity,
+        tuple[SourceFreshnessIdentity, ...],
+    ]
+    source_identities_by_node: dict[
+        NodeSourceWatermarkIdentity,
+        tuple[SourceFreshnessIdentity, ...],
+    ]
+    upstream_node_identities_by_node: dict[
+        NodeSourceWatermarkIdentity,
+        tuple[NodeSourceWatermarkIdentity, ...],
+    ]
+    payloads_by_node: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkPayload] = field(
+        default_factory=dict
+    )
+    buffered_records: list[NodeSourceWatermarkRecord] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class NativeNodeSourceWatermarkInputs:
+    """Native plan-derived source watermark execution inputs."""
+
+    source_identities_by_node: dict[
+        NodeSourceWatermarkIdentity,
+        tuple[SourceFreshnessIdentity, ...],
+    ] = field(default_factory=dict)
+    direct_source_identities_by_node: dict[
+        NodeSourceWatermarkIdentity,
+        tuple[SourceFreshnessIdentity, ...],
+    ] = field(default_factory=dict)
+    upstream_node_identities_by_node: dict[
+        NodeSourceWatermarkIdentity,
+        tuple[NodeSourceWatermarkIdentity, ...],
+    ] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

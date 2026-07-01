@@ -19,6 +19,7 @@ from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     FunctionPlanEntry,
@@ -52,6 +53,9 @@ from sqlbuild.executor.build.models import (
     NodeCompletion,
     SeedExecutionResult,
     SourceLoadPlanEntry,
+)
+from sqlbuild.executor.build.shared.helpers.node_source_watermarks import (
+    record_native_successful_node_source_watermark,
 )
 from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
@@ -140,6 +144,7 @@ class BuildScheduler:
         initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
         providers: ProviderContainer | None = None,
         python_identity_recorder: PythonIdentityRecorder | None = None,
+        node_source_watermark_context: NodeSourceWatermarkExecutionContext | None = None,
     ) -> None:
         self._plan: PlanOutput = plan
         self._indexes: BuildIndexes = indexes
@@ -189,6 +194,9 @@ class BuildScheduler:
         self._use_color: bool = use_color
         self._providers: ProviderContainer | None = providers
         self._python_identity_recorder: PythonIdentityRecorder | None = python_identity_recorder
+        self._node_source_watermark_context: NodeSourceWatermarkExecutionContext | None = (
+            node_source_watermark_context
+        )
 
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
@@ -727,6 +735,8 @@ class BuildScheduler:
             self._model_results.append(result)
             if self._on_node_complete is not None:
                 self._on_node_complete(result)
+            if result.status == ExecutionStatus.SUCCESS:
+                self._record_successful_node_source_watermark(key)
             failed = result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
 
         if failed:
@@ -754,6 +764,18 @@ class BuildScheduler:
             self._in_degree[neighbor] = self._in_degree.get(neighbor, 1) - 1
             if self._in_degree[neighbor] <= 0:
                 self._ready.append(neighbor)
+
+    def _record_successful_node_source_watermark(self, key: CompiledObjectKey) -> None:
+        if key.resource_type != CompiledResourceType.MODEL:
+            return
+        entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
+        if entry is None:
+            return
+        record_native_successful_node_source_watermark(
+            context=self._node_source_watermark_context,
+            entry=entry,
+            run_id=self._run_id,
+        )
 
     def _record_skipped(self, key: CompiledObjectKey) -> None:
         if key.resource_type == CompiledResourceType.MODEL:
