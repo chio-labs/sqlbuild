@@ -11,3 +11,9 @@ class WatermarkGraphResourceKind(StrEnum):
     SEED = "seed"
     FUNCTION = "function"
     TEST = "test"
+
+
+class WatermarkStalenessStatus(StrEnum):
+    FRESH = "fresh"
+    STALE = "stale"
+    UNKNOWN = "unknown"

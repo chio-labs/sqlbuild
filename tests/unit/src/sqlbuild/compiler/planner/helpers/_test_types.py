@@ -11,6 +11,10 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
+from sqlbuild.compiler.node_source_watermarks.models import (
+    NodeSourceWatermarkIdentity,
+    NodeSourceWatermarkRecord,
+)
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     GraphChangesOnlyPropagationResult,
@@ -138,6 +142,17 @@ class SelectionStalenessGraphWarningTestCase:
     changed_model_names: frozenset[str]
     changed_seed_names: frozenset[str]
     changed_source_names: frozenset[str]
+    expected_warning_fragments: tuple[str, ...]
+    unexpected_warning_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NodeSourceWatermarkWarningTestCase:
+    description: str
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    model_names: tuple[str, ...]
+    source_names: tuple[str, ...]
+    watermark_records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord]
     expected_warning_fragments: tuple[str, ...]
     unexpected_warning_fragments: tuple[str, ...] = ()
 
