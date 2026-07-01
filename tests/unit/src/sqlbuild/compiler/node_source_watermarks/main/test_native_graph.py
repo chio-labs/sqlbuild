@@ -8,7 +8,11 @@ from sqlbuild.compiler.node_source_watermarks.main.native_graph import (
 from sqlbuild.compiler.node_source_watermarks.models import (
     NativeNodeSourceWatermarkInputs,
     NodeSourceWatermarkIdentity,
+    WatermarkFrontierMember,
+    WatermarkGraphKey,
+    WatermarkGraphNode,
 )
+from sqlbuild.compiler.node_source_watermarks.types import WatermarkGraphResourceKind
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity
@@ -25,6 +29,14 @@ from tests.unit.src.sqlbuild.compiler.node_source_watermarks.main.helpers import
 
 FACT: NodeSourceWatermarkIdentity = node_watermark_identity("fact_orders")
 DIM: NodeSourceWatermarkIdentity = node_watermark_identity("dim_customers")
+FACT_KEY: WatermarkGraphKey = WatermarkGraphKey(node_type="model", node_name="fact_orders")
+STG_KEY: WatermarkGraphKey = WatermarkGraphKey(node_type="model", node_name="stg_orders")
+DIM_KEY: WatermarkGraphKey = WatermarkGraphKey(node_type="model", node_name="dim_customers")
+EVENTS_KEY: WatermarkGraphKey = WatermarkGraphKey(node_type="source", node_name="raw.events")
+CUSTOMERS_KEY: WatermarkGraphKey = WatermarkGraphKey(
+    node_type="source",
+    node_name="raw.customers",
+)
 EVENTS: SourceFreshnessIdentity = SourceFreshnessIdentity(
     source_name="raw.events",
     target_database=None,
@@ -45,6 +57,40 @@ CUSTOMERS: SourceFreshnessIdentity = SourceFreshnessIdentity(
         NativeNodeSourceWatermarkInputsTestCase(
             description="passes through views and maps materialized upstream table frontier",
             expected_inputs=NativeNodeSourceWatermarkInputs(
+                frontier_members=(
+                    WatermarkFrontierMember(root_key=DIM_KEY, frontier_key=CUSTOMERS_KEY),
+                    WatermarkFrontierMember(root_key=FACT_KEY, frontier_key=DIM_KEY),
+                    WatermarkFrontierMember(root_key=FACT_KEY, frontier_key=EVENTS_KEY),
+                ),
+                nodes={
+                    FACT_KEY: WatermarkGraphNode(
+                        key=FACT_KEY,
+                        resource_kind=WatermarkGraphResourceKind.MODEL,
+                        materialized=True,
+                    ),
+                    STG_KEY: WatermarkGraphNode(
+                        key=STG_KEY,
+                        resource_kind=WatermarkGraphResourceKind.MODEL,
+                        materialized=False,
+                    ),
+                    DIM_KEY: WatermarkGraphNode(
+                        key=DIM_KEY,
+                        resource_kind=WatermarkGraphResourceKind.MODEL,
+                        materialized=True,
+                    ),
+                    EVENTS_KEY: WatermarkGraphNode(
+                        key=EVENTS_KEY,
+                        resource_kind=WatermarkGraphResourceKind.SOURCE,
+                    ),
+                    CUSTOMERS_KEY: WatermarkGraphNode(
+                        key=CUSTOMERS_KEY,
+                        resource_kind=WatermarkGraphResourceKind.SOURCE,
+                    ),
+                },
+                source_identities_by_key={
+                    EVENTS_KEY: EVENTS,
+                    CUSTOMERS_KEY: CUSTOMERS,
+                },
                 source_identities_by_node={
                     FACT: (CUSTOMERS, EVENTS),
                     DIM: (CUSTOMERS,),

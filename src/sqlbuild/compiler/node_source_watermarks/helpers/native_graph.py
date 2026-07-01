@@ -47,7 +47,15 @@ def build_native_node_source_watermark_inputs(
         for node in nodes.values()
         if node.resource_kind == WatermarkGraphResourceKind.MODEL and node.materialized
     )
+    frontier_members: tuple[WatermarkFrontierMember, ...] = build_materialized_watermark_frontier(
+        root_keys=materialized_node_keys,
+        upstream_deps=upstream_deps,
+        nodes=nodes,
+    )
     return NativeNodeSourceWatermarkInputs(
+        frontier_members=frontier_members,
+        nodes=nodes,
+        source_identities_by_key=_source_identities_by_key(source_map=plan.source_map),
         source_identities_by_node=_source_identities_by_node(
             node_keys=materialized_node_keys,
             upstream_deps=upstream_deps,
@@ -158,6 +166,18 @@ def _source_identities_by_node(
     return {
         identity: tuple(sorted(source_identities, key=_source_identity_sort_key))
         for identity, source_identities in result.items()
+    }
+
+
+def _source_identities_by_key(
+    *, source_map: dict[str, SourceEntry]
+) -> dict[WatermarkGraphKey, SourceFreshnessIdentity]:
+    return {
+        WatermarkGraphKey(
+            node_type=CompiledResourceType.SOURCE.value,
+            node_name=source_name,
+        ): _source_identity(source)
+        for source_name, source in source_map.items()
     }
 
 

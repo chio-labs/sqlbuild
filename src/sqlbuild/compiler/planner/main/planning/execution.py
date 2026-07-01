@@ -33,6 +33,9 @@ from sqlbuild.compiler.planner.helpers.output.plan_entry import (
 )
 from sqlbuild.compiler.planner.helpers.output.plan_output import build_plan_output
 from sqlbuild.compiler.planner.helpers.pruning.cascade import resolve_cascades
+from sqlbuild.compiler.planner.helpers.pruning.node_source_watermark_staleness import (
+    build_node_source_watermark_staleness_warnings,
+)
 from sqlbuild.compiler.planner.helpers.pruning.selection_staleness import (
     build_stale_out_of_selection_warnings,
 )
@@ -59,6 +62,9 @@ from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_planning import (
     build_standard_reuse_planning_result,
     serialize_standard_reuse_metadata,
     serialize_standard_reuse_plan_metadata,
+)
+from sqlbuild.compiler.planner.helpers.warehouse.node_source_watermarks import (
+    read_latest_node_source_watermarks_for_plan,
 )
 from sqlbuild.compiler.planner.helpers.warehouse.snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.helpers.warehouse.source_freshness import (
@@ -483,6 +489,8 @@ def build_execution_plan(
         seed_version_hashes=version_identities.seed_version_hashes,
         seed_metadata_jsons=version_identities.seed_metadata_jsons,
     )
+    if source_freshness is not None:
+        plan_output = replace(plan_output, source_freshness=source_freshness)
     reuse_satisfied_model_names: frozenset[str] = (
         frozenset(
             name
@@ -501,8 +509,26 @@ def build_execution_plan(
             version_identities=stale_warning_version_identities,
             source_freshness=source_freshness,
             reuse_satisfied_model_names=reuse_satisfied_model_names,
+            include_sources=False,
         )
     )
+    node_source_watermark_warnings: tuple[PlanWarning, ...] = (
+        build_node_source_watermark_staleness_warnings(
+            plan=plan_output,
+            watermark_records=read_latest_node_source_watermarks_for_plan(
+                plan=plan_output,
+                adapter=adapter,
+                connection=connection,
+            ),
+        )
+        if source_freshness is not None
+        else ()
+    )
+    if node_source_watermark_warnings:
+        plan_output = replace(
+            plan_output,
+            warnings=(*plan_output.warnings, *node_source_watermark_warnings),
+        )
     if stale_out_of_selection_warnings:
         plan_output = replace(
             plan_output,

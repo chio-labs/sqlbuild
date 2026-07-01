@@ -4,6 +4,9 @@ from sqlbuild.compiler.node_source_watermarks.models import (
     NativeNodeSourceWatermarkInputs,
     NodeSourceWatermarkIdentity,
     NodeSourceWatermarkPayload,
+    NodeSourceWatermarkRecord,
+    NodeSourceWatermarkStaleness,
+    NodeSourceWatermarkStalenessReport,
     WatermarkFrontierMember,
     WatermarkGraphKey,
     WatermarkGraphNode,
@@ -71,3 +74,27 @@ class NodeSourceWatermarkExecutionContextTestCase:
 class NativeNodeSourceWatermarkInputsTestCase:
     description: str
     expected_inputs: NativeNodeSourceWatermarkInputs
+
+
+@dataclass(frozen=True)
+class NodeSourceWatermarkStalenessClassifierTestCase:
+    description: str
+    frontier_members: tuple[WatermarkFrontierMember, ...]
+    nodes: dict[WatermarkGraphKey, WatermarkGraphNode]
+    source_identities_by_key: dict[WatermarkGraphKey, SourceFreshnessIdentity]
+    required_source_identities_by_node: dict[
+        NodeSourceWatermarkIdentity,
+        tuple[SourceFreshnessIdentity, ...],
+    ]
+    current_source_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
+    watermark_records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord]
+    expected_classifications: tuple[NodeSourceWatermarkStaleness, ...]
+
+
+@dataclass(frozen=True)
+class NodeSourceWatermarkStalenessReportTestCase:
+    description: str
+    classifications: tuple[NodeSourceWatermarkStaleness, ...]
+    section_limit: int
+    expected_report: NodeSourceWatermarkStalenessReport
+    expected_output: str

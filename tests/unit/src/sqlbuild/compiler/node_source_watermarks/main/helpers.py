@@ -9,9 +9,11 @@ from sqlbuild.compiler.node_source_watermarks.main.record_successful import (
 from sqlbuild.compiler.node_source_watermarks.models import (
     NodeSourceWatermarkExecutionContext,
     NodeSourceWatermarkIdentity,
+    NodeSourceWatermarkPayload,
     NodeSourceWatermarkRecord,
     NodeSourceWatermarkTarget,
     SourceWatermarkEntry,
+    UnknownSourceWatermarkEntry,
     WatermarkGraphKey,
     WatermarkGraphNode,
 )
@@ -92,6 +94,44 @@ def source_entry(
         data_version_hash=data_hash,
         observed_at=datetime(2026, 6, 29, 15, 45),
         watermark_kind="direct",
+    )
+
+
+def unknown_source_entry(
+    identity: SourceFreshnessIdentity,
+    *,
+    reason: str,
+) -> UnknownSourceWatermarkEntry:
+    return UnknownSourceWatermarkEntry(
+        source_name=identity.source_name,
+        target_database=identity.target_database,
+        target_schema=identity.target_schema,
+        target_name=identity.target_name,
+        reason=reason,
+    )
+
+
+def watermark_record(
+    identity: NodeSourceWatermarkIdentity,
+    *,
+    sources: tuple[SourceWatermarkEntry, ...] = (),
+    unknown_sources: tuple[UnknownSourceWatermarkEntry, ...] = (),
+) -> NodeSourceWatermarkRecord:
+    return NodeSourceWatermarkRecord(
+        node_type=identity.node_type,
+        node_name=identity.node_name,
+        target_database=None,
+        target_schema="main",
+        target_name=identity.node_name,
+        run_id="run-1",
+        node_version_hash=f"version-{identity.node_name}",
+        payload=NodeSourceWatermarkPayload(
+            version=1,
+            complete=not unknown_sources,
+            sources=sources,
+            unknown_sources=unknown_sources,
+        ),
+        created_at=datetime(2026, 6, 29, 16),
     )
 
 

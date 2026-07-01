@@ -62,6 +62,7 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     GraphIdentityNode,
     GraphNodeKey,
+    ModelPlanEntry,
     PlannerChangeResults,
     PlannerScope,
     PlanOutput,
@@ -73,7 +74,14 @@ from sqlbuild.compiler.planner.models import (
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, GraphResourceKind
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    ChangeKind,
+    GraphResourceKind,
+    MaterializationType,
+    PlanAction,
+    PlanReason,
+)
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -369,6 +377,76 @@ def build_run_despite_unchanged_source_freshness(
                 )
             }
         ),
+    )
+
+
+def build_node_source_watermark_warning_plan(
+    *,
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    model_names: tuple[str, ...],
+    source_names: tuple[str, ...],
+    source_record_hash: str = "hash-current",
+) -> PlanOutput:
+    """Build a minimal native plan for node source watermark warning tests."""
+
+    source_entries: dict[str, SourceEntry] = {
+        source_name: SourceEntry(name=source_name, schema="raw", table=source_name)
+        for source_name in source_names
+    }
+    return PlanOutput(
+        model_entries=tuple(
+            _node_source_watermark_warning_model_entry(model_name) for model_name in model_names
+        ),
+        selected_keys=frozenset(model_key(model_name) for model_name in model_names),
+        upstream_deps=upstream_deps,
+        source_map=source_entries,
+        source_freshness=StandardSourceFreshnessPlanningResult(
+            observed_records=tuple(
+                _node_source_watermark_warning_source_record(
+                    source_name=source_name,
+                    data_version_hash=source_record_hash,
+                )
+                for source_name in source_names
+            )
+        ),
+    )
+
+
+def _node_source_watermark_warning_model_entry(model_name: str) -> ModelPlanEntry:
+    return ModelPlanEntry(
+        key=model_key(model_name),
+        name=model_name,
+        relative_path=Path(f"models/{model_name}.sql"),
+        materialization_type=MaterializationType.TABLE,
+        action=PlanAction.CREATE_TABLE,
+        reason=PlanReason.FIRST_RUN,
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name=model_name,
+            qualified_name=f"main.{model_name}",
+        ),
+        fingerprint_query_sql="SELECT 1",
+        resolved_sql="SELECT 1",
+        logical_ddl="CREATE TABLE x AS SELECT 1",
+        fingerprint_version_hash=f"version-{model_name}",
+    )
+
+
+def _node_source_watermark_warning_source_record(
+    *, source_name: str, data_version_hash: str
+) -> SourceFreshnessRecord:
+    return SourceFreshnessRecord(
+        source_name=source_name,
+        target_database=None,
+        target_schema="raw",
+        target_name=source_name,
+        run_id="planning",
+        strategy=SourceFreshnessStrategy.SQL.value,
+        value_kind="timestamp",
+        data_version="2026-06-29T18:00:00+00:00",
+        data_version_hash=data_version_hash,
+        observed_at=datetime(2026, 6, 29, 18, tzinfo=UTC),
     )
 
 

@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.compiler.node_source_watermarks.types import WatermarkGraphResourceKind
+from sqlbuild.compiler.node_source_watermarks.types import (
+    WatermarkGraphResourceKind,
+    WatermarkStalenessStatus,
+)
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
@@ -125,6 +128,11 @@ class NodeSourceWatermarkExecutionContext:
 class NativeNodeSourceWatermarkInputs:
     """Native plan-derived source watermark execution inputs."""
 
+    frontier_members: tuple[WatermarkFrontierMember, ...] = ()
+    nodes: dict[WatermarkGraphKey, WatermarkGraphNode] = field(default_factory=dict)
+    source_identities_by_key: dict[WatermarkGraphKey, SourceFreshnessIdentity] = field(
+        default_factory=dict
+    )
     source_identities_by_node: dict[
         NodeSourceWatermarkIdentity,
         tuple[SourceFreshnessIdentity, ...],
@@ -177,3 +185,35 @@ class WatermarkSourceAncestryMember:
 
     node_key: WatermarkGraphKey
     source_key: WatermarkGraphKey
+
+
+@dataclass(frozen=True)
+class NodeSourceWatermarkStaleness:
+    """Freshness classification for one frontier source proof."""
+
+    root_key: WatermarkGraphKey
+    frontier_key: WatermarkGraphKey
+    source_identity: SourceFreshnessIdentity
+    status: WatermarkStalenessStatus
+    reason: str | None = None
+    watermark_entry: SourceWatermarkEntry | None = None
+    current_record: SourceFreshnessRecord | None = None
+
+
+@dataclass(frozen=True)
+class NodeSourceWatermarkStalenessReport:
+    """Grouped stale-input report derived from source watermark classifications."""
+
+    affected_root_names: tuple[str, ...] = ()
+    stale_frontier_names: tuple[str, ...] = ()
+    changed_source_names: tuple[str, ...] = ()
+    unknown_frontier_names: tuple[str, ...] = ()
+
+    @property
+    def has_entries(self) -> bool:
+        return bool(
+            self.affected_root_names
+            or self.stale_frontier_names
+            or self.changed_source_names
+            or self.unknown_frontier_names
+        )
