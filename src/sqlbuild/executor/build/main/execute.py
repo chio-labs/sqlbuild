@@ -13,6 +13,7 @@ from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.constants import BUILD_SOURCE_FRESHNESS_BLOCKED_CODE
@@ -23,6 +24,10 @@ from sqlbuild.executor.build.models import (
     BuildIndexes,
     FunctionExecutionResult,
     SeedExecutionResult,
+)
+from sqlbuild.executor.build.shared.helpers.node_source_watermarks import (
+    build_native_node_source_watermark_context,
+    write_native_node_source_watermark_records,
 )
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
@@ -81,6 +86,13 @@ def execute_build_plan(
     """Execute a full build plan using the DAG scheduler."""
 
     indexes: BuildIndexes = build_execution_indexes(plan)
+    node_source_watermark_context: NodeSourceWatermarkExecutionContext | None = (
+        build_native_node_source_watermark_context(
+            plan=plan,
+            adapter=adapter,
+            connection=scheduler_connection,
+        )
+    )
     scheduler: BuildScheduler = BuildScheduler(
         plan=plan,
         indexes=indexes,
@@ -119,6 +131,7 @@ def execute_build_plan(
         initial_failed_keys=initial_failed_keys,
         providers=providers,
         python_identity_recorder=python_identity_recorder,
+        node_source_watermark_context=node_source_watermark_context,
     )
 
     dependency_baseline_results: tuple[ModelExecutionResult, ...] = (
@@ -158,7 +171,7 @@ def execute_build_plan(
         end_audit_results,
     ) = scheduler.run()
 
-    return _aggregate_build_result(
+    result: BuildExecutionResult = _aggregate_build_result(
         model_results=(*dependency_baseline_results, *model_results),
         seed_results=seed_results,
         function_results=function_results,
@@ -167,6 +180,13 @@ def execute_build_plan(
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
     )
+    if result.status == BuildStatus.SUCCESS:
+        write_native_node_source_watermark_records(
+            context=node_source_watermark_context,
+            adapter=adapter,
+            connection=scheduler_connection,
+        )
+    return result
 
 
 def _aggregate_build_result(

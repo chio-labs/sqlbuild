@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import base64
+import json
 import subprocess
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBuildE2ETestCase,
     DependencyBaselineBuildE2ETestCase,
+    NodeSourceWatermarkBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_virtual_plan_project_toml,
@@ -154,6 +158,148 @@ def raw_orders_setup_sql(*, rows_sql: str) -> str:
         "CREATE TABLE main.raw_orders (id INTEGER, amount INTEGER, event_time TIMESTAMP);\n"
         f"INSERT INTO main.raw_orders VALUES {rows_sql};\n"
     )
+
+
+def prepare_node_source_watermark_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+    models: dict[str, str],
+) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                f"""
+                name = "{project_name}"
+                adapter = "duckdb"
+
+                [connection]
+                database = "warehouse.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_orders
+                    schema: main
+                    table: raw_orders
+                    freshness:
+                      strategy: sql
+                      type: integer
+                      query: SELECT MAX(data_version) AS data_version FROM raw_orders
+                """
+            ).strip()
+            + "\n",
+            **models,
+        },
+    )
+
+
+def replace_raw_orders_versions(*, db_path: Path, versions: tuple[int, ...]) -> None:
+    values_sql: str = ", ".join(
+        f"({index + 1}, {version})" for index, version in enumerate(versions)
+    )
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE OR REPLACE TABLE raw_orders (id INTEGER, data_version INTEGER);\n"
+            f"INSERT INTO raw_orders VALUES {values_sql};\n"
+        ),
+    )
+
+
+def latest_node_source_watermark_payloads(*, db_path: Path) -> dict[str, dict[str, Any]]:
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT node_name, watermarks_json_b64 FROM main._sqlbuild_node_source_watermarks "
+            "ORDER BY created_at, run_id, node_name"
+        ),
+    )
+    payloads: dict[str, dict[str, Any]] = {}
+    node_name: Any
+    encoded_payload: Any
+    for node_name, encoded_payload in rows:
+        payloads[str(node_name)] = json.loads(
+            base64.b64decode(str(encoded_payload)).decode("utf-8")
+        )
+    return payloads
+
+
+def build_frontier_inputs_for_node_source_watermark_case(
+    *,
+    project_dir: Path,
+    db_path: Path,
+    test_case: NodeSourceWatermarkBuildE2ETestCase,
+) -> None:
+    if test_case.project_name.endswith("current"):
+        replace_raw_orders_versions(db_path=db_path, versions=(2,))
+        run_successful_sqb_build(
+            project_dir=project_dir, command=("--no-color", "build", "--select", "b")
+        )
+        run_successful_sqb_build(
+            project_dir=project_dir, command=("--no-color", "build", "--select", "c")
+        )
+        return
+    if test_case.project_name.endswith("stale"):
+        replace_raw_orders_versions(db_path=db_path, versions=(1,))
+        run_successful_sqb_build(
+            project_dir=project_dir, command=("--no-color", "build", "--select", "b")
+        )
+        run_successful_sqb_build(
+            project_dir=project_dir, command=("--no-color", "build", "--select", "c")
+        )
+        replace_raw_orders_versions(db_path=db_path, versions=(2,))
+        return
+    replace_raw_orders_versions(db_path=db_path, versions=(1,))
+    run_successful_sqb_build(
+        project_dir=project_dir, command=("--no-color", "build", "--select", "b")
+    )
+    replace_raw_orders_versions(db_path=db_path, versions=(2,))
+    run_successful_sqb_build(
+        project_dir=project_dir, command=("--no-color", "build", "--select", "c")
+    )
+
+
+def run_successful_sqb_build(*, project_dir: Path, command: tuple[str, ...]) -> None:
+    result: subprocess.CompletedProcess[str] = run_sqb(command=command, project_dir=project_dir)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def node_source_watermark_versions_by_node(
+    *,
+    payloads: dict[str, dict[str, Any]],
+    test_case: NodeSourceWatermarkBuildE2ETestCase,
+) -> dict[str, tuple[str, ...]]:
+    return {
+        name: tuple(str(entry["data_version"]) for entry in payloads[name]["sources"])
+        for name in test_case.expected_source_versions_by_node
+    }
+
+
+def node_source_watermark_kinds_by_node(
+    *,
+    payloads: dict[str, dict[str, Any]],
+    test_case: NodeSourceWatermarkBuildE2ETestCase,
+) -> dict[str, tuple[str, ...]]:
+    return {
+        name: tuple(str(entry["watermark_kind"]) for entry in payloads[name]["sources"])
+        for name in test_case.expected_source_kinds_by_node
+    }
+
+
+def node_source_watermark_unknown_reasons_by_node(
+    *,
+    payloads: dict[str, dict[str, Any]],
+    test_case: NodeSourceWatermarkBuildE2ETestCase,
+) -> dict[str, tuple[str, ...]]:
+    return {
+        name: tuple(str(entry["reason"]) for entry in payloads[name]["unknown_sources"])
+        for name in test_case.expected_unknown_reasons_by_node
+    }
 
 
 def assert_dependency_baseline_build_case(
