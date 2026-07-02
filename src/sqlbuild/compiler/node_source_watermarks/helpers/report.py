@@ -33,7 +33,7 @@ def build_node_source_watermark_staleness_report(
         affected_roots.add(classification.root_key.node_name)
         if classification.status == WatermarkStalenessStatus.STALE:
             changed_sources.add(classification.source_identity.source_name)
-            if classification.frontier_key.node_type == WatermarkGraphResourceKind.MODEL.value:
+            if classification.frontier_key.node_type != WatermarkGraphResourceKind.SOURCE.value:
                 stale_frontiers.add(classification.frontier_key.node_name)
             continue
         unknown_frontiers.add(_unknown_frontier_label(classification))

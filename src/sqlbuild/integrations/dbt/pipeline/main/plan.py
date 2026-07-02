@@ -250,6 +250,11 @@ def plan_dbt_interop_from_project(
             None if connection_progress is None else connection_progress.on_connection_error
         ),
         dependency_baseline_entries=(),
+        dbt_manifest=manifest,
+        dbt_graph=graph,
+        dbt_source_freshness=(
+            plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
+        ),
     )
     if sqlbuild_plan_output is not None:
         plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.planner.models import GraphNodeKey, SelectionStalenessNodeKey
 from sqlbuild.integrations.dbt.helpers.graph.core import dbt_model_graph_key
@@ -18,6 +19,18 @@ def dbt_graph_node_key(unique_id: str) -> GraphNodeKey:
     """Return the neutral planner graph key for one dbt unique ID."""
 
     return GraphNodeKey(node_type=NODE_TYPE_DBT, node_name=unique_id)
+
+
+def dbt_source_graph_node_key(unique_id: str) -> GraphNodeKey:
+    """Return the neutral planner graph key for one dbt source unique ID."""
+
+    return GraphNodeKey(node_type=CompiledResourceType.SOURCE.value, node_name=unique_id)
+
+
+def sqlbuild_model_graph_node_key(name: str) -> GraphNodeKey:
+    """Return the neutral planner graph key for one SQLBuild model name."""
+
+    return GraphNodeKey(node_type=CompiledResourceType.MODEL.value, node_name=name)
 
 
 def dbt_graph_node_upstream_deps(

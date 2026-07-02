@@ -20,11 +20,24 @@ from sqlbuild.compiler.planner.main.planning.execution import build_execution_pl
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
     DependencyBaselinePlanEntry,
+    GraphNodeKey,
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import StandardScopePruning
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessIdentity,
+    SourceFreshnessRecord,
+    StandardSourceFreshnessPlanningResult,
+)
+from sqlbuild.integrations.dbt.constants import DBT_MATERIALIZATION_VIEW
+from sqlbuild.integrations.dbt.helpers.manifest.core import dbt_manifest_model_materialization
 from sqlbuild.integrations.dbt.helpers.manifest.sqlbuild_refs import (
     resolve_sqlbuild_model_dbt_refs,
+)
+from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
+    dbt_graph_node_key,
+    dbt_source_graph_node_key,
+    sqlbuild_model_graph_node_key,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_dbt_model_planning_result,
@@ -32,13 +45,19 @@ from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
 from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
     adapt_project_for_dbt_sql_tests,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import (
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSource,
+)
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
+    DbtCombinedGraphKey,
     DbtCommandResult,
     DbtModelPlanningResult,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
 from sqlbuild.shared.models import RelationLookup
 
 
@@ -125,8 +144,10 @@ def build_sqlbuild_plan_output(
     dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
     disable_scope_pruning: bool = False,
     manifest: DbtManifestIndex | None = None,
+    dbt_manifest: DbtManifestIndex | None = None,
+    dbt_graph: DbtCombinedGraph | None = None,
+    dbt_source_freshness: StandardSourceFreshnessPlanningResult | None = None,
 ) -> PlanOutput | None:
-    del required_dbt_unique_ids
     if not selected_model_names:
         return None
     cursor_overrides: CursorOverrides = _parse_cursor_overrides(sqlbuild_args)
@@ -180,6 +201,17 @@ def build_sqlbuild_plan_output(
                 dependency_baseline_entries=(
                     *dependency_baseline_entries,
                     *plan_output.dependency_baseline_entries,
+                ),
+                source_freshness=_merged_source_freshness(
+                    native=plan_output.source_freshness,
+                    dbt=dbt_source_freshness,
+                ),
+                **_dbt_node_source_watermark_graph_kwargs(
+                    project=project,
+                    selected_model_names=selected_model_names,
+                    required_dbt_unique_ids=required_dbt_unique_ids,
+                    manifest=dbt_manifest,
+                    graph=dbt_graph,
                 ),
             )
         except PlannerInputError:
@@ -258,6 +290,138 @@ def build_dbt_model_plan_output(
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
+
+
+def _dbt_node_source_watermark_graph_kwargs(
+    *,
+    project: CompiledProject,
+    selected_model_names: tuple[str, ...],
+    required_dbt_unique_ids: tuple[str, ...],
+    manifest: DbtManifestIndex | None,
+    graph: DbtCombinedGraph | None,
+) -> dict[str, object]:
+    if manifest is None or graph is None:
+        return {}
+    direct_refs: tuple[tuple[object, DbtManifestModel], ...] = resolve_sqlbuild_model_dbt_refs(
+        project=project,
+        manifest=manifest,
+        selected_model_names=selected_model_names,
+    )
+    node_keys: set[GraphNodeKey] = set()
+    materialized_node_keys: set[GraphNodeKey] = set()
+    upstream_deps: dict[GraphNodeKey, list[GraphNodeKey]] = {}
+    source_identities_by_key: dict[GraphNodeKey, SourceFreshnessIdentity] = {}
+    _model: object
+    dbt_model: DbtManifestModel
+    for _model, dbt_model in direct_refs:
+        model_key: GraphNodeKey = sqlbuild_model_graph_node_key(_model.name)
+        upstream_deps.setdefault(model_key, []).append(dbt_graph_node_key(dbt_model.unique_id))
+    for unique_id in required_dbt_unique_ids:
+        _add_dbt_watermark_subgraph(
+            unique_id=unique_id,
+            manifest=manifest,
+            graph=graph,
+            node_keys=node_keys,
+            materialized_node_keys=materialized_node_keys,
+            upstream_deps=upstream_deps,
+            source_identities_by_key=source_identities_by_key,
+        )
+    for _model, dbt_model in direct_refs:
+        _add_dbt_watermark_subgraph(
+            unique_id=dbt_model.unique_id,
+            manifest=manifest,
+            graph=graph,
+            node_keys=node_keys,
+            materialized_node_keys=materialized_node_keys,
+            upstream_deps=upstream_deps,
+            source_identities_by_key=source_identities_by_key,
+        )
+    return {
+        "node_source_watermark_node_keys": frozenset(node_keys),
+        "node_source_watermark_materialized_node_keys": frozenset(materialized_node_keys),
+        "node_source_watermark_upstream_deps": {
+            key: tuple(dict.fromkeys(values)) for key, values in upstream_deps.items()
+        },
+        "node_source_watermark_source_identities_by_key": source_identities_by_key,
+    }
+
+
+def _add_dbt_watermark_subgraph(
+    *,
+    unique_id: str,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    node_keys: set[GraphNodeKey],
+    materialized_node_keys: set[GraphNodeKey],
+    upstream_deps: dict[GraphNodeKey, list[GraphNodeKey]],
+    source_identities_by_key: dict[GraphNodeKey, SourceFreshnessIdentity],
+) -> None:
+    model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
+    if model is None:
+        return
+    key: GraphNodeKey = dbt_graph_node_key(unique_id)
+    if key in node_keys:
+        return
+    node_keys.add(key)
+    if dbt_manifest_model_materialization(model=model) != DBT_MATERIALIZATION_VIEW:
+        materialized_node_keys.add(key)
+    combined_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
+        owner=DbtCombinedGraphOwner.DBT,
+        resource_type=DbtCombinedGraphResourceType.MODEL,
+        name=unique_id,
+    )
+    upstream_key: DbtCombinedGraphKey
+    for upstream_key in graph.upstream_deps.get(combined_key, ()):
+        if upstream_key.owner != DbtCombinedGraphOwner.DBT:
+            continue
+        if upstream_key.resource_type == DbtCombinedGraphResourceType.MODEL:
+            upstream_graph_key: GraphNodeKey = dbt_graph_node_key(upstream_key.name)
+            upstream_deps.setdefault(key, []).append(upstream_graph_key)
+            _add_dbt_watermark_subgraph(
+                unique_id=upstream_key.name,
+                manifest=manifest,
+                graph=graph,
+                node_keys=node_keys,
+                materialized_node_keys=materialized_node_keys,
+                upstream_deps=upstream_deps,
+                source_identities_by_key=source_identities_by_key,
+            )
+            continue
+        if upstream_key.resource_type == DbtCombinedGraphResourceType.SOURCE:
+            source: DbtManifestSource | None = manifest.sources_by_unique_id.get(upstream_key.name)
+            if source is None:
+                continue
+            source_key: GraphNodeKey = dbt_source_graph_node_key(source.unique_id)
+            node_keys.add(source_key)
+            upstream_deps.setdefault(key, []).append(source_key)
+            source_identities_by_key[source_key] = _dbt_source_identity(source)
+
+
+def _dbt_source_identity(source: DbtManifestSource) -> SourceFreshnessIdentity:
+    return SourceFreshnessIdentity(
+        source_name=source.unique_id,
+        target_database=source.database,
+        target_schema=source.schema,
+        target_name=source.identifier or source.name,
+    )
+
+
+def _merged_source_freshness(
+    *,
+    native: StandardSourceFreshnessPlanningResult | None,
+    dbt: StandardSourceFreshnessPlanningResult | None,
+) -> StandardSourceFreshnessPlanningResult | None:
+    if native is None:
+        return dbt
+    if dbt is None:
+        return native
+    records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = {
+        record.identity: record for record in native.observed_records
+    }
+    record: SourceFreshnessRecord
+    for record in dbt.observed_records:
+        records_by_identity[record.identity] = record
+    return replace(native, observed_records=tuple(records_by_identity.values()))
 
 
 def _parse_cursor_overrides(args: tuple[str, ...]) -> CursorOverrides:
