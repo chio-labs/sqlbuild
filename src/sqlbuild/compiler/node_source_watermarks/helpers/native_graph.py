@@ -24,6 +24,7 @@ from sqlbuild.compiler.node_source_watermarks.types import WatermarkGraphResourc
 from sqlbuild.compiler.planner.models import (
     DependencyBaselinePlanEntry,
     ExistingDestinationInputPlanEntry,
+    GraphNodeKey,
     ModelPlanEntry,
     PlanOutput,
 )
@@ -52,21 +53,24 @@ def build_native_node_source_watermark_inputs(
         upstream_deps=upstream_deps,
         nodes=nodes,
     )
+    source_identities_by_key: dict[WatermarkGraphKey, SourceFreshnessIdentity] = (
+        _source_identities_by_key(plan=plan)
+    )
     return NativeNodeSourceWatermarkInputs(
         frontier_members=frontier_members,
         nodes=nodes,
-        source_identities_by_key=_source_identities_by_key(source_map=plan.source_map),
+        source_identities_by_key=source_identities_by_key,
         source_identities_by_node=_source_identities_by_node(
             node_keys=materialized_node_keys,
             upstream_deps=upstream_deps,
             nodes=nodes,
-            source_map=plan.source_map,
+            source_identities_by_key=source_identities_by_key,
         ),
         direct_source_identities_by_node=_direct_source_identities_by_node(
             node_keys=materialized_node_keys,
             upstream_deps=upstream_deps,
             nodes=nodes,
-            source_map=plan.source_map,
+            source_identities_by_key=source_identities_by_key,
         ),
         upstream_node_identities_by_node=_upstream_node_identities_by_node(
             node_keys=materialized_node_keys,
@@ -122,6 +126,18 @@ def _nodes_by_key(*, plan: PlanOutput) -> dict[WatermarkGraphKey, WatermarkGraph
             resource_kind=WatermarkGraphResourceKind.SOURCE,
             materialized=False,
         )
+    external_key: GraphNodeKey
+    for external_key in plan.node_source_watermark_node_keys:
+        key = _graph_key_from_planner_key(external_key)
+        nodes[key] = WatermarkGraphNode(
+            key=key,
+            resource_kind=(
+                WatermarkGraphResourceKind.SOURCE
+                if external_key.node_type == CompiledResourceType.SOURCE.value
+                else WatermarkGraphResourceKind.MODEL
+            ),
+            materialized=external_key in plan.node_source_watermark_materialized_node_keys,
+        )
     return nodes
 
 
@@ -142,6 +158,17 @@ def _upstream_deps(
             for upstream_key in upstream_keys
             if (upstream_graph_key := _graph_key(upstream_key)) in nodes
         )
+    external_key: GraphNodeKey
+    external_upstream_keys: tuple[GraphNodeKey, ...]
+    for external_key, external_upstream_keys in plan.node_source_watermark_upstream_deps.items():
+        graph_key = _graph_key_from_planner_key(external_key)
+        if graph_key not in nodes:
+            continue
+        deps[graph_key] = tuple(
+            upstream_graph_key
+            for upstream_key in external_upstream_keys
+            if (upstream_graph_key := _graph_key_from_planner_key(upstream_key)) in nodes
+        )
     return deps
 
 
@@ -150,7 +177,7 @@ def _source_identities_by_node(
     node_keys: frozenset[WatermarkGraphKey],
     upstream_deps: dict[WatermarkGraphKey, tuple[WatermarkGraphKey, ...]],
     nodes: dict[WatermarkGraphKey, WatermarkGraphNode],
-    source_map: dict[str, SourceEntry],
+    source_identities_by_key: dict[WatermarkGraphKey, SourceFreshnessIdentity],
 ) -> dict[NodeSourceWatermarkIdentity, tuple[SourceFreshnessIdentity, ...]]:
     result: dict[NodeSourceWatermarkIdentity, list[SourceFreshnessIdentity]] = defaultdict(list)
     member: WatermarkSourceAncestryMember
@@ -159,10 +186,12 @@ def _source_identities_by_node(
         upstream_deps=upstream_deps,
         nodes=nodes,
     ):
-        source: SourceEntry | None = source_map.get(member.source_key.node_name)
-        if source is None:
+        source_identity: SourceFreshnessIdentity | None = source_identities_by_key.get(
+            member.source_key
+        )
+        if source_identity is None:
             continue
-        result[_identity_from_graph_key(member.node_key)].append(_source_identity(source))
+        result[_identity_from_graph_key(member.node_key)].append(source_identity)
     return {
         identity: tuple(sorted(source_identities, key=_source_identity_sort_key))
         for identity, source_identities in result.items()
@@ -170,15 +199,22 @@ def _source_identities_by_node(
 
 
 def _source_identities_by_key(
-    *, source_map: dict[str, SourceEntry]
+    *, plan: PlanOutput
 ) -> dict[WatermarkGraphKey, SourceFreshnessIdentity]:
-    return {
+    identities: dict[WatermarkGraphKey, SourceFreshnessIdentity] = {
         WatermarkGraphKey(
             node_type=CompiledResourceType.SOURCE.value,
             node_name=source_name,
         ): _source_identity(source)
-        for source_name, source in source_map.items()
+        for source_name, source in plan.source_map.items()
     }
+    identities.update(
+        {
+            _graph_key_from_planner_key(key): identity
+            for key, identity in plan.node_source_watermark_source_identities_by_key.items()
+        }
+    )
+    return identities
 
 
 def _upstream_node_identities_by_node(
@@ -211,7 +247,7 @@ def _direct_source_identities_by_node(
     node_keys: frozenset[WatermarkGraphKey],
     upstream_deps: dict[WatermarkGraphKey, tuple[WatermarkGraphKey, ...]],
     nodes: dict[WatermarkGraphKey, WatermarkGraphNode],
-    source_map: dict[str, SourceEntry],
+    source_identities_by_key: dict[WatermarkGraphKey, SourceFreshnessIdentity],
 ) -> dict[NodeSourceWatermarkIdentity, tuple[SourceFreshnessIdentity, ...]]:
     result: dict[NodeSourceWatermarkIdentity, list[SourceFreshnessIdentity]] = defaultdict(list)
     member: WatermarkFrontierMember
@@ -226,10 +262,12 @@ def _direct_source_identities_by_node(
             or frontier_node.resource_kind != WatermarkGraphResourceKind.SOURCE
         ):
             continue
-        source: SourceEntry | None = source_map.get(member.frontier_key.node_name)
-        if source is None:
+        source_identity: SourceFreshnessIdentity | None = source_identities_by_key.get(
+            member.frontier_key
+        )
+        if source_identity is None:
             continue
-        result[_identity_from_graph_key(member.root_key)].append(_source_identity(source))
+        result[_identity_from_graph_key(member.root_key)].append(source_identity)
     return {
         identity: tuple(sorted(source_identities, key=_source_identity_sort_key))
         for identity, source_identities in result.items()
@@ -238,6 +276,10 @@ def _direct_source_identities_by_node(
 
 def _graph_key(key: CompiledObjectKey) -> WatermarkGraphKey:
     return WatermarkGraphKey(node_type=str(key.resource_type), node_name=key.name)
+
+
+def _graph_key_from_planner_key(key: GraphNodeKey) -> WatermarkGraphKey:
+    return WatermarkGraphKey(node_type=key.node_type, node_name=key.node_name)
 
 
 def _identity_from_graph_key(key: WatermarkGraphKey) -> NodeSourceWatermarkIdentity:

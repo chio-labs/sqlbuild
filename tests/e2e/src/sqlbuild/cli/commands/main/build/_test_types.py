@@ -103,6 +103,17 @@ class NodeSourceWatermarkBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class NodeSourceWatermarkWarningBuildE2ETestCase:
+    description: str
+    project_name: str
+    models: dict[str, str]
+    setup_build_command: tuple[str, ...]
+    plan_command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class PythonBuildE2ETestCase:
     """Test case for direct build Python-node behavior."""
 

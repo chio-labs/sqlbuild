@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import pty
@@ -374,6 +375,157 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return root_dir / "sqlbuild_project"
+
+
+def prepare_dbt_node_source_watermark_project(*, tmp_path: Path) -> Path:
+    """Write a minimal dbt-only project with source freshness metadata."""
+
+    workspace: Path = tmp_path / "dbt_node_source_watermark"
+    dbt_project_dir: Path = workspace / "dbt_project"
+    profiles_dir: Path = workspace / "profiles"
+    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
+    dbt_models_dir: Path = dbt_project_dir / "models"
+    sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
+    dbt_models_dir.mkdir(parents=True)
+    profiles_dir.mkdir(parents=True)
+    sqlbuild_models_dir.mkdir(parents=True)
+    db_path: Path = sqlbuild_project_dir / "dbt_watermark.duckdb"
+    (dbt_project_dir / "dbt_project.yml").write_text(
+        "name: analytics\n"
+        "profile: analytics\n"
+        "model-paths: ['models']\n"
+        "target-path: target\n"
+        "models:\n"
+        "  analytics:\n"
+        "    +materialized: table\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "sources.yml").write_text(
+        "version: 2\n\n"
+        "sources:\n"
+        "  - name: raw\n"
+        "    schema: main\n"
+        "    tables:\n"
+        "      - name: raw_orders\n"
+        "        config:\n"
+        "          loaded_at_field: updated_at\n"
+        "          freshness:\n"
+        "            warn_after:\n"
+        "              count: 99\n"
+        "              period: day\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "b.sql").write_text(
+        "select id from {{ source('raw', 'raw_orders') }}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "a.sql").write_text(
+        "select id from {{ ref('b') }}\n",
+        encoding="utf-8",
+    )
+    (sqlbuild_models_dir / "downstream_b.sql").write_text(
+        "MODEL (\n"
+        "  materialized table,\n"
+        "  columns (id ()),\n"
+        ");\n\n"
+        'select id from __dbt_ref("analytics", "b")\n',
+        encoding="utf-8",
+    )
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n",
+        encoding="utf-8",
+    )
+    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
+        'name = "dbt_node_source_watermark"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n\n'
+        "[connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n\n'
+        "[targets.dev.connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n'
+        'target = "dev"\n',
+        encoding="utf-8",
+    )
+    return sqlbuild_project_dir
+
+
+def replace_dbt_watermark_raw_orders(*, project_dir: Path, version: str) -> None:
+    """Replace the raw source rows for dbt watermark E2Es."""
+
+    execute_duckdb(
+        db_path=project_dir / "dbt_watermark.duckdb",
+        sql=(
+            "CREATE OR REPLACE TABLE main.raw_orders "
+            "(id INTEGER, updated_at TIMESTAMP);\n"
+            f"INSERT INTO main.raw_orders VALUES (1, TIMESTAMP '{version}');\n"
+        ),
+    )
+
+
+def latest_dbt_node_source_watermark_payloads(*, project_dir: Path) -> dict[str, dict[str, object]]:
+    """Return latest dbt node source watermark payloads keyed by node name."""
+
+    rows: list[tuple[object, object]] = execute_duckdb_query(
+        project_dir=project_dir,
+        sql=(
+            "SELECT node_name, watermarks_json_b64 "
+            "FROM main._sqlbuild_node_source_watermarks "
+            "WHERE node_type = 'dbt' "
+            "ORDER BY created_at, run_id, node_name"
+        ),
+    )
+    payloads: dict[str, dict[str, object]] = {}
+    node_name: object
+    encoded_payload: object
+    for node_name, encoded_payload in rows:
+        payloads[str(node_name)] = json.loads(
+            base64.b64decode(str(encoded_payload)).decode("utf-8")
+        )
+    return payloads
+
+
+def latest_node_source_watermark_payloads(
+    *, project_dir: Path, node_type: str
+) -> dict[str, dict[str, object]]:
+    """Return latest node source watermark payloads keyed by node name."""
+
+    rows: list[tuple[object, object]] = execute_duckdb_query(
+        project_dir=project_dir,
+        sql=(
+            "SELECT node_name, watermarks_json_b64 "
+            "FROM main._sqlbuild_node_source_watermarks "
+            f"WHERE node_type = '{node_type}' "
+            "ORDER BY created_at, run_id, node_name"
+        ),
+    )
+    payloads: dict[str, dict[str, object]] = {}
+    node_name: object
+    encoded_payload: object
+    for node_name, encoded_payload in rows:
+        payloads[str(node_name)] = json.loads(
+            base64.b64decode(str(encoded_payload)).decode("utf-8")
+        )
+    return payloads
+
+
+def execute_duckdb_query(*, project_dir: Path, sql: str) -> list[tuple[object, object]]:
+    """Run a DuckDB query for the dbt watermark E2E warehouse."""
+
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
+
+    return query_duckdb(db_path=project_dir / "dbt_watermark.duckdb", sql=sql)
 
 
 def write_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:

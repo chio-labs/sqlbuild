@@ -69,6 +69,35 @@ class DbtExecutionFailureCliTestCase:
 
 
 @dataclass(frozen=True)
+class DbtNodeSourceWatermarkE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_node_name: str
+    expected_source_name: str
+    expected_watermark_kind: str
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtNodeSourceWatermarkWarningE2ETestCase:
+    description: str
+    setup_command: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtSqlbuildNodeSourceWatermarkE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_node_name: str
+    expected_source_name: str
+    expected_watermark_kind: str
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtMissingRelationGuardE2ETestCase:
     description: str
     command: tuple[str, ...]

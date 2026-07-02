@@ -55,6 +55,9 @@ from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     compose_dbt_graph_version_hash,
     dbt_graph_identity_execution_order,
 )
+from sqlbuild.integrations.dbt.helpers.runtime.node_source_watermarks import (
+    build_dbt_node_source_watermark_staleness_warning,
+)
 from sqlbuild.integrations.dbt.helpers.runtime.source_freshness import (
     translate_manifest_sources_to_sqlbuild_sources,
 )
@@ -181,6 +184,31 @@ def build_dbt_model_planning_result(
             changed_source_unique_ids=changed_source_unique_ids,
             changed_seed_unique_ids=in_selection_changed_seed_unique_ids,
         )
+    stale_out_of_selection_warning_messages: tuple[str, ...] = (
+        _stale_out_of_selection_warning_messages(
+            manifest=manifest,
+            graph=graph,
+            selected_unique_ids=selected_unique_ids_set,
+            entries_by_unique_id=entries_by_unique_id,
+            changed_seed_unique_ids=changed_seed_unique_ids,
+        )
+    )
+    if graph is not None and (
+        node_source_watermark_warning := build_dbt_node_source_watermark_staleness_warning(
+            manifest=manifest,
+            graph=graph,
+            selected_unique_ids=tuple(sorted(selected_unique_ids_set)),
+            source_records=source_freshness.observed_records,
+            adapter=adapter,
+            connection=connection,
+            state_database=project.effective_target_database,
+            state_schema=project.effective_target_schema,
+        )
+    ):
+        stale_out_of_selection_warning_messages = (
+            *stale_out_of_selection_warning_messages,
+            node_source_watermark_warning,
+        )
     return DbtModelPlanningResult(
         entries=tuple(
             entries_by_unique_id[unique_id] for unique_id in sorted(entries_by_unique_id)
@@ -201,14 +229,7 @@ def build_dbt_model_planning_result(
                 if entry.action == DbtModelPlanAction.BLOCKED
             ),
         ),
-        stale_out_of_selection_warning_messages=_stale_out_of_selection_warning_messages(
-            manifest=manifest,
-            graph=graph,
-            selected_unique_ids=selected_unique_ids_set,
-            entries_by_unique_id=entries_by_unique_id,
-            changed_seed_unique_ids=changed_seed_unique_ids,
-            changed_source_unique_ids=changed_source_unique_ids,
-        ),
+        stale_out_of_selection_warning_messages=stale_out_of_selection_warning_messages,
         source_freshness=source_freshness,
         selected_unique_ids=tuple(sorted(selected_unique_ids_set)),
         changed_seed_unique_ids=tuple(sorted(in_selection_changed_seed_unique_ids)),
@@ -244,7 +265,6 @@ def _stale_out_of_selection_warning_messages(
     selected_unique_ids: frozenset[str],
     entries_by_unique_id: dict[str, DbtModelPlanEntry],
     changed_seed_unique_ids: frozenset[str],
-    changed_source_unique_ids: frozenset[str],
 ) -> tuple[str, ...]:
     if graph is None:
         return ()
@@ -268,7 +288,7 @@ def _stale_out_of_selection_warning_messages(
             if _entry_is_own_changed(entry)
         ),
         changed_seed_names=changed_seed_unique_ids,
-        changed_source_names=changed_source_unique_ids,
+        changed_source_names=frozenset(),
     )
     return tuple(
         _format_stale_warning(warning=warning, manifest=manifest)

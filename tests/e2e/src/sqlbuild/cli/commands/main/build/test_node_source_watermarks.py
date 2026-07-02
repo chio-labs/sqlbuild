@@ -9,6 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     NodeSourceWatermarkBuildE2ETestCase,
+    NodeSourceWatermarkWarningBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     build_frontier_inputs_for_node_source_watermark_case,
@@ -281,3 +282,80 @@ def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then
         node_source_watermark_unknown_reasons_by_node(payloads=payloads, test_case=test_case)
         == test_case.expected_unknown_reasons_by_node
     )
+
+
+WARNING_TEST_CASES: list[NodeSourceWatermarkWarningBuildE2ETestCase] = [
+    NodeSourceWatermarkWarningBuildE2ETestCase(
+        description="materialized frontier behind source emits grouped warning",
+        project_name="node_watermark_warning_stale_frontier",
+        models={
+            "models/b.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+            "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+        },
+        setup_build_command=("--no-color", "build", "--select", "b"),
+        plan_command=("--no-color", "plan", "--select", "a"),
+        expected_stdout_fragments=(
+            "Warnings (1)",
+            "Stale inputs detected",
+            "Affected selected models:",
+            "a",
+            "Stale frontier tables:",
+            "b",
+            "Changed sources:",
+            "raw_orders",
+            "rebuild the upstream closure for the selected model(s)",
+        ),
+    ),
+    NodeSourceWatermarkWarningBuildE2ETestCase(
+        description="direct source frontier does not emit stale-input warning",
+        project_name="node_watermark_warning_direct_source",
+        models={
+            "models/a.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+        setup_build_command=("--no-color", "build", "--select", "a"),
+        plan_command=("--no-color", "plan", "--select", "a"),
+        expected_stdout_fragments=("Source freshness", "source-stale models: a"),
+        unexpected_stdout_fragments=("Warnings (1)", "Stale inputs detected"),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    WARNING_TEST_CASES,
+    ids=[case.description for case in WARNING_TEST_CASES],
+)
+def test_given_source_advances_when_planning_selection_then_reports_expected_stale_inputs(
+    test_case: NodeSourceWatermarkWarningBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_node_source_watermark_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        models=test_case.models,
+    )
+    db_path: Path = project_dir / "warehouse.duckdb"
+    replace_raw_orders_versions(db_path=db_path, versions=(1,))
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.setup_build_command,
+        project_dir=project_dir,
+    )
+    replace_raw_orders_versions(db_path=db_path, versions=(2,))
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.plan_command,
+        project_dir=project_dir,
+    )
+
+    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_stdout_fragments:
+        assert unexpected_fragment not in result.stdout

@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -14,12 +14,19 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtExecutionQueryAssertion,
     DbtExistingRelationGuardE2ETestCase,
     DbtMissingRelationGuardE2ETestCase,
+    DbtNodeSourceWatermarkE2ETestCase,
+    DbtNodeSourceWatermarkWarningE2ETestCase,
+    DbtSqlbuildNodeSourceWatermarkE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     break_dbt_interop_fact_orders_model,
+    latest_dbt_node_source_watermark_payloads,
+    latest_node_source_watermark_payloads,
     load_json_stdout,
     prepare_dbt_diff_workspace,
     prepare_dbt_interop_project,
+    prepare_dbt_node_source_watermark_project,
+    replace_dbt_watermark_raw_orders,
     skip_unless_dbt_is_runnable,
     write_dbt_diff_orders_model,
 )
@@ -32,6 +39,184 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtNodeSourceWatermarkE2ETestCase(
+            description="dbt-only build records direct source watermark",
+            command=("--no-color", "dbt", "build", "--select", "b"),
+            expected_node_name="model.analytics.b",
+            expected_source_name="source.analytics.raw.raw_orders",
+            expected_watermark_kind="direct",
+            expected_stdout_fragments=(
+                "Recording dbt node source watermarks",
+                "Recorded dbt node source watermarks",
+                "Completed successfully.",
+            ),
+        )
+    ],
+    ids=["dbt-only build records direct source watermark"],
+)
+def test_given_dbt_model_reads_source_when_build_runs_then_records_node_source_watermark(
+    test_case: DbtNodeSourceWatermarkE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
+    replace_dbt_watermark_raw_orders(
+        project_dir=project_dir,
+        version="2026-06-29 15:45:00",
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    payloads: dict[str, dict[str, object]] = latest_dbt_node_source_watermark_payloads(
+        project_dir=project_dir
+    )
+    payload: dict[str, object] = payloads[test_case.expected_node_name]
+    sources: object = payload["sources"]
+    assert isinstance(sources, list)
+    assert len(sources) == 1
+    source: object = sources[0]
+    assert isinstance(source, dict)
+    source_entry: dict[str, Any] = cast(dict[str, Any], source)
+    assert source_entry["source_name"] == test_case.expected_source_name
+    assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
+
+
+DBT_NODE_SOURCE_WATERMARK_WARNING_TEST_CASES: tuple[
+    DbtNodeSourceWatermarkWarningE2ETestCase, ...
+] = (
+    DbtNodeSourceWatermarkWarningE2ETestCase(
+        description="dbt plan warns when selected model depends on stale frontier table",
+        setup_command=("--no-color", "dbt", "build", "--select", "b"),
+        command=("--no-color", "dbt", "plan", "--select", "a"),
+        expected_stdout_fragments=(
+            "Warnings (1)",
+            "Stale inputs detected",
+            "Affected selected models:",
+            "model.analytics.a",
+            "Stale frontier tables:",
+            "model.analytics.b",
+            "Changed sources:",
+            "source.analytics.raw.raw_orders",
+        ),
+    ),
+    DbtNodeSourceWatermarkWarningE2ETestCase(
+        description="dbt plan does not warn when selected model reads advanced source directly",
+        setup_command=("--no-color", "dbt", "build", "--select", "b"),
+        command=("--no-color", "dbt", "plan", "--select", "b"),
+        expected_stdout_fragments=(
+            "Plan ready",
+            "model.analytics.b",
+        ),
+        unexpected_stdout_fragments=(
+            "Stale inputs detected",
+            "Stale frontier tables:",
+        ),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    DBT_NODE_SOURCE_WATERMARK_WARNING_TEST_CASES,
+    ids=[case.description for case in DBT_NODE_SOURCE_WATERMARK_WARNING_TEST_CASES],
+)
+def test_given_dbt_watermark_frontier_when_planning_then_renders_expected_warning(
+    test_case: DbtNodeSourceWatermarkWarningE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
+    replace_dbt_watermark_raw_orders(
+        project_dir=project_dir,
+        version="2026-06-29 15:45:00",
+    )
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.setup_command,
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+    replace_dbt_watermark_raw_orders(
+        project_dir=project_dir,
+        version="2026-06-30 15:45:00",
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_stdout_fragments:
+        assert unexpected_fragment not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtSqlbuildNodeSourceWatermarkE2ETestCase(
+            description="SQLBuild model inherits dbt upstream source watermark",
+            command=("--no-color", "dbt", "build", "--select", "+downstream_b"),
+            expected_node_name="downstream_b",
+            expected_source_name="source.analytics.raw.raw_orders",
+            expected_watermark_kind="inherited",
+            expected_stdout_fragments=(
+                "Recording dbt node source watermarks",
+                "Completed successfully.",
+            ),
+        )
+    ],
+    ids=["SQLBuild model inherits dbt source watermark"],
+)
+def test_given_sqlbuild_model_depends_on_dbt_model_when_build_runs_then_inherits_watermark(
+    test_case: DbtSqlbuildNodeSourceWatermarkE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
+    replace_dbt_watermark_raw_orders(
+        project_dir=project_dir,
+        version="2026-06-29 15:45:00",
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    payloads: dict[str, dict[str, object]] = latest_node_source_watermark_payloads(
+        project_dir=project_dir,
+        node_type="model",
+    )
+    payload: dict[str, object] = payloads[test_case.expected_node_name]
+    sources: object = payload["sources"]
+    assert isinstance(sources, list)
+    assert len(sources) == 1
+    source: object = sources[0]
+    assert isinstance(source, dict)
+    source_entry: dict[str, Any] = cast(dict[str, Any], source)
+    assert source_entry["source_name"] == test_case.expected_source_name
+    assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
+
 
 EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
     DbtExecutionCliTestCase(

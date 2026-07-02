@@ -109,15 +109,15 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         expected_warning_fragments=(),
     ),
     DbtSelectionStalenessWarningTestCase(
-        description="changed source outside selection warns",
+        description="changed source outside selection does not use legacy warning",
         upstream_deps={MODEL_C: (SOURCE_ORDERS,)},
         selected_unique_ids=(MODEL_C,),
         run_unique_ids=(),
         changed_model_unique_ids=(),
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(SOURCE_ORDERS,),
-        expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' will build on", "- orders"),
+        expected_warning_count=0,
+        expected_warning_fragments=(),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="multi-hop changed seed outside selection warns",
@@ -134,15 +134,15 @@ TEST_CASES: tuple[DbtSelectionStalenessWarningTestCase, ...] = (
         ),
     ),
     DbtSelectionStalenessWarningTestCase(
-        description="multi-hop changed source outside selection warns",
+        description="multi-hop changed source outside selection does not use legacy warning",
         upstream_deps={MODEL_C: (MODEL_B,), MODEL_B: (SOURCE_ORDERS,)},
         selected_unique_ids=(MODEL_C,),
         run_unique_ids=(),
         changed_model_unique_ids=(),
         changed_seed_unique_ids=(),
         changed_source_unique_ids=(SOURCE_ORDERS,),
-        expected_warning_count=1,
-        expected_warning_fragments=("selected dbt model 'c' will build on", "- b", "- orders"),
+        expected_warning_count=0,
+        expected_warning_fragments=(),
     ),
     DbtSelectionStalenessWarningTestCase(
         description="selected model can run and still warn for unselected upstream",
@@ -217,7 +217,6 @@ def test_given_dbt_graph_when_classifying_selection_staleness_then_warns_for_sta
         selected_unique_ids=frozenset(test_case.selected_unique_ids),
         entries_by_unique_id=entries_by_unique_id,
         changed_seed_unique_ids=frozenset(test_case.changed_seed_unique_ids),
-        changed_source_unique_ids=frozenset(test_case.changed_source_unique_ids),
     )
 
     rendered_warnings: str = "\n".join(warnings)
