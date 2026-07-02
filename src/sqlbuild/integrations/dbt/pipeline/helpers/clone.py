@@ -57,6 +57,13 @@ def parse_dbt_clone_options(args: tuple[str, ...]) -> DbtCloneOptions:
             value, index = _consume_one_value(args=args, index=index)
             dbt_args.extend((token, value))
             continue
+        if token == "select" and index + 1 < len(args) and not args[index + 1].startswith("--"):
+            selector: str = args[index + 1]
+            raise DbtInteropArgumentError(
+                "unexpected positional argument 'select'",
+                code="C350",
+                help=f"Use --select {selector} to choose dbt models for clone.",
+            )
         if not token.startswith("--"):
             raise DbtInteropArgumentError(
                 f"unexpected positional argument {token!r}",

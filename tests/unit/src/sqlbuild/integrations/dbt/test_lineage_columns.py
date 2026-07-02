@@ -214,9 +214,8 @@ SOURCE_SCHEMA_INSPECTION_TEST_CASES: tuple[DbtColumnLineageSelectionTestCase, ..
         expected_edges=(),
         expected_warnings=(
             "Could not inspect source source.analytics.raw.orders; "
-            "SELECT * lineage from this source may be incomplete: "
-            'missing relation "db"."raw"."orders"; missing relation raw.orders; '
-            'missing relation "raw"."orders"; missing relation orders',
+            "SELECT * lineage from this relation may be incomplete: "
+            "relation was not returned by batched column lookup",
         ),
     ),
 )
@@ -722,7 +721,7 @@ def test_given_source_schema_inspection_when_describing_sources_then_returns_col
     adapter_by_description: dict[str, FakeLineageSourceSchemaAdapter] = {
         "inspects source schema with fallback relation name": FakeLineageSourceSchemaAdapter(
             {
-                "raw.orders": (
+                "orders": (
                     ColumnInfo(name="order_id", type="INTEGER"),
                     ColumnInfo(name="amount", type="INTEGER"),
                 )
@@ -750,3 +749,39 @@ def test_given_source_schema_inspection_when_describing_sources_then_returns_col
         )
         == expected_columns_by_description[test_case.description]
     )
+    assert adapter_by_description[test_case.description].get_all_columns_calls == [
+        ("db", ("raw",), ("orders",))
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtColumnLineageSelectionTestCase(
+            description="empty source schema inspection skips warehouse",
+            target="model.analytics.fact_orders",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(),
+        )
+    ],
+    ids=["empty source schema inspection skips warehouse"],
+)
+def test_given_no_column_lineage_keys_when_inspecting_source_schemas_then_skips_warehouse(
+    test_case: DbtColumnLineageSelectionTestCase,
+) -> None:
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_column_lineage_manifest_data()
+    )
+    adapter: FakeLineageSourceSchemaAdapter = FakeLineageSourceSchemaAdapter({})
+
+    result: DbtSourceSchemaInspectionResult = inspect_dbt_source_schemas(
+        adapter=adapter,
+        connection_config={},
+        manifest=manifest,
+        selected_keys=frozenset(),
+    )
+
+    assert result.columns_by_unique_id == {}
+    assert result.warnings == test_case.expected_warnings
+    assert adapter.connect_count == 0
+    assert adapter.get_all_columns_calls == []

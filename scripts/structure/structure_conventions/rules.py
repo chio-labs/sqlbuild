@@ -31,6 +31,7 @@ _WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
         "relation_exists",
         "get_columns",
         "get_all_columns",
+        "describe_relation",
         "list_functions",
     }
 )
@@ -42,6 +43,9 @@ _SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
     ),
     "src/sqlbuild/compiler/planner/helpers/output/plan_entry.py": (
         "one get_all_columns per database"
+    ),
+    "src/sqlbuild/integrations/dbt/helpers/lineage/columns.py": (
+        "one get_all_columns per selected dbt source/seed database-schema group"
     ),
     "src/sqlbuild/executor/pipeline/helpers/testing.py": (
         "list_functions grouped per database, schema, and name batch"

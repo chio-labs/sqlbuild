@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,15 @@ class _ColumnCandidateSelection:
     keys: frozenset[DbtCombinedGraphKey]
     model_names: frozenset[str]
     truncated: bool
+
+
+@dataclass(frozen=True)
+class _SourceSchemaColumnRequest:
+    unique_id: str
+    label: str
+    database: str | None
+    schema: str | None
+    name: str
 
 
 def dbt_column_lineage_selected_keys(
@@ -234,50 +244,35 @@ def inspect_dbt_source_schemas(
 
     columns_by_unique_id: dict[str, tuple[SourceColumnEntry, ...]] = {}
     warnings: list[str] = []
+    if not selected_keys:
+        return DbtSourceSchemaInspectionResult(
+            columns_by_unique_id=columns_by_unique_id,
+            warnings=(),
+        )
     connection: Any | None = None
     try:
         connection = adapter.connect(connection_config)
-        source: DbtManifestSource
-        for source in manifest.sources_by_unique_id.values():
-            if dbt_source_graph_key(source.unique_id) not in selected_keys:
-                continue
-            columns: tuple[ColumnInfo, ...] | None = None
-            errors: list[str] = []
-            for relation_name in _source_relation_candidates(source):
-                try:
-                    columns = adapter.describe_relation(connection, relation_name)
-                    break
-                except Exception as error:
-                    errors.append(str(error))
+        requests: tuple[_SourceSchemaColumnRequest, ...] = _source_schema_column_requests(
+            manifest=manifest,
+            selected_keys=selected_keys,
+        )
+        inspected_columns: dict[str, tuple[ColumnInfo, ...]] = _inspect_columns_by_unique_id(
+            adapter=adapter,
+            connection=connection,
+            requests=requests,
+        )
+        request: _SourceSchemaColumnRequest
+        for request in requests:
+            columns: tuple[ColumnInfo, ...] | None = inspected_columns.get(request.unique_id)
             if columns is None:
                 warnings.append(
-                    f"Could not inspect source {source.unique_id}; SELECT * lineage from this "
-                    f"source may be incomplete: {'; '.join(errors)}"
+                    f"Could not inspect {request.label} {request.unique_id}; SELECT * lineage "
+                    "from this relation may be incomplete: relation was not returned by batched "
+                    "column lookup"
                 )
                 continue
-            columns_by_unique_id[source.unique_id] = tuple(
+            columns_by_unique_id[request.unique_id] = tuple(
                 SourceColumnEntry(name=column.name, type=column.type) for column in columns
-            )
-        seed: DbtManifestSeed
-        for seed in manifest.seeds_by_unique_id.values():
-            if dbt_source_graph_key(seed.unique_id) not in selected_keys:
-                continue
-            seed_columns: tuple[ColumnInfo, ...] | None = None
-            seed_errors: list[str] = []
-            for relation_name in _seed_relation_candidates(seed):
-                try:
-                    seed_columns = adapter.describe_relation(connection, relation_name)
-                    break
-                except Exception as error:
-                    seed_errors.append(str(error))
-            if seed_columns is None:
-                warnings.append(
-                    f"Could not inspect seed {seed.unique_id}; SELECT * lineage from this "
-                    f"seed may be incomplete: {'; '.join(seed_errors)}"
-                )
-                continue
-            columns_by_unique_id[seed.unique_id] = tuple(
-                SourceColumnEntry(name=column.name, type=column.type) for column in seed_columns
             )
     finally:
         if connection is not None:
@@ -286,6 +281,138 @@ def inspect_dbt_source_schemas(
         columns_by_unique_id=columns_by_unique_id,
         warnings=tuple(warnings),
     )
+
+
+def _source_schema_column_requests(
+    *, manifest: DbtManifestIndex, selected_keys: frozenset[DbtCombinedGraphKey]
+) -> tuple[_SourceSchemaColumnRequest, ...]:
+    requests: list[_SourceSchemaColumnRequest] = []
+    source: DbtManifestSource
+    for source in manifest.sources_by_unique_id.values():
+        if dbt_source_graph_key(source.unique_id) not in selected_keys:
+            continue
+        requests.append(
+            _SourceSchemaColumnRequest(
+                unique_id=source.unique_id,
+                label="source",
+                database=_manifest_relation_database(
+                    database=source.database,
+                    relation_name=source.relation_name,
+                ),
+                schema=_manifest_relation_schema(
+                    schema=source.schema,
+                    relation_name=source.relation_name,
+                ),
+                name=_manifest_relation_name(
+                    explicit_name=source.identifier,
+                    fallback_name=source.name,
+                    relation_name=source.relation_name,
+                ),
+            )
+        )
+    seed: DbtManifestSeed
+    for seed in manifest.seeds_by_unique_id.values():
+        if dbt_source_graph_key(seed.unique_id) not in selected_keys:
+            continue
+        requests.append(
+            _SourceSchemaColumnRequest(
+                unique_id=seed.unique_id,
+                label="seed",
+                database=_manifest_relation_database(
+                    database=seed.database,
+                    relation_name=seed.relation_name,
+                ),
+                schema=_manifest_relation_schema(
+                    schema=seed.schema,
+                    relation_name=seed.relation_name,
+                ),
+                name=_manifest_relation_name(
+                    explicit_name=seed.alias,
+                    fallback_name=seed.name,
+                    relation_name=seed.relation_name,
+                ),
+            )
+        )
+    return tuple(requests)
+
+
+def _inspect_columns_by_unique_id(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    requests: tuple[_SourceSchemaColumnRequest, ...],
+) -> dict[str, tuple[ColumnInfo, ...]]:
+    requests_by_location: dict[tuple[str | None, str | None], list[_SourceSchemaColumnRequest]] = (
+        defaultdict(list)
+    )
+    request: _SourceSchemaColumnRequest
+    for request in requests:
+        requests_by_location[(request.database, request.schema)].append(request)
+    result: dict[str, tuple[ColumnInfo, ...]] = {}
+    database_schema: tuple[str | None, str | None]
+    location_requests: list[_SourceSchemaColumnRequest]
+    for database_schema, location_requests in requests_by_location.items():
+        database, schema = database_schema
+        names: tuple[str, ...] = tuple(sorted({request.name for request in location_requests}))
+        columns_by_name: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
+            connection,
+            database=database,
+            schemas=(schema,) if schema is not None else None,
+            names=names,
+        )
+        for request in location_requests:
+            columns: tuple[ColumnInfo, ...] | None = _columns_for_table_name(
+                columns_by_name=columns_by_name,
+                name=request.name,
+            )
+            if columns is not None:
+                result[request.unique_id] = columns
+    return result
+
+
+def _columns_for_table_name(
+    *, columns_by_name: dict[str, tuple[ColumnInfo, ...]], name: str
+) -> tuple[ColumnInfo, ...] | None:
+    if name in columns_by_name:
+        return columns_by_name[name]
+    lower_name: str = name.lower()
+    if lower_name in columns_by_name:
+        return columns_by_name[lower_name]
+    upper_name: str = name.upper()
+    if upper_name in columns_by_name:
+        return columns_by_name[upper_name]
+    return None
+
+
+def _manifest_relation_database(*, database: str | None, relation_name: str) -> str | None:
+    if database is not None:
+        return database
+    relation_parts: tuple[str, ...] = _relation_parts(relation_name)
+    if len(relation_parts) >= 3:
+        return relation_parts[-3]
+    return None
+
+
+def _manifest_relation_schema(*, schema: str | None, relation_name: str) -> str | None:
+    if schema is not None:
+        return schema
+    relation_parts: tuple[str, ...] = _relation_parts(relation_name)
+    if len(relation_parts) >= 2:
+        return relation_parts[-2]
+    return None
+
+
+def _manifest_relation_name(
+    *, explicit_name: str | None, fallback_name: str, relation_name: str
+) -> str:
+    if explicit_name is not None:
+        return explicit_name
+    relation_parts: tuple[str, ...] = _relation_parts(relation_name)
+    return relation_parts[-1] if relation_parts else fallback_name
+
+
+def _relation_parts(relation_name: str) -> tuple[str, ...]:
+    return tuple(part.strip().strip('"') for part in relation_name.split(".") if part.strip())
 
 
 def build_dbt_column_lineage_analysis_project(
@@ -603,43 +730,6 @@ def _replace_relation_in_from_or_join(sql: str, relation_name: str, replacement:
     return pattern.sub(
         lambda match: f"{match.group('prefix')}{replacement}{match.group('suffix')}", sql
     )
-
-
-def _source_relation_candidates(source: DbtManifestSource) -> tuple[str, ...]:
-    relation_name: str = source.relation_name
-    relation_parts: tuple[str, ...] = tuple(
-        part.strip('"') for part in relation_name.split(".") if part.strip('"')
-    )
-    schema: str | None = source.schema
-    identifier: str | None = source.identifier
-    name: str = source.name
-    table_name: str = identifier or name
-    candidates: list[str] = [relation_name]
-    if len(relation_parts) >= 2:
-        candidates.append(".".join(relation_parts[-2:]))
-        candidates.append(".".join(f'"{part}"' for part in relation_parts[-2:]))
-    if schema is not None:
-        candidates.append(f"{schema}.{table_name}")
-        candidates.append(f'"{schema}"."{table_name}"')
-    candidates.append(table_name)
-    return tuple(dict.fromkeys(candidates))
-
-
-def _seed_relation_candidates(seed: DbtManifestSeed) -> tuple[str, ...]:
-    relation_name: str = seed.relation_name
-    relation_parts: tuple[str, ...] = tuple(
-        part.strip('"') for part in relation_name.split(".") if part.strip('"')
-    )
-    table_name: str = seed.alias or seed.name
-    candidates: list[str] = [relation_name]
-    if len(relation_parts) >= 2:
-        candidates.append(".".join(relation_parts[-2:]))
-        candidates.append(".".join(f'"{part}"' for part in relation_parts[-2:]))
-    if seed.schema is not None:
-        candidates.append(f"{seed.schema}.{table_name}")
-        candidates.append(f'"{seed.schema}"."{table_name}"')
-    candidates.append(table_name)
-    return tuple(dict.fromkeys(candidates))
 
 
 def _trace_column_with_depth(

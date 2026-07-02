@@ -1394,9 +1394,13 @@ class FakeLineageSourceSchemaAdapter(BaseAdapter):
 
     def __init__(self, columns_by_relation: dict[str, tuple[ColumnInfo, ...]]) -> None:
         self.columns_by_relation: dict[str, tuple[ColumnInfo, ...]] = columns_by_relation
-        self.described_relations: list[str] = []
+        self.connect_count: int = 0
+        self.get_all_columns_calls: list[
+            tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
+        ] = []
 
     def connect(self, config: dict[str, object]) -> object:
+        self.connect_count += 1
         return object()
 
     def execute(self, connection: object, sql: str) -> object:
@@ -1408,12 +1412,22 @@ class FakeLineageSourceSchemaAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         return None
 
-    def describe_relation(self, connection: object, relation: str) -> tuple[ColumnInfo, ...]:
-        self.described_relations.append(relation)
-        columns: tuple[ColumnInfo, ...] | None = self.columns_by_relation.get(relation)
-        if columns is None:
-            raise RuntimeError(f"missing relation {relation}")
-        return columns
+    def get_all_columns(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> dict[str, tuple[ColumnInfo, ...]]:
+        del connection
+        self.get_all_columns_calls.append((database, schemas, names))
+        requested_names: frozenset[str] | None = frozenset(names) if names is not None else None
+        return {
+            relation_name: columns
+            for relation_name, columns in self.columns_by_relation.items()
+            if requested_names is None or relation_name in requested_names
+        }
 
 
 class FakeReusePlanAdapter(BaseAdapter):
