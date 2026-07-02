@@ -7,7 +7,7 @@ import json
 
 from sqlbuild.compiler.auditing.models import AuditIdentity
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.shared.helpers.hashing import normalize_query_sql
+from sqlbuild.shared.helpers.identity.hashing import normalize_query_sql
 
 
 def audit_identity(audit: AuditPlanEntry) -> AuditIdentity:

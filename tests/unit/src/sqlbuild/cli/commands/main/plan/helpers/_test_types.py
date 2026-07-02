@@ -8,7 +8,7 @@ from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     PlanOutput,
 )
-from sqlbuild.shared.helpers.display import DisplayOptions
+from sqlbuild.shared.helpers.output.display import DisplayOptions
 
 
 @dataclass(frozen=True)

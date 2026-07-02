@@ -14,20 +14,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     build_real_warehouse_local_replay_project_files,
     maybe_corrupt_scenario_snapshot_dialect,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    assert_dbt_profile_lifecycle,
-    build_current_check_customers_model_sql,
-    build_current_customers_model_sql,
-    build_current_delete_customers_model_sql,
-    build_historical_check_daily_model_sql,
-    build_historical_timestamp_extracts_model_sql,
-    build_real_warehouse_existing_snapshot_project_files,
-    build_real_warehouse_snapshot_project_files,
-    prepare_inline_project,
-    query_duckdb,
-    run_sqb,
-    stringify_warehouse_rows,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerBuildE2ETestCase,
     SqlServerDbtProfileE2ETestCase,
@@ -66,6 +52,20 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
     prepare_sqlserver_source_loader_strategies,
     prepare_sqlserver_waffle_shop,
     relation_name,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    assert_dbt_profile_lifecycle,
+    build_current_check_customers_model_sql,
+    build_current_customers_model_sql,
+    build_current_delete_customers_model_sql,
+    build_historical_check_daily_model_sql,
+    build_historical_timestamp_extracts_model_sql,
+    build_real_warehouse_existing_snapshot_project_files,
+    build_real_warehouse_snapshot_project_files,
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+    stringify_warehouse_rows,
 )
 
 

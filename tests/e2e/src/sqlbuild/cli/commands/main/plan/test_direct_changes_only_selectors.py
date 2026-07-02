@@ -14,7 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     build_direct_changes_only_project_toml,
     direct_changes_only_stg_orders_sql,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     run_sqb,
 )

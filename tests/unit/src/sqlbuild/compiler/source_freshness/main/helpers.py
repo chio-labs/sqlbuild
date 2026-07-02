@@ -4,21 +4,21 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+from sqlbuild.compiler.source_freshness.helpers.sql import build_read_latest_sql
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
-from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import build_read_latest_sql
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
 )
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 

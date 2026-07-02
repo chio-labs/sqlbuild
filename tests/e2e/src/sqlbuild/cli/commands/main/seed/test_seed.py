@@ -9,12 +9,14 @@ from typing import Any
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import build_virtual_plan_project_toml
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_project_toml,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.seed._test_types import (
     SeedE2ETestCase,
     VirtualSeedE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
     prepare_waffle_shop,

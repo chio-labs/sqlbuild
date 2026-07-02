@@ -42,7 +42,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
-from sqlbuild.shared.helpers.sql_reference_patterns import (
+from sqlbuild.shared.helpers.sql.reference_patterns import (
     quoted_reference_call_pattern,
     reference_call_prefix_pattern_text,
 )

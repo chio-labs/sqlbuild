@@ -21,7 +21,7 @@ from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 

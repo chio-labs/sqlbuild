@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import DbtSeedChangeE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
+    DbtSeedChangeE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     add_dbt_seed_change_second_seed,
     append_dbt_seed_change_order,

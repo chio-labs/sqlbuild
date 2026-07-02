@@ -9,8 +9,8 @@ from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.constants import TEMPLATE_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.types import TemplateNamespace
-from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 
 
 @dataclass(frozen=True)

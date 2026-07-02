@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.helpers.relation_type import normalize_relation_type
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.adapter.shared.types import RelationType
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
@@ -16,14 +17,13 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
-from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
-from sqlbuild.virtual.state.main.release_lock import release_state_lease
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.locks.locks import acquire_virtual_environment_lease
+from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     ReconcileEventRecord,

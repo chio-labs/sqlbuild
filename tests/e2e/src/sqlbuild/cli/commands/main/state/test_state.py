@@ -5,12 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    execute_duckdb,
-    prepare_inline_project,
-    query_duckdb,
-    run_sqb,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.state._test_types import (
     StateAdoptDetachE2ETestCase,
     StateExplicitRollbackE2ETestCase,
@@ -21,6 +15,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.state._test_types import (
     StateSchemaCorruptionE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.state.helpers import assert_state_cli_error
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    execute_duckdb,
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+)
 
 STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[StateLifecycleErrorE2ETestCase, ...] = (
     StateLifecycleErrorE2ETestCase(

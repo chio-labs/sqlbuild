@@ -19,7 +19,7 @@ from sqlbuild.compiler.planner.helpers.output.audit_scheduling import (
     resolve_effective_run_scope,
 )
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.shared.helpers.sql_resolution import assert_no_unresolved_sql_markers
+from sqlbuild.shared.helpers.sql.resolution import assert_no_unresolved_sql_markers
 from sqlbuild.spec.models.source import SourceEntry
 
 

@@ -26,10 +26,10 @@ from sqlbuild.compiler.planner.helpers.shared.change_policy import (
     pick_more_aggressive,
     resolve_replay_on_change,
 )
-from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
+from sqlbuild.compiler.planner.main.planning.version_identity_function_hashes import (
     build_function_local_hashes,
 )
-from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
+from sqlbuild.compiler.planner.main.planning.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import (
@@ -42,8 +42,8 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
-from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event, log_sql
-from sqlbuild.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event, log_sql
+from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 
 
 def detect_changes(

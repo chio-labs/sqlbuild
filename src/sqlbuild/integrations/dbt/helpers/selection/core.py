@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.planner.main.sqlbuild_model_selectors import (
+from sqlbuild.compiler.planner.main.planning.selector_expansion import split_selector_expansion
+from sqlbuild.compiler.planner.main.planning.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
@@ -22,8 +23,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropSelectionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner
-from sqlbuild.shared.helpers.graph_algorithms import path_nodes
-from sqlbuild.shared.helpers.selector_expansion import split_selector_expansion
+from sqlbuild.shared.helpers.graph.algorithms import path_nodes
 from sqlbuild.shared.models import SelectorExpansion
 
 

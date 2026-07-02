@@ -18,7 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.check.helpers import (
     prepare_python_check_project,
     resolve_check_command,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import query_duckdb, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run_sqb
 
 TEST_CASES: tuple[CheckCommandTestCase, ...] = (
     CheckCommandTestCase(

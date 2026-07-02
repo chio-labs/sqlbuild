@@ -13,7 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     write_dbt_clone_summary_view_model,
     write_dbt_diff_orders_model,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     query_duckdb,
     run_sqb,
     table_exists,

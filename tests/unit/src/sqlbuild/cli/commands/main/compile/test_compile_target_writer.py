@@ -6,15 +6,17 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.cli.commands.main.helpers.compile.models import WrittenTarget
-from sqlbuild.cli.commands.main.helpers.compile.target_writer import (
+from sqlbuild.cli.commands.helpers.compile.models import WrittenTarget
+from sqlbuild.cli.commands.helpers.compile.target_writer import (
     write_compile_target,
     write_static_compile_target,
 )
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
-from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import TargetWriterTestCase
+from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    TargetWriterTestCase,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_static_target_writer_project,
     build_target_writer_plan_output,

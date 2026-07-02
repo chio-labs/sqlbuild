@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
     write_sqlite_orders_source_database,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     run_sqb,
 )

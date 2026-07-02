@@ -11,9 +11,11 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
-from sqlbuild.compiler.planner.main.scenario import build_scenario_plan
+from sqlbuild.compiler.planner.main.planning.scenario import build_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.executor.scenario.main.capture_steps import execute_scenario_snapshot_capture_run
+from sqlbuild.executor.scenario.main.capture_steps import (
+    execute_scenario_snapshot_capture_run,
+)
 from sqlbuild.executor.scenario.main.local import execute_local_scenario_load_only_run
 from sqlbuild.executor.scenario.main.run import execute_scenario_run
 from sqlbuild.executor.scenario.main.snapshots import classify_scenario_snapshot_state
@@ -29,8 +31,10 @@ from sqlbuild.shared.constants import (
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_INTERNAL,
 )
-from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
-from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
+from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
+from sqlbuild.shared.main.error_code import error_code
+from sqlbuild.shared.main.error_help import error_help
+from sqlbuild.shared.main.error_message import error_message
 from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")

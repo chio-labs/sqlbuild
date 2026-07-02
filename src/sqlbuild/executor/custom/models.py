@@ -12,7 +12,7 @@ from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRe
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 
 
 @dataclass(frozen=True)

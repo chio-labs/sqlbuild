@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
-from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
+from sqlbuild.compiler.fingerprints.helpers.sql import (
     build_qualified_table_name,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet

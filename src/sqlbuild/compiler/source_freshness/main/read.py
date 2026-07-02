@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
-from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import (
+from sqlbuild.compiler.source_freshness.helpers.sql import (
     build_qualified_table_name,
 )
 from sqlbuild.compiler.source_freshness.models import (

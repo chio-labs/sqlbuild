@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,
@@ -18,6 +20,11 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.compiler.node_source_watermarks.main.read import read_latest_node_source_watermarks
+from sqlbuild.compiler.node_source_watermarks.models import (
+    NodeSourceWatermarkIdentity,
+    NodeSourceWatermarkRecord,
+)
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     PlanOutput,
@@ -29,6 +36,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.schema import SeedCsvSettings
@@ -124,6 +132,45 @@ def build_model_plan_entry(
         observed_at_column=observed_at_column,
         historical_input=historical_input,
     )
+
+
+def build_source_freshness_record(
+    *,
+    source_name: str,
+    data_hash: str,
+    data_version: str = "2026-06-30T12:00:00",
+) -> SourceFreshnessRecord:
+    return SourceFreshnessRecord(
+        source_name=source_name,
+        target_database=None,
+        target_schema="main",
+        target_name=source_name,
+        run_id="run-1",
+        strategy="adapter",
+        value_kind="timestamp",
+        data_version=data_version,
+        data_version_hash=data_hash,
+        observed_at=datetime(2026, 6, 30, 12, 1),
+    )
+
+
+def read_node_source_watermark_records(
+    *,
+    adapter: DuckDbAdapter,
+    connection: object,
+) -> dict[str, NodeSourceWatermarkRecord]:
+    records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord] = (
+        read_latest_node_source_watermarks(
+            connection=connection,
+            execute=adapter.execute,
+            table_exists=True,
+            database=None,
+            schema="main",
+            render_qualified_name=adapter.render_qualified_name,
+            render_read_latest_sql=adapter.render_read_latest_node_source_watermarks_sql,
+        ).records
+    )
+    return {identity.node_name: record for identity, record in records.items()}
 
 
 def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:

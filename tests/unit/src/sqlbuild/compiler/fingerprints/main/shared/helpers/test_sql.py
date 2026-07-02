@@ -8,7 +8,7 @@ from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
+from sqlbuild.compiler.fingerprints.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
     build_qualified_table_name,

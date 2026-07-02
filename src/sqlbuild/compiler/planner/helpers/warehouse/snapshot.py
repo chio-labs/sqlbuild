@@ -45,7 +45,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
+from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 

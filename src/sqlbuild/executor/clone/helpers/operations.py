@@ -9,7 +9,7 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneItemResult
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.models import RelationLookup
 
 

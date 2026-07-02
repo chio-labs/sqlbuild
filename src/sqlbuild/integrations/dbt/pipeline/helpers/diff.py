@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.shared.models import CursorValue, RowDiffResult, SchemaDiffResult
 from sqlbuild.adapter.shared.types import CursorKind
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
@@ -13,7 +14,6 @@ from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInt
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtDiffOptions, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
 
 

@@ -19,7 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     prepare_dbt_interop_project,
     skip_unless_dbt_is_runnable,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     REPO_ROOT,
     prepare_inline_project,
     run_sqb,

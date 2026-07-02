@@ -8,10 +8,10 @@ from typing import Any
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.spec.models.targets import resolve_target_name
-from sqlbuild.virtual.state.main.python_node_identity_read import (
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.python_identities.python_node_identity_read import (
     read_virtual_python_identity_fingerprints,
 )
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
 
 
 def read_bound_virtual_python_identities(

@@ -22,8 +22,10 @@ from sqlbuild.executor.functions.constants import (
 )
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.helpers.coded_errors import error_code, error_help, error_message
-from sqlbuild.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
+from sqlbuild.shared.main.error_code import error_code
+from sqlbuild.shared.main.error_help import error_help
+from sqlbuild.shared.main.error_message import error_message
 
 
 def execute_function(

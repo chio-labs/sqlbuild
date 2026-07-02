@@ -20,7 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     prepare_virtual_run_despite_unchanged_project,
     seed_matching_virtual_refs,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
     run_sqb,

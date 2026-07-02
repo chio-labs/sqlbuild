@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledRelationLocation,
@@ -15,7 +16,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult, ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.helpers.clone import (
@@ -37,7 +37,7 @@ from sqlbuild.virtual.executor.helpers.rewrite import (
 from sqlbuild.virtual.executor.models import VirtualCloneItemResult, VirtualCloneResult
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SeedVersionRecord,

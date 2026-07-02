@@ -15,7 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
     serve_orders_api,
     write_sqlite_orders_source_database,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     query_duckdb,
     run_sqb,

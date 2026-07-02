@@ -45,7 +45,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         | {
             "src/sqlbuild/example/widget/main/load.py": dedent(
                 """
-                from sqlbuild.shared.helpers.colors import green_bold, supports_color
+                from sqlbuild.shared.helpers.output.colors import green_bold, supports_color
 
 
                 def load_example() -> str:
@@ -62,7 +62,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         | {
             "src/sqlbuild/example/widget/main/load.py": dedent(
                 """
-                from sqlbuild.shared.helpers.colors import supports_color
+                from sqlbuild.shared.helpers.output.colors import supports_color
 
 
                 def load_example() -> bool:
@@ -226,6 +226,19 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC049",),
     ),
     CheckPathsTestCase(
+        description="reports mixed helper layout without init module",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/helpers/build.py": (
+                "def build() -> str:\n    return 'demo'\n"
+            ),
+            "src/sqlbuild/example/widget/helpers/render/name.py": (
+                "def render() -> str:\n    return 'demo'\n"
+            ),
+        },
+        expected_violation_codes=("SC049",),
+    ),
+    CheckPathsTestCase(
         description="reports shared subfolder mixed with flat helper modules",
         repo_files=compliant_repo_files()
         | {
@@ -266,6 +279,65 @@ TEST_CASES: list[CheckPathsTestCase] = [
             },
         },
         expected_violation_codes=("SC050",),
+    ),
+    CheckPathsTestCase(
+        description="reports helpers package without init module with too many flat modules",
+        repo_files=compliant_repo_files()
+        | {
+            **{
+                f"src/sqlbuild/example/widget/helpers/module_{index}.py": (
+                    f"def build_{index}() -> int:\n    return {index}\n"
+                )
+                for index in range(11)
+            },
+        },
+        expected_violation_codes=("SC050",),
+    ),
+    CheckPathsTestCase(
+        description="reports mixed flat main modules and concern subfolders",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/__init__.py": '"""Entrypoints."""\n',
+            "src/sqlbuild/example/widget/main/build.py": (
+                "def build() -> str:\n    return 'demo'\n"
+            ),
+            "src/sqlbuild/example/widget/main/render/name.py": (
+                "def render() -> str:\n    return 'demo'\n"
+            ),
+        },
+        expected_violation_codes=("SC059",),
+    ),
+    CheckPathsTestCase(
+        description="reports main package support folders outside CLI commands",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/__init__.py": '"""Entrypoints."""\n',
+            "src/sqlbuild/example/widget/main/shared/__init__.py": '"""Shared."""\n',
+        },
+        expected_violation_codes=("SC061",),
+    ),
+    CheckPathsTestCase(
+        description="reports CLI command main support folders",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/cli/commands/main/__init__.py": '"""Entrypoints."""\n',
+            "src/sqlbuild/cli/commands/main/shared/__init__.py": '"""Shared."""\n',
+        },
+        expected_violation_codes=("SC061",),
+    ),
+    CheckPathsTestCase(
+        description="reports main package with too many flat modules",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/__init__.py": '"""Entrypoints."""\n',
+            **{
+                f"src/sqlbuild/example/widget/main/module_{index}.py": (
+                    f"def build_{index}() -> int:\n    return {index}\n"
+                )
+                for index in range(21)
+            },
+        },
+        expected_violation_codes=("SC060",),
     ),
     CheckPathsTestCase(
         description="reports ambiguous target reuse source terminology",
@@ -717,13 +789,13 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="reports subpackage under main",
+        description="reports concern subpackage under main when flat entries exist",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
             "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
         },
-        expected_violation_codes=("SC030",),
+        expected_violation_codes=("SC059",),
     ),
     CheckPathsTestCase(
         description="reports extra support module directly under main",
@@ -899,7 +971,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=(),
     ),
     CheckPathsTestCase(
-        description="reports subpackage under main even when flat entry exists",
+        description="reports mixed flat module and concern subpackage under main",
         repo_files=compliant_repo_files()
         | {
             "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
@@ -912,7 +984,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
             + "\n",
             "src/sqlbuild/example/widget/main/plan/__init__.py": '"""Plan command."""\n',
         },
-        expected_violation_codes=("SC030",),
+        expected_violation_codes=("SC059",),
     ),
     CheckPathsTestCase(
         description="reports custom exception declared outside exceptions module",
@@ -1318,7 +1390,7 @@ TEST_CASES: list[CheckPathsTestCase] = [
             "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
             "src/sqlbuild/example/discovery/main/discover.py": dedent(
                 """
-                from sqlbuild.shared.helpers.cli_style import CliStyle
+                from sqlbuild.shared.helpers.output.cli_style import CliStyle
 
 
                 def discover_name() -> str:
@@ -1650,6 +1722,23 @@ TEST_CASES: list[CheckPathsTestCase] = [
                         ):
                             found.append(entry)
                     return found
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC051",),
+    ),
+    CheckPathsTestCase(
+        description="flags describe relation calls inside a loop as N+1 risks",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/describe.py": dedent(
+                """
+                def describe(adapter, connection, relations) -> list[object]:
+                    columns: list[object] = []
+                    for relation in relations:
+                        columns.extend(adapter.describe_relation(connection, relation))
+                    return columns
                 """
             ).strip()
             + "\n",

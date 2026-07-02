@@ -33,7 +33,7 @@ def build_motherduck_project_toml(*, project_name: str, schema_name: str) -> str
 def prepare_motherduck_build_project(*, tmp_path: Path) -> tuple[Path, str]:
     """Prepare a small MotherDuck-backed SQLBuild project."""
 
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_inline_project
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
     schema_name: str = build_unique_schema_name(prefix="sqlbuild_e2e_motherduck")
     project_dir: Path = prepare_inline_project(

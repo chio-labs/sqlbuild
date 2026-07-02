@@ -9,23 +9,27 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.model_downstream_closure import build_downstream_model_names
-from sqlbuild.compiler.planner.main.model_upstream_closure import build_upstream_model_names
-from sqlbuild.compiler.planner.main.seed_identity import build_seed_identity
-from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
-from sqlbuild.compiler.planner.main.version_identity_function_hashes import (
+from sqlbuild.compiler.planner.main.planning.model_downstream_closure import (
+    build_downstream_model_names,
+)
+from sqlbuild.compiler.planner.main.planning.model_upstream_closure import (
+    build_upstream_model_names,
+)
+from sqlbuild.compiler.planner.main.planning.seed_identity import build_seed_identity
+from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.planning.version_identity_function_hashes import (
     build_function_local_hashes as build_shared_function_local_hashes,
 )
-from sqlbuild.compiler.planner.main.version_identity_local_hash import (
+from sqlbuild.compiler.planner.main.planning.version_identity_local_hash import (
     build_model_local_identity_hash,
 )
-from sqlbuild.compiler.planner.main.version_identity_model_metadata import (
+from sqlbuild.compiler.planner.main.planning.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
 )
-from sqlbuild.compiler.planner.main.version_identity_stale_model_names import (
+from sqlbuild.compiler.planner.main.planning.version_identity_stale_model_names import (
     build_version_identity_stale_model_names,
 )
-from sqlbuild.compiler.planner.main.version_identity_version_hash import (
+from sqlbuild.compiler.planner.main.planning.version_identity_version_hash import (
     build_model_version_identity_hash,
 )
 from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy

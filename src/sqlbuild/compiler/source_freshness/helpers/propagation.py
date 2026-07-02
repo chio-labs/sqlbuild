@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.main.model_downstream_closure import build_downstream_model_names
+from sqlbuild.compiler.planner.main.planning.model_downstream_closure import (
+    build_downstream_model_names,
+)
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,

@@ -6,12 +6,12 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.helpers.operations import clone_relation, recreate_view
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
 
 

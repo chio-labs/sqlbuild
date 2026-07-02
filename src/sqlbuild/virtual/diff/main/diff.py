@@ -26,7 +26,7 @@ from sqlbuild.virtual.diff.helpers.diff import (
 )
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,

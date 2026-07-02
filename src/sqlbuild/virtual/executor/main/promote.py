@@ -27,13 +27,15 @@ from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_s
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.main.upstreams import build_virtual_stale_required_upstream_closure
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.checkpoints import create_finalized_virtual_environment_checkpoint
-from sqlbuild.virtual.state.main.locks import (
+from sqlbuild.virtual.state.main.checkpoints.checkpoints import (
+    create_finalized_virtual_environment_checkpoint,
+)
+from sqlbuild.virtual.state.main.environments.record_operation import record_state_operation
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.locks.locks import (
     acquire_virtual_environment_lease,
 )
-from sqlbuild.virtual.state.main.record_operation import record_state_operation
-from sqlbuild.virtual.state.main.release_lock import release_state_lease
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,

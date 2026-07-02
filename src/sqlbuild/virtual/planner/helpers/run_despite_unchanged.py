@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.run_despite_unchanged import (
+from sqlbuild.compiler.planner.main.planning.run_despite_unchanged import (
     build_run_despite_unchanged_planning_result,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, RunDespiteUnchangedPlanningResult

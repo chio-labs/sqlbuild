@@ -44,7 +44,7 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
 )
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.helpers.warehouse.source_deferral import build_source_read_map
-from sqlbuild.compiler.planner.main.model_changes import detect_model_changes
+from sqlbuild.compiler.planner.main.planning.model_changes import detect_model_changes
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,

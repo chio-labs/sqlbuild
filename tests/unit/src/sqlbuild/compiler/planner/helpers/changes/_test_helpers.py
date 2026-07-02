@@ -18,11 +18,11 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.main.version_identity_metadata import (
+from sqlbuild.compiler.planner.main.planning.version_identity_metadata import (
     build_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, WarehouseFingerprints, WarehouseSnapshot
-from sqlbuild.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_types import (
     DetectModelChangesTestCase,

@@ -69,6 +69,56 @@ class DbtExecutionFailureCliTestCase:
 
 
 @dataclass(frozen=True)
+class DbtNodeSourceWatermarkE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_node_name: str
+    expected_source_name: str
+    expected_watermark_kind: str
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtNodeSourceWatermarkWarningE2ETestCase:
+    description: str
+    setup_command: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DbtSqlbuildNodeSourceWatermarkE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_node_name: str
+    expected_source_name: str
+    expected_watermark_kind: str
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtInheritedNodeSourceWatermarkE2ETestCase:
+    description: str
+    setup_command: tuple[str, ...]
+    command: tuple[str, ...]
+    initial_source_version: str
+    advanced_source_version: str
+    expected_node_name: str
+    expected_source_name: str
+    expected_watermark_kind: str
+    expected_data_version: str
+
+
+@dataclass(frozen=True)
+class DbtDeferCloneNodeSourceWatermarkE2ETestCase:
+    description: str
+    expected_node_name: str
+    expected_data_version: str
+    expected_watermark_kind: str
+
+
+@dataclass(frozen=True)
 class DbtMissingRelationGuardE2ETestCase:
     description: str
     command: tuple[str, ...]

@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
     query_duckdb,
@@ -68,7 +68,7 @@ def build_virtual_clone_project_toml() -> str:
 
 
 def build_prod_source_versions(project_dir: Path) -> None:
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
     (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
     init_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -82,7 +82,7 @@ def build_prod_source_versions(project_dir: Path) -> None:
 
 
 def build_dev_target_versions(project_dir: Path) -> None:
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
     (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
     init_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -96,7 +96,7 @@ def build_dev_target_versions(project_dir: Path) -> None:
 
 
 def init_dev_state(project_dir: Path) -> None:
-    from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
     (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
     init_result: subprocess.CompletedProcess[str] = run_sqb(

@@ -19,22 +19,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     build_real_warehouse_remote_scenario_project_files,
     maybe_corrupt_scenario_snapshot_dialect,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
-    assert_dbt_profile_lifecycle,
-    assert_real_adapter_dependency_baseline_case,
-    build_current_check_customers_model_sql,
-    build_current_customers_model_sql,
-    build_current_delete_customers_model_sql,
-    build_historical_check_daily_model_sql,
-    build_historical_timestamp_extracts_model_sql,
-    build_real_warehouse_existing_snapshot_project_files,
-    build_real_warehouse_snapshot_project_files,
-    prepare_dbt_profile_workspace,
-    prepare_inline_project,
-    query_duckdb,
-    run_sqb,
-    stringify_warehouse_rows,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeBuildE2ETestCase,
     SnowflakeCliTestCase,
@@ -83,6 +67,22 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     virtual_seed_source_yml,
     write_local_environment_override,
     write_snowflake_dbt_scenario_date_trunc_model,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    assert_dbt_profile_lifecycle,
+    assert_real_adapter_dependency_baseline_case,
+    build_current_check_customers_model_sql,
+    build_current_customers_model_sql,
+    build_current_delete_customers_model_sql,
+    build_historical_check_daily_model_sql,
+    build_historical_timestamp_extracts_model_sql,
+    build_real_warehouse_existing_snapshot_project_files,
+    build_real_warehouse_snapshot_project_files,
+    prepare_dbt_profile_workspace,
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+    stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_snowflake_connection_config,

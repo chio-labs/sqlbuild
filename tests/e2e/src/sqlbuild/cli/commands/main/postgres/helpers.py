@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.postgres.client import PostgresAdapter
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     stringify_warehouse_rows,

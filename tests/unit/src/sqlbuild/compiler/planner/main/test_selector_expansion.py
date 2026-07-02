@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+import pytest
+
+from sqlbuild.compiler.planner.main.planning.selector_expansion import split_selector_expansion
+from sqlbuild.shared.models import SelectorExpansion
+from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
+    SelectorExpansionErrorTestCase,
+    SelectorExpansionTestCase,
+)
+
+SELECTOR_EXPANSION_TEST_CASES: list[SelectorExpansionTestCase] = [
+    SelectorExpansionTestCase(
+        description="splits bare selector",
+        raw="orders",
+        expected_core="orders",
+        expected_upstream=False,
+        expected_downstream=False,
+    ),
+    SelectorExpansionTestCase(
+        description="splits bidirectional selector",
+        raw="+orders+",
+        expected_core="orders",
+        expected_upstream=True,
+        expected_downstream=True,
+    ),
+    SelectorExpansionTestCase(
+        description="preserves dbt-native comma selector core",
+        raw="state:modified,tag:daily+",
+        expected_core="state:modified,tag:daily",
+        expected_upstream=False,
+        expected_downstream=True,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SELECTOR_EXPANSION_TEST_CASES,
+    ids=[case.description for case in SELECTOR_EXPANSION_TEST_CASES],
+)
+def test_given_selector_when_splitting_expansion_then_returns_expected_parts(
+    test_case: SelectorExpansionTestCase,
+) -> None:
+    result: SelectorExpansion = split_selector_expansion(test_case.raw)
+
+    assert result.core == test_case.expected_core
+    assert result.upstream == test_case.expected_upstream
+    assert result.downstream == test_case.expected_downstream
+
+
+SELECTOR_EXPANSION_ERROR_TEST_CASES: list[SelectorExpansionErrorTestCase] = [
+    SelectorExpansionErrorTestCase(
+        description="rejects empty selector",
+        raw="",
+        expected_error_type=ValueError,
+    ),
+    SelectorExpansionErrorTestCase(
+        description="rejects whitespace selector",
+        raw="   ",
+        expected_error_type=ValueError,
+    ),
+    SelectorExpansionErrorTestCase(
+        description="rejects marker-only selector",
+        raw="+",
+        expected_error_type=ValueError,
+    ),
+    SelectorExpansionErrorTestCase(
+        description="rejects unsupported marker position",
+        raw="orders+daily",
+        expected_error_type=ValueError,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    SELECTOR_EXPANSION_ERROR_TEST_CASES,
+    ids=[case.description for case in SELECTOR_EXPANSION_ERROR_TEST_CASES],
+)
+def test_given_invalid_selector_when_splitting_expansion_then_raises(
+    test_case: SelectorExpansionErrorTestCase,
+) -> None:
+    with pytest.raises(test_case.expected_error_type):
+        split_selector_expansion(test_case.raw)

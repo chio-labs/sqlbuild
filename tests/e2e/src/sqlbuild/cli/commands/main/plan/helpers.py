@@ -26,7 +26,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentRecord,
 )
 from sqlbuild.virtual.state.types import ModelVersionStatus, VirtualEnvironmentStatus
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
     query_duckdb,

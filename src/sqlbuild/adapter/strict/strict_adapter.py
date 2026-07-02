@@ -27,6 +27,7 @@ from sqlbuild.adapter.shared.types import (
     TablePromotionMode,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 
 
@@ -743,6 +744,26 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_create_node_source_watermark_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render DDL that creates the node source watermark table when missing."""
+        ...
+
+    @abstractmethod
+    def render_read_latest_node_source_watermarks_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        """Render SQL that reads latest node source watermark rows per identity."""
+        ...
+
+    @abstractmethod
     def render_create_fingerprint_index_sqls(
         self,
         *,
@@ -771,6 +792,17 @@ class StrictAdapter(
         records: tuple[SourceFreshnessRecord, ...],
     ) -> str:
         """Render DML that appends source freshness records."""
+        ...
+
+    @abstractmethod
+    def render_insert_node_source_watermark_records_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        records: tuple[NodeSourceWatermarkRecord, ...],
+    ) -> str:
+        """Render DML that appends node source watermark records."""
         ...
 
     @abstractmethod

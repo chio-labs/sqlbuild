@@ -31,9 +31,9 @@ from sqlbuild.virtual.executor.helpers.rollback import (
     validate_physical_relations_exist,
 )
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
-from sqlbuild.virtual.state.main.locks import acquire_virtual_environment_lease
-from sqlbuild.virtual.state.main.release_lock import release_state_lease
-from sqlbuild.virtual.state.main.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.locks.locks import acquire_virtual_environment_lease
+from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     PhysicalRelationRecord,

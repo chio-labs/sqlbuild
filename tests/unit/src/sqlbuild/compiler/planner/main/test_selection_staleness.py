@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.main.selection_staleness import (
+from sqlbuild.compiler.planner.main.planning.selection_staleness import (
     classify_selection_staleness_warnings,
 )
 from sqlbuild.compiler.planner.models import (

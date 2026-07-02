@@ -23,7 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.load.helpers import (
     build_loader_waffle_shop_project_files,
     build_schema_behavior_project_files,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     prepare_source_loader_strategies,
     query_duckdb,

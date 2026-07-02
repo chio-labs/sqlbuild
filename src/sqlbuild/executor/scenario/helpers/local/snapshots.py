@@ -30,7 +30,8 @@ from sqlbuild.shared.constants import (
     SCENARIO_LOCAL_SNAPSHOT_STALE,
     SCENARIO_LOCAL_TYPE_INVALID,
 )
-from sqlbuild.shared.helpers.coded_errors import error_code, error_message
+from sqlbuild.shared.main.error_code import error_code
+from sqlbuild.shared.main.error_message import error_message
 
 
 def load_scenario_snapshot_into_duckdb(

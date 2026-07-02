@@ -10,8 +10,8 @@ from sqlbuild.compiler.planner.models import ScenarioFixturePlan
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_FIXTURE_FAILED
-from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def execute_scenario_fixture(

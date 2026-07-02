@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage._test_types import LineageCliTestCase
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waffle_shop, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop, run_sqb
 
 LINEAGE_CLI_TEST_CASES: list[LineageCliTestCase] = [
     LineageCliTestCase(

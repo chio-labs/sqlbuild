@@ -12,7 +12,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import ScenarioCleanupTarget
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def collect_scenario_cleanup_targets(

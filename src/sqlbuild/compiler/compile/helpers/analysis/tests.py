@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
+from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 
 
 def extract_expected_branch_column_names_with_sql_analysis(

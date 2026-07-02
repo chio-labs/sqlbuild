@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from sqlbuild.adapter.shared.models import LifeCycleEvent
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.planner.main.planning.model_execution_annotation import (
+    model_execution_annotation,
+)
+from sqlbuild.compiler.planner.main.planning.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
@@ -19,14 +23,13 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.shared.helpers.alignment import format_aligned_name_value, resolve_name_column_width
-from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.coded_errors import format_coded_error
-from sqlbuild.shared.helpers.materialization_labels import (
-    model_execution_annotation,
-    model_resource_type,
+from sqlbuild.shared.helpers.output.alignment import (
+    format_aligned_name_value,
+    resolve_name_column_width,
 )
-from sqlbuild.shared.helpers.summary_footer import format_summary_footer
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.shared.main.coded_error_text import format_coded_error
+from sqlbuild.shared.main.summary_footer import format_summary_footer
 
 
 @dataclass(frozen=True)

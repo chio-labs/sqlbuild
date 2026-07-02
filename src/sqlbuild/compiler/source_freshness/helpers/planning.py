@@ -21,7 +21,9 @@ from sqlbuild.compiler.source_freshness.main.data_version_hash import (
 from sqlbuild.compiler.source_freshness.main.normalization import (
     normalize_source_freshness_data_version,
 )
-from sqlbuild.compiler.source_freshness.main.observation import observe_configured_source_freshness
+from sqlbuild.compiler.source_freshness.main.observation import (
+    observe_configured_source_freshness,
+)
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
 from sqlbuild.compiler.source_freshness.main.record_equivalence import (
     source_freshness_records_equivalent,

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main import dbt_clone as dbt_clone_module
+from sqlbuild.cli.commands.main.commands import dbt_clone as dbt_clone_module
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.models import DbtCloneRun
@@ -23,11 +23,11 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
             expected_stderr_fragments=(
                 "Connected to snowflake. (0.01s)",
                 "Applied clone plan. (0.02s)",
+            ),
+            expected_stdout_fragments=(
                 "sqb clone  origin=master destination=dev  (1 relation)",
                 "1/1  cloned",
                 "RACING.STAGING.RACE__STG_HORSE -> RACING.DEV.RACE__STG_HORSE  OK  0.92s",
-            ),
-            expected_stdout_fragments=(
                 "Completed successfully.",
                 "CLONED=1",
                 "TOTAL=1",

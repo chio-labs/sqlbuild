@@ -26,7 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     write_dbt_phase11_missing_ref_model,
     write_dbt_phase11_star_lineage_models,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 

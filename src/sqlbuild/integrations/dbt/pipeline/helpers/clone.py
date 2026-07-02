@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
@@ -18,7 +19,6 @@ from sqlbuild.integrations.dbt.helpers.manifest.core import dbt_manifest_model_m
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtCloneOptions, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import RelationLookup
 
 
@@ -57,6 +57,13 @@ def parse_dbt_clone_options(args: tuple[str, ...]) -> DbtCloneOptions:
             value, index = _consume_one_value(args=args, index=index)
             dbt_args.extend((token, value))
             continue
+        if token == "select" and index + 1 < len(args) and not args[index + 1].startswith("--"):
+            selector: str = args[index + 1]
+            raise DbtInteropArgumentError(
+                "unexpected positional argument 'select'",
+                code="C350",
+                help=f"Use --select {selector} to choose dbt models for clone.",
+            )
         if not token.startswith("--"):
             raise DbtInteropArgumentError(
                 f"unexpected positional argument {token!r}",

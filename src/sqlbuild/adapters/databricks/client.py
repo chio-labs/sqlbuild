@@ -44,12 +44,18 @@ from sqlbuild.adapter.shared.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
+from sqlbuild.adapters.shared.helpers.node_source_watermarks import (
+    render_create_node_source_watermark_table_sql,
+    render_insert_node_source_watermark_records_sql,
+    render_read_latest_node_source_watermarks_sql,
+)
 from sqlbuild.adapters.shared.helpers.source_freshness import (
     render_insert_source_freshness_records_sql,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.shared.helpers.diagnostics_logging import log_sql
+from sqlbuild.shared.helpers.diagnostics.logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
@@ -83,7 +89,9 @@ class DatabricksAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.read_latest_sql import build_read_latest_sql
+        from sqlbuild.compiler.fingerprints.main.read_latest_sql import (
+            build_read_latest_sql,
+        )
 
         return build_read_latest_sql(
             database=database,
@@ -106,7 +114,9 @@ class DatabricksAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.source_freshness.main.read_latest_sql import build_read_latest_sql
+        from sqlbuild.compiler.source_freshness.main.read_latest_sql import (
+            build_read_latest_sql,
+        )
 
         return build_read_latest_sql(
             database=database,
@@ -123,6 +133,32 @@ class DatabricksAdapter(BaseAdapter):
         del database, schema
         return ()
 
+    def render_create_node_source_watermark_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        return render_create_node_source_watermark_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
+    def render_read_latest_node_source_watermarks_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        return render_read_latest_node_source_watermarks_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+        )
+
     def render_insert_source_freshness_records_sql(
         self,
         *,
@@ -131,6 +167,20 @@ class DatabricksAdapter(BaseAdapter):
         records: tuple[SourceFreshnessRecord, ...],
     ) -> str:
         return render_insert_source_freshness_records_sql(
+            database=database,
+            schema=schema,
+            records=records,
+            render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_insert_node_source_watermark_records_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        records: tuple[NodeSourceWatermarkRecord, ...],
+    ) -> str:
+        return render_insert_node_source_watermark_records_sql(
             database=database,
             schema=schema,
             records=records,
@@ -1367,7 +1417,9 @@ class DatabricksAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
+        from sqlbuild.compiler.fingerprints.main.create_table_sql import (
+            build_create_table_sql,
+        )
 
         return build_create_table_sql(
             database=database,

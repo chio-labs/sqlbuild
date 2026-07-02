@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main import playground as playground_command
-from sqlbuild.cli.commands.main.helpers.playground.copy import create_playground_project
-from sqlbuild.cli.commands.main.playground import run_playground
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.helpers.playground.copy import create_playground_project
+from sqlbuild.cli.commands.main.commands import playground as playground_command
+from sqlbuild.cli.commands.main.commands.playground import run_playground
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,
     RunPlaygroundTestCase,

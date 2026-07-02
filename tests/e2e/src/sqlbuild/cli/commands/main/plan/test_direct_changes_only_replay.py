@@ -19,7 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
     plan_changes_only_json,
     prepare_direct_changes_only_incremental_project,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     run_sqb,
 )

@@ -40,9 +40,11 @@ from sqlbuild.compiler.pipeline.helpers.python_stale_selection import (
     filter_python_node_names_for_selected_sql,
 )
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.main.prepare_versions import load_custom_prepare_version_functions
+from sqlbuild.compiler.pipeline.main.prepare_versions import (
+    load_custom_prepare_version_functions,
+)
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph, PythonPlanEntry
-from sqlbuild.compiler.planner.main.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.planner.types import StandardScopePruning, WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph

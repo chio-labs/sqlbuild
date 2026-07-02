@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main.entry import _main_with_dependencies, main
-from sqlbuild.cli.commands.main.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.main.commands.entry import _main_with_dependencies, main
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -2812,7 +2812,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.cli.commands.main.entry.supports_color", lambda: True)
+    monkeypatch.setattr("sqlbuild.cli.commands.main.commands.entry.supports_color", lambda: True)
 
     exit_code: int = main(test_case.argv)
     rendered_stderr: str = capsys.readouterr().err
@@ -2838,7 +2838,7 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.cli.commands.main.entry.supports_color", lambda: True)
+    monkeypatch.setattr("sqlbuild.cli.commands.main.commands.entry.supports_color", lambda: True)
 
     exit_code: int = main(test_case.argv)
     rendered_stderr: str = capsys.readouterr().err
@@ -2937,7 +2937,7 @@ def test_given_expected_cli_error_and_color_support_when_running_main_then_it_co
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.cli.commands.main.entry.supports_color", lambda: True)
+    monkeypatch.setattr("sqlbuild.cli.commands.main.commands.entry.supports_color", lambda: True)
 
     def run_query(
         project_dir: Path | None,

@@ -1,0 +1,1 @@
+"""Shared adapter public entrypoints."""

@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
+from sqlbuild.compiler.fingerprints.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
 )
@@ -18,7 +18,7 @@ from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.identity.standard import (
     build_standard_model_version_identities,
 )
-from sqlbuild.compiler.planner.main.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DependencyBaselinePlanEntry,
     ModelPlanEntry,

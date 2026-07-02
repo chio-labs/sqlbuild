@@ -5,14 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.main.playground import run_playground
-from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import skip_unless_dbt_is_runnable
+from sqlbuild.cli.commands.main.commands.playground import run_playground
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    skip_unless_dbt_is_runnable,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.playground._test_types import (
     DbtChangeAwarePlaygroundLifecycleTestCase,
     PythonNodesPlaygroundLifecycleTestCase,
     VirtualPlaygroundLifecycleTestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 
 @pytest.mark.parametrize(

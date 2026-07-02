@@ -15,7 +15,7 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
-from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context
+from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
 
 
 def execute_scenario_cleanup(

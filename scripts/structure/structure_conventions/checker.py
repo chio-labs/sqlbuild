@@ -31,6 +31,7 @@ from scripts.structure.structure_conventions.rules import (
     check_integration_adapter_helpers_module,
     check_integrations_package_structure,
     check_main_entry_name_collisions,
+    check_main_package_layout,
     check_model_declarations_outside_models,
     check_models_module,
     check_nested_runtime_package_direct_modules,
@@ -119,6 +120,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_constants_outside_constants(file_path, module))
         violations.extend(check_helpers_package_shape(actual_repo_root, file_path))
         violations.extend(check_helpers_package_layout(actual_repo_root, file_path))
+        violations.extend(check_main_package_layout(actual_repo_root, file_path))
         violations.extend(check_shared_package_structure(actual_repo_root, file_path))
         violations.extend(check_integrations_package_structure(actual_repo_root, file_path))
         violations.extend(check_integration_adapter_helpers_module(actual_repo_root, file_path))

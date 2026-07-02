@@ -53,8 +53,8 @@ from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.helpers.diagnostics_logging import diagnostics_context, log_debug_event
-from sqlbuild.shared.helpers.naming import (
+from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context, log_debug_event
+from sqlbuild.shared.helpers.identity.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )

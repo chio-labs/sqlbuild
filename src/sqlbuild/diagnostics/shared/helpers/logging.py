@@ -8,8 +8,8 @@ from sqlbuild.diagnostics.shared.constants import (
     FILE_LOG_DATE_FORMAT,
     SQL_SEPARATOR,
 )
-from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.diagnostics_logging import LOGGER_ROOT_NAME
+from sqlbuild.shared.helpers.diagnostics.logging import LOGGER_ROOT_NAME
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
 
 _SQL_EVENT_FIELD: str = "sqlbuild_sql"
 

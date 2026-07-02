@@ -7,7 +7,7 @@ from shutil import copytree
 from typing import Any
 
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     WAFFLE_SHOP_DIR,
     prepare_source_loader_strategies,
     stringify_warehouse_rows,
