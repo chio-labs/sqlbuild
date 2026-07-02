@@ -321,6 +321,57 @@ WARNING_TEST_CASES: list[NodeSourceWatermarkWarningBuildE2ETestCase] = [
         expected_stdout_fragments=("Source freshness", "source-stale models: a"),
         unexpected_stdout_fragments=("Warnings (1)", "Stale inputs detected"),
     ),
+    NodeSourceWatermarkWarningBuildE2ETestCase(
+        description="shared stale frontier table appears once for multiple selected roots",
+        project_name="node_watermark_warning_shared_stale_frontier",
+        models={
+            "models/b.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+            "models/a1.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+            "models/a2.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+        },
+        setup_build_command=("--no-color", "build", "--select", "b"),
+        plan_command=("--no-color", "plan", "--select", "a1", "--select", "a2"),
+        expected_stdout_fragments=(
+            "Warnings (1)",
+            "Stale inputs detected",
+            "Affected selected models:",
+            "a1",
+            "a2",
+            "Stale frontier tables:",
+            "b",
+            "Changed sources:",
+            "raw_orders",
+        ),
+        expected_stdout_occurrences={
+            "\n        b\n": 1,
+            "\n        raw_orders\n": 1,
+        },
+    ),
+    NodeSourceWatermarkWarningBuildE2ETestCase(
+        description="selected root behind refreshed frontier table emits grouped warning",
+        project_name="node_watermark_warning_root_behind_frontier",
+        models={
+            "models/b.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+            "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+        },
+        setup_build_command=("--no-color", "build"),
+        setup_after_source_advance_commands=(("--no-color", "build", "--select", "b"),),
+        plan_command=("--no-color", "plan", "--select", "a"),
+        expected_stdout_fragments=(
+            "Warnings (1)",
+            "Stale inputs detected",
+            "Affected selected models:",
+            "a",
+            "Stale frontier tables:",
+            "b",
+            "Changed sources:",
+            "raw_orders",
+        ),
+    ),
 ]
 
 
@@ -345,6 +396,13 @@ def test_given_source_advances_when_planning_selection_then_reports_expected_sta
         project_dir=project_dir,
     )
     replace_raw_orders_versions(db_path=db_path, versions=(2,))
+    setup_after_source_advance_command: tuple[str, ...]
+    for setup_after_source_advance_command in test_case.setup_after_source_advance_commands:
+        followup_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=setup_after_source_advance_command,
+            project_dir=project_dir,
+        )
+        assert followup_result.returncode == 0, followup_result.stdout + followup_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.plan_command,
@@ -359,3 +417,7 @@ def test_given_source_advances_when_planning_selection_then_reports_expected_sta
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_stdout_fragments:
         assert unexpected_fragment not in result.stdout
+    fragment: str
+    expected_count: int
+    for fragment, expected_count in test_case.expected_stdout_occurrences.items():
+        assert result.stdout.count(fragment) == expected_count

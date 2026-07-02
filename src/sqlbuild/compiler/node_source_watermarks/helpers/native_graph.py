@@ -118,6 +118,33 @@ def _nodes_by_key(*, plan: PlanOutput) -> dict[WatermarkGraphKey, WatermarkGraph
                 materialized=baseline_entry.resource_label != MaterializationType.VIEW.value,
             ),
         )
+    selected_key: CompiledObjectKey
+    for selected_key in plan.selected_keys:
+        if selected_key.resource_type != CompiledResourceType.MODEL:
+            continue
+        key = _graph_key(selected_key)
+        nodes.setdefault(
+            key,
+            WatermarkGraphNode(
+                key=key,
+                resource_kind=WatermarkGraphResourceKind.MODEL,
+                materialized=True,
+            ),
+        )
+    pruned_model_name: str
+    for pruned_model_name in _metadata_model_names(plan=plan, key="standard_pruned_model_names"):
+        key = WatermarkGraphKey(
+            node_type=CompiledResourceType.MODEL.value,
+            node_name=pruned_model_name,
+        )
+        nodes.setdefault(
+            key,
+            WatermarkGraphNode(
+                key=key,
+                resource_kind=WatermarkGraphResourceKind.MODEL,
+                materialized=True,
+            ),
+        )
     source_name: str
     for source_name in plan.source_map:
         key = WatermarkGraphKey(node_type=CompiledResourceType.SOURCE.value, node_name=source_name)
@@ -280,6 +307,13 @@ def _graph_key(key: CompiledObjectKey) -> WatermarkGraphKey:
 
 def _graph_key_from_planner_key(key: GraphNodeKey) -> WatermarkGraphKey:
     return WatermarkGraphKey(node_type=key.node_type, node_name=key.node_name)
+
+
+def _metadata_model_names(*, plan: PlanOutput, key: str) -> tuple[str, ...]:
+    value: object = plan.metadata.get(key, ())
+    if not isinstance(value, tuple | list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
 
 
 def _identity_from_graph_key(key: WatermarkGraphKey) -> NodeSourceWatermarkIdentity:

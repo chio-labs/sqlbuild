@@ -500,6 +500,14 @@ def build_execution_plan(
         if standard_reuse is not None
         else frozenset()
     )
+    if pruned_standard_model_names:
+        plan_output = replace(
+            plan_output,
+            metadata={
+                **plan_output.metadata,
+                "standard_pruned_model_names": pruned_standard_model_names,
+            },
+        )
     stale_out_of_selection_warnings: tuple[PlanWarning, ...] = (
         build_stale_out_of_selection_warnings(
             original_scope=original_scope_for_stale_warnings,
@@ -533,14 +541,6 @@ def build_execution_plan(
         plan_output = replace(
             plan_output,
             warnings=(*plan_output.warnings, *stale_out_of_selection_warnings),
-        )
-    if pruned_standard_model_names:
-        plan_output = replace(
-            plan_output,
-            metadata={
-                **plan_output.metadata,
-                "standard_pruned_model_names": pruned_standard_model_names,
-            },
         )
     if source_freshness is not None:
         standard_remaining_stale_model_names: tuple[str, ...] = tuple(

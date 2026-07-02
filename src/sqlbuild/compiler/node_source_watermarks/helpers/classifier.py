@@ -85,12 +85,14 @@ def classify_node_source_watermark_staleness(
             continue
         source_entry: SourceWatermarkEntry
         for source_entry in record.payload.sources:
+            source_identity: SourceFreshnessIdentity = _identity_from_entry(source_entry)
             classifications.append(
-                _classify_entry(
+                _classify_materialized_frontier_entry(
                     member=member,
-                    source_identity=_identity_from_entry(source_entry),
-                    entry=source_entry,
+                    source_identity=source_identity,
+                    frontier_entry=source_entry,
                     current_source_records=current_source_records,
+                    watermark_records=watermark_records,
                 )
             )
         unknown_entry: UnknownSourceWatermarkEntry
@@ -147,6 +149,52 @@ def _classify_source_against_record(
         reason=_MISSING_SOURCE_WATERMARK,
         current_record=current_source_records.get(source_identity),
     )
+
+
+def _classify_materialized_frontier_entry(
+    *,
+    member: WatermarkFrontierMember,
+    source_identity: SourceFreshnessIdentity,
+    frontier_entry: SourceWatermarkEntry,
+    current_source_records: Mapping[SourceFreshnessIdentity, SourceFreshnessRecord],
+    watermark_records: Mapping[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord],
+) -> NodeSourceWatermarkStaleness:
+    root_entry: SourceWatermarkEntry | None = _root_source_entry(
+        root_key=member.root_key,
+        source_identity=source_identity,
+        watermark_records=watermark_records,
+    )
+    if root_entry is not None and root_entry.data_version_hash != frontier_entry.data_version_hash:
+        return _classify_entry(
+            member=member,
+            source_identity=source_identity,
+            entry=root_entry,
+            current_source_records=current_source_records,
+        )
+    return _classify_entry(
+        member=member,
+        source_identity=source_identity,
+        entry=frontier_entry,
+        current_source_records=current_source_records,
+    )
+
+
+def _root_source_entry(
+    *,
+    root_key: WatermarkGraphKey,
+    source_identity: SourceFreshnessIdentity,
+    watermark_records: Mapping[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord],
+) -> SourceWatermarkEntry | None:
+    root_record: NodeSourceWatermarkRecord | None = watermark_records.get(
+        _identity_from_graph_key(root_key)
+    )
+    if root_record is None:
+        return None
+    source_entry: SourceWatermarkEntry
+    for source_entry in root_record.payload.sources:
+        if _identity_from_entry(source_entry) == source_identity:
+            return source_entry
+    return None
 
 
 def _classify_entry(
