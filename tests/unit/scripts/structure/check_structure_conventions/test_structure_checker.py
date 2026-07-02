@@ -1729,6 +1729,23 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC051",),
     ),
     CheckPathsTestCase(
+        description="flags describe relation calls inside a loop as N+1 risks",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/describe.py": dedent(
+                """
+                def describe(adapter, connection, relations) -> list[object]:
+                    columns: list[object] = []
+                    for relation in relations:
+                        columns.extend(adapter.describe_relation(connection, relation))
+                    return columns
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC051",),
+    ),
+    CheckPathsTestCase(
         description="allows warehouse metadata calls gathered once before a loop",
         repo_files=compliant_repo_files()
         | {

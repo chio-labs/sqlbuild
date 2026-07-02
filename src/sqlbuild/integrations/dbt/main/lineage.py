@@ -43,6 +43,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtColumnLineageTrace,
     DbtCombinedGraph,
+    DbtCombinedGraphKey,
     DbtCommandResult,
     DbtLineageArgs,
     DbtLineageGraph,
@@ -104,6 +105,16 @@ def build_dbt_lineage_output(
         adapter_name=adapter_name,
         discovered_inputs=discovered_inputs,
     )
+    column_lineage_selected_keys: frozenset[DbtCombinedGraphKey] = dbt_column_lineage_selected_keys(
+        project=project,
+        manifest=manifest,
+        graph=graph,
+        target=lineage_args.target,
+        direction=lineage_args.direction,
+        depth=lineage_args.depth,
+    )
+    if column_lineage_selected_keys:
+        _report_progress(on_progress, "Inspecting dbt source and seed schemas...")
     column_trace: DbtColumnLineageTrace | None = select_dbt_column_lineage_target(
         project=project,
         manifest=manifest,
@@ -115,14 +126,7 @@ def build_dbt_lineage_output(
             adapter=adapter,
             connection_config=connection_config,
             manifest=manifest,
-            selected_keys=dbt_column_lineage_selected_keys(
-                project=project,
-                manifest=manifest,
-                graph=graph,
-                target=lineage_args.target,
-                direction=lineage_args.direction,
-                depth=lineage_args.depth,
-            ),
+            selected_keys=column_lineage_selected_keys,
         ),
     )
     if column_trace is not None:

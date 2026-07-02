@@ -82,6 +82,12 @@ CLONE_OPTIONS_ERROR_TEST_CASES: tuple[DbtCloneOptionsErrorTestCase, ...] = (
         expected_error_fragment="unexpected positional argument 'tag:catalog'",
         expected_help_fragment="Use --select tag:catalog",
     ),
+    DbtCloneOptionsErrorTestCase(
+        description="rejects bare select keyword with selector hint",
+        args=("select", "tag:catalog"),
+        expected_error_fragment="unexpected positional argument 'select'",
+        expected_help_fragment="Use --select tag:catalog",
+    ),
 )
 
 CLONE_EXECUTE_TEST_CASES: tuple[DbtCloneExecuteTestCase, ...] = (
