@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.shared.types import FrameworkType
-from sqlbuild.compiler.source_freshness.main.shared.helpers.sql import (
+from sqlbuild.compiler.source_freshness.helpers.sql import (
     build_create_table_sql,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord

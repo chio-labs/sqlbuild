@@ -8,8 +8,8 @@ from io import StringIO
 import pytest
 
 from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.cli.commands.main.helpers.janitor.output import write_disabled, write_plan
-from sqlbuild.cli.commands.main.janitor import _confirm
+from sqlbuild.cli.commands.helpers.janitor.output import write_disabled, write_plan
+from sqlbuild.cli.commands.main.commands.janitor import _confirm
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
     JanitorPlan,

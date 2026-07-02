@@ -8,7 +8,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
-from sqlbuild.cli.commands.main.helpers.compile.target_writer import write_compile_target
+from sqlbuild.cli.commands.helpers.compile.target_writer import write_compile_target
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

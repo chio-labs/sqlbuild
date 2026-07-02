@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.shared.types import FrameworkType
-from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import (
+from sqlbuild.compiler.fingerprints.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
 )

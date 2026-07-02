@@ -11,7 +11,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     RemoveColumnSemanticsBuildE2ETestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import prepare_waffle_shop, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop, run_sqb
 
 
 @pytest.mark.parametrize(

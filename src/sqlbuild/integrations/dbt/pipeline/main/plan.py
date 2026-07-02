@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.connection_progress import build_connection_progress_reporter
+from sqlbuild.cli.commands.main.commands.connection_progress import (
+    build_connection_progress_reporter,
+)
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -248,6 +250,11 @@ def plan_dbt_interop_from_project(
             None if connection_progress is None else connection_progress.on_connection_error
         ),
         dependency_baseline_entries=(),
+        dbt_manifest=manifest,
+        dbt_graph=graph,
+        dbt_source_freshness=(
+            plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
+        ),
     )
     if sqlbuild_plan_output is not None:
         plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)

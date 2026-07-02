@@ -16,18 +16,20 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.pipeline.main.project_graph import build_project_graph_from_compiled_project
+from sqlbuild.compiler.pipeline.main.project_graph import (
+    build_project_graph_from_compiled_project,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.shared.helpers.naming import (
+from sqlbuild.shared.helpers.identity.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.virtual.executor.helpers.rewrite import relation_type_for_model
 from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
-from sqlbuild.virtual.state.main.model_version_lock import acquire_model_version_lease
-from sqlbuild.virtual.state.main.release_lock import release_state_lease
+from sqlbuild.virtual.state.main.locks.model_version_lock import acquire_model_version_lease
+from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,

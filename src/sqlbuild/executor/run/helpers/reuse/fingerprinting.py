@@ -15,7 +15,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
 )
-from sqlbuild.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 
 
 def try_write_fingerprint(

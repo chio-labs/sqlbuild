@@ -6,7 +6,7 @@ from typing import Any, NoReturn
 
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import SCENARIO_LOCAL_SQL_TRANSPILE_FAILED
-from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
+from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 
 
 def transpile_sql_for_local_duckdb(

@@ -44,7 +44,7 @@ from sqlbuild.compiler.planner.helpers.identity.standard import (
     build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.models import StandardModelVersionIdentities
-from sqlbuild.shared.helpers.hashing import compute_query_hash
+from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, SettingsConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry

@@ -7,9 +7,13 @@ from fnmatch import fnmatchcase
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.planner.main.planning.is_scenario_artifact_physical_name import (
+    is_scenario_artifact_physical_name,
+)
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
 from sqlbuild.executor.janitor.helpers.plan import (
@@ -37,8 +41,6 @@ from sqlbuild.executor.janitor.models import (
     JanitorStateBackupCandidate,
     JanitorVirtualStatePruneCandidate,
 )
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
-from sqlbuild.shared.helpers.scenario_artifact_names import is_scenario_artifact_physical_name
 from sqlbuild.shared.models import RelationLookup
 
 

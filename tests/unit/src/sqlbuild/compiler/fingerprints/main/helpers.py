@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.compiler.fingerprints.main.shared.helpers.sql import build_read_latest_sql
+from sqlbuild.compiler.fingerprints.helpers.sql import build_read_latest_sql
 
 
 class FakeFingerprintResult:

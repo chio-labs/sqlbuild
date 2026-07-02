@@ -11,12 +11,15 @@ from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import BuiltinAdapter
-from sqlbuild.cli.commands.main.connection_progress import build_connection_progress_reporter
-from sqlbuild.cli.commands.main.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
+from sqlbuild.cli.commands.main.commands.connection_progress import (
+    build_connection_progress_reporter,
+)
+from sqlbuild.cli.commands.main.commands.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.planner.models import (
@@ -51,6 +54,11 @@ from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_manifest_path,
     resolve_dbt_plan_options,
     resolve_dbt_vars_mapping,
+)
+from sqlbuild.integrations.dbt.helpers.runtime.node_source_watermarks import (
+    build_dbt_node_source_watermark_context,
+    record_dbt_successful_node_source_watermark,
+    write_dbt_node_source_watermark_records,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
@@ -108,8 +116,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropSkipReason,
     DbtInteropSqlbuildTestAction,
 )
-from sqlbuild.shared.helpers.cli_style import CliStyle
-from sqlbuild.shared.helpers.display import DisplayOptions
+from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.shared.helpers.output.display import DisplayOptions
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_effective_force
 
@@ -412,6 +420,11 @@ def execute_dbt_interop_from_project(
             dependency_baseline_entries=(),
             disable_scope_pruning=command == DbtInteropCommand.TEST,
             manifest=manifest if command == DbtInteropCommand.TEST else None,
+            dbt_manifest=manifest,
+            dbt_graph=graph,
+            dbt_source_freshness=(
+                plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
+            ),
         )
         if sqlbuild_plan_output is not None:
             plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)
@@ -477,9 +490,34 @@ def execute_dbt_interop_from_project(
 
     buffered_dbt_results: list[DbtNodeExecutionResult] = []
     dbt_state_connection: object | None = None
+    dbt_watermark_context: NodeSourceWatermarkExecutionContext | None = None
     dbt_query_sql_by_unique_id: dict[str, str] = {
         unique_id: model.query_sql for unique_id, model in manifest.models_by_unique_id.items()
     }
+    if (
+        plan.dbt_model_plan is not None
+        and plan.dbt_model_plan.source_freshness is not None
+        and plan.dbt_model_plan.source_freshness.observed_records
+    ):
+        watermark_connect_start: float = time.monotonic()
+        _report_progress(on_progress, "Reading dbt node source watermarks...")
+        dbt_watermark_connection: object = adapter.connect(connection_config)
+        try:
+            dbt_watermark_context = build_dbt_node_source_watermark_context(
+                manifest=manifest,
+                graph=graph,
+                source_records=plan.dbt_model_plan.source_freshness.observed_records,
+                adapter=adapter,
+                connection=dbt_watermark_connection,
+                state_database=project.effective_target_database,
+                state_schema=project.effective_target_schema,
+            )
+        finally:
+            adapter.close(dbt_watermark_connection)
+        _report_progress(
+            on_progress,
+            f"Read dbt node source watermarks. ({time.monotonic() - watermark_connect_start:.2f}s)",
+        )
     if project.settings.query_change_tracking and adapter_name != BuiltinAdapter.DUCKDB:
         state_connect_start: float = time.monotonic()
         _report_progress(on_progress, "Connecting to warehouse for dbt fingerprint writes...")
@@ -491,6 +529,13 @@ def execute_dbt_interop_from_project(
         )
 
     def record_dbt_node_result(result: DbtNodeExecutionResult) -> None:
+        record_dbt_successful_node_source_watermark(
+            context=dbt_watermark_context,
+            result=result,
+            manifest=manifest,
+            run_id=project.run_id,
+            node_version_hash=dbt_write_identity_hashes.get(dbt_graph_node_key(result.unique_id)),
+        )
         if not project.settings.query_change_tracking:
             return
         version_hash_override: str | None = dbt_write_identity_hashes.get(
@@ -563,6 +608,24 @@ def execute_dbt_interop_from_project(
         _report_progress(
             on_progress,
             f"Recorded dbt fingerprints. ({time.monotonic() - fingerprint_start:.2f}s)",
+        )
+    if dbt_execution.returncode == 0 and dbt_watermark_context is not None:
+        watermark_start: float = time.monotonic()
+        _report_progress(on_progress, "Recording dbt node source watermarks...")
+        watermark_connection: object = adapter.connect(connection_config)
+        try:
+            write_dbt_node_source_watermark_records(
+                context=dbt_watermark_context,
+                adapter=adapter,
+                connection=watermark_connection,
+                state_database=project.effective_target_database,
+                state_schema=project.effective_target_schema,
+            )
+        finally:
+            adapter.close(watermark_connection)
+        _report_progress(
+            on_progress,
+            f"Recorded dbt node source watermarks. ({time.monotonic() - watermark_start:.2f}s)",
         )
     warning: str
     style: CliStyle = CliStyle(use_color=use_color)
@@ -653,6 +716,11 @@ def execute_dbt_interop_from_project(
             dependency_baseline_entries=(),
             disable_scope_pruning=command == DbtInteropCommand.TEST,
             manifest=manifest if command == DbtInteropCommand.TEST else None,
+            dbt_manifest=manifest,
+            dbt_graph=graph,
+            dbt_source_freshness=(
+                plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
+            ),
         )
     if plan_output is None:
         exit_code: int = max(

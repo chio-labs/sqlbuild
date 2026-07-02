@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.clone.models import CloneItemResult
-from sqlbuild.executor.clone.types import CloneAction, CloneStatus
-from sqlbuild.shared.helpers.prephase_progress import (
+from sqlbuild.executor.clone.main.prephase_cause_annotation import (
     format_prephase_cause_annotation,
+)
+from sqlbuild.executor.clone.main.prephase_row_from_clone_item import (
     prephase_row_from_clone_item,
 )
+from sqlbuild.executor.clone.models import CloneItemResult
+from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.shared.models import PrephaseProgressRow
 from tests.unit.src.sqlbuild.shared.helpers._test_types import (
     PrephaseCauseAnnotationTestCase,

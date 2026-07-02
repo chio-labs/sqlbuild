@@ -8,27 +8,23 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.planner.main.graph_changes_only import (
+from sqlbuild.compiler.planner.main.planning.graph_changes_only import (
     build_graph_changes_only_propagation,
 )
-from sqlbuild.compiler.planner.main.graph_identity import build_expected_graph_identity_hashes
-from sqlbuild.compiler.planner.main.selection_staleness import (
-    classify_selection_staleness_warnings,
+from sqlbuild.compiler.planner.main.planning.graph_identity import (
+    build_expected_graph_identity_hashes,
 )
-from sqlbuild.compiler.planner.main.stale_warning_message import (
-    format_stale_upstream_warning_message,
-)
+from sqlbuild.compiler.planner.main.planning.local_node_planning import classify_local_node_plan
 from sqlbuild.compiler.planner.models import (
     GraphChangesOnlyPropagationInput,
     GraphChangesOnlyPropagationResult,
     GraphIdentityNode,
     GraphNodeKey,
-    SelectionStalenessGraph,
-    SelectionStalenessWarning,
 )
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.planning import (
@@ -44,12 +40,14 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
 from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
     dbt_graph_node_key,
     dbt_graph_node_upstream_deps,
-    dbt_selection_staleness_upstream_deps,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_graph_identity_nodes,
     compose_dbt_graph_version_hash,
     dbt_graph_identity_execution_order,
+)
+from sqlbuild.integrations.dbt.helpers.runtime.node_source_watermarks import (
+    build_dbt_node_source_watermark_staleness_warning,
 )
 from sqlbuild.integrations.dbt.helpers.runtime.source_freshness import (
     translate_manifest_sources_to_sqlbuild_sources,
@@ -72,8 +70,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.shared.helpers.local_node_planning import classify_local_node_plan
-from sqlbuild.shared.helpers.relation_lookup import build_relation_lookup
 from sqlbuild.shared.models import LocalNodePlanInput, LocalNodePlanOutcome, RelationLookup
 from sqlbuild.shared.types import LocalNodePlanAction, LocalNodePlanReason
 from sqlbuild.spec.models.source import SourceEntry
@@ -179,6 +175,23 @@ def build_dbt_model_planning_result(
             changed_source_unique_ids=changed_source_unique_ids,
             changed_seed_unique_ids=in_selection_changed_seed_unique_ids,
         )
+    stale_out_of_selection_warning_messages: tuple[str, ...] = ()
+    if graph is not None and (
+        node_source_watermark_warning := build_dbt_node_source_watermark_staleness_warning(
+            manifest=manifest,
+            graph=graph,
+            selected_unique_ids=tuple(sorted(selected_unique_ids_set)),
+            source_records=source_freshness.observed_records,
+            adapter=adapter,
+            connection=connection,
+            state_database=project.effective_target_database,
+            state_schema=project.effective_target_schema,
+        )
+    ):
+        stale_out_of_selection_warning_messages = (
+            *stale_out_of_selection_warning_messages,
+            node_source_watermark_warning,
+        )
     return DbtModelPlanningResult(
         entries=tuple(
             entries_by_unique_id[unique_id] for unique_id in sorted(entries_by_unique_id)
@@ -199,14 +212,7 @@ def build_dbt_model_planning_result(
                 if entry.action == DbtModelPlanAction.BLOCKED
             ),
         ),
-        stale_out_of_selection_warning_messages=_stale_out_of_selection_warning_messages(
-            manifest=manifest,
-            graph=graph,
-            selected_unique_ids=selected_unique_ids_set,
-            entries_by_unique_id=entries_by_unique_id,
-            changed_seed_unique_ids=changed_seed_unique_ids,
-            changed_source_unique_ids=changed_source_unique_ids,
-        ),
+        stale_out_of_selection_warning_messages=stale_out_of_selection_warning_messages,
         source_freshness=source_freshness,
         selected_unique_ids=tuple(sorted(selected_unique_ids_set)),
         changed_seed_unique_ids=tuple(sorted(in_selection_changed_seed_unique_ids)),
@@ -235,96 +241,12 @@ def _force_selected_current_entries(
     return forced
 
 
-def _stale_out_of_selection_warning_messages(
-    *,
-    manifest: DbtManifestIndex,
-    graph: DbtCombinedGraph | None,
-    selected_unique_ids: frozenset[str],
-    entries_by_unique_id: dict[str, DbtModelPlanEntry],
-    changed_seed_unique_ids: frozenset[str],
-    changed_source_unique_ids: frozenset[str],
-) -> tuple[str, ...]:
-    if graph is None:
-        return ()
-    neutral_graph: SelectionStalenessGraph = SelectionStalenessGraph(
-        upstream_deps=dbt_selection_staleness_upstream_deps(graph=graph, manifest=manifest),
-        selected_model_names=frozenset(
-            unique_id
-            for unique_id in selected_unique_ids
-            if unique_id in manifest.models_by_unique_id
-        ),
-        run_model_names=frozenset(
-            entry.unique_id
-            for entry in entries_by_unique_id.values()
-            if entry.action == DbtModelPlanAction.RUN and entry.unique_id in selected_unique_ids
-        ),
-        run_seed_names=changed_seed_unique_ids & selected_unique_ids,
-        run_source_names=frozenset(),
-        changed_model_names=frozenset(
-            entry.unique_id
-            for entry in entries_by_unique_id.values()
-            if _entry_is_own_changed(entry)
-        ),
-        changed_seed_names=changed_seed_unique_ids,
-        changed_source_names=changed_source_unique_ids,
-    )
-    return tuple(
-        _format_stale_warning(warning=warning, manifest=manifest)
-        for warning in classify_selection_staleness_warnings(neutral_graph)
-    )
-
-
-def _entry_is_own_changed(entry: DbtModelPlanEntry) -> bool:
-    return entry.action == DbtModelPlanAction.RUN and entry.reason in {
-        DbtModelPlanReason.FIRST_RUN,
-        DbtModelPlanReason.RELATION_MISSING,
-        DbtModelPlanReason.CHECKSUM_CHANGED,
-        DbtModelPlanReason.FULL_REFRESH,
-    }
-
-
 def _entry_version_mismatch(entry: DbtModelPlanEntry) -> bool:
     return (
         entry.previous_version_hash is not None
         and entry.expected_version_hash is not None
         and entry.previous_version_hash != entry.expected_version_hash
     )
-
-
-def _format_stale_warning(*, warning: SelectionStalenessWarning, manifest: DbtManifestIndex) -> str:
-    model_name: str = _display_trigger_name(unique_id=warning.model_name, manifest=manifest)
-    trigger_names: tuple[str, ...] = tuple(
-        _display_trigger_name(unique_id=trigger_name, manifest=manifest)
-        for trigger_name in warning.trigger_names
-    )
-    changed_seed_names: tuple[str, ...] = tuple(
-        _display_trigger_name(unique_id=trigger_name, manifest=manifest)
-        for trigger_name in warning.trigger_names
-        if trigger_name in manifest.seeds_by_unique_id
-    )
-    if changed_seed_names:
-        return format_stale_upstream_warning_message(
-            model_label="selected dbt model",
-            model_name=model_name,
-            trigger_label="seed(s)",
-            trigger_names=changed_seed_names,
-        )
-    return format_stale_upstream_warning_message(
-        model_label="selected dbt model",
-        model_name=model_name,
-        trigger_label="upstream(s)",
-        trigger_names=trigger_names,
-    )
-
-
-def _display_trigger_name(*, unique_id: str, manifest: DbtManifestIndex) -> str:
-    model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
-    if model is not None:
-        return model.name
-    seed: DbtManifestSeed | None = manifest.seeds_by_unique_id.get(unique_id)
-    if seed is not None:
-        return seed.name
-    return unique_id.split(".")[-1]
 
 
 def build_downstream_sqlbuild_model_names(
@@ -430,24 +352,7 @@ def _freshness_sources_by_unique_id(
     candidate_unique_ids: Sequence[str],
     graph: DbtCombinedGraph | None,
 ) -> dict[str, DbtManifestSource]:
-    if graph is None:
-        return manifest.sources_by_unique_id
-    source_unique_ids: set[str] = set()
-    unique_id: str
-    for unique_id in candidate_unique_ids:
-        key: DbtCombinedGraphKey
-        for key in expand_combined_upstream(dbt_model_graph_key(unique_id), graph.upstream_deps):
-            if (
-                key.owner == DbtCombinedGraphOwner.DBT
-                and key.resource_type == DbtCombinedGraphResourceType.SOURCE
-                and key.name in manifest.sources_by_unique_id
-            ):
-                source_unique_ids.add(key.name)
-    return {
-        unique_id: source
-        for unique_id, source in manifest.sources_by_unique_id.items()
-        if unique_id in source_unique_ids
-    }
+    return manifest.sources_by_unique_id
 
 
 def _apply_graph_propagation(

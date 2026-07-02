@@ -45,12 +45,17 @@ from sqlbuild.adapter.shared.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
+from sqlbuild.adapters.shared.helpers.node_source_watermarks import (
+    render_insert_node_source_watermark_records_sql,
+    render_read_latest_node_source_watermarks_sql,
+)
 from sqlbuild.adapters.shared.helpers.source_freshness import (
     render_insert_source_freshness_records_sql,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.shared.helpers.diagnostics_logging import log_sql
+from sqlbuild.shared.helpers.diagnostics.logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
@@ -501,7 +506,9 @@ class SqlServerAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.read_latest_sql import build_read_latest_sql
+        from sqlbuild.compiler.fingerprints.main.read_latest_sql import (
+            build_read_latest_sql,
+        )
 
         return build_read_latest_sql(
             database=database,
@@ -572,6 +579,82 @@ class SqlServerAdapter(BaseAdapter):
         records: tuple[SourceFreshnessRecord, ...],
     ) -> str:
         return render_insert_source_freshness_records_sql(
+            database=database,
+            schema=schema,
+            records=records,
+            render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_create_node_source_watermark_table_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        from sqlbuild.compiler.node_source_watermarks.constants import (
+            COLUMN_CREATED_AT,
+            COLUMN_NODE_NAME,
+            COLUMN_NODE_TYPE,
+            COLUMN_NODE_VERSION_HASH,
+            COLUMN_RUN_ID,
+            COLUMN_TARGET_DATABASE,
+            COLUMN_TARGET_NAME,
+            COLUMN_TARGET_SCHEMA,
+            COLUMN_WATERMARKS_JSON_B64,
+            NODE_SOURCE_WATERMARK_TABLE_NAME,
+        )
+
+        table_name: str | None = self.render_qualified_name(
+            database=database,
+            schema=schema,
+            name=NODE_SOURCE_WATERMARK_TABLE_NAME,
+        )
+        if table_name is None:
+            return ""
+        create_sql: str = (
+            f"CREATE TABLE {table_name} ("
+            f"{COLUMN_NODE_TYPE} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_NODE_NAME} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_TARGET_DATABASE} NVARCHAR(450), "
+            f"{COLUMN_TARGET_SCHEMA} NVARCHAR(450), "
+            f"{COLUMN_TARGET_NAME} NVARCHAR(450), "
+            f"{COLUMN_RUN_ID} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_NODE_VERSION_HASH} NVARCHAR(450) NOT NULL, "
+            f"{COLUMN_WATERMARKS_JSON_B64} NVARCHAR(MAX) NOT NULL, "
+            f"{COLUMN_CREATED_AT} DATETIME2 NOT NULL"
+            f")"
+        )
+        escaped_schema: str = schema.replace("'", "''")
+        escaped_table: str = NODE_SOURCE_WATERMARK_TABLE_NAME.replace("'", "''")
+        exists_sql: str = (
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        )
+        if database is not None:
+            escaped_database: str = database.replace("'", "''")
+            exists_sql += f" AND table_catalog = '{escaped_database}'"
+        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
+
+    def render_read_latest_node_source_watermarks_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> str:
+        return render_read_latest_node_source_watermarks_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+        )
+
+    def render_insert_node_source_watermark_records_sql(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+        records: tuple[NodeSourceWatermarkRecord, ...],
+    ) -> str:
+        return render_insert_node_source_watermark_records_sql(
             database=database,
             schema=schema,
             records=records,
@@ -660,7 +743,9 @@ class SqlServerAdapter(BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.source_freshness.main.read_latest_sql import build_read_latest_sql
+        from sqlbuild.compiler.source_freshness.main.read_latest_sql import (
+            build_read_latest_sql,
+        )
 
         return build_read_latest_sql(
             database=database,

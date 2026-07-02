@@ -17,7 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     skip_unless_dbt_is_runnable,
     write_dbt_diff_orders_model,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 

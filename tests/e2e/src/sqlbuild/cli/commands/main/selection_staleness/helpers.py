@@ -5,14 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import skip_unless_dbt_is_runnable
+from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    skip_unless_dbt_is_runnable,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.selection_staleness._test_types import (
     SelectionStalenessE2ETestCase,
     SelectionStalenessEngine,
     SelectionStalenessEngineE2ETestCase,
     SelectionStalenessEngineOverride,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     query_duckdb,
     run_sqb,

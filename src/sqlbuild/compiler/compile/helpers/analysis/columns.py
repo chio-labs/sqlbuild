@@ -188,9 +188,9 @@ from sqlbuild.shared.constants import (
 from sqlbuild.shared.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
 )
-from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
-from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
-from sqlbuild.shared.helpers.sql_reference_patterns import (
+from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
+from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
+from sqlbuild.shared.helpers.sql.reference_patterns import (
     quoted_reference_call_pattern,
     reference_call_prefix_pattern_text,
 )

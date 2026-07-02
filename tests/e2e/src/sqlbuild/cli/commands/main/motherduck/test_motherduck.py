@@ -14,7 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.motherduck.helpers import (
     prepare_motherduck_build_project,
     relation_name,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 
 @pytest.mark.parametrize(

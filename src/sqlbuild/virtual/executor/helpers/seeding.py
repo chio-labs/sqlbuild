@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, PlanAction
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
-from sqlbuild.shared.helpers.naming import (
+from sqlbuild.shared.helpers.identity.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )

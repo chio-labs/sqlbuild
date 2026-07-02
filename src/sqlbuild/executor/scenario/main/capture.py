@@ -33,8 +33,8 @@ from sqlbuild.shared.constants import (
     SCENARIO_EXEC_CAPTURE_FAILED,
     SCENARIO_EXEC_CAPTURE_INTERNAL,
 )
-from sqlbuild.shared.helpers.coded_errors import error_code
-from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
+from sqlbuild.shared.main.error_code import error_code
 
 
 def execute_scenario_snapshot_capture(

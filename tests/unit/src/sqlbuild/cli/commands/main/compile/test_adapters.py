@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.main.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.main.shared.helpers.config.adapters import resolve_adapter
+from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, resolve_effective_adapter_name
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     ResolveAdapterErrorTestCase,

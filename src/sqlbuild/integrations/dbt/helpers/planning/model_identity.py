@@ -6,7 +6,9 @@ import hashlib
 import json
 from collections.abc import Sequence
 
-from sqlbuild.compiler.planner.main.graph_write_identity import build_graph_write_identity_hashes
+from sqlbuild.compiler.planner.main.planning.graph_write_identity import (
+    build_graph_write_identity_hashes,
+)
 from sqlbuild.compiler.planner.models import GraphIdentityNode, GraphNodeKey
 from sqlbuild.compiler.planner.types import GraphResourceKind
 from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (

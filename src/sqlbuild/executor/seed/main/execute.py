@@ -12,7 +12,7 @@ from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.seed.constants import SEED_LOAD_FAILED_CODE
 from sqlbuild.executor.seed.helpers.fingerprinting import try_write_seed_fingerprint
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def execute_seed(

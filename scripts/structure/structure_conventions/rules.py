@@ -31,17 +31,21 @@ _WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
         "relation_exists",
         "get_columns",
         "get_all_columns",
+        "describe_relation",
         "list_functions",
     }
 )
 _SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
-    "src/sqlbuild/shared/helpers/relation_lookup.py": "shared single-query lookup builder",
+    "src/sqlbuild/adapter/shared/main/relation_lookup.py": "shared single-query lookup builder",
     "src/sqlbuild/executor/janitor/helpers/plan.py": "one list_relations per database",
     "src/sqlbuild/integrations/dbt/helpers/planning/model_planning.py": (
         "one list_relations per database"
     ),
     "src/sqlbuild/compiler/planner/helpers/output/plan_entry.py": (
         "one get_all_columns per database"
+    ),
+    "src/sqlbuild/integrations/dbt/helpers/lineage/columns.py": (
+        "one get_all_columns per selected dbt source/seed database-schema group"
     ),
     "src/sqlbuild/executor/pipeline/helpers/testing.py": (
         "list_functions grouped per database, schema, and name batch"
@@ -77,6 +81,8 @@ _SC045_ALLOWED_PATH_MARKERS_BY_TERM: dict[str, tuple[str, ...]] = {
 }
 _MAX_SOURCE_FILE_LINES: int = 2000
 _MAX_HELPER_FLAT_MODULES: int = 10
+_MAX_MAIN_FLAT_MODULES: int = 20
+_MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "helpers", "shared"})
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/client.py",
     "src/sqlbuild/adapters/shared/classes/*.py",
@@ -88,7 +94,7 @@ _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
     "src/sqlbuild/integrations/dbt/helpers/manifest/compile_refs.py",
 )
 _SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS: tuple[str, ...] = (
-    "src/sqlbuild/shared/helpers/selector_expansion.py",
+    "src/sqlbuild/compiler/planner/main/planning/selector_expansion.py",
 )
 _SC056_COMMENT_ALLOWED_PREFIXES: tuple[str, ...] = (
     "#!",
@@ -191,7 +197,9 @@ def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> li
 
     violations: list[Violation] = []
     for node in ast.walk(module):
-        if isinstance(node, ast.ImportFrom) and node.module == "sqlbuild.shared.helpers.colors":
+        if isinstance(node, ast.ImportFrom) and node.module == (
+            "sqlbuild.shared.helpers.output.colors"
+        ):
             imported_names: set[str] = {alias.name for alias in node.names}
             raw_names: set[str] = imported_names - {"supports_color"}
             if raw_names:
@@ -203,13 +211,13 @@ def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> li
                         message=(
                             "runtime output modules must use CliStyle instead of raw color "
                             "helpers; only supports_color may be imported from "
-                            "sqlbuild.shared.helpers.colors"
+                            "sqlbuild.shared.helpers.output.colors"
                         ),
                     )
                 )
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "sqlbuild.shared.helpers.colors":
+                if alias.name == "sqlbuild.shared.helpers.output.colors":
                     violations.append(
                         Violation(
                             code="SC041",
@@ -217,7 +225,7 @@ def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> li
                             line=node.lineno,
                             message=(
                                 "runtime output modules must not import "
-                                "sqlbuild.shared.helpers.colors directly; use CliStyle"
+                                "sqlbuild.shared.helpers.output.colors directly; use CliStyle"
                             ),
                         )
                     )
@@ -385,48 +393,143 @@ def check_source_file_line_count(repo_root: Path, file_path: Path) -> list[Viola
 def check_helpers_package_layout(repo_root: Path, file_path: Path) -> list[Violation]:
     """Enforce consistent flat-or-subfolder helper package layout."""
 
-    if file_path.name != "__init__.py" or file_path.parent.name != "helpers":
+    package_dir: Path | None = _role_package_layout_dir(file_path=file_path, package_name="helpers")
+    if package_dir is None:
         return []
 
+    return _role_package_layout_violations(
+        package_dir=package_dir,
+        file_path=file_path,
+        package_name="helpers",
+        mixed_code="SC049",
+        too_many_code="SC050",
+        module_label="helper",
+        max_flat_modules=_MAX_HELPER_FLAT_MODULES,
+        ignored_subfolder_names=frozenset(),
+    )
+
+
+def check_main_package_layout(repo_root: Path, file_path: Path) -> list[Violation]:
+    """Enforce consistent flat-or-subfolder main package layout."""
+
+    support_violation: Violation | None = _main_support_folder_violation(
+        repo_root=repo_root,
+        file_path=file_path,
+    )
+    package_dir: Path | None = _role_package_layout_dir(file_path=file_path, package_name="main")
+    if package_dir is None:
+        return [support_violation] if support_violation is not None else []
+
+    violations: list[Violation] = _role_package_layout_violations(
+        package_dir=package_dir,
+        file_path=file_path,
+        package_name="main",
+        mixed_code="SC059",
+        too_many_code="SC060",
+        module_label="entry",
+        max_flat_modules=_MAX_MAIN_FLAT_MODULES,
+        ignored_subfolder_names=_MAIN_SUPPORT_FOLDER_NAMES,
+    )
+    if support_violation is not None:
+        violations.append(support_violation)
+    return violations
+
+
+def _main_support_folder_violation(*, repo_root: Path, file_path: Path) -> Violation | None:
+    relative_path: Path = file_path.resolve().relative_to(repo_root.resolve())
+    parts: tuple[str, ...] = relative_path.parts
+    index: int
+    for index, part in enumerate(parts[:-1]):
+        if (
+            part == "main"
+            and index + 1 < len(parts)
+            and parts[index + 1] in _MAIN_SUPPORT_FOLDER_NAMES
+        ):
+            return Violation(
+                code="SC061",
+                path=file_path,
+                line=None,
+                message=(
+                    "main package must not contain support folders like helpers/, shared/, "
+                    "or classes/; move support code beside main/"
+                ),
+            )
+    return None
+
+
+def _role_package_layout_violations(
+    *,
+    package_dir: Path,
+    file_path: Path,
+    package_name: str,
+    mixed_code: str,
+    too_many_code: str,
+    module_label: str,
+    max_flat_modules: int,
+    ignored_subfolder_names: frozenset[str],
+) -> list[Violation]:
     direct_modules: list[Path] = sorted(
         child
-        for child in file_path.parent.glob("*.py")
+        for child in package_dir.glob("*.py")
         if child.name != "__init__.py" and child.is_file()
     )
     concern_subfolders: list[Path] = sorted(
         child
-        for child in file_path.parent.iterdir()
-        if child.is_dir() and child.name != "__pycache__"
+        for child in package_dir.iterdir()
+        if child.is_dir()
+        and child.name != "__pycache__"
+        and child.name not in ignored_subfolder_names
     )
 
     violations: list[Violation] = []
     if direct_modules and concern_subfolders:
         violations.append(
             Violation(
-                code="SC049",
+                code=mixed_code,
                 path=file_path,
                 line=None,
                 message=(
-                    "helpers package mixes flat helper modules with concern subfolders; "
-                    "use either flat files or move all helper modules into subfolders"
+                    f"{package_name} package mixes flat {module_label} modules with "
+                    "concern subfolders; use either flat files or move all modules into "
+                    "subfolders"
                 ),
             )
         )
-    if len(direct_modules) > _MAX_HELPER_FLAT_MODULES:
+    if len(direct_modules) > max_flat_modules:
         violations.append(
             Violation(
-                code="SC050",
+                code=too_many_code,
                 path=file_path,
                 line=None,
                 message=(
-                    f"helpers package has too many direct helper modules "
-                    f"({len(direct_modules)} > {_MAX_HELPER_FLAT_MODULES}); organize the "
-                    "entire helpers package into concern subfolders consistently, not just "
+                    f"{package_name} package has too many direct {module_label} modules "
+                    f"({len(direct_modules)} > {max_flat_modules}); organize the "
+                    f"entire {package_name} package into concern subfolders consistently, not just "
                     "one file"
                 ),
             )
         )
     return violations
+
+
+def _role_package_layout_dir(*, file_path: Path, package_name: str) -> Path | None:
+    if file_path.parent.name == package_name:
+        package_dir: Path = file_path.parent
+    elif file_path.parent.parent.name == package_name:
+        package_dir = file_path.parent.parent
+    else:
+        return None
+    init_file: Path = package_dir / "__init__.py"
+    if init_file.exists():
+        return package_dir if file_path == init_file else None
+    direct_modules: list[Path] = sorted(
+        child
+        for child in package_dir.glob("*.py")
+        if child.name != "__init__.py" and child.is_file()
+    )
+    if not direct_modules:
+        return None
+    return package_dir if file_path == direct_modules[0] else None
 
 
 def check_banned_generic_filename(file_path: Path) -> list[Violation]:
@@ -595,6 +698,8 @@ def check_nested_runtime_package_direct_modules(
         return []
     if _is_direct_child_of_main_package(relative_parts):
         return []
+    if _is_within_main_package(relative_parts):
+        return []
     if any(
         part in {"helpers", "classes", "models", "types", "constants", "exceptions"}
         for part in relative_parts[2:-1]
@@ -657,6 +762,8 @@ def check_nested_runtime_package_direct_subpackages(
 
     parent_package_name = parent_package_parts[-1]
     direct_child_name = relative_parts[-2]
+    if _is_within_main_package(relative_parts):
+        return []
     if parent_package_name in {"helpers", "classes", "models", "types", "constants", "exceptions"}:
         return []
     if direct_child_name in {
@@ -1132,7 +1239,7 @@ def check_no_ad_hoc_selector_plus_parsing(file_path: Path, module: ast.Module) -
                 line=node.lineno,
                 message=(
                     "planner and dbt selector code must parse + markers with "
-                    "sqlbuild.shared.helpers.selector_expansion.split_selector_expansion"
+                    "sqlbuild.compiler.planner.main.planning.selector_expansion.split_selector_expansion"
                 ),
             )
         )
@@ -1832,6 +1939,8 @@ def check_no_sibling_package_imports(
             continue
 
         sibling_name = imported_parts[len(parent_package_parts)]
+        if parent_package_parts[-1] == "main" and sibling_name in {"helpers", "shared"}:
+            continue
         if sibling_name == "helpers" and current_subpackage_name in {
             "classes",
             "main",
@@ -1885,6 +1994,8 @@ def check_no_sibling_package_imports(
                 continue
 
             sibling_name = imported_parts[len(parent_package_parts)]
+            if parent_package_parts[-1] == "main" and sibling_name in {"helpers", "shared"}:
+                continue
             if sibling_name == "helpers" and current_subpackage_name in {
                 "classes",
                 "main",
@@ -2488,6 +2599,10 @@ def _is_direct_child_of_main_package(relative_parts: tuple[str, ...]) -> bool:
     )
 
 
+def _is_within_main_package(relative_parts: tuple[str, ...]) -> bool:
+    return "main" in relative_parts[2:-1] and relative_parts[-1] != "main.py"
+
+
 def _is_orchestration_integration_public_module(relative_parts: tuple[str, ...]) -> bool:
     return (
         len(relative_parts) == 5
@@ -2552,6 +2667,12 @@ def _is_allowed_sibling_public_surface(
     public_surface_names: frozenset[str] = frozenset({"models", "types", "constants", "exceptions"})
     if (
         len(imported_parts) == len(parent_package_parts) + 2
+        and imported_parts[len(parent_package_parts)] == "main"
+        and imported_parts[-1] != "main"
+    ):
+        return True
+    if (
+        len(imported_parts) == len(parent_package_parts) + 3
         and imported_parts[len(parent_package_parts)] == "main"
         and imported_parts[-1] != "main"
     ):

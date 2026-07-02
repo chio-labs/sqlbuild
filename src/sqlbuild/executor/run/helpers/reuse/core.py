@@ -12,7 +12,7 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import RelationReusePlan
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def _origin_is_transient(

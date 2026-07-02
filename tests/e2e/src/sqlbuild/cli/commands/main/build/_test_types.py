@@ -93,6 +93,29 @@ class SelectionAwareStalenessBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class NodeSourceWatermarkBuildE2ETestCase:
+    description: str
+    project_name: str
+    expected_source_versions_by_node: dict[str, tuple[str, ...]]
+    expected_source_kinds_by_node: dict[str, tuple[str, ...]]
+    expected_unknown_reasons_by_node: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    expected_absent_nodes: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class NodeSourceWatermarkWarningBuildE2ETestCase:
+    description: str
+    project_name: str
+    models: dict[str, str]
+    setup_build_command: tuple[str, ...]
+    plan_command: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_stdout_occurrences: dict[str, int] = field(default_factory=dict)
+    setup_after_source_advance_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class PythonBuildE2ETestCase:
     """Test case for direct build Python-node behavior."""
 

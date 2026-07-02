@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.render.macros import expand_sql_macros
+from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models.core import (
     LoadedMacro,
     MacroContext,
@@ -23,7 +24,6 @@ from sqlbuild.compiler.shared.helpers.sql_scanning import (
     skip_line_comment,
     skip_quoted_text,
 )
-from sqlbuild.shared.helpers.project_var_values import render_project_var_text
 
 _CONTEXT: str = "SQL interpolation"
 

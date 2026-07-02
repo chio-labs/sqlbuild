@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_destination_from_physical_relation,
     build_virtual_destination,

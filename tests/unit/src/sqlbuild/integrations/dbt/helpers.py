@@ -18,7 +18,7 @@ from sqlbuild.adapter.shared.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.cli.commands.main.helpers.diff.output import has_diff_failures
+from sqlbuild.cli.commands.helpers.diff.output import has_diff_failures
 from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
@@ -79,7 +79,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtLineageGraph,
     DbtLsNode,
-    DbtModelPlanEntry,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
     DbtDiffOptions,
@@ -89,8 +88,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
     DbtLineageDirection,
-    DbtModelPlanAction,
-    DbtModelPlanReason,
 )
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry
@@ -1005,94 +1002,6 @@ def build_manifest_source_node(
     return node
 
 
-def build_dbt_selection_staleness_manifest(
-    *,
-    model_unique_ids: tuple[str, ...],
-    seed_unique_ids: tuple[str, ...],
-    source_unique_ids: tuple[str, ...],
-) -> DbtManifestIndex:
-    """Build a minimal manifest for dbt selection staleness adapter tests."""
-
-    return build_dbt_manifest_index(
-        raw_data=build_manifest_data(
-            nodes=(
-                *(
-                    build_manifest_model_node(
-                        unique_id=unique_id,
-                        package_name="analytics",
-                        name=unique_id.rsplit(".", 1)[-1],
-                        relation_name=unique_id.rsplit(".", 1)[-1],
-                        checksum="same_hash",
-                    )
-                    for unique_id in model_unique_ids
-                ),
-                *(
-                    build_manifest_seed_node(
-                        unique_id=unique_id,
-                        name=unique_id.rsplit(".", 1)[-1],
-                    )
-                    for unique_id in seed_unique_ids
-                ),
-            ),
-            sources=tuple(
-                build_manifest_source_node(
-                    unique_id=unique_id,
-                    source_name=unique_id.split(".")[-2],
-                    name=unique_id.rsplit(".", 1)[-1],
-                )
-                for unique_id in source_unique_ids
-            ),
-        )
-    )
-
-
-def build_dbt_selection_staleness_graph(
-    *, upstream_deps: dict[str, tuple[str, ...]]
-) -> DbtCombinedGraph:
-    """Build a combined dbt graph from unique-id upstream dependencies."""
-
-    mapped_upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]] = {
-        build_dbt_selection_staleness_key(unique_id): tuple(
-            build_dbt_selection_staleness_key(upstream_unique_id)
-            for upstream_unique_id in upstream_unique_ids
-        )
-        for unique_id, upstream_unique_ids in upstream_deps.items()
-    }
-    nodes: frozenset[DbtCombinedGraphKey] = frozenset(
-        key for item in mapped_upstream_deps.items() for key in (item[0], *item[1])
-    )
-    return DbtCombinedGraph(nodes=nodes, upstream_deps=mapped_upstream_deps, downstream_deps={})
-
-
-def build_dbt_selection_staleness_key(unique_id: str) -> DbtCombinedGraphKey:
-    """Build the combined graph key shape used by dbt model planning."""
-
-    resource_type: DbtCombinedGraphResourceType = DbtCombinedGraphResourceType.MODEL
-    if unique_id.startswith(("seed.", "source.")):
-        resource_type = DbtCombinedGraphResourceType.SOURCE
-    return DbtCombinedGraphKey(
-        owner=DbtCombinedGraphOwner.DBT,
-        resource_type=resource_type,
-        name=unique_id,
-    )
-
-
-def build_dbt_selection_staleness_entry(
-    *, unique_id: str, action: DbtModelPlanAction, reason: DbtModelPlanReason
-) -> DbtModelPlanEntry:
-    """Build a dbt model plan entry for staleness warning tests."""
-
-    name: str = unique_id.rsplit(".", 1)[-1]
-    return DbtModelPlanEntry(
-        unique_id=unique_id,
-        package_name="analytics",
-        name=name,
-        action=action,
-        reason=reason,
-        relation_name=name,
-    )
-
-
 def build_manifest_seed_node(
     *,
     unique_id: str,
@@ -1485,9 +1394,13 @@ class FakeLineageSourceSchemaAdapter(BaseAdapter):
 
     def __init__(self, columns_by_relation: dict[str, tuple[ColumnInfo, ...]]) -> None:
         self.columns_by_relation: dict[str, tuple[ColumnInfo, ...]] = columns_by_relation
-        self.described_relations: list[str] = []
+        self.connect_count: int = 0
+        self.get_all_columns_calls: list[
+            tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
+        ] = []
 
     def connect(self, config: dict[str, object]) -> object:
+        self.connect_count += 1
         return object()
 
     def execute(self, connection: object, sql: str) -> object:
@@ -1499,12 +1412,22 @@ class FakeLineageSourceSchemaAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         return None
 
-    def describe_relation(self, connection: object, relation: str) -> tuple[ColumnInfo, ...]:
-        self.described_relations.append(relation)
-        columns: tuple[ColumnInfo, ...] | None = self.columns_by_relation.get(relation)
-        if columns is None:
-            raise RuntimeError(f"missing relation {relation}")
-        return columns
+    def get_all_columns(
+        self,
+        connection: object,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> dict[str, tuple[ColumnInfo, ...]]:
+        del connection
+        self.get_all_columns_calls.append((database, schemas, names))
+        requested_names: frozenset[str] | None = frozenset(names) if names is not None else None
+        return {
+            relation_name: columns
+            for relation_name, columns in self.columns_by_relation.items()
+            if requested_names is None or relation_name in requested_names
+        }
 
 
 class FakeReusePlanAdapter(BaseAdapter):

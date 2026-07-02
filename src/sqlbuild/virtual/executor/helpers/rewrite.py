@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSeed,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.shared.helpers.naming import resolve_qualified_name_parts
+from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
 

@@ -25,7 +25,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtLineageDirection,
 )
-from sqlbuild.shared.helpers.graph_algorithms import transitive_closure
+from sqlbuild.shared.helpers.graph.algorithms import transitive_closure
 
 
 def select_dbt_lineage_target(

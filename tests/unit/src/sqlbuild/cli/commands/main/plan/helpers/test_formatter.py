@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from sqlbuild.cli.commands.main.helpers.plan.formatter import format_plan
+from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult, CursorBounds
@@ -24,7 +24,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonRunPhase,
 )
-from sqlbuild.shared.helpers.display import DisplayOptions
+from sqlbuild.shared.helpers.output.display import DisplayOptions
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers._test_types import (
     FormatPlanColorTestCase,

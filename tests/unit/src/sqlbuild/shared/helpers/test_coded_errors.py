@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.shared.helpers.coded_errors import format_coded_error
+from sqlbuild.shared.main.coded_error_text import format_coded_error
 from tests.unit.src.sqlbuild.shared.helpers._test_types import FormatCodedErrorTestCase
 
 FORMAT_CODED_ERROR_TEST_CASES: list[FormatCodedErrorTestCase] = [

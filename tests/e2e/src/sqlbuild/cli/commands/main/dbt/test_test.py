@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     write_qualified_dbt_source_sqlbuild_unit_test,
     write_unmocked_snapshot_boundary_dbt_sqlbuild_unit_test,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     query_duckdb,
     run_sqb,
     table_exists,

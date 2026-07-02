@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
 from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_locations
 from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import (

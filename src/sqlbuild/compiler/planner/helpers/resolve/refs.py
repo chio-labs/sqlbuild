@@ -14,8 +14,8 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.shared.helpers.sql_scanning import find_matching_paren
-from sqlbuild.shared.helpers.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.helpers.sql_reference_patterns import (
+from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
+from sqlbuild.shared.helpers.sql.reference_patterns import (
     quoted_reference_call_pattern,
     reference_call_prefix_pattern_text,
 )

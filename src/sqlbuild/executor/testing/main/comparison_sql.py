@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
-from sqlbuild.executor.testing.main.helpers.comparison_sql import (
+from sqlbuild.executor.testing.helpers.comparison_sql import (
     format_sql,
     lift_step_ctes,
     unique_cte_suffix,

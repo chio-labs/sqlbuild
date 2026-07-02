@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import dbt_executable
-from tests.e2e.src.sqlbuild.cli.commands.main.shared.helpers import (
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     run_sqb,

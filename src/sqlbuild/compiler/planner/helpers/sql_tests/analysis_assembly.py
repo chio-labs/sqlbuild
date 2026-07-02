@@ -19,8 +19,8 @@ from sqlbuild.compiler.planner.helpers.scenario.relations import (
     _replace_relation_markers_in_polyglot_dict,
 )
 from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql
-from sqlbuild.shared.helpers.diagnostics_logging import log_debug_event
-from sqlbuild.shared.helpers.polyglot import import_polyglot_sql
+from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
+from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 from sqlbuild.shared.types import SqlReferenceKind
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")

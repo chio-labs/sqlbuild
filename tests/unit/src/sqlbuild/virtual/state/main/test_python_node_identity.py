@@ -4,10 +4,10 @@ import pytest
 
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
-from sqlbuild.virtual.state.main.python_node_identity_read import (
+from sqlbuild.virtual.state.main.python_identities.python_node_identity_read import (
     read_virtual_python_identity_fingerprints,
 )
-from sqlbuild.virtual.state.main.python_node_identity_write import (
+from sqlbuild.virtual.state.main.python_identities.python_node_identity_write import (
     try_record_virtual_python_node_identity,
 )
 from tests.unit.src.sqlbuild.virtual.state.main._test_types import (

@@ -5,13 +5,26 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
+from sqlbuild.compiler.node_source_watermarks.constants import NODE_SOURCE_WATERMARK_TABLE_NAME
+from sqlbuild.compiler.node_source_watermarks.main.read import read_latest_node_source_watermarks
+from sqlbuild.compiler.node_source_watermarks.main.write import write_node_source_watermark_records
+from sqlbuild.compiler.node_source_watermarks.models import (
+    NodeSourceWatermarkIdentity,
+    NodeSourceWatermarkRecord,
+    NodeSourceWatermarkSet,
+)
 from sqlbuild.compiler.planner.models import GraphNodeKey
+from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
@@ -49,11 +62,11 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import execute_dbt_clone
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtSupportedResourceType
-from sqlbuild.shared.helpers.graph_algorithms import (
+from sqlbuild.shared.helpers.graph.algorithms import (
     resolve_clone_boundary,
     resolve_skipped_view_chain,
 )
-from sqlbuild.shared.helpers.prephase_progress import run_prephase_clone_stream
+from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.project import DbtProductionRefConfig
 
 
@@ -137,6 +150,16 @@ def run_dbt_defer_clone_prephase(
                 on_item=on_item,
             )
             _write_defer_clone_dbt_fingerprints(
+                result=result,
+                adapter=adapter,
+                connection=connection,
+                project=project,
+                current_manifest=current_manifest,
+                reuse_manifest=reuse_manifest,
+                unique_ids=unique_ids,
+                on_progress=on_progress,
+            )
+            _write_defer_clone_dbt_node_source_watermarks(
                 result=result,
                 adapter=adapter,
                 connection=connection,
@@ -365,6 +388,119 @@ def _write_defer_clone_dbt_fingerprints(
         )
     if warnings:
         _report_progress(on_progress, "; ".join(warnings))
+
+
+def _write_defer_clone_dbt_node_source_watermarks(
+    *,
+    result: CloneExecutionResult,
+    adapter: BaseAdapter,
+    connection: Any,
+    project: CompiledProject,
+    current_manifest: DbtManifestIndex,
+    reuse_manifest: DbtManifestIndex,
+    unique_ids: tuple[str, ...],
+    on_progress: Callable[[str], None] | None,
+) -> None:
+    if project.effective_target_schema is None:
+        return
+    reuse_state_database: str | None
+    reuse_state_schema: str | None
+    reuse_state_database, reuse_state_schema = _reuse_state_location(
+        reuse_manifest=reuse_manifest,
+        unique_ids=unique_ids,
+    )
+    if reuse_state_schema is None:
+        return
+    successful_names: frozenset[str] = frozenset(
+        item.name
+        for item in result.item_results
+        if item.status == CloneStatus.SUCCESS
+        and item.action in {CloneAction.CLONED, CloneAction.COPIED}
+    )
+    if not successful_names:
+        return
+    reuse_records: NodeSourceWatermarkSet = _read_latest_node_source_watermarks_from_schema(
+        adapter=adapter,
+        connection=connection,
+        database=reuse_state_database,
+        schema=reuse_state_schema,
+    )
+    records: list[NodeSourceWatermarkRecord] = []
+    unique_id: str
+    for unique_id in unique_ids:
+        current_model: DbtManifestModel | None = current_manifest.models_by_unique_id.get(unique_id)
+        reuse_model: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(unique_id)
+        if (
+            current_model is None
+            or reuse_model is None
+            or current_model.name not in successful_names
+        ):
+            continue
+        reuse_record: NodeSourceWatermarkRecord | None = reuse_records.records.get(
+            NodeSourceWatermarkIdentity(node_type=NODE_TYPE_DBT, node_name=unique_id)
+        )
+        if reuse_record is None:
+            continue
+        records.append(
+            replace(
+                reuse_record,
+                target_database=current_model.database,
+                target_schema=current_model.schema,
+                target_name=current_model.alias or current_model.name,
+                run_id=project.run_id,
+                node_version_hash=reuse_record.node_version_hash,
+                created_at=datetime.now(tz=UTC),
+            )
+        )
+    if not records:
+        return
+    write_node_source_watermark_records(
+        connection=connection,
+        execute=adapter.execute,
+        database=project.effective_target_database,
+        schema=project.effective_target_schema,
+        records=tuple(records),
+        render_create_table_sql=adapter.render_create_node_source_watermark_table_sql,
+        render_insert_records_sql=adapter.render_insert_node_source_watermark_records_sql,
+    )
+    _report_progress(
+        on_progress,
+        f"Recorded dbt defer-clone node source watermarks ({len(records)}).",
+    )
+
+
+def _read_latest_node_source_watermarks_from_schema(
+    *, adapter: BaseAdapter, connection: Any, database: str | None, schema: str
+) -> NodeSourceWatermarkSet:
+    relation_lookup: RelationLookup = build_relation_lookup(
+        adapter=adapter,
+        connection=connection,
+        locations=((database, schema, NODE_SOURCE_WATERMARK_TABLE_NAME),),
+    )
+    return read_latest_node_source_watermarks(
+        connection=connection,
+        execute=adapter.execute,
+        table_exists=relation_lookup.exists(
+            database=database,
+            schema=schema,
+            name=NODE_SOURCE_WATERMARK_TABLE_NAME,
+        ),
+        database=database,
+        schema=schema,
+        render_qualified_name=adapter.render_qualified_name,
+        render_read_latest_sql=adapter.render_read_latest_node_source_watermarks_sql,
+    )
+
+
+def _reuse_state_location(
+    *, reuse_manifest: DbtManifestIndex, unique_ids: tuple[str, ...]
+) -> tuple[str | None, str | None]:
+    unique_id: str
+    for unique_id in unique_ids:
+        model: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(unique_id)
+        if model is not None and model.schema is not None:
+            return model.database, model.schema
+    return None, None
 
 
 def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
