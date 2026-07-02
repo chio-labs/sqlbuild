@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.46.0](https://github.com/chio-labs/sqlbuild/compare/v0.45.5...v0.46.0) (2026-07-02)
+
+
+### Features
+
+* add node source watermark state ([aaac057](https://github.com/chio-labs/sqlbuild/commit/aaac0577bc3255648ab6ddba3b9deab3c9968305))
+* add watermark frontier resolution ([554294a](https://github.com/chio-labs/sqlbuild/commit/554294aa6b6483ff46c8b5207cec2cb2d0bc8727))
+* complete watermark stale input handling ([5ca0e56](https://github.com/chio-labs/sqlbuild/commit/5ca0e56ba0ffabe366dbf18bf7830d309e6c57b5))
+* warn on stale node source watermarks ([8afb164](https://github.com/chio-labs/sqlbuild/commit/8afb16470375108e9d3cf4de7f7c7a289fe2c310))
+* wire dbt node source watermarks ([763b0e6](https://github.com/chio-labs/sqlbuild/commit/763b0e6cee741555791dc05f185b3ca53e36945e))
+* wire native node source watermarks ([380eac9](https://github.com/chio-labs/sqlbuild/commit/380eac93f6ef7dd1231794fc3350b0c1165a3741))
+
+
+### Bug Fixes
+
+* batch dbt lineage schema inspection ([8f44588](https://github.com/chio-labs/sqlbuild/commit/8f445883620990f94dbfaba7cbc64ecfb9f0a271))
+* refresh dbt prephase status output ([59a842b](https://github.com/chio-labs/sqlbuild/commit/59a842b96987a142b1e050a4684206544365147f))
+* refresh dbt prephase status output ([42a142b](https://github.com/chio-labs/sqlbuild/commit/42a142b43dfc3bbcb4a6e8966ba5cef02f2d40de))
+
 ## [0.45.5](https://github.com/chio-labs/sqlbuild/compare/v0.45.4...v0.45.5) (2026-06-28)
 
 
