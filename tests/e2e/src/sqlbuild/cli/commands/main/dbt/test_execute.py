@@ -9,10 +9,12 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtCloneE2ETestCase,
+    DbtDeferCloneNodeSourceWatermarkE2ETestCase,
     DbtExecutionCliTestCase,
     DbtExecutionFailureCliTestCase,
     DbtExecutionQueryAssertion,
     DbtExistingRelationGuardE2ETestCase,
+    DbtInheritedNodeSourceWatermarkE2ETestCase,
     DbtMissingRelationGuardE2ETestCase,
     DbtNodeSourceWatermarkE2ETestCase,
     DbtNodeSourceWatermarkWarningE2ETestCase,
@@ -20,15 +22,20 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     break_dbt_interop_fact_orders_model,
+    checkout_dbt_watermark_feature_branch,
+    configure_dbt_node_source_watermark_production_ref,
     latest_dbt_node_source_watermark_payloads,
     latest_node_source_watermark_payloads,
     load_json_stdout,
     prepare_dbt_diff_workspace,
     prepare_dbt_interop_project,
     prepare_dbt_node_source_watermark_project,
+    remove_dbt_watermark_local_target,
     replace_dbt_watermark_raw_orders,
+    run_dbt_watermark_build,
     skip_unless_dbt_is_runnable,
     write_dbt_diff_orders_model,
+    write_dbt_watermark_local_target,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
@@ -169,6 +176,110 @@ def test_given_dbt_watermark_frontier_when_planning_then_renders_expected_warnin
 @pytest.mark.parametrize(
     "test_case",
     [
+        DbtInheritedNodeSourceWatermarkE2ETestCase(
+            description="dbt downstream build inherits stale upstream source watermark",
+            setup_command=("--no-color", "dbt", "build", "--select", "b"),
+            command=("--no-color", "dbt", "build", "--select", "c"),
+            initial_source_version="2026-06-29T15:45:00",
+            advanced_source_version="2026-06-30T15:45:00",
+            expected_node_name="model.analytics.c",
+            expected_source_name="source.analytics.raw.raw_orders",
+            expected_watermark_kind="inherited",
+            expected_data_version="2026-06-29T15:45:00",
+        )
+    ],
+    ids=["dbt downstream inherits stale upstream watermark"],
+)
+def test_given_dbt_upstream_table_stale_when_downstream_runs_then_records_inherited_watermark(
+    test_case: DbtInheritedNodeSourceWatermarkE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
+    replace_dbt_watermark_raw_orders(
+        project_dir=project_dir,
+        version=test_case.initial_source_version.replace("T", " "),
+    )
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.setup_command,
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+    replace_dbt_watermark_raw_orders(
+        project_dir=project_dir,
+        version=test_case.advanced_source_version.replace("T", " "),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payloads: dict[str, dict[str, object]] = latest_dbt_node_source_watermark_payloads(
+        project_dir=project_dir
+    )
+    payload: dict[str, object] = payloads[test_case.expected_node_name]
+    sources: object = payload["sources"]
+    assert isinstance(sources, list)
+    assert len(sources) == 1
+    source: object = sources[0]
+    assert isinstance(source, dict)
+    source_entry: dict[str, Any] = cast(dict[str, Any], source)
+    assert source_entry["source_name"] == test_case.expected_source_name
+    assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
+    assert source_entry["data_version"] == test_case.expected_data_version
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtNodeSourceWatermarkWarningE2ETestCase(
+            description="dbt plan reports unknown when frontier table has no watermark",
+            setup_command=(),
+            command=("--no-color", "dbt", "plan", "--select", "a"),
+            expected_stdout_fragments=(
+                "Warnings (1)",
+                "Stale inputs detected",
+                "Affected selected models:",
+                "model.analytics.a",
+                "Unknown freshness proofs:",
+                "model.analytics.b (missing_frontier_watermark)",
+            ),
+            unexpected_stdout_fragments=("Stale frontier tables:",),
+        )
+    ],
+    ids=["dbt plan reports unknown missing frontier watermark"],
+)
+def test_given_dbt_frontier_table_without_watermark_when_planning_then_reports_unknown(
+    test_case: DbtNodeSourceWatermarkWarningE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
+    replace_dbt_watermark_raw_orders(
+        project_dir=project_dir,
+        version="2026-06-29 15:45:00",
+    )
+    run_dbt_watermark_build(project_dir=project_dir, selector="b")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected_fragment: str
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_stdout_fragments:
+        assert unexpected_fragment not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DbtSqlbuildNodeSourceWatermarkE2ETestCase(
             description="SQLBuild model inherits dbt upstream source watermark",
             command=("--no-color", "dbt", "build", "--select", "+downstream_b"),
@@ -215,6 +326,62 @@ def test_given_sqlbuild_model_depends_on_dbt_model_when_build_runs_then_inherits
     assert isinstance(source, dict)
     source_entry: dict[str, Any] = cast(dict[str, Any], source)
     assert source_entry["source_name"] == test_case.expected_source_name
+    assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtDeferCloneNodeSourceWatermarkE2ETestCase(
+            description="dbt defer-clone records cloned production source watermark",
+            expected_node_name="model.analytics.b",
+            expected_data_version="2026-06-01T00:00:00",
+            expected_watermark_kind="direct",
+        )
+    ],
+    ids=["dbt defer-clone records cloned production source watermark"],
+)
+def test_given_dbt_boundary_defer_cloned_when_build_runs_then_records_production_watermark(
+    tmp_path: Path,
+    test_case: DbtDeferCloneNodeSourceWatermarkE2ETestCase,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
+    configure_dbt_node_source_watermark_production_ref(project_dir=project_dir)
+    replace_dbt_watermark_raw_orders(
+        project_dir=project_dir, version=test_case.expected_data_version.replace("T", " ")
+    )
+    write_dbt_watermark_local_target(project_dir=project_dir, target="prod")
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "dbt", "build", "--target", "prod", "--select", "b"),
+        project_dir=project_dir,
+    )
+    assert prod_result.returncode == 0, prod_result.stdout + prod_result.stderr
+    remove_dbt_watermark_local_target(project_dir=project_dir)
+    checkout_dbt_watermark_feature_branch(project_dir=project_dir)
+    replace_dbt_watermark_raw_orders(project_dir=project_dir, version="2026-06-02 00:00:00")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "dbt",
+            "build",
+            "--select",
+            "downstream_b",
+            "--defer-clone-from",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Recorded dbt defer-clone node source watermarks (1)." in result.stdout
+    payloads: dict[str, dict[str, object]] = latest_dbt_node_source_watermark_payloads(
+        project_dir=project_dir
+    )
+    payload: dict[str, object] = payloads[test_case.expected_node_name]
+    sources: list[dict[str, object]] = cast(list[dict[str, object]], payload["sources"])
+    source_entry: dict[str, object] = sources[0]
+    assert source_entry["data_version"] == test_case.expected_data_version
     assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
 
 

@@ -200,6 +200,11 @@ def build_dbt_node_source_watermark_staleness_warning(
         if unique_id in manifest.models_by_unique_id
         and (key := _graph_key(unique_id, WatermarkGraphResourceKind.MODEL)) in nodes
     )
+    materialized_node_keys: frozenset[WatermarkGraphKey] = frozenset(
+        node.key
+        for node in nodes.values()
+        if node.resource_kind == WatermarkGraphResourceKind.MODEL and node.materialized
+    )
     frontier_members: tuple[WatermarkFrontierMember, ...] = tuple(
         member
         for member in build_materialized_watermark_frontier(
@@ -222,7 +227,7 @@ def build_dbt_node_source_watermark_staleness_warning(
             nodes=nodes,
             source_identities_by_key=_source_identities_by_key(manifest=manifest),
             required_source_identities_by_node=_source_identities_by_node(
-                node_keys=root_keys,
+                node_keys=materialized_node_keys,
                 upstream_deps=upstream_deps,
                 nodes=nodes,
                 manifest=manifest,

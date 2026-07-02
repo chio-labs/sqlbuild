@@ -125,6 +125,45 @@ TEST_CASES: list[NodeSourceWatermarkStalenessReportTestCase] = [
         expected_output="",
     ),
     NodeSourceWatermarkStalenessReportTestCase(
+        description="deduplicates shared stale frontier across selected roots",
+        classifications=(
+            NodeSourceWatermarkStaleness(
+                root_key=ROOT_A,
+                frontier_key=TABLE_OLD,
+                source_identity=EVENTS,
+                status=WatermarkStalenessStatus.STALE,
+            ),
+            NodeSourceWatermarkStaleness(
+                root_key=ROOT_B,
+                frontier_key=TABLE_OLD,
+                source_identity=EVENTS,
+                status=WatermarkStalenessStatus.STALE,
+            ),
+        ),
+        section_limit=5,
+        expected_report=NodeSourceWatermarkStalenessReport(
+            affected_root_names=("a", "b"),
+            stale_frontier_names=("old_table",),
+            changed_source_names=("raw.events",),
+        ),
+        expected_output=(
+            "Stale inputs detected\n"
+            "\n"
+            "  Affected selected models:\n"
+            "    a\n"
+            "    b\n"
+            "\n"
+            "  Stale frontier tables:\n"
+            "    old_table\n"
+            "\n"
+            "  Changed sources:\n"
+            "    raw.events\n"
+            "\n"
+            "  To refresh these inputs:\n"
+            "    rebuild the upstream closure for the selected model(s)"
+        ),
+    ),
+    NodeSourceWatermarkStalenessReportTestCase(
         description="caps each report section independently",
         classifications=(
             NodeSourceWatermarkStaleness(

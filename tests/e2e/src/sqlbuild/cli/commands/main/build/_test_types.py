@@ -111,6 +111,8 @@ class NodeSourceWatermarkWarningBuildE2ETestCase:
     plan_command: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...]
     unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_stdout_occurrences: dict[str, int] = field(default_factory=dict)
+    setup_after_source_advance_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

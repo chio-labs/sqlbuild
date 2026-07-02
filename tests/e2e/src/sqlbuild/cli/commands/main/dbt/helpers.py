@@ -419,7 +419,15 @@ def prepare_dbt_node_source_watermark_project(*, tmp_path: Path) -> Path:
         "select id from {{ source('raw', 'raw_orders') }}\n",
         encoding="utf-8",
     )
+    (dbt_models_dir / "v.sql").write_text(
+        "{{ config(materialized='view') }}\n\nselect id from {{ ref('b') }}\n",
+        encoding="utf-8",
+    )
     (dbt_models_dir / "a.sql").write_text(
+        "select id from {{ ref('v') }}\n",
+        encoding="utf-8",
+    )
+    (dbt_models_dir / "c.sql").write_text(
         "select id from {{ ref('b') }}\n",
         encoding="utf-8",
     )
@@ -461,6 +469,83 @@ def prepare_dbt_node_source_watermark_project(*, tmp_path: Path) -> Path:
     return sqlbuild_project_dir
 
 
+def configure_dbt_node_source_watermark_production_ref(*, project_dir: Path) -> None:
+    """Add prod target and production_ref config to the dbt watermark fixture."""
+
+    workspace: Path = project_dir.parent
+    profiles_dir: Path = workspace / "profiles"
+    macro_dir: Path = project_dir / "dbt" / "macros"
+    macro_dir.mkdir(parents=True)
+    db_path: Path = project_dir / "dbt_watermark.duckdb"
+    (profiles_dir / "profiles.yml").write_text(
+        "analytics:\n"
+        "  target: dev\n"
+        "  outputs:\n"
+        "    dev:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: main\n"
+        "    prod:\n"
+        "      type: duckdb\n"
+        f"      path: '{db_path.as_posix()}'\n"
+        "      schema: prod\n",
+        encoding="utf-8",
+    )
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "dbt_node_source_watermark"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n\n'
+        "[connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n\n'
+        "[dbt]\n"
+        'project_dir = "../dbt_project"\n'
+        'profiles_dir = "../profiles"\n'
+        'target_path = "../dbt_project/target"\n\n'
+        "[dbt.production_ref]\n"
+        'git_ref = "prod"\n'
+        'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n\n'
+        "[targets.dev]\n"
+        'schema = "main"\n\n'
+        "[targets.dev.connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n'
+        'target = "dev"\n\n'
+        "[targets.prod]\n"
+        'schema = "prod"\n\n'
+        "[targets.prod.connection]\n"
+        'source = "dbt_profile"\n'
+        'profile = "analytics"\n'
+        'target = "prod"\n',
+        encoding="utf-8",
+    )
+    macro_dir.joinpath("generate_schema_name.sql").write_text(
+        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
+        encoding="utf-8",
+    )
+    _initialize_dbt_diff_git(workspace=workspace)
+
+
+def checkout_dbt_watermark_feature_branch(*, project_dir: Path) -> None:
+    """Move the dbt watermark fixture to a feature branch after prod setup."""
+
+    _run_git(args=("checkout", "-b", "feature"), cwd=project_dir.parent)
+
+
+def write_dbt_watermark_local_target(*, project_dir: Path, target: str) -> None:
+    """Write a local SQLBuild target override for the dbt watermark fixture."""
+
+    project_dir.joinpath("sqlbuild_local.toml").write_text(
+        f'target = "{target}"\n', encoding="utf-8"
+    )
+
+
+def remove_dbt_watermark_local_target(*, project_dir: Path) -> None:
+    """Remove the local SQLBuild target override for the dbt watermark fixture."""
+
+    project_dir.joinpath("sqlbuild_local.toml").unlink(missing_ok=True)
+
+
 def replace_dbt_watermark_raw_orders(*, project_dir: Path, version: str) -> None:
     """Replace the raw source rows for dbt watermark E2Es."""
 
@@ -471,6 +556,18 @@ def replace_dbt_watermark_raw_orders(*, project_dir: Path, version: str) -> None
             "(id INTEGER, updated_at TIMESTAMP);\n"
             f"INSERT INTO main.raw_orders VALUES (1, TIMESTAMP '{version}');\n"
         ),
+    )
+
+
+def run_dbt_watermark_build(*, project_dir: Path, selector: str) -> None:
+    """Build a dbt watermark fixture model without SQLBuild state recording."""
+
+    workspace: Path = project_dir.parent
+    _run_dbt(
+        args=("build", "--select", selector),
+        dbt_project_dir=workspace / "dbt_project",
+        profiles_dir=workspace / "profiles",
+        target="dev",
     )
 
 
