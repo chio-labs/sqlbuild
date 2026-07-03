@@ -32,6 +32,10 @@ _WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
         "get_columns",
         "get_all_columns",
         "describe_relation",
+        "schema_exists",
+        "get_table_freshness_metadata",
+        "get_tables_freshness_metadata",
+        "query_column_names",
         "list_functions",
     }
 )

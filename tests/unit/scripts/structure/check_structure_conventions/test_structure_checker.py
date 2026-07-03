@@ -1746,6 +1746,62 @@ TEST_CASES: list[CheckPathsTestCase] = [
         expected_violation_codes=("SC051",),
     ),
     CheckPathsTestCase(
+        description="flags query column names calls inside a loop as N+1 risks",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/columns.py": dedent(
+                """
+                def columns(adapter, connection, expressions) -> dict[str, tuple[str, ...]]:
+                    result: dict[str, tuple[str, ...]] = {}
+                    for name, sql in expressions.items():
+                        result[name] = adapter.query_column_names(connection, sql)
+                    return result
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC051",),
+    ),
+    CheckPathsTestCase(
+        description="flags schema exists calls inside a loop as N+1 risks",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/schemas.py": dedent(
+                """
+                def schemas(adapter, connection, names) -> list[str]:
+                    existing: list[str] = []
+                    for name in names:
+                        if adapter.schema_exists(connection, schema=name):
+                            existing.append(name)
+                    return existing
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC051",),
+    ),
+    CheckPathsTestCase(
+        description="flags table freshness metadata calls inside a loop as N+1 risks",
+        repo_files=compliant_repo_files()
+        | {
+            "src/sqlbuild/example/widget/main/freshness.py": dedent(
+                """
+                def freshness(adapter, connection, names) -> list[object]:
+                    records: list[object] = []
+                    for name in names:
+                        records.append(
+                            adapter.get_table_freshness_metadata(
+                                connection, database=None, schema="s", name=name
+                            )
+                        )
+                    return records
+                """
+            ).strip()
+            + "\n",
+        },
+        expected_violation_codes=("SC051",),
+    ),
+    CheckPathsTestCase(
         description="allows warehouse metadata calls gathered once before a loop",
         repo_files=compliant_repo_files()
         | {
