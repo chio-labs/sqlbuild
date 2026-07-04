@@ -7,6 +7,11 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.build.models import (
+    BuildCommandRequest,
+    BuildInvocation,
+    DeferClonePrephaseOutcome,
+)
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.shared.helpers.connection.core import (
     resolve_target_connection_config,
@@ -108,6 +113,50 @@ def defer_clone_view_chain_selectors(*, scope: PlannerScope) -> tuple[str, ...]:
         is_view=lambda key: _scope_is_view(scope=scope, key=key),
     )
     return tuple(sorted(key.name for key in view_keys))
+
+
+def run_defer_clone_boundary_prephase(
+    *,
+    request: BuildCommandRequest,
+    invocation: BuildInvocation,
+    origin_target_name: str,
+) -> DeferClonePrephaseOutcome:
+    """Resolve defer-clone boundaries and clone them before build planning."""
+
+    cloned_project: CompiledProject
+    boundary_selectors: tuple[str, ...]
+    view_chain_selectors: tuple[str, ...]
+    cloned_project, boundary_selectors, view_chain_selectors = build_defer_clone_boundary_selectors(
+        discovered_inputs=invocation.discovered_inputs,
+        adapter=invocation.adapter,
+        selected_target=request.selected_target,
+        no_sql_validation=request.no_sql_validation,
+        select=request.select,
+        exclude=request.exclude,
+        cli_vars=request.cli_vars,
+        project_dir=invocation.effective_project_dir,
+        auto_load_sources=invocation.should_load_sources,
+    )
+    run_defer_clone_prephase(
+        discovered_inputs=invocation.discovered_inputs,
+        adapter=invocation.adapter,
+        origin_target_name=origin_target_name,
+        destination_target_name=cloned_project.effective_target_name,
+        no_sql_validation=request.no_sql_validation,
+        select=(*boundary_selectors, *view_chain_selectors),
+        caused_by_names=request.select,
+        cli_vars=request.cli_vars,
+        connection_config=invocation.connection_config,
+        project_dir=invocation.effective_project_dir,
+        on_progress=invocation.planning_progress.on_progress,
+        progress_stream=invocation.progress_stream,
+        use_color=invocation.use_color,
+    )
+    return DeferClonePrephaseOutcome(
+        destination_target_name=cloned_project.effective_target_name,
+        boundary_selectors=boundary_selectors,
+        view_chain_selectors=view_chain_selectors,
+    )
 
 
 def run_defer_clone_prephase(

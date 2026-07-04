@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.commands.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
@@ -1072,6 +1073,9 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
     received_args: list[tuple[bool, Path | None]] = []
 
     def record_json_handler(*args: object) -> int:
+        if isinstance(args[0], BuildCommandRequest):
+            received_args.append((bool(args[0].json_output), args[0].json_output_path))
+            return test_case.expected_exit_code
         received_args.append((bool(args[-2]), args[-1] if isinstance(args[-1], Path) else None))
         return test_case.expected_exit_code
 
@@ -2283,68 +2287,20 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         tuple[bool, bool, bool, str | None, bool | None, bool, bool, bool, bool, bool, bool]
     ] = []
 
-    def run_build(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        defer_to: str | None,
-        defer_clone_from: str | None,
-        defer_sources_to: str | None,
-        selected_target: str | None,
-        cursor_overrides: object,
-        no_color: bool,
-        fail_fast: bool,
-        full_refresh: bool,
-        virtual_env: str | None,
-        load_sources: bool | None,
-        reload_sources: bool,
-        include_python: bool,
-        allow_snapshot_full_refresh: bool,
-        allow_snapshot_schema_change: bool,
-        concurrency: int | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool = False,
-        debug: bool = False,
-        cli_vars: dict[str, object] | None = None,
-        include_stale_upstreams: bool = False,
-        force: bool = False,
-        run_tests: bool = True,
-        run_audits: bool = True,
-        manifest: bool = False,
-        json_output: bool = False,
-        json_output_path: Path | None = None,
-    ) -> int:
-        del manifest
-        del project_dir
-        del no_sql_validation
-        del defer_to
-        del defer_clone_from
-        del defer_sources_to
-        del selected_target
-        del cursor_overrides
-        del concurrency
-        del select
-        del exclude
-        del verbose
-        del cli_vars
-        del json_output
-        del json_output_path
-        del include_stale_upstreams
-        del force
-        del include_python
+    def run_build(request: BuildCommandRequest) -> int:
         received_args.append(
             (
-                no_color,
-                fail_fast,
-                full_refresh,
-                virtual_env,
-                load_sources,
-                reload_sources,
-                allow_snapshot_full_refresh,
-                allow_snapshot_schema_change,
-                run_tests,
-                run_audits,
-                debug,
+                request.no_color,
+                request.fail_fast,
+                request.full_refresh,
+                request.virtual_env,
+                request.load_sources,
+                request.reload_sources,
+                request.allow_snapshot_full_refresh,
+                request.allow_snapshot_schema_change,
+                request.run_tests,
+                request.run_audits,
+                request.debug,
             )
         )
         return test_case.expected_exit_code

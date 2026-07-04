@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.helpers.diff.validation import parse_diff_name_range
@@ -745,42 +746,43 @@ def _main_with_dependencies(
                 return handlers.run_dbt_clone(project_dir, tuple(args.dbt_args), args.no_color)
             raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
         if args.command == CliCommand.BUILD:
-            cursor_overrides = CursorOverrides(
-                start_ts=args.start_cursor_ts,
-                end_ts=args.end_cursor_ts,
-                start_int=args.start_cursor_int,
-                end_int=args.end_cursor_int,
-            )
             return handlers.run_build(
-                project_dir,
-                args.no_sql_validation,
-                args.defer_to,
-                args.defer_clone_from,
-                args.defer_sources_to,
-                args.target,
-                cursor_overrides,
-                args.no_color,
-                args.fail_fast,
-                args.full_refresh,
-                args.virtual_env,
-                args.load_sources,
-                args.reload,
-                args.include_python,
-                args.allow_snapshot_full_refresh,
-                args.allow_snapshot_schema_change,
-                args.concurrency,
-                select,
-                tuple(args.exclude),
-                args.verbose,
-                args.debug,
-                args.vars,
-                args.include_stale_upstreams,
-                args.force,
-                args.run_tests,
-                args.run_audits,
-                args.manifest,
-                args.json,
-                args.json_output,
+                BuildCommandRequest(
+                    project_dir=project_dir,
+                    no_sql_validation=args.no_sql_validation,
+                    defer_to=args.defer_to,
+                    defer_clone_from=args.defer_clone_from,
+                    defer_sources_to=args.defer_sources_to,
+                    selected_target=args.target,
+                    cursor_overrides=CursorOverrides(
+                        start_ts=args.start_cursor_ts,
+                        end_ts=args.end_cursor_ts,
+                        start_int=args.start_cursor_int,
+                        end_int=args.end_cursor_int,
+                    ),
+                    no_color=args.no_color,
+                    fail_fast=args.fail_fast,
+                    full_refresh=args.full_refresh,
+                    virtual_env=args.virtual_env,
+                    load_sources=args.load_sources,
+                    reload_sources=args.reload,
+                    include_python=args.include_python,
+                    allow_snapshot_full_refresh=args.allow_snapshot_full_refresh,
+                    allow_snapshot_schema_change=args.allow_snapshot_schema_change,
+                    concurrency=args.concurrency,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    verbose=args.verbose,
+                    debug=args.debug,
+                    cli_vars=args.vars,
+                    include_stale_upstreams=args.include_stale_upstreams,
+                    force=args.force,
+                    run_tests=args.run_tests,
+                    run_audits=args.run_audits,
+                    manifest=args.manifest,
+                    json_output=args.json,
+                    json_output_path=args.json_output,
+                )
             )
         if args.command == CliCommand.FRESHNESS:
             return handlers.run_freshness(
