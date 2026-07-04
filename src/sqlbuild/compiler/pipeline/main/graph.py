@@ -12,13 +12,13 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.helpers.graph import (
-    build_static_all_keys,
-    build_static_downstream_deps,
-    build_static_upstream_deps,
-)
+from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.shared.helpers.lineage_graph import (
+    build_lineage_downstream_deps,
+    build_lineage_upstream_deps,
+)
 from sqlbuild.compiler.shared.helpers.selector_indexes import (
     build_model_path_index,
     build_model_tag_index,
@@ -56,10 +56,10 @@ def build_project_graph(
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_static_upstream_deps(project)
+        build_lineage_upstream_deps(project)
     )
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_static_downstream_deps(upstream_deps)
+        build_lineage_downstream_deps(upstream_deps)
     )
     return ProjectGraph(
         project=project,

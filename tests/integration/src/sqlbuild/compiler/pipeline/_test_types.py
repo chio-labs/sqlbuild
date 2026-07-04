@@ -22,6 +22,15 @@ class RunCompilePipelineIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class SelectionLineageIntegrationTestCase:
+    description: str
+    project_files: dict[str, str]
+    select: tuple[str, ...]
+    expected_selected_names: frozenset[str]
+    expected_unselected_names: frozenset[str]
+
+
+@dataclass(frozen=True)
 class MacroLoadCountIntegrationTestCase:
     description: str
     project_files: dict[str, str]

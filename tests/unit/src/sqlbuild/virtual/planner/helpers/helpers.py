@@ -22,7 +22,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
-    build_upstream_deps,
+    build_execution_upstream_deps,
 )
 from sqlbuild.spec.models.project import SettingsConfig
 from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
@@ -192,8 +192,8 @@ def build_virtual_planner_test_project(
         seeds=(seed,) if seed is not None else (),
         functions=(function,),
     )
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        project
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
     )
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream_deps

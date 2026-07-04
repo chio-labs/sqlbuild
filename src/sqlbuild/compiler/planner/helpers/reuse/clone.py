@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
-    build_upstream_deps,
+    build_execution_upstream_deps,
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.graph.selectors import resolve_selectors
@@ -40,6 +40,10 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.compiler.shared.helpers.lineage_graph import (
+    build_lineage_downstream_deps,
+    build_lineage_upstream_deps,
+)
 from sqlbuild.compiler.shared.helpers.selector_indexes import (
     build_model_path_index,
     build_model_tag_index,
@@ -53,8 +57,8 @@ def build_clone_plan_output(
     select: tuple[str, ...],
     exclude: tuple[str, ...],
 ) -> PlanOutput:
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        project
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
     )
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream_deps
@@ -64,12 +68,15 @@ def build_clone_plan_output(
         **{source.name: source.key for source in project.sources},
         **{seed.name: seed.key for seed in project.seeds},
     }
+    lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_lineage_upstream_deps(project)
+    )
     selected_keys: frozenset[CompiledObjectKey] = resolve_selectors(
         select=select,
         exclude=exclude,
         all_keys=all_keys,
-        upstream=upstream_deps,
-        downstream=downstream_deps,
+        upstream=lineage_upstream,
+        downstream=build_lineage_downstream_deps(lineage_upstream),
         tag_index=build_model_tag_index(project),
         path_index=build_model_path_index(project),
     )

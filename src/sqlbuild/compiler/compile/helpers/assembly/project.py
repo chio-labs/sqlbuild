@@ -42,6 +42,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioInput,
     InferredColumn,
     MacroContext,
+    PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.models.sql_tests import (
     CompiledDirectLogicSqlTestPayload,
@@ -74,9 +75,7 @@ _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS: int = 32
 
 @dataclass(frozen=True)
 class _ModelSqlAnalysis:
-    polyglot_analysis: (
-        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
-    )
+    polyglot_analysis: PolyglotAnalysisResult
     placeholders: dict[str, str] | None
 
 
@@ -207,10 +206,7 @@ def _assemble_compiled_model(
     )
     if sql_analysis_enabled:
         profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-        polyglot_analysis: (
-            tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool]
-            | bool
-        ) = (
+        polyglot_analysis: PolyglotAnalysisResult = (
             sql_analysis.polyglot_analysis
             if sql_analysis is not None
             else analyze_columns_and_lineage_with_polyglot(
@@ -222,10 +218,10 @@ def _assemble_compiled_model(
                 allow_compact_analysis=allow_compact_analysis,
             )
         )
-        if isinstance(polyglot_analysis, tuple):
-            inferred_columns = polyglot_analysis[0]
-            fast_lineage_columns = polyglot_analysis[1]
-            fast_lineage_has_star = polyglot_analysis[2]
+        if polyglot_analysis.analysis_succeeded:
+            inferred_columns = polyglot_analysis.columns
+            fast_lineage_columns = polyglot_analysis.lineage_columns
+            fast_lineage_has_star = polyglot_analysis.has_star
         else:
             if model_input.sql_validation_enabled:
                 validate_sql_syntax(
