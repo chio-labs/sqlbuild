@@ -13,38 +13,41 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     DiscoverLoaderFunctionsTestCase,
 )
 
-TEST_CASES: list[DiscoverLoaderFunctionsTestCase] = [
-    DiscoverLoaderFunctionsTestCase(
-        description="discovers decorated source loaders from loaders directory",
-        files={
-            "loaders/github.py": """
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiscoverLoaderFunctionsTestCase(
+            description="discovers decorated source loaders from loaders directory",
+            files={
+                "loaders/github.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def github_events(ctx):
     return []
 """,
-            "loaders/stripe.py": """
+                "loaders/stripe.py": """
 from sqlbuild.loaders import loader
 
 @loader(destination="raw.customers")
 def stripe_customers(ctx):
     return []
 """,
-        },
-        expected_names=("github_events", "stripe_customers"),
-        expected_targets=(None, "raw.customers"),
-        expected_dependency_counts=(0, 0),
-        expected_write_strategies=(None, None),
-        expected_cursor_columns=(None, None),
-        expected_unique_keys=((), ()),
-        expected_column_names=((), ()),
-        expected_contracts=(None, None),
-    ),
-    DiscoverLoaderFunctionsTestCase(
-        description="discovers intermediate loader write and schema metadata",
-        files={
-            "loaders/events.py": """
+            },
+            expected_names=("github_events", "stripe_customers"),
+            expected_targets=(None, "raw.customers"),
+            expected_dependency_counts=(0, 0),
+            expected_write_strategies=(None, None),
+            expected_cursor_columns=(None, None),
+            expected_unique_keys=((), ()),
+            expected_column_names=((), ()),
+            expected_contracts=(None, None),
+        ),
+        DiscoverLoaderFunctionsTestCase(
+            description="discovers intermediate loader write and schema metadata",
+            files={
+                "loaders/events.py": """
 from sqlbuild.loaders import loader
 
 @loader(
@@ -61,20 +64,20 @@ from sqlbuild.loaders import loader
 def events(ctx):
     return []
 """,
-        },
-        expected_names=("events",),
-        expected_targets=("staging.events",),
-        expected_dependency_counts=(0,),
-        expected_write_strategies=("merge",),
-        expected_cursor_columns=("updated_at",),
-        expected_unique_keys=(("event_id", "updated_at"),),
-        expected_column_names=(("event_id", "updated_at"),),
-        expected_contracts=("enforced",),
-    ),
-    DiscoverLoaderFunctionsTestCase(
-        description="discovers loader dependencies from decorator metadata",
-        files={
-            "loaders/events.py": """
+            },
+            expected_names=("events",),
+            expected_targets=("staging.events",),
+            expected_dependency_counts=(0,),
+            expected_write_strategies=("merge",),
+            expected_cursor_columns=("updated_at",),
+            expected_unique_keys=(("event_id", "updated_at"),),
+            expected_column_names=(("event_id", "updated_at"),),
+            expected_contracts=("enforced",),
+        ),
+        DiscoverLoaderFunctionsTestCase(
+            description="discovers loader dependencies from decorator metadata",
+            files={
+                "loaders/events.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -85,20 +88,20 @@ def fetch_events(ctx):
 def enriched_events(ctx):
     return []
 """,
-        },
-        expected_names=("enriched_events", "fetch_events"),
-        expected_targets=(None, None),
-        expected_dependency_counts=(1, 0),
-        expected_write_strategies=(None, None),
-        expected_cursor_columns=(None, None),
-        expected_unique_keys=((), ()),
-        expected_column_names=((), ()),
-        expected_contracts=(None, None),
-    ),
-    DiscoverLoaderFunctionsTestCase(
-        description="discovers explicit loader names and dependencies",
-        files={
-            "loaders/events.py": """
+            },
+            expected_names=("enriched_events", "fetch_events"),
+            expected_targets=(None, None),
+            expected_dependency_counts=(1, 0),
+            expected_write_strategies=(None, None),
+            expected_cursor_columns=(None, None),
+            expected_unique_keys=((), ()),
+            expected_column_names=((), ()),
+            expected_contracts=(None, None),
+        ),
+        DiscoverLoaderFunctionsTestCase(
+            description="discovers explicit loader names and dependencies",
+            files={
+                "loaders/events.py": """
 from sqlbuild.loaders import loader
 
 @loader(name="fetch_events")
@@ -109,57 +112,52 @@ def make_fetch(ctx):
 def make_enriched(ctx):
     return []
 """,
-        },
-        expected_names=("enriched_events", "fetch_events"),
-        expected_targets=(None, None),
-        expected_dependency_counts=(1, 0),
-        expected_write_strategies=(None, None),
-        expected_cursor_columns=(None, None),
-        expected_unique_keys=((), ()),
-        expected_column_names=((), ()),
-        expected_contracts=(None, None),
-    ),
-    DiscoverLoaderFunctionsTestCase(
-        description="returns empty tuple when loaders directory does not exist",
-        files={},
-        expected_names=(),
-        expected_targets=(),
-        expected_dependency_counts=(),
-        expected_write_strategies=(),
-        expected_cursor_columns=(),
-        expected_unique_keys=(),
-        expected_column_names=(),
-        expected_contracts=(),
-    ),
-    DiscoverLoaderFunctionsTestCase(
-        description="ignores undecorated functions and init files",
-        files={
-            "loaders/__init__.py": "",
-            "loaders/helpers.py": "def helper(): return None\n",
-            "loaders/orders.py": """
+            },
+            expected_names=("enriched_events", "fetch_events"),
+            expected_targets=(None, None),
+            expected_dependency_counts=(1, 0),
+            expected_write_strategies=(None, None),
+            expected_cursor_columns=(None, None),
+            expected_unique_keys=((), ()),
+            expected_column_names=((), ()),
+            expected_contracts=(None, None),
+        ),
+        DiscoverLoaderFunctionsTestCase(
+            description="returns empty tuple when loaders directory does not exist",
+            files={},
+            expected_names=(),
+            expected_targets=(),
+            expected_dependency_counts=(),
+            expected_write_strategies=(),
+            expected_cursor_columns=(),
+            expected_unique_keys=(),
+            expected_column_names=(),
+            expected_contracts=(),
+        ),
+        DiscoverLoaderFunctionsTestCase(
+            description="ignores undecorated functions and init files",
+            files={
+                "loaders/__init__.py": "",
+                "loaders/helpers.py": "def helper(): return None\n",
+                "loaders/orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def orders(ctx):
     return []
 """,
-        },
-        expected_names=("orders",),
-        expected_targets=(None,),
-        expected_dependency_counts=(0,),
-        expected_write_strategies=(None,),
-        expected_cursor_columns=(None,),
-        expected_unique_keys=((),),
-        expected_column_names=((),),
-        expected_contracts=(None,),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+            },
+            expected_names=("orders",),
+            expected_targets=(None,),
+            expected_dependency_counts=(0,),
+            expected_write_strategies=(None,),
+            expected_cursor_columns=(None,),
+            expected_unique_keys=((),),
+            expected_column_names=((),),
+            expected_contracts=(None,),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_project_dir_when_discovering_loaders_then_returns_expected(
     test_case: DiscoverLoaderFunctionsTestCase,
@@ -211,7 +209,7 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
             expected_error_fragment="Failed to import source loader file",
         )
     ],
-    ids=["raises clear error when loader file import fails"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_import_error_when_discovering_loaders_then_raises_clear_error(
     test_case: DiscoverLoaderFunctionsTestCase,

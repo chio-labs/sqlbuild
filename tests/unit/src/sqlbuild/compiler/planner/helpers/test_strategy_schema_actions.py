@@ -36,83 +36,81 @@ _TYPE_CHANGED_FINDING: SchemaFinding = SchemaFinding(
     actual_type="INTEGER",
 )
 
-RESOLVE_SCHEMA_ACTIONS_TEST_CASES: list[ResolveSchemaActionsTestCase] = [
-    ResolveSchemaActionsTestCase(
-        description="ignore produces no actions regardless of findings",
-        schema_findings=(_ADDED_FINDING, _REMOVED_FINDING, _TYPE_CHANGED_FINDING),
-        on_schema_change=OnSchemaChange.IGNORE,
-        expected_actions=(),
-    ),
-    ResolveSchemaActionsTestCase(
-        description="fail produces no actions regardless of findings",
-        schema_findings=(_ADDED_FINDING, _REMOVED_FINDING),
-        on_schema_change=OnSchemaChange.FAIL,
-        expected_actions=(),
-    ),
-    ResolveSchemaActionsTestCase(
-        description="append_new_columns adds only new columns",
-        schema_findings=(_ADDED_FINDING, _REMOVED_FINDING, _TYPE_CHANGED_FINDING),
-        on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
-        expected_actions=(
-            SchemaAction(
-                kind=SchemaActionKind.ADD_COLUMN,
-                column_name="status",
-                column_type="VARCHAR",
-            ),
-        ),
-    ),
-    ResolveSchemaActionsTestCase(
-        description="sync_all_columns handles add drop and alter",
-        schema_findings=(_ADDED_FINDING, _REMOVED_FINDING, _TYPE_CHANGED_FINDING),
-        on_schema_change=OnSchemaChange.SYNC_ALL_COLUMNS,
-        expected_actions=(
-            SchemaAction(
-                kind=SchemaActionKind.ADD_COLUMN,
-                column_name="status",
-                column_type="VARCHAR",
-            ),
-            SchemaAction(
-                kind=SchemaActionKind.DROP_COLUMN,
-                column_name="old_col",
-            ),
-            SchemaAction(
-                kind=SchemaActionKind.ALTER_COLUMN_TYPE,
-                column_name="amount",
-                column_type="DECIMAL",
-            ),
-        ),
-    ),
-    ResolveSchemaActionsTestCase(
-        description="default on_schema_change uses append_new_columns",
-        schema_findings=(_ADDED_FINDING, _REMOVED_FINDING),
-        on_schema_change=None,
-        expected_actions=(
-            SchemaAction(
-                kind=SchemaActionKind.ADD_COLUMN,
-                column_name="status",
-                column_type="VARCHAR",
-            ),
-        ),
-    ),
-    ResolveSchemaActionsTestCase(
-        description="empty findings produces no actions",
-        schema_findings=(),
-        on_schema_change=OnSchemaChange.SYNC_ALL_COLUMNS,
-        expected_actions=(),
-    ),
-    ResolveSchemaActionsTestCase(
-        description=("append_new_columns ignores type changes and removals"),
-        schema_findings=(_REMOVED_FINDING, _TYPE_CHANGED_FINDING),
-        on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
-        expected_actions=(),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    RESOLVE_SCHEMA_ACTIONS_TEST_CASES,
-    ids=[case.description for case in RESOLVE_SCHEMA_ACTIONS_TEST_CASES],
+    [
+        ResolveSchemaActionsTestCase(
+            description="ignore produces no actions regardless of findings",
+            schema_findings=(_ADDED_FINDING, _REMOVED_FINDING, _TYPE_CHANGED_FINDING),
+            on_schema_change=OnSchemaChange.IGNORE,
+            expected_actions=(),
+        ),
+        ResolveSchemaActionsTestCase(
+            description="fail produces no actions regardless of findings",
+            schema_findings=(_ADDED_FINDING, _REMOVED_FINDING),
+            on_schema_change=OnSchemaChange.FAIL,
+            expected_actions=(),
+        ),
+        ResolveSchemaActionsTestCase(
+            description="append_new_columns adds only new columns",
+            schema_findings=(_ADDED_FINDING, _REMOVED_FINDING, _TYPE_CHANGED_FINDING),
+            on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
+            expected_actions=(
+                SchemaAction(
+                    kind=SchemaActionKind.ADD_COLUMN,
+                    column_name="status",
+                    column_type="VARCHAR",
+                ),
+            ),
+        ),
+        ResolveSchemaActionsTestCase(
+            description="sync_all_columns handles add drop and alter",
+            schema_findings=(_ADDED_FINDING, _REMOVED_FINDING, _TYPE_CHANGED_FINDING),
+            on_schema_change=OnSchemaChange.SYNC_ALL_COLUMNS,
+            expected_actions=(
+                SchemaAction(
+                    kind=SchemaActionKind.ADD_COLUMN,
+                    column_name="status",
+                    column_type="VARCHAR",
+                ),
+                SchemaAction(
+                    kind=SchemaActionKind.DROP_COLUMN,
+                    column_name="old_col",
+                ),
+                SchemaAction(
+                    kind=SchemaActionKind.ALTER_COLUMN_TYPE,
+                    column_name="amount",
+                    column_type="DECIMAL",
+                ),
+            ),
+        ),
+        ResolveSchemaActionsTestCase(
+            description="default on_schema_change uses append_new_columns",
+            schema_findings=(_ADDED_FINDING, _REMOVED_FINDING),
+            on_schema_change=None,
+            expected_actions=(
+                SchemaAction(
+                    kind=SchemaActionKind.ADD_COLUMN,
+                    column_name="status",
+                    column_type="VARCHAR",
+                ),
+            ),
+        ),
+        ResolveSchemaActionsTestCase(
+            description="empty findings produces no actions",
+            schema_findings=(),
+            on_schema_change=OnSchemaChange.SYNC_ALL_COLUMNS,
+            expected_actions=(),
+        ),
+        ResolveSchemaActionsTestCase(
+            description=("append_new_columns ignores type changes and removals"),
+            schema_findings=(_REMOVED_FINDING, _TYPE_CHANGED_FINDING),
+            on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
+            expected_actions=(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_findings_and_policy_when_resolving_schema_actions_then_returns_expected(
     test_case: ResolveSchemaActionsTestCase,

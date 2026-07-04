@@ -29,7 +29,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.dag.helpers import (
             expected_asset_key=("analytics", "orders"),
         )
     ],
-    ids=["emits static dag json without connecting"],
+    ids=lambda case: case.description,
 )
 def test_given_local_project_when_running_dag_json_then_outputs_static_graph_without_connecting(
     test_case: DagCommandTestCase,
@@ -119,7 +119,7 @@ def test_given_local_project_when_running_dag_json_then_outputs_static_graph_wit
             },
         )
     ],
-    ids=["emits Python nodes and checks in static dag json"],
+    ids=lambda case: case.description,
 )
 def test_given_python_nodes_when_running_dag_json_then_outputs_artifact_metadata(
     test_case: PythonDagCommandTestCase,

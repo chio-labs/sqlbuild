@@ -49,7 +49,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
             },
         )
     ],
-    ids=["classifies standard reuse decisions"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_classifies_models(
     test_case: StandardReuseDecisionTestCase,
@@ -137,7 +137,7 @@ def test_given_reuse_from_snapshot_when_building_standard_reuse_decisions_then_c
             },
         )
     ],
-    ids=["reuse origin version mismatch blocks reuse"],
+    ids=lambda case: case.description,
 )
 def test_given_origin_version_differs_when_deciding_then_model_is_not_reused(
     test_case: StandardReuseDecisionTestCase,
@@ -172,7 +172,7 @@ def test_given_origin_version_differs_when_deciding_then_model_is_not_reused(
             expected_decisions={"candidate": StandardReuseDecisionKind.REUSE_ELIGIBLE.value},
         )
     ],
-    ids=["classifies only selected models"],
+    ids=lambda case: case.description,
 )
 def test_given_scoped_models_when_building_standard_reuse_decisions_then_classifies_only_selected(
     test_case: StandardReuseDecisionTestCase,
@@ -206,7 +206,7 @@ def test_given_scoped_models_when_building_standard_reuse_decisions_then_classif
             },
         )
     ],
-    ids=["downgrades table reuse when source freshness is stale"],
+    ids=lambda case: case.description,
 )
 def test_given_stale_source_freshness_when_building_standard_reuse_decisions_then_table_builds(
     test_case: StandardReuseDecisionTestCase,
@@ -264,7 +264,7 @@ def test_given_stale_source_freshness_when_building_standard_reuse_decisions_the
             },
         )
     ],
-    ids=["keeps current incremental when destination cursor is numerically ahead"],
+    ids=lambda case: case.description,
 )
 def test_given_destination_cursor_ahead_when_planning_incremental_reuse_then_stays_current(
     test_case: StandardReuseDecisionTestCase,

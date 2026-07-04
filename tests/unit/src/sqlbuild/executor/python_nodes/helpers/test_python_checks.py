@@ -34,55 +34,53 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     python_check_function_for_case,
 )
 
-CHECK_EXECUTOR_TEST_CASES: tuple[PythonCheckExecutorTestCase, ...] = (
-    PythonCheckExecutorTestCase(
-        description="executes passing check with upstream metadata",
-        expected_passed=True,
-        expected_severity=PythonCheckSeverity.ERROR,
-        expected_message="passed",
-    ),
-    PythonCheckExecutorTestCase(
-        description="preserves explicit warning result",
-        expected_passed=False,
-        expected_severity=PythonCheckSeverity.WARN,
-        expected_message="warned",
-    ),
-    PythonCheckExecutorTestCase(
-        description="normalizes false result as error failure",
-        expected_passed=False,
-        expected_severity=PythonCheckSeverity.ERROR,
-        expected_message=None,
-    ),
-    PythonCheckExecutorTestCase(
-        description="normalizes check exception as error failure",
-        expected_passed=False,
-        expected_severity=PythonCheckSeverity.ERROR,
-        expected_message=None,
-        expected_error_fragment="check exploded",
-    ),
-    PythonCheckExecutorTestCase(
-        description="fails when upstream failed",
-        expected_passed=False,
-        expected_severity=PythonCheckSeverity.ERROR,
-        expected_message=None,
-        expected_error_fragment="Upstream Python node failed: upstream_task",
-        upstream_status=PythonNodeStatus.FAILED,
-    ),
-    PythonCheckExecutorTestCase(
-        description="warns when upstream skipped",
-        expected_passed=False,
-        expected_severity=PythonCheckSeverity.WARN,
-        expected_message="Upstream Python node skipped: upstream_task",
-        upstream_status=PythonNodeStatus.SKIPPED,
-        upstream_skip_reason="not needed",
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    CHECK_EXECUTOR_TEST_CASES,
-    ids=[case.description for case in CHECK_EXECUTOR_TEST_CASES],
+    (
+        PythonCheckExecutorTestCase(
+            description="executes passing check with upstream metadata",
+            expected_passed=True,
+            expected_severity=PythonCheckSeverity.ERROR,
+            expected_message="passed",
+        ),
+        PythonCheckExecutorTestCase(
+            description="preserves explicit warning result",
+            expected_passed=False,
+            expected_severity=PythonCheckSeverity.WARN,
+            expected_message="warned",
+        ),
+        PythonCheckExecutorTestCase(
+            description="normalizes false result as error failure",
+            expected_passed=False,
+            expected_severity=PythonCheckSeverity.ERROR,
+            expected_message=None,
+        ),
+        PythonCheckExecutorTestCase(
+            description="normalizes check exception as error failure",
+            expected_passed=False,
+            expected_severity=PythonCheckSeverity.ERROR,
+            expected_message=None,
+            expected_error_fragment="check exploded",
+        ),
+        PythonCheckExecutorTestCase(
+            description="fails when upstream failed",
+            expected_passed=False,
+            expected_severity=PythonCheckSeverity.ERROR,
+            expected_message=None,
+            expected_error_fragment="Upstream Python node failed: upstream_task",
+            upstream_status=PythonNodeStatus.FAILED,
+        ),
+        PythonCheckExecutorTestCase(
+            description="warns when upstream skipped",
+            expected_passed=False,
+            expected_severity=PythonCheckSeverity.WARN,
+            expected_message="Upstream Python node skipped: upstream_task",
+            upstream_status=PythonNodeStatus.SKIPPED,
+            upstream_skip_reason="not needed",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_python_check_when_executing_then_returns_expected_result(
     test_case: PythonCheckExecutorTestCase,
@@ -153,7 +151,7 @@ def test_given_python_check_when_executing_then_returns_expected_result(
             expected_message=None,
         )
     ],
-    ids=["injects provider into check execution"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_parameter_when_executing_python_check_then_provider_is_injected(
     test_case: PythonCheckExecutorTestCase,
@@ -203,7 +201,7 @@ def test_given_provider_parameter_when_executing_python_check_then_provider_is_i
             expected_message=None,
         )
     ],
-    ids=["exposes providers on check context"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_executing_python_check_then_context_exposes_providers(
     test_case: PythonCheckExecutorTestCase,
@@ -257,7 +255,7 @@ def test_given_provider_container_when_executing_python_check_then_context_expos
             ),
         )
     ],
-    ids=["normalizes missing provider container as check failure"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_provider_container_when_executing_python_check_then_failure_is_recorded(
     test_case: PythonCheckExecutorTestCase,

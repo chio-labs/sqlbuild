@@ -19,53 +19,30 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     python_graph_for_lifecycle_case,
 )
 
-INGRESS_LIFECYCLE_NODE_TEST_CASES: list[PythonNodeLifecycleNodeBuildTestCase] = [
-    PythonNodeLifecycleNodeBuildTestCase(
-        description="builds pre sql task and loader scheduler nodes",
-        python_graph_case="orders",
-        selected_names=frozenset({"prepare_orders", "load_events"}),
-        expected_names=("load_events", "prepare_orders"),
-        expected_kinds=("loader", "task"),
-        expected_upstream_names=(("prepare_orders",), ()),
-        expected_payload_names=("load_events", "prepare_orders"),
-    ),
-    PythonNodeLifecycleNodeBuildTestCase(
-        description="builds intermediate loader scheduler node",
-        python_graph_case="intermediate_loader_asset_dependency",
-        selected_names=frozenset({"fetch_pages", "export_orders"}),
-        expected_names=("fetch_pages",),
-        expected_kinds=("loader",),
-        expected_upstream_names=((),),
-        expected_payload_names=("fetch_pages",),
-    ),
-]
-
-READ_SIDE_LIFECYCLE_NODE_TEST_CASES: list[PythonNodeLifecycleNodeBuildTestCase] = [
-    PythonNodeLifecycleNodeBuildTestCase(
-        description="builds read only asset scheduler node",
-        python_graph_case="orders",
-        selected_names=frozenset({"export_orders"}),
-        expected_names=("export_orders",),
-        expected_kinds=("asset",),
-        expected_upstream_names=((),),
-        expected_payload_names=("export_orders",),
-    ),
-    PythonNodeLifecycleNodeBuildTestCase(
-        description="builds read only task scheduler node",
-        python_graph_case="orders",
-        selected_names=frozenset({"prepare_orders"}),
-        expected_names=("prepare_orders",),
-        expected_kinds=("task",),
-        expected_upstream_names=((),),
-        expected_payload_names=("prepare_orders",),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    INGRESS_LIFECYCLE_NODE_TEST_CASES,
-    ids=[case.description for case in INGRESS_LIFECYCLE_NODE_TEST_CASES],
+    [
+        PythonNodeLifecycleNodeBuildTestCase(
+            description="builds pre sql task and loader scheduler nodes",
+            python_graph_case="orders",
+            selected_names=frozenset({"prepare_orders", "load_events"}),
+            expected_names=("load_events", "prepare_orders"),
+            expected_kinds=("loader", "task"),
+            expected_upstream_names=(("prepare_orders",), ()),
+            expected_payload_names=("load_events", "prepare_orders"),
+        ),
+        PythonNodeLifecycleNodeBuildTestCase(
+            description="builds intermediate loader scheduler node",
+            python_graph_case="intermediate_loader_asset_dependency",
+            selected_names=frozenset({"fetch_pages", "export_orders"}),
+            expected_names=("fetch_pages",),
+            expected_kinds=("loader",),
+            expected_upstream_names=((),),
+            expected_payload_names=("fetch_pages",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_lifecycle_plan_when_building_ingress_nodes_then_returns_python_scheduler_nodes(
     test_case: PythonNodeLifecycleNodeBuildTestCase,
@@ -91,8 +68,27 @@ def test_given_lifecycle_plan_when_building_ingress_nodes_then_returns_python_sc
 
 @pytest.mark.parametrize(
     "test_case",
-    READ_SIDE_LIFECYCLE_NODE_TEST_CASES,
-    ids=[case.description for case in READ_SIDE_LIFECYCLE_NODE_TEST_CASES],
+    [
+        PythonNodeLifecycleNodeBuildTestCase(
+            description="builds read only asset scheduler node",
+            python_graph_case="orders",
+            selected_names=frozenset({"export_orders"}),
+            expected_names=("export_orders",),
+            expected_kinds=("asset",),
+            expected_upstream_names=((),),
+            expected_payload_names=("export_orders",),
+        ),
+        PythonNodeLifecycleNodeBuildTestCase(
+            description="builds read only task scheduler node",
+            python_graph_case="orders",
+            selected_names=frozenset({"prepare_orders"}),
+            expected_names=("prepare_orders",),
+            expected_kinds=("task",),
+            expected_upstream_names=((),),
+            expected_payload_names=("prepare_orders",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_lifecycle_plan_when_building_read_side_nodes_then_returns_python_scheduler_nodes(
     test_case: PythonNodeLifecycleNodeBuildTestCase,

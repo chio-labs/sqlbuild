@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_fragments=("Reconcile report for dev: no issues.",),
         )
     ],
-    ids=["report shows no issues for healthy vde"],
+    ids=lambda case: case.description,
 )
 def test_given_healthy_virtual_environment_when_reconciling_then_report_is_clean(
     test_case: ReconcileE2ETestCase,
@@ -67,7 +67,7 @@ def test_given_healthy_virtual_environment_when_reconciling_then_report_is_clean
             ),
         )
     ],
-    ids=["report detects missing logical seed view"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_logical_seed_view_when_reconciling_then_report_flags_seed_issue(
     test_case: ReconcileE2ETestCase,
@@ -120,7 +120,7 @@ def test_given_missing_logical_seed_view_when_reconciling_then_report_flags_seed
             ),
         )
     ],
-    ids=["repair-view recreates missing logical seed view"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_logical_seed_view_when_repairing_then_it_is_recreated(
     test_case: ReconcileE2ETestCase,
@@ -164,7 +164,7 @@ def test_given_missing_logical_seed_view_when_repairing_then_it_is_recreated(
             ),
         )
     ],
-    ids=["report detects missing physical seed relation"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_physical_seed_relation_when_reconciling_then_report_flags_seed_issue(
     test_case: ReconcileE2ETestCase,
@@ -213,7 +213,7 @@ def test_given_missing_physical_seed_relation_when_reconciling_then_report_flags
             ),
         )
     ],
-    ids=["report detects missing tracked physical seed state"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_seed_physical_state_when_reconciling_then_report_flags_seed_issue(
     test_case: ReconcileE2ETestCase,
@@ -272,7 +272,7 @@ def test_given_missing_seed_physical_state_when_reconciling_then_report_flags_se
             ),
         )
     ],
-    ids=["report detects and repair-view recreates missing logical vde view"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_logical_view_when_reconciling_and_repairing_then_it_is_recreated(
     test_case: ReconcileE2ETestCase,
@@ -336,7 +336,7 @@ def test_given_missing_logical_view_when_reconciling_and_repairing_then_it_is_re
             unexpected_fragments=("Traceback",),
         )
     ],
-    ids=["report detects and repair-view blocks missing physical relation"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_physical_relation_when_reconciling_and_repairing_then_it_blocks(
     test_case: ReconcileE2ETestCase,
@@ -402,7 +402,7 @@ def test_given_missing_physical_relation_when_reconciling_and_repairing_then_it_
             input_text="attach fact_orders\n",
         )
     ],
-    ids=["attach rebinds logical ref to tracked physical relation"],
+    ids=lambda case: case.description,
 )
 def test_given_tracked_physical_relation_when_attaching_then_logical_ref_is_rebound(
     test_case: ReconcileE2ETestCase,
@@ -471,7 +471,7 @@ def test_given_tracked_physical_relation_when_attaching_then_logical_ref_is_rebo
             expected_fragments=("is not a tracked relation",),
         )
     ],
-    ids=["attach blocks untracked physical relation"],
+    ids=lambda case: case.description,
 )
 def test_given_untracked_physical_relation_when_attaching_then_it_blocks(
     test_case: ReconcileE2ETestCase,
@@ -519,7 +519,7 @@ def test_given_untracked_physical_relation_when_attaching_then_it_blocks(
             expected_fragments=("is not a tracked relation for 'fact_orders'",),
         )
     ],
-    ids=["attach blocks physical relation tracked for another model"],
+    ids=lambda case: case.description,
 )
 def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_before_ref_update(
     test_case: ReconcileE2ETestCase,
@@ -597,7 +597,7 @@ def test_given_wrong_model_physical_relation_when_attaching_then_it_blocks_befor
             input_text="nope\n",
         )
     ],
-    ids=["attach cancellation blocks before ref mutation"],
+    ids=lambda case: case.description,
 )
 def test_given_wrong_confirmation_when_attaching_then_it_cancels(
     test_case: ReconcileE2ETestCase,
@@ -676,7 +676,7 @@ def test_given_wrong_confirmation_when_attaching_then_it_cancels(
             expected_fragments=("logical target for 'fact_orders' is a table",),
         )
     ],
-    ids=["repair-view blocks logical target table"],
+    ids=lambda case: case.description,
 )
 def test_given_logical_target_table_when_repairing_view_then_it_blocks(
     test_case: ReconcileE2ETestCase,
@@ -717,7 +717,7 @@ def test_given_logical_target_table_when_repairing_view_then_it_blocks(
             expected_fragments=("logical target for 'fact_orders' is a table",),
         )
     ],
-    ids=["attach blocks logical target table before ref mutation"],
+    ids=lambda case: case.description,
 )
 def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_update(
     test_case: ReconcileE2ETestCase,
@@ -814,7 +814,7 @@ def test_given_logical_target_table_when_attaching_then_it_blocks_before_ref_upd
             expected_fragments=("virtual environment 'dev' is locked",),
         )
     ],
-    ids=["repair-view blocks when target vde is locked"],
+    ids=lambda case: case.description,
 )
 def test_given_target_virtual_environment_lock_when_repairing_view_then_it_blocks(
     test_case: ReconcileE2ETestCase,
@@ -871,7 +871,7 @@ def test_given_target_virtual_environment_lock_when_repairing_view_then_it_block
             expected_fragments=("virtual environment 'dev' is locked",),
         )
     ],
-    ids=["attach blocks when target vde is locked"],
+    ids=lambda case: case.description,
 )
 def test_given_target_virtual_environment_lock_when_attaching_then_it_blocks_before_ref_update(
     test_case: ReconcileE2ETestCase,

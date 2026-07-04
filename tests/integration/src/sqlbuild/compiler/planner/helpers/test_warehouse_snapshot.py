@@ -51,153 +51,151 @@ _REVENUE_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.MODEL, name="revenue"
 )
 
-GATHER_SNAPSHOT_TEST_CASES: list[GatherWarehouseSnapshotTestCase] = [
-    GatherWarehouseSnapshotTestCase(
-        description="gathers relations columns and fingerprints across schemas",
-        setup_sql=(
-            "CREATE TABLE staging.orders (id INTEGER, name VARCHAR)",
-            "CREATE TABLE marts.revenue (amount DECIMAL)",
-        ),
-        model_locations={"orders": "staging", "revenue": "marts"},
-        seed_locations={},
-        fingerprints_to_write=(
-            (
-                "staging",
-                Fingerprint(
-                    node_type="model",
-                    node_name="orders",
-                    target_database=None,
-                    target_schema=None,
-                    target_name="orders",
-                    run_id="run_001",
-                    definition_hash="definition_a",
-                    schema_fingerprint="schema_a",
-                    definition="SELECT 1",
-                    ts=datetime(2026, 1, 15, 12, 0, 0),
-                ),
-            ),
-        ),
-        expected_relation_names=frozenset({"orders", "revenue"}),
-        expected_column_table_names=frozenset({"orders", "revenue"}),
-        expected_fingerprint_names=frozenset({"orders"}),
-    ),
-    GatherWarehouseSnapshotTestCase(
-        description="gathers snapshot with seed locations included",
-        setup_sql=(
-            "CREATE TABLE staging.orders (id INTEGER)",
-            "CREATE TABLE staging.country_codes (code VARCHAR)",
-        ),
-        model_locations={"orders": "staging"},
-        seed_locations={"country_codes": "staging"},
-        expected_relation_names=frozenset({"orders", "country_codes"}),
-        expected_column_table_names=frozenset({"orders", "country_codes"}),
-        expected_fingerprint_names=frozenset(),
-    ),
-    GatherWarehouseSnapshotTestCase(
-        description="partitions mixed fingerprint node types into typed maps",
-        setup_sql=(
-            "CREATE TABLE staging.orders (id INTEGER)",
-            "CREATE TABLE staging.country_codes (code VARCHAR)",
-        ),
-        model_locations={"orders": "staging"},
-        seed_locations={"country_codes": "staging"},
-        fingerprints_to_write=(
-            (
-                "staging",
-                Fingerprint(
-                    node_type="model",
-                    node_name="orders",
-                    target_database=None,
-                    target_schema=None,
-                    target_name="orders",
-                    run_id="run_001",
-                    definition_hash="model_definition",
-                    schema_fingerprint="model_schema",
-                    definition="SELECT 1",
-                    ts=datetime(2026, 1, 15, 12, 0, 0),
-                ),
-            ),
-            (
-                "staging",
-                Fingerprint(
-                    node_type="udf",
-                    node_name="is_large_order",
-                    target_database=None,
-                    target_schema=None,
-                    target_name="is_large_order",
-                    run_id="run_001",
-                    definition_hash="function_definition",
-                    schema_fingerprint="",
-                    definition="amount > 100",
-                    ts=datetime(2026, 1, 15, 12, 0, 1),
-                ),
-            ),
-            (
-                "staging",
-                Fingerprint(
-                    node_type="seed",
-                    node_name="country_codes",
-                    target_database=None,
-                    target_schema=None,
-                    target_name="country_codes",
-                    run_id="run_001",
-                    definition_hash="seed_definition",
-                    schema_fingerprint="",
-                    definition='{"columns": []}',
-                    ts=datetime(2026, 1, 15, 12, 0, 2),
-                ),
-            ),
-        ),
-        expected_relation_names=frozenset({"orders", "country_codes"}),
-        expected_column_table_names=frozenset({"orders", "country_codes"}),
-        expected_fingerprint_names=frozenset({"orders"}),
-        expected_function_fingerprint_names=frozenset({"is_large_order"}),
-        expected_seed_fingerprint_names=frozenset({"country_codes"}),
-    ),
-    GatherWarehouseSnapshotTestCase(
-        description="filters metadata to selected model and unselected upstream names",
-        setup_sql=(
-            "CREATE TABLE staging.raw_orders (id INTEGER)",
-            "CREATE TABLE staging.revenue (amount DECIMAL)",
-            "CREATE TABLE staging.unrelated (value VARCHAR)",
-        ),
-        model_locations={"raw_orders": "staging", "revenue": "staging"},
-        model_deps={"revenue": ("raw_orders",)},
-        seed_locations={},
-        selected_keys=frozenset({_REVENUE_KEY}),
-        expected_relation_names=frozenset({"raw_orders", "revenue"}),
-        expected_column_table_names=frozenset({"raw_orders", "revenue"}),
-        expected_fingerprint_names=frozenset(),
-    ),
-    GatherWarehouseSnapshotTestCase(
-        description="falls back to schema-wide metadata when selected scope exceeds threshold",
-        setup_sql=(
-            *(f"CREATE TABLE staging.model_{index} (id INTEGER)" for index in range(251)),
-            "CREATE TABLE staging.unrelated (value VARCHAR)",
-        ),
-        model_locations={
-            f"model_{index}": "staging" for index in range(METADATA_NAME_FILTER_LIMIT + 1)
-        },
-        seed_locations={},
-        selected_keys=frozenset(
-            CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=f"model_{index}")
-            for index in range(METADATA_NAME_FILTER_LIMIT + 1)
-        ),
-        expected_relation_names=frozenset(
-            {*(f"model_{index}" for index in range(251)), "unrelated"}
-        ),
-        expected_column_table_names=frozenset(
-            {*(f"model_{index}" for index in range(251)), "unrelated"}
-        ),
-        expected_fingerprint_names=frozenset(),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    GATHER_SNAPSHOT_TEST_CASES,
-    ids=[case.description for case in GATHER_SNAPSHOT_TEST_CASES],
+    [
+        GatherWarehouseSnapshotTestCase(
+            description="gathers relations columns and fingerprints across schemas",
+            setup_sql=(
+                "CREATE TABLE staging.orders (id INTEGER, name VARCHAR)",
+                "CREATE TABLE marts.revenue (amount DECIMAL)",
+            ),
+            model_locations={"orders": "staging", "revenue": "marts"},
+            seed_locations={},
+            fingerprints_to_write=(
+                (
+                    "staging",
+                    Fingerprint(
+                        node_type="model",
+                        node_name="orders",
+                        target_database=None,
+                        target_schema=None,
+                        target_name="orders",
+                        run_id="run_001",
+                        definition_hash="definition_a",
+                        schema_fingerprint="schema_a",
+                        definition="SELECT 1",
+                        ts=datetime(2026, 1, 15, 12, 0, 0),
+                    ),
+                ),
+            ),
+            expected_relation_names=frozenset({"orders", "revenue"}),
+            expected_column_table_names=frozenset({"orders", "revenue"}),
+            expected_fingerprint_names=frozenset({"orders"}),
+        ),
+        GatherWarehouseSnapshotTestCase(
+            description="gathers snapshot with seed locations included",
+            setup_sql=(
+                "CREATE TABLE staging.orders (id INTEGER)",
+                "CREATE TABLE staging.country_codes (code VARCHAR)",
+            ),
+            model_locations={"orders": "staging"},
+            seed_locations={"country_codes": "staging"},
+            expected_relation_names=frozenset({"orders", "country_codes"}),
+            expected_column_table_names=frozenset({"orders", "country_codes"}),
+            expected_fingerprint_names=frozenset(),
+        ),
+        GatherWarehouseSnapshotTestCase(
+            description="partitions mixed fingerprint node types into typed maps",
+            setup_sql=(
+                "CREATE TABLE staging.orders (id INTEGER)",
+                "CREATE TABLE staging.country_codes (code VARCHAR)",
+            ),
+            model_locations={"orders": "staging"},
+            seed_locations={"country_codes": "staging"},
+            fingerprints_to_write=(
+                (
+                    "staging",
+                    Fingerprint(
+                        node_type="model",
+                        node_name="orders",
+                        target_database=None,
+                        target_schema=None,
+                        target_name="orders",
+                        run_id="run_001",
+                        definition_hash="model_definition",
+                        schema_fingerprint="model_schema",
+                        definition="SELECT 1",
+                        ts=datetime(2026, 1, 15, 12, 0, 0),
+                    ),
+                ),
+                (
+                    "staging",
+                    Fingerprint(
+                        node_type="udf",
+                        node_name="is_large_order",
+                        target_database=None,
+                        target_schema=None,
+                        target_name="is_large_order",
+                        run_id="run_001",
+                        definition_hash="function_definition",
+                        schema_fingerprint="",
+                        definition="amount > 100",
+                        ts=datetime(2026, 1, 15, 12, 0, 1),
+                    ),
+                ),
+                (
+                    "staging",
+                    Fingerprint(
+                        node_type="seed",
+                        node_name="country_codes",
+                        target_database=None,
+                        target_schema=None,
+                        target_name="country_codes",
+                        run_id="run_001",
+                        definition_hash="seed_definition",
+                        schema_fingerprint="",
+                        definition='{"columns": []}',
+                        ts=datetime(2026, 1, 15, 12, 0, 2),
+                    ),
+                ),
+            ),
+            expected_relation_names=frozenset({"orders", "country_codes"}),
+            expected_column_table_names=frozenset({"orders", "country_codes"}),
+            expected_fingerprint_names=frozenset({"orders"}),
+            expected_function_fingerprint_names=frozenset({"is_large_order"}),
+            expected_seed_fingerprint_names=frozenset({"country_codes"}),
+        ),
+        GatherWarehouseSnapshotTestCase(
+            description="filters metadata to selected model and unselected upstream names",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (id INTEGER)",
+                "CREATE TABLE staging.revenue (amount DECIMAL)",
+                "CREATE TABLE staging.unrelated (value VARCHAR)",
+            ),
+            model_locations={"raw_orders": "staging", "revenue": "staging"},
+            model_deps={"revenue": ("raw_orders",)},
+            seed_locations={},
+            selected_keys=frozenset({_REVENUE_KEY}),
+            expected_relation_names=frozenset({"raw_orders", "revenue"}),
+            expected_column_table_names=frozenset({"raw_orders", "revenue"}),
+            expected_fingerprint_names=frozenset(),
+        ),
+        GatherWarehouseSnapshotTestCase(
+            description="falls back to schema-wide metadata when selected scope exceeds threshold",
+            setup_sql=(
+                *(f"CREATE TABLE staging.model_{index} (id INTEGER)" for index in range(251)),
+                "CREATE TABLE staging.unrelated (value VARCHAR)",
+            ),
+            model_locations={
+                f"model_{index}": "staging" for index in range(METADATA_NAME_FILTER_LIMIT + 1)
+            },
+            seed_locations={},
+            selected_keys=frozenset(
+                CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=f"model_{index}")
+                for index in range(METADATA_NAME_FILTER_LIMIT + 1)
+            ),
+            expected_relation_names=frozenset(
+                {*(f"model_{index}" for index in range(251)), "unrelated"}
+            ),
+            expected_column_table_names=frozenset(
+                {*(f"model_{index}" for index in range(251)), "unrelated"}
+            ),
+            expected_fingerprint_names=frozenset(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
     test_case: GatherWarehouseSnapshotTestCase,
@@ -256,7 +254,7 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
             expected_fingerprint_count=0,
         ),
     ],
-    ids=["returns empty snapshot when no target schemas exist"],
+    ids=lambda case: case.description,
 )
 def test_given_no_target_schemas_when_gathering_snapshot_then_returns_empty(
     test_case: GatherEmptySnapshotTestCase,
@@ -292,7 +290,7 @@ def test_given_no_target_schemas_when_gathering_snapshot_then_returns_empty(
             expected_get_all_columns_names=(("orders",),),
         )
     ],
-    ids=["filters source column metadata to declared source table names"],
+    ids=lambda case: case.description,
 )
 def test_given_sources_when_gathering_source_columns_then_filters_metadata_names(
     test_case: GatherSourceColumnsTestCase,
@@ -314,95 +312,92 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
     assert tuple(adapter.get_all_columns_names) == test_case.expected_get_all_columns_names
 
 
-CURSOR_SNAPSHOT_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
-    GatherCursorSnapshotTestCase(
-        description="gathers cursor bounds for incremental model with existing target",
-        setup_sql=(
-            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-02-01')",
-            "CREATE TABLE staging.fact_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO staging.fact_orders VALUES (1, '2024-01-15')",
-        ),
-        selected_keys=frozenset({_SELECTED_KEY}),
-        full_refresh=False,
-        start_cursor_override=None,
-        end_cursor_override=None,
-        expected_cursor_model_names=frozenset({"fact_orders"}),
-        expected_cursor_snapshots={
-            "fact_orders": ModelCursorSnapshot(
-                target_max="2024-01-15 00:00:00",
-                upstream_mins=("2024-01-01 00:00:00",),
-                upstream_maxes=("2024-02-01 00:00:00",),
-            ),
-        },
-        expected_progress_calls=2,
-    ),
-    GatherCursorSnapshotTestCase(
-        description="gathers cursor bounds for first run with no target table",
-        setup_sql=(
-            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-02-01')",
-        ),
-        selected_keys=frozenset({_SELECTED_KEY}),
-        full_refresh=False,
-        start_cursor_override=None,
-        end_cursor_override=None,
-        expected_cursor_model_names=frozenset({"fact_orders"}),
-        expected_cursor_snapshots={
-            "fact_orders": ModelCursorSnapshot(
-                target_max=None,
-                upstream_mins=("2024-01-01 00:00:00",),
-                upstream_maxes=("2024-02-01 00:00:00",),
-            ),
-        },
-        expected_progress_calls=2,
-    ),
-    GatherCursorSnapshotTestCase(
-        description="skips cursor gathering when full refresh is true",
-        setup_sql=(
-            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
-        ),
-        selected_keys=frozenset({_SELECTED_KEY}),
-        full_refresh=True,
-        start_cursor_override=None,
-        end_cursor_override=None,
-        expected_cursor_model_names=frozenset(),
-        expected_progress_calls=0,
-    ),
-    GatherCursorSnapshotTestCase(
-        description="skips cursor gathering when both overrides are provided",
-        setup_sql=(
-            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
-        ),
-        selected_keys=frozenset({_SELECTED_KEY}),
-        full_refresh=False,
-        start_cursor_override="2024-01-01",
-        end_cursor_override="2024-02-01",
-        expected_cursor_model_names=frozenset(),
-        expected_progress_calls=0,
-    ),
-    GatherCursorSnapshotTestCase(
-        description="skips unselected incremental models",
-        setup_sql=(
-            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
-        ),
-        selected_keys=frozenset(),
-        full_refresh=False,
-        start_cursor_override=None,
-        end_cursor_override=None,
-        expected_cursor_model_names=frozenset(),
-        expected_progress_calls=0,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    CURSOR_SNAPSHOT_TEST_CASES,
-    ids=[case.description for case in CURSOR_SNAPSHOT_TEST_CASES],
+    [
+        GatherCursorSnapshotTestCase(
+            description="gathers cursor bounds for incremental model with existing target",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-02-01')",
+                "CREATE TABLE staging.fact_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.fact_orders VALUES (1, '2024-01-15')",
+            ),
+            selected_keys=frozenset({_SELECTED_KEY}),
+            full_refresh=False,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            expected_cursor_model_names=frozenset({"fact_orders"}),
+            expected_cursor_snapshots={
+                "fact_orders": ModelCursorSnapshot(
+                    target_max="2024-01-15 00:00:00",
+                    upstream_mins=("2024-01-01 00:00:00",),
+                    upstream_maxes=("2024-02-01 00:00:00",),
+                ),
+            },
+            expected_progress_calls=2,
+        ),
+        GatherCursorSnapshotTestCase(
+            description="gathers cursor bounds for first run with no target table",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-02-01')",
+            ),
+            selected_keys=frozenset({_SELECTED_KEY}),
+            full_refresh=False,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            expected_cursor_model_names=frozenset({"fact_orders"}),
+            expected_cursor_snapshots={
+                "fact_orders": ModelCursorSnapshot(
+                    target_max=None,
+                    upstream_mins=("2024-01-01 00:00:00",),
+                    upstream_maxes=("2024-02-01 00:00:00",),
+                ),
+            },
+            expected_progress_calls=2,
+        ),
+        GatherCursorSnapshotTestCase(
+            description="skips cursor gathering when full refresh is true",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
+            ),
+            selected_keys=frozenset({_SELECTED_KEY}),
+            full_refresh=True,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            expected_cursor_model_names=frozenset(),
+            expected_progress_calls=0,
+        ),
+        GatherCursorSnapshotTestCase(
+            description="skips cursor gathering when both overrides are provided",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
+            ),
+            selected_keys=frozenset({_SELECTED_KEY}),
+            full_refresh=False,
+            start_cursor_override="2024-01-01",
+            end_cursor_override="2024-02-01",
+            expected_cursor_model_names=frozenset(),
+            expected_progress_calls=0,
+        ),
+        GatherCursorSnapshotTestCase(
+            description="skips unselected incremental models",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
+            ),
+            selected_keys=frozenset(),
+            full_refresh=False,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            expected_cursor_model_names=frozenset(),
+            expected_progress_calls=0,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_expected(
     test_case: GatherCursorSnapshotTestCase,
@@ -443,62 +438,59 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
     assert len(progress_calls) == test_case.expected_progress_calls
 
 
-DEFERRED_CURSOR_TEST_CASES: list[GatherCursorSnapshotTestCase] = [
-    GatherCursorSnapshotTestCase(
-        description="selected upstream reads cursor from current env not deferred",
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-03-01')",
-            "CREATE TABLE prod.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO prod.raw_orders VALUES (1, '2024-01-01'), (2, '2024-06-01')",
-        ),
-        selected_keys=frozenset({_SELECTED_KEY, _ORDERS_KEY}),
-        full_refresh=False,
-        start_cursor_override=None,
-        end_cursor_override=None,
-        deferred_locations={"raw_orders": "prod.raw_orders"},
-        expected_cursor_model_names=frozenset({"fact_orders"}),
-        expected_cursor_snapshots={
-            "fact_orders": ModelCursorSnapshot(
-                target_max=None,
-                upstream_mins=("2024-01-01 00:00:00",),
-                upstream_maxes=("2024-03-01 00:00:00",),
-            ),
-        },
-        expected_progress_calls=2,
-    ),
-    GatherCursorSnapshotTestCase(
-        description="non-selected upstream reads cursor from deferred env",
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-03-01')",
-            "CREATE TABLE prod.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-            "INSERT INTO prod.raw_orders VALUES (1, '2024-01-01'), (2, '2024-06-01')",
-        ),
-        selected_keys=frozenset({_SELECTED_KEY}),
-        full_refresh=False,
-        start_cursor_override=None,
-        end_cursor_override=None,
-        deferred_locations={"raw_orders": "prod.raw_orders"},
-        expected_cursor_model_names=frozenset({"fact_orders"}),
-        expected_cursor_snapshots={
-            "fact_orders": ModelCursorSnapshot(
-                target_max=None,
-                upstream_mins=("2024-01-01 00:00:00",),
-                upstream_maxes=("2024-06-01 00:00:00",),
-            ),
-        },
-        expected_progress_calls=2,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DEFERRED_CURSOR_TEST_CASES,
-    ids=[case.description for case in DEFERRED_CURSOR_TEST_CASES],
+    [
+        GatherCursorSnapshotTestCase(
+            description="selected upstream reads cursor from current env not deferred",
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-03-01')",
+                "CREATE TABLE prod.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO prod.raw_orders VALUES (1, '2024-01-01'), (2, '2024-06-01')",
+            ),
+            selected_keys=frozenset({_SELECTED_KEY, _ORDERS_KEY}),
+            full_refresh=False,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            deferred_locations={"raw_orders": "prod.raw_orders"},
+            expected_cursor_model_names=frozenset({"fact_orders"}),
+            expected_cursor_snapshots={
+                "fact_orders": ModelCursorSnapshot(
+                    target_max=None,
+                    upstream_mins=("2024-01-01 00:00:00",),
+                    upstream_maxes=("2024-03-01 00:00:00",),
+                ),
+            },
+            expected_progress_calls=2,
+        ),
+        GatherCursorSnapshotTestCase(
+            description="non-selected upstream reads cursor from deferred env",
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-03-01')",
+                "CREATE TABLE prod.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO prod.raw_orders VALUES (1, '2024-01-01'), (2, '2024-06-01')",
+            ),
+            selected_keys=frozenset({_SELECTED_KEY}),
+            full_refresh=False,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            deferred_locations={"raw_orders": "prod.raw_orders"},
+            expected_cursor_model_names=frozenset({"fact_orders"}),
+            expected_cursor_snapshots={
+                "fact_orders": ModelCursorSnapshot(
+                    target_max=None,
+                    upstream_mins=("2024-01-01 00:00:00",),
+                    upstream_maxes=("2024-06-01 00:00:00",),
+                ),
+            },
+            expected_progress_calls=2,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_deferred_locations_when_gathering_cursor_snapshots_then_resolves_correct_env(
     test_case: GatherCursorSnapshotTestCase,

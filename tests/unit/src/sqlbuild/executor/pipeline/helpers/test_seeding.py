@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.executor.pipeline.helpers.helpers import (
             expected_json_asset_order=("seed_a", "seed_b", "seed_c"),
         ),
     ],
-    ids=["uses bounded concurrent connections and preserves seed result order"],
+    ids=lambda case: case.description,
 )
 def test_given_multiple_seeds_when_running_seed_pipeline_then_uses_concurrent_connections(
     test_case: SeedPipelineConcurrencyTestCase,

@@ -25,7 +25,7 @@ from tests.integration.src.sqlbuild.adapters.motherduck.helpers import (
             expected_result=QueryResult(columns=("id", "name"), rows=((1, "hello"),)),
         )
     ],
-    ids=["returns inline query result with column names and rows"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_when_querying_then_motherduck_returns_named_rows(
     test_case: MotherDuckQueryTestCase,
@@ -47,7 +47,7 @@ def test_given_sql_when_querying_then_motherduck_returns_named_rows(
             expected_row_count=2,
         )
     ],
-    ids=["creates table from query using DuckDB materialization semantics"],
+    ids=lambda case: case.description,
 )
 def test_given_model_sql_when_building_then_motherduck_creates_table(
     test_case: MotherDuckBuildFlowTestCase,

@@ -25,7 +25,7 @@ from tests.integration.src.sqlbuild.executor.node_results.main._test_types impor
             expected_metadata={"source": "integration"},
         )
     ],
-    ids=["writes and reads node result through DuckDB"],
+    ids=lambda case: case.description,
 )
 def test_given_node_result_record_when_writing_and_reading_then_round_trips_envelope(
     test_case: NodeResultReadWriteIntegrationTestCase,

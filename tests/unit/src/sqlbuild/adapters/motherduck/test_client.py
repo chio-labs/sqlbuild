@@ -13,39 +13,37 @@ from tests.unit.src.sqlbuild.adapters.motherduck.helpers import (
     install_fake_duckdb_module,
 )
 
-CONNECTION_DATABASE_TEST_CASES: list[MotherDuckConnectionDatabaseTestCase] = [
-    MotherDuckConnectionDatabaseTestCase(
-        description="defaults to the MotherDuck account connection",
-        config={},
-        expected_database="md:",
-    ),
-    MotherDuckConnectionDatabaseTestCase(
-        description="prefixes bare database names with md scheme",
-        config={"database": "analytics"},
-        expected_database="md:analytics",
-    ),
-    MotherDuckConnectionDatabaseTestCase(
-        description="preserves explicit md connection strings",
-        config={"database": "md:analytics"},
-        expected_database="md:analytics",
-    ),
-    MotherDuckConnectionDatabaseTestCase(
-        description="adds token as MotherDuck connection parameter",
-        config={"database": "analytics", "token": "token with space"},
-        expected_database="md:analytics?motherduck_token=token+with+space",
-    ),
-    MotherDuckConnectionDatabaseTestCase(
-        description="appends token to existing connection parameters",
-        config={"database": "md:analytics?custom=1", "token": "secret"},
-        expected_database="md:analytics?custom=1&motherduck_token=secret",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    CONNECTION_DATABASE_TEST_CASES,
-    ids=[case.description for case in CONNECTION_DATABASE_TEST_CASES],
+    [
+        MotherDuckConnectionDatabaseTestCase(
+            description="defaults to the MotherDuck account connection",
+            config={},
+            expected_database="md:",
+        ),
+        MotherDuckConnectionDatabaseTestCase(
+            description="prefixes bare database names with md scheme",
+            config={"database": "analytics"},
+            expected_database="md:analytics",
+        ),
+        MotherDuckConnectionDatabaseTestCase(
+            description="preserves explicit md connection strings",
+            config={"database": "md:analytics"},
+            expected_database="md:analytics",
+        ),
+        MotherDuckConnectionDatabaseTestCase(
+            description="adds token as MotherDuck connection parameter",
+            config={"database": "analytics", "token": "token with space"},
+            expected_database="md:analytics?motherduck_token=token+with+space",
+        ),
+        MotherDuckConnectionDatabaseTestCase(
+            description="appends token to existing connection parameters",
+            config={"database": "md:analytics?custom=1", "token": "secret"},
+            expected_database="md:analytics?custom=1&motherduck_token=secret",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_connection_config_when_connecting_then_uses_motherduck_database(
     test_case: MotherDuckConnectionDatabaseTestCase,
@@ -68,7 +66,7 @@ def test_given_connection_config_when_connecting_then_uses_motherduck_database(
             expected_sql_analysis_dialect="duckdb",
         )
     ],
-    ids=["returns MotherDuck adapter defaults"],
+    ids=lambda case: case.description,
 )
 def test_given_motherduck_adapter_when_checking_defaults_then_returns_duckdb_defaults(
     test_case: MotherDuckAdapterDefaultsTestCase,
@@ -95,7 +93,7 @@ def test_given_motherduck_adapter_when_checking_defaults_then_returns_duckdb_def
             ),
         )
     ],
-    ids=["inherits DuckDB fingerprint pruning SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_prune_then_motherduck_inherits_duckdb_pattern(
     test_case: MotherDuckPruneSqlTestCase,
@@ -128,7 +126,7 @@ def test_given_fingerprint_table_when_rendering_prune_then_motherduck_inherits_d
             ),
         )
     ],
-    ids=["inherits DuckDB source freshness pruning SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_table_when_rendering_prune_then_motherduck_inherits_duckdb_pattern(
     test_case: MotherDuckPruneSqlTestCase,

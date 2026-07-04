@@ -173,19 +173,21 @@ CORE_SCENARIOS: tuple[SelectionStalenessE2ETestCase, ...] = (
     ),
 )
 
-TEST_CASES: list[SelectionStalenessEngineE2ETestCase] = [
-    SelectionStalenessEngineE2ETestCase(
-        description=f"{engine}: {scenario.description}",
-        engine=engine,
-        scenario=scenario,
-        expected_rows_after_repair=scenario.expected_rows_after_repair,
-    )
-    for scenario in CORE_SCENARIOS
-    for engine in scenario.engines
-]
 
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectionStalenessEngineE2ETestCase(
+            description=f"{engine}: {scenario.description}",
+            engine=engine,
+            scenario=scenario,
+            expected_rows_after_repair=scenario.expected_rows_after_repair,
+        )
+        for scenario in CORE_SCENARIOS
+        for engine in scenario.engines
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_exact_selection_when_upstream_changed_then_preserves_staleness_contract(
     test_case: SelectionStalenessEngineE2ETestCase,
     tmp_path: Path,

@@ -62,40 +62,6 @@ SEED_KEY: CompiledObjectKey = CompiledObjectKey(
     name="seed_orders",
 )
 
-EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES: list[DirectParentRunActionTestCase] = [
-    DirectParentRunActionTestCase(
-        description="direct model run marks child as upstream changed",
-        parent_key=MODEL_CHANGED,
-        child_key=MODEL_UNCHANGED,
-        expected_cascade_present=True,
-        expected_root_cause=MODEL_CHANGED.name,
-        expected_root_reason=PlanReason.UPSTREAM_CHANGED,
-    ),
-    DirectParentRunActionTestCase(
-        description="direct seed run marks child as upstream changed",
-        parent_key=SEED_KEY,
-        child_key=MODEL_UNCHANGED,
-        expected_cascade_present=True,
-        expected_root_cause=SEED_KEY.name,
-        expected_root_reason=PlanReason.UPSTREAM_CHANGED,
-    ),
-]
-
-NON_EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES: list[DirectParentRunActionTestCase] = [
-    DirectParentRunActionTestCase(
-        description="selected source parent does not mark child as upstream changed",
-        parent_key=SOURCE_KEY,
-        child_key=MODEL_UNCHANGED,
-        expected_cascade_present=False,
-    ),
-    DirectParentRunActionTestCase(
-        description="selected function parent does not mark child as upstream changed",
-        parent_key=FUNCTION_CHANGED,
-        child_key=MODEL_UNCHANGED,
-        expected_cascade_present=False,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -115,7 +81,7 @@ NON_EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES: list[DirectParentRunActionTe
             expected_stale_model_names=frozenset({"stale_model", "missing_model"}),
         )
     ],
-    ids=["returns models with missing or mismatched built identities"],
+    ids=lambda case: case.description,
 )
 def test_given_identity_hashes_when_collecting_stale_models_then_returns_missing_and_mismatched(
     test_case: DirectIdentityStaleModelNamesTestCase,
@@ -168,7 +134,7 @@ def test_given_identity_hashes_when_collecting_stale_models_then_returns_missing
             ),
         )
     ],
-    ids=["keeps stale SQL keys and non-model resources"],
+    ids=lambda case: case.description,
 )
 def test_given_mixed_change_results_when_pruning_unchanged_scope_then_keeps_only_stale_sql_keys(
     test_case: PruneUnchangedScopeTestCase,
@@ -246,7 +212,7 @@ def test_given_mixed_change_results_when_pruning_unchanged_scope_then_keeps_only
             expected_selected_keys=frozenset({MODEL_UNCHANGED}),
         )
     ],
-    ids=["keeps unchanged model marked stale by source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_stale_model_when_pruning_then_keeps_model(
     test_case: PruneUnchangedScopeTestCase,
@@ -295,7 +261,7 @@ def test_given_source_freshness_stale_model_when_pruning_then_keeps_model(
             expected_cascade_present=False,
         )
     ],
-    ids=["composed version stale model does not add upstream cascade"],
+    ids=lambda case: case.description,
 )
 def test_given_composed_version_stale_model_when_marking_actions_then_does_not_add_upstream_cascade(
     test_case: MarkVersionIdentityStaleActionsTestCase,
@@ -343,7 +309,7 @@ def test_given_composed_version_stale_model_when_marking_actions_then_does_not_a
             expected_cascade_present=False,
         )
     ],
-    ids=["locally changed model keeps existing reason"],
+    ids=lambda case: case.description,
 )
 def test_given_locally_changed_model_when_marking_actions_then_keeps_existing_reason(
     test_case: MarkVersionIdentityStaleActionsTestCase,
@@ -381,8 +347,25 @@ def test_given_locally_changed_model_when_marking_actions_then_keeps_existing_re
 
 @pytest.mark.parametrize(
     "test_case",
-    EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES,
-    ids=[case.description for case in EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES],
+    [
+        DirectParentRunActionTestCase(
+            description="direct model run marks child as upstream changed",
+            parent_key=MODEL_CHANGED,
+            child_key=MODEL_UNCHANGED,
+            expected_cascade_present=True,
+            expected_root_cause=MODEL_CHANGED.name,
+            expected_root_reason=PlanReason.UPSTREAM_CHANGED,
+        ),
+        DirectParentRunActionTestCase(
+            description="direct seed run marks child as upstream changed",
+            parent_key=SEED_KEY,
+            child_key=MODEL_UNCHANGED,
+            expected_cascade_present=True,
+            expected_root_cause=SEED_KEY.name,
+            expected_root_reason=PlanReason.UPSTREAM_CHANGED,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_executable_direct_parent_run_scope_when_marking_then_child_gets_cascade(
     test_case: DirectParentRunActionTestCase,
@@ -429,8 +412,21 @@ def test_given_executable_direct_parent_run_scope_when_marking_then_child_gets_c
 
 @pytest.mark.parametrize(
     "test_case",
-    NON_EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES,
-    ids=[case.description for case in NON_EXECUTABLE_DIRECT_PARENT_RUN_ACTION_TEST_CASES],
+    [
+        DirectParentRunActionTestCase(
+            description="selected source parent does not mark child as upstream changed",
+            parent_key=SOURCE_KEY,
+            child_key=MODEL_UNCHANGED,
+            expected_cascade_present=False,
+        ),
+        DirectParentRunActionTestCase(
+            description="selected function parent does not mark child as upstream changed",
+            parent_key=FUNCTION_CHANGED,
+            child_key=MODEL_UNCHANGED,
+            expected_cascade_present=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_non_executable_direct_parent_in_scope_when_marking_then_child_has_no_cascade(
     test_case: DirectParentRunActionTestCase,

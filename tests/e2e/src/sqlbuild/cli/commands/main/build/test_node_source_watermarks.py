@@ -34,7 +34,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb, r
             expected_absent_nodes=("v",),
         )
     ],
-    ids=["table reaches source frontier through view"],
+    ids=lambda case: case.description,
 )
 def test_given_table_reads_view_over_source_when_build_runs_then_records_direct_watermark(
     test_case: NodeSourceWatermarkBuildE2ETestCase,
@@ -96,7 +96,7 @@ def test_given_table_reads_view_over_source_when_build_runs_then_records_direct_
             expected_absent_nodes=("v",),
         )
     ],
-    ids=["table reaches materialized frontier through view"],
+    ids=lambda case: case.description,
 )
 def test_given_table_reads_view_over_table_when_source_advances_then_inherits_table_watermark(
     test_case: NodeSourceWatermarkBuildE2ETestCase,
@@ -161,32 +161,29 @@ def test_given_table_reads_view_over_table_when_source_advances_then_inherits_ta
         assert absent_node not in payloads
 
 
-MERGED_FRONTIER_TEST_CASES: list[NodeSourceWatermarkBuildE2ETestCase] = [
-    NodeSourceWatermarkBuildE2ETestCase(
-        description="both upstream frontier tables current",
-        project_name="node_watermark_merged_current",
-        expected_source_versions_by_node={"a": ("2",)},
-        expected_source_kinds_by_node={"a": ("inherited",)},
-    ),
-    NodeSourceWatermarkBuildE2ETestCase(
-        description="both upstream frontier tables stale",
-        project_name="node_watermark_merged_stale",
-        expected_source_versions_by_node={"a": ("1",)},
-        expected_source_kinds_by_node={"a": ("inherited",)},
-    ),
-    NodeSourceWatermarkBuildE2ETestCase(
-        description="one upstream frontier table stale and one current",
-        project_name="node_watermark_merged_mixed",
-        expected_source_versions_by_node={"a": ("1",)},
-        expected_source_kinds_by_node={"a": ("inherited",)},
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    MERGED_FRONTIER_TEST_CASES,
-    ids=[case.description for case in MERGED_FRONTIER_TEST_CASES],
+    [
+        NodeSourceWatermarkBuildE2ETestCase(
+            description="both upstream frontier tables current",
+            project_name="node_watermark_merged_current",
+            expected_source_versions_by_node={"a": ("2",)},
+            expected_source_kinds_by_node={"a": ("inherited",)},
+        ),
+        NodeSourceWatermarkBuildE2ETestCase(
+            description="both upstream frontier tables stale",
+            project_name="node_watermark_merged_stale",
+            expected_source_versions_by_node={"a": ("1",)},
+            expected_source_kinds_by_node={"a": ("inherited",)},
+        ),
+        NodeSourceWatermarkBuildE2ETestCase(
+            description="one upstream frontier table stale and one current",
+            project_name="node_watermark_merged_mixed",
+            expected_source_versions_by_node={"a": ("1",)},
+            expected_source_kinds_by_node={"a": ("inherited",)},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_table_reads_two_frontier_tables_when_build_runs_then_keeps_oldest_watermark(
     test_case: NodeSourceWatermarkBuildE2ETestCase,
@@ -243,7 +240,7 @@ def test_given_table_reads_two_frontier_tables_when_build_runs_then_keeps_oldest
             expected_unknown_reasons_by_node={"a": ("missing_upstream_watermark",)},
         )
     ],
-    ids=["missing upstream frontier watermark records unknown"],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then_records_unknown(
     test_case: NodeSourceWatermarkBuildE2ETestCase,
@@ -284,101 +281,98 @@ def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then
     )
 
 
-WARNING_TEST_CASES: list[NodeSourceWatermarkWarningBuildE2ETestCase] = [
-    NodeSourceWatermarkWarningBuildE2ETestCase(
-        description="materialized frontier behind source emits grouped warning",
-        project_name="node_watermark_warning_stale_frontier",
-        models={
-            "models/b.sql": (
-                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
-            ),
-            "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
-        },
-        setup_build_command=("--no-color", "build", "--select", "b"),
-        plan_command=("--no-color", "plan", "--select", "a"),
-        expected_stdout_fragments=(
-            "Warnings (1)",
-            "Stale inputs detected",
-            "Affected selected models:",
-            "a",
-            "Stale frontier tables:",
-            "b",
-            "Changed sources:",
-            "raw_orders",
-            "rebuild the upstream closure for the selected model(s)",
-        ),
-    ),
-    NodeSourceWatermarkWarningBuildE2ETestCase(
-        description="direct source frontier does not emit stale-input warning",
-        project_name="node_watermark_warning_direct_source",
-        models={
-            "models/a.sql": (
-                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
-            ),
-        },
-        setup_build_command=("--no-color", "build", "--select", "a"),
-        plan_command=("--no-color", "plan", "--select", "a"),
-        expected_stdout_fragments=("Source freshness", "source-stale models: a"),
-        unexpected_stdout_fragments=("Warnings (1)", "Stale inputs detected"),
-    ),
-    NodeSourceWatermarkWarningBuildE2ETestCase(
-        description="shared stale frontier table appears once for multiple selected roots",
-        project_name="node_watermark_warning_shared_stale_frontier",
-        models={
-            "models/b.sql": (
-                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
-            ),
-            "models/a1.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
-            "models/a2.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
-        },
-        setup_build_command=("--no-color", "build", "--select", "b"),
-        plan_command=("--no-color", "plan", "--select", "a1", "--select", "a2"),
-        expected_stdout_fragments=(
-            "Warnings (1)",
-            "Stale inputs detected",
-            "Affected selected models:",
-            "a1",
-            "a2",
-            "Stale frontier tables:",
-            "b",
-            "Changed sources:",
-            "raw_orders",
-        ),
-        expected_stdout_occurrences={
-            "\n        b\n": 1,
-            "\n        raw_orders\n": 1,
-        },
-    ),
-    NodeSourceWatermarkWarningBuildE2ETestCase(
-        description="selected root behind refreshed frontier table emits grouped warning",
-        project_name="node_watermark_warning_root_behind_frontier",
-        models={
-            "models/b.sql": (
-                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
-            ),
-            "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
-        },
-        setup_build_command=("--no-color", "build"),
-        setup_after_source_advance_commands=(("--no-color", "build", "--select", "b"),),
-        plan_command=("--no-color", "plan", "--select", "a"),
-        expected_stdout_fragments=(
-            "Warnings (1)",
-            "Stale inputs detected",
-            "Affected selected models:",
-            "a",
-            "Stale frontier tables:",
-            "b",
-            "Changed sources:",
-            "raw_orders",
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    WARNING_TEST_CASES,
-    ids=[case.description for case in WARNING_TEST_CASES],
+    [
+        NodeSourceWatermarkWarningBuildE2ETestCase(
+            description="materialized frontier behind source emits grouped warning",
+            project_name="node_watermark_warning_stale_frontier",
+            models={
+                "models/b.sql": (
+                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+                ),
+                "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+            },
+            setup_build_command=("--no-color", "build", "--select", "b"),
+            plan_command=("--no-color", "plan", "--select", "a"),
+            expected_stdout_fragments=(
+                "Warnings (1)",
+                "Stale inputs detected",
+                "Affected selected models:",
+                "a",
+                "Stale frontier tables:",
+                "b",
+                "Changed sources:",
+                "raw_orders",
+                "rebuild the upstream closure for the selected model(s)",
+            ),
+        ),
+        NodeSourceWatermarkWarningBuildE2ETestCase(
+            description="direct source frontier does not emit stale-input warning",
+            project_name="node_watermark_warning_direct_source",
+            models={
+                "models/a.sql": (
+                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+                ),
+            },
+            setup_build_command=("--no-color", "build", "--select", "a"),
+            plan_command=("--no-color", "plan", "--select", "a"),
+            expected_stdout_fragments=("Source freshness", "source-stale models: a"),
+            unexpected_stdout_fragments=("Warnings (1)", "Stale inputs detected"),
+        ),
+        NodeSourceWatermarkWarningBuildE2ETestCase(
+            description="shared stale frontier table appears once for multiple selected roots",
+            project_name="node_watermark_warning_shared_stale_frontier",
+            models={
+                "models/b.sql": (
+                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+                ),
+                "models/a1.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+                "models/a2.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+            },
+            setup_build_command=("--no-color", "build", "--select", "b"),
+            plan_command=("--no-color", "plan", "--select", "a1", "--select", "a2"),
+            expected_stdout_fragments=(
+                "Warnings (1)",
+                "Stale inputs detected",
+                "Affected selected models:",
+                "a1",
+                "a2",
+                "Stale frontier tables:",
+                "b",
+                "Changed sources:",
+                "raw_orders",
+            ),
+            expected_stdout_occurrences={
+                "\n        b\n": 1,
+                "\n        raw_orders\n": 1,
+            },
+        ),
+        NodeSourceWatermarkWarningBuildE2ETestCase(
+            description="selected root behind refreshed frontier table emits grouped warning",
+            project_name="node_watermark_warning_root_behind_frontier",
+            models={
+                "models/b.sql": (
+                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+                ),
+                "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+            },
+            setup_build_command=("--no-color", "build"),
+            setup_after_source_advance_commands=(("--no-color", "build", "--select", "b"),),
+            plan_command=("--no-color", "plan", "--select", "a"),
+            expected_stdout_fragments=(
+                "Warnings (1)",
+                "Stale inputs detected",
+                "Affected selected models:",
+                "a",
+                "Stale frontier tables:",
+                "b",
+                "Changed sources:",
+                "raw_orders",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_advances_when_planning_selection_then_reports_expected_stale_inputs(
     test_case: NodeSourceWatermarkWarningBuildE2ETestCase,

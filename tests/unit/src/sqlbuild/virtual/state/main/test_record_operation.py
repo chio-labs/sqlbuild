@@ -31,7 +31,7 @@ from tests.unit.src.sqlbuild.virtual.state.main.helpers import RecordingStateBac
             ),
         )
     ],
-    ids=["preserves operation type and VDE across follow-up events"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_operation_when_recording_follow_up_event_then_transition_is_preserved(
     test_case: RecordStateOperationTestCase,

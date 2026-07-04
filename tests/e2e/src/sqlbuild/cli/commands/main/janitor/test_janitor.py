@@ -52,7 +52,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["disabled janitor exits successfully with guidance"],
+    ids=lambda case: case.description,
 )
 def test_given_default_config_when_running_janitor_then_it_reports_disabled(
     test_case: JanitorDisabledE2ETestCase,
@@ -100,7 +100,7 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
             expected_missing_tables=("janitor_tracked_extra",),
         )
     ],
-    ids=["tracked-only janitor deletes only tracked stale relations"],
+    ids=lambda case: case.description,
 )
 def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked(
     test_case: JanitorCleanupE2ETestCase,
@@ -175,7 +175,7 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
             ),
         )
     ],
-    ids=["tracked-only janitor deletes strict scenario artifacts"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_artifacts_when_running_tracked_only_janitor_then_it_deletes_them(
     test_case: JanitorCleanupE2ETestCase,
@@ -250,7 +250,7 @@ def test_given_scenario_artifacts_when_running_tracked_only_janitor_then_it_dele
             expected_source_freshness_run_ids_after=("run_003", "run_002"),
         )
     ],
-    ids=["auto-approved janitor prunes direct state history"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_state_history_when_running_janitor_then_it_prunes_history(
     test_case: JanitorDirectStatePruningE2ETestCase,
@@ -342,7 +342,7 @@ def test_given_direct_state_history_when_running_janitor_then_it_prunes_history(
             ),
         )
     ],
-    ids=["virtual janitor preserves checkpoint referenced physical versions"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_checkpoint_refs_when_janitor_then_preserves_physical_versions(
     test_case: JanitorCheckpointProtectionE2ETestCase,
@@ -416,7 +416,7 @@ def test_given_virtual_checkpoint_refs_when_janitor_then_preserves_physical_vers
             expected_virtual_environment_names_after=("dev",),
         )
     ],
-    ids=["virtual janitor prunes expired non-active VDEs"],
+    ids=lambda case: case.description,
 )
 def test_given_non_active_vde_when_running_janitor_then_it_prunes_expired_environment(
     test_case: JanitorExpiredVirtualEnvironmentE2ETestCase,
@@ -491,7 +491,7 @@ def test_given_non_active_vde_when_running_janitor_then_it_prunes_expired_enviro
             expected_lock_count_after=0,
         )
     ],
-    ids=["virtual janitor prunes old backups and expired locks"],
+    ids=lambda case: case.description,
 )
 def test_given_state_backups_and_expired_locks_when_running_janitor_then_state_is_pruned(
     test_case: JanitorStateCleanupE2ETestCase,
@@ -564,7 +564,7 @@ def test_given_state_backups_and_expired_locks_when_running_janitor_then_state_i
             expected_lock_count_after=1,
         )
     ],
-    ids=["virtual janitor keeps state cleanup refs when warehouse cleanup fails"],
+    ids=lambda case: case.description,
 )
 def test_given_warehouse_cleanup_failure_when_running_janitor_then_state_cleanup_is_skipped(
     test_case: JanitorStateCleanupE2ETestCase,
@@ -676,7 +676,7 @@ def test_given_warehouse_cleanup_failure_when_running_janitor_then_state_cleanup
             ),
         )
     ],
-    ids=["virtual janitor prunes old checkpoints and newly unprotected physicals"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prunes_old_history(
     test_case: JanitorCheckpointRetentionE2ETestCase,
@@ -793,7 +793,7 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
             expected_ref_count_after=0,
         )
     ],
-    ids=["virtual janitor prunes detached VDE refs and physicals"],
+    ids=lambda case: case.description,
 )
 def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physical_versions(
     test_case: JanitorDetachedVirtualEnvironmentE2ETestCase,
@@ -904,7 +904,7 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
             expected_virtual_environment_count_after=0,
         )
     ],
-    ids=["virtual janitor prunes only detached VDEs older than retention"],
+    ids=lambda case: case.description,
 )
 def test_given_old_detached_vde_when_running_janitor_then_retention_allows_cleanup(
     test_case: JanitorDetachedVirtualEnvironmentRetentionE2ETestCase,
@@ -996,7 +996,7 @@ def test_given_old_detached_vde_when_running_janitor_then_retention_allows_clean
             ),
         )
     ],
-    ids=["virtual janitor preserves active working VDE refs"],
+    ids=lambda case: case.description,
 )
 def test_given_active_vde_ref_when_running_janitor_then_it_preserves_physical_version(
     test_case: JanitorActiveVirtualEnvironmentProtectionE2ETestCase,
@@ -1063,7 +1063,7 @@ def test_given_active_vde_ref_when_running_janitor_then_it_preserves_physical_ve
             expected_stderr_fragments=("janitor.delete_tracked_only requires",),
         )
     ],
-    ids=["tracked-only janitor requires query tracking"],
+    ids=lambda case: case.description,
 )
 def test_given_query_tracking_disabled_when_running_tracked_only_janitor_then_it_errors(
     test_case: JanitorInvalidConfigE2ETestCase,

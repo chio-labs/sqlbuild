@@ -51,7 +51,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_downstream_keys=("sqb:model:downstream_orders", "sqb:model:mart_orders"),
         ),
     ],
-    ids=["expands from real dbt model to downstream SQLBuild models"],
+    ids=lambda case: case.description,
 )
 def test_given_real_dbt_manifest_and_sqlbuild_project_when_building_graph_then_expands_downstream(
     test_case: RealDbtCombinedGraphTestCase,

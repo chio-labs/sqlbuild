@@ -23,7 +23,7 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
             expected_model_file_count=1,
         )
     ],
-    ids=["accepts Windows-style model paths that match path defaults"],
+    ids=lambda case: case.description,
 )
 def test_given_windows_style_model_paths_when_validating_path_defaults_then_they_match(
     test_case: ValidatePathDefaultsMatchModelsTestCase,

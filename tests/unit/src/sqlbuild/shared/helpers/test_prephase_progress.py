@@ -16,56 +16,31 @@ from tests.unit.src.sqlbuild.shared.helpers._test_types import (
     PrephaseCloneItemRowTestCase,
 )
 
-PREPHASE_CAUSE_ANNOTATION_TEST_CASES: tuple[PrephaseCauseAnnotationTestCase, ...] = (
-    PrephaseCauseAnnotationTestCase(
-        description="formats one selected model cause",
-        caused_by_names=("fact_orders",),
-        expected_annotation="  [for fact_orders]",
-    ),
-    PrephaseCauseAnnotationTestCase(
-        description="sorts and caps selected model causes at four",
-        caused_by_names=(
-            "mart_activity",
-            "dim_customer",
-            "fact_orders",
-            "mart_revenue",
-            "mart_retention",
-            "mart_profit",
-        ),
-        expected_annotation=(
-            "  [for dim_customer, fact_orders, mart_activity, mart_profit and 2 more]"
-        ),
-    ),
-)
-PREPHASE_CLONE_ITEM_ROW_TEST_CASES: tuple[PrephaseCloneItemRowTestCase, ...] = (
-    PrephaseCloneItemRowTestCase(
-        description="maps cloned item to clone OK row",
-        action="cloned",
-        status="success",
-        expected_label="clone",
-        expected_status="OK",
-    ),
-    PrephaseCloneItemRowTestCase(
-        description="maps copied item to copy WARN row",
-        action="copied",
-        status="warning",
-        expected_label="copy",
-        expected_status="WARN",
-    ),
-    PrephaseCloneItemRowTestCase(
-        description="maps recreated view item to view FAIL row",
-        action="recreated_view",
-        status="failed",
-        expected_label="view",
-        expected_status="FAIL",
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PREPHASE_CAUSE_ANNOTATION_TEST_CASES,
-    ids=[case.description for case in PREPHASE_CAUSE_ANNOTATION_TEST_CASES],
+    (
+        PrephaseCauseAnnotationTestCase(
+            description="formats one selected model cause",
+            caused_by_names=("fact_orders",),
+            expected_annotation="  [for fact_orders]",
+        ),
+        PrephaseCauseAnnotationTestCase(
+            description="sorts and caps selected model causes at four",
+            caused_by_names=(
+                "mart_activity",
+                "dim_customer",
+                "fact_orders",
+                "mart_revenue",
+                "mart_retention",
+                "mart_profit",
+            ),
+            expected_annotation=(
+                "  [for dim_customer, fact_orders, mart_activity, mart_profit and 2 more]"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_selected_model_causes_when_formatting_then_uses_bracketed_capped_annotation(
     test_case: PrephaseCauseAnnotationTestCase,
@@ -77,8 +52,30 @@ def test_given_selected_model_causes_when_formatting_then_uses_bracketed_capped_
 
 @pytest.mark.parametrize(
     "test_case",
-    PREPHASE_CLONE_ITEM_ROW_TEST_CASES,
-    ids=[case.description for case in PREPHASE_CLONE_ITEM_ROW_TEST_CASES],
+    (
+        PrephaseCloneItemRowTestCase(
+            description="maps cloned item to clone OK row",
+            action="cloned",
+            status="success",
+            expected_label="clone",
+            expected_status="OK",
+        ),
+        PrephaseCloneItemRowTestCase(
+            description="maps copied item to copy WARN row",
+            action="copied",
+            status="warning",
+            expected_label="copy",
+            expected_status="WARN",
+        ),
+        PrephaseCloneItemRowTestCase(
+            description="maps recreated view item to view FAIL row",
+            action="recreated_view",
+            status="failed",
+            expected_label="view",
+            expected_status="FAIL",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_clone_item_when_building_prephase_row_then_uses_shared_label_and_status(
     test_case: PrephaseCloneItemRowTestCase,

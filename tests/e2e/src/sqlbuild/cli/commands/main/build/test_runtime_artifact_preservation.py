@@ -40,7 +40,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["full build then selected rerun preserves existing runtime artifacts"],
+    ids=lambda case: case.description,
 )
 def test_given_full_build_when_running_selected_rerun_then_existing_runtime_artifacts_are_preserved(
     test_case: RuntimeArtifactPreservationBuildE2ETestCase,

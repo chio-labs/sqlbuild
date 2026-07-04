@@ -48,7 +48,7 @@ from tests.unit.src.sqlbuild.python_nodes.decorators.helpers import upstream_ass
             ),
         )
     ],
-    ids=["stores task metadata and normalizes single dependency"],
+    ids=lambda case: case.description,
 )
 def test_given_task_decorator_when_reading_definition_then_returns_metadata(
     test_case: TaskDecoratorMetadataTestCase,
@@ -103,7 +103,7 @@ def test_given_task_decorator_when_reading_definition_then_returns_metadata(
             expected_retry=RetryPolicy(max_attempts=2, retry_on=TimeoutError, jitter=False),
         )
     ],
-    ids=["stores asset schema metadata and column lineage"],
+    ids=lambda case: case.description,
 )
 def test_given_asset_decorator_when_reading_definition_then_returns_metadata(
     test_case: AssetDecoratorMetadataTestCase,
@@ -167,7 +167,7 @@ def test_given_asset_decorator_when_reading_definition_then_returns_metadata(
             expected_meta={"owner": "data-eng"},
         )
     ],
-    ids=["stores check metadata and normalizes dependency list"],
+    ids=lambda case: case.description,
 )
 def test_given_check_decorator_when_reading_definition_then_returns_metadata(
     test_case: CheckDecoratorMetadataTestCase,
@@ -210,7 +210,7 @@ def test_given_check_decorator_when_reading_definition_then_returns_metadata(
             expected_name="generated_nodes",
         )
     ],
-    ids=["stores factory metadata and returns original function"],
+    ids=lambda case: case.description,
 )
 def test_given_factory_decorator_when_reading_definition_then_returns_metadata(
     test_case: FactoryDecoratorMetadataTestCase,
@@ -236,7 +236,7 @@ def test_given_factory_decorator_when_reading_definition_then_returns_metadata(
             expected_error_fragment="required positional argument",
         )
     ],
-    ids=["factory rejects argument decorator usage"],
+    ids=lambda case: case.description,
 )
 def test_given_factory_decorator_when_called_without_function_then_raises(
     test_case: FactoryDecoratorErrorTestCase,

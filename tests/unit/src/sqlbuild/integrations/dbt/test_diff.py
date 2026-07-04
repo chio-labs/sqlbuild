@@ -38,270 +38,96 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     create_dbt_diff_unique_key_relation,
 )
 
-DIFF_OPTIONS_TEST_CASES: tuple[DbtDiffOptionsTestCase, ...] = (
-    DbtDiffOptionsTestCase(
-        description="parses schema only with single select",
-        args=("--select", "dbt_orders", "--schema-only"),
-        expected_select=("dbt_orders",),
-        expected_exclude=(),
-        expected_full=False,
-        expected_schema_only=True,
-        expected_bounded=None,
-        expected_verbose=False,
-        expected_max_column_examples=3,
-        expected_max_row_only_examples=3,
-        expected_dbt_args=("--select", "dbt_orders"),
-    ),
-    DbtDiffOptionsTestCase(
-        description="parses full with multi select and exclude",
-        args=("--select", "a", "b", "--exclude", "c", "--full"),
-        expected_select=("a", "b"),
-        expected_exclude=("c",),
-        expected_full=True,
-        expected_schema_only=False,
-        expected_bounded=None,
-        expected_verbose=False,
-        expected_max_column_examples=3,
-        expected_max_row_only_examples=3,
-        expected_dbt_args=("--select", "a", "b", "--exclude", "c"),
-    ),
-    DbtDiffOptionsTestCase(
-        description="parses bounded duration",
-        args=("--select", "dbt_orders", "--bounded", "7d"),
-        expected_select=("dbt_orders",),
-        expected_exclude=(),
-        expected_full=False,
-        expected_schema_only=False,
-        expected_bounded="7d",
-        expected_verbose=False,
-        expected_max_column_examples=3,
-        expected_max_row_only_examples=3,
-        expected_dbt_args=("--select", "dbt_orders"),
-    ),
-    DbtDiffOptionsTestCase(
-        description="verbose raises example caps",
-        args=("--select", "dbt_orders", "--full", "--verbose"),
-        expected_select=("dbt_orders",),
-        expected_exclude=(),
-        expected_full=True,
-        expected_schema_only=False,
-        expected_bounded=None,
-        expected_verbose=True,
-        expected_max_column_examples=10,
-        expected_max_row_only_examples=10,
-        expected_dbt_args=("--select", "dbt_orders"),
-    ),
-    DbtDiffOptionsTestCase(
-        description="parses explicit example caps and forwards dbt flags",
-        args=(
-            "--select",
-            "dbt_orders",
-            "--full",
-            "--max-column-examples",
-            "7",
-            "--max-row-only-examples",
-            "9",
-            "--target",
-            "prod",
-            "--profiles-dir",
-            "profiles",
-        ),
-        expected_select=("dbt_orders",),
-        expected_exclude=(),
-        expected_full=True,
-        expected_schema_only=False,
-        expected_bounded=None,
-        expected_verbose=False,
-        expected_max_column_examples=7,
-        expected_max_row_only_examples=9,
-        expected_dbt_args=(
-            "--select",
-            "dbt_orders",
-            "--target",
-            "prod",
-            "--profiles-dir",
-            "profiles",
-        ),
-    ),
-)
-
-DIFF_OPTIONS_ERROR_TEST_CASES: tuple[DbtDiffOptionsErrorTestCase, ...] = (
-    DbtDiffOptionsErrorTestCase(
-        description="rejects no mode",
-        args=("--select", "dbt_orders"),
-        expected_error_fragment="exactly one of --full, --schema-only, or --bounded",
-        expected_code="C201",
-    ),
-    DbtDiffOptionsErrorTestCase(
-        description="rejects two modes",
-        args=("--select", "dbt_orders", "--full", "--schema-only"),
-        expected_error_fragment="exactly one of --full, --schema-only, or --bounded",
-        expected_code="C201",
-    ),
-    DbtDiffOptionsErrorTestCase(
-        description="rejects three modes",
-        args=("--select", "dbt_orders", "--full", "--schema-only", "--bounded", "7d"),
-        expected_error_fragment="exactly one of --full, --schema-only, or --bounded",
-        expected_code="C201",
-    ),
-    DbtDiffOptionsErrorTestCase(
-        description="rejects non positive column examples",
-        args=("--select", "dbt_orders", "--full", "--max-column-examples", "0"),
-        expected_error_fragment="--max-column-examples must be positive",
-        expected_code="C202",
-    ),
-)
-
-DIFF_UNIQUE_KEY_TEST_CASES: tuple[DbtDiffUniqueKeyTestCase, ...] = (
-    DbtDiffUniqueKeyTestCase(
-        description="uses string unique key",
-        config={"unique_key": "order_id"},
-        expected_unique_key=("order_id",),
-    ),
-    DbtDiffUniqueKeyTestCase(
-        description="uses list unique key",
-        config={"unique_key": ["order_id", "line_id"]},
-        expected_unique_key=("order_id", "line_id"),
-    ),
-)
-
-DIFF_UNIQUE_KEY_ERROR_TEST_CASES: tuple[DbtDiffUniqueKeyErrorTestCase, ...] = (
-    DbtDiffUniqueKeyErrorTestCase(
-        description="missing unique key errors",
-        config={},
-        expected_error_fragment="requires model 'dbt_orders' to define config.unique_key",
-        expected_code="C341",
-    ),
-    DbtDiffUniqueKeyErrorTestCase(
-        description="empty string unique key errors",
-        config={"unique_key": ""},
-        expected_error_fragment="requires model 'dbt_orders' to define config.unique_key",
-        expected_code="C341",
-    ),
-)
-
-DIFF_BOUNDED_CURSOR_TEST_CASES: tuple[DbtDiffBoundedCursorTestCase, ...] = (
-    DbtDiffBoundedCursorTestCase(
-        description="timestamp cursor from node meta",
-        node_meta={"sqlbuild": {"cursor": "updated_at", "cursor_type": "timestamp"}},
-        config_meta=None,
-        bounded="7d",
-        expected_cursor_column="updated_at",
-        expected_cursor_kind="timestamp",
-        expected_has_end_cursor=True,
-    ),
-    DbtDiffBoundedCursorTestCase(
-        description="integer cursor from config meta fallback",
-        node_meta=None,
-        config_meta={"sqlbuild": {"cursor": "batch_id", "cursor_type": "integer"}},
-        bounded="1000",
-        expected_cursor_column="batch_id",
-        expected_cursor_kind="integer",
-        expected_has_end_cursor=False,
-    ),
-)
-
-DIFF_BOUNDED_CURSOR_ERROR_TEST_CASES: tuple[DbtDiffBoundedCursorErrorTestCase, ...] = (
-    DbtDiffBoundedCursorErrorTestCase(
-        description="missing sqlbuild meta errors",
-        node_meta=None,
-        config_meta=None,
-        bounded="7d",
-        expected_error_fragment="requires model 'dbt_orders' to define SQLBuild cursor metadata",
-        expected_code="C342",
-    ),
-    DbtDiffBoundedCursorErrorTestCase(
-        description="bad cursor type errors",
-        node_meta={"sqlbuild": {"cursor": "updated_at", "cursor_type": "weird"}},
-        config_meta=None,
-        bounded="7d",
-        expected_error_fragment="requires model 'dbt_orders' to define SQLBuild cursor metadata",
-        expected_code="C342",
-    ),
-    DbtDiffBoundedCursorErrorTestCase(
-        description="bad timestamp duration errors",
-        node_meta={"sqlbuild": {"cursor": "updated_at", "cursor_type": "timestamp"}},
-        config_meta=None,
-        bounded="seven",
-        expected_error_fragment="requires duration like 30d, 12h, or 15m",
-        expected_code="C344",
-    ),
-    DbtDiffBoundedCursorErrorTestCase(
-        description="bad integer bound errors",
-        node_meta={"sqlbuild": {"cursor": "batch_id", "cursor_type": "integer"}},
-        config_meta=None,
-        bounded="lots",
-        expected_error_fragment="requires an integer bound",
-        expected_code="C343",
-    ),
-)
-
-DIFF_EXECUTE_TEST_CASES: tuple[DbtDiffExecuteTestCase, ...] = (
-    DbtDiffExecuteTestCase(
-        description="schema only path skips row diff",
-        options_args=("--select", "dbt_orders", "--schema-only"),
-        current_rows=((1, 111),),
-        reuse_rows=((1, 900),),
-        node_resource_type="model",
-        expected_model_names=("dbt_orders",),
-        expected_has_row_result=False,
-        expected_unequal_count=0,
-        expected_left_only_count=0,
-        expected_right_only_count=0,
-        expected_has_failures=False,
-    ),
-    DbtDiffExecuteTestCase(
-        description="full path reports row differences",
-        options_args=("--select", "dbt_orders", "--full"),
-        current_rows=((1, 111), (3, 777), (4, 400)),
-        reuse_rows=((1, 900), (2, 250)),
-        node_resource_type="model",
-        expected_model_names=("dbt_orders",),
-        expected_has_row_result=True,
-        expected_unequal_count=1,
-        expected_left_only_count=1,
-        expected_right_only_count=2,
-        expected_has_failures=True,
-    ),
-    DbtDiffExecuteTestCase(
-        description="non model nodes are skipped",
-        options_args=("--select", "dbt_orders", "--schema-only"),
-        current_rows=((1, 111),),
-        reuse_rows=((1, 900),),
-        node_resource_type="test",
-        expected_model_names=(),
-        expected_has_row_result=False,
-        expected_unequal_count=0,
-        expected_left_only_count=0,
-        expected_right_only_count=0,
-        expected_has_failures=False,
-    ),
-)
-
-DIFF_EXECUTE_ERROR_TEST_CASES: tuple[DbtDiffExecuteErrorTestCase, ...] = (
-    DbtDiffExecuteErrorTestCase(
-        description="missing reuse relation errors",
-        schema_only=True,
-        create_current_relation=True,
-        create_reuse_relation=False,
-        expected_error_fragment="relation for model 'dbt_orders' does not exist",
-        expected_code="C340",
-    ),
-    DbtDiffExecuteErrorTestCase(
-        description="missing current relation errors",
-        schema_only=True,
-        create_current_relation=False,
-        create_reuse_relation=True,
-        expected_error_fragment="relation for model 'dbt_orders' does not exist",
-        expected_code="C340",
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_OPTIONS_TEST_CASES,
-    ids=[case.description for case in DIFF_OPTIONS_TEST_CASES],
+    (
+        DbtDiffOptionsTestCase(
+            description="parses schema only with single select",
+            args=("--select", "dbt_orders", "--schema-only"),
+            expected_select=("dbt_orders",),
+            expected_exclude=(),
+            expected_full=False,
+            expected_schema_only=True,
+            expected_bounded=None,
+            expected_verbose=False,
+            expected_max_column_examples=3,
+            expected_max_row_only_examples=3,
+            expected_dbt_args=("--select", "dbt_orders"),
+        ),
+        DbtDiffOptionsTestCase(
+            description="parses full with multi select and exclude",
+            args=("--select", "a", "b", "--exclude", "c", "--full"),
+            expected_select=("a", "b"),
+            expected_exclude=("c",),
+            expected_full=True,
+            expected_schema_only=False,
+            expected_bounded=None,
+            expected_verbose=False,
+            expected_max_column_examples=3,
+            expected_max_row_only_examples=3,
+            expected_dbt_args=("--select", "a", "b", "--exclude", "c"),
+        ),
+        DbtDiffOptionsTestCase(
+            description="parses bounded duration",
+            args=("--select", "dbt_orders", "--bounded", "7d"),
+            expected_select=("dbt_orders",),
+            expected_exclude=(),
+            expected_full=False,
+            expected_schema_only=False,
+            expected_bounded="7d",
+            expected_verbose=False,
+            expected_max_column_examples=3,
+            expected_max_row_only_examples=3,
+            expected_dbt_args=("--select", "dbt_orders"),
+        ),
+        DbtDiffOptionsTestCase(
+            description="verbose raises example caps",
+            args=("--select", "dbt_orders", "--full", "--verbose"),
+            expected_select=("dbt_orders",),
+            expected_exclude=(),
+            expected_full=True,
+            expected_schema_only=False,
+            expected_bounded=None,
+            expected_verbose=True,
+            expected_max_column_examples=10,
+            expected_max_row_only_examples=10,
+            expected_dbt_args=("--select", "dbt_orders"),
+        ),
+        DbtDiffOptionsTestCase(
+            description="parses explicit example caps and forwards dbt flags",
+            args=(
+                "--select",
+                "dbt_orders",
+                "--full",
+                "--max-column-examples",
+                "7",
+                "--max-row-only-examples",
+                "9",
+                "--target",
+                "prod",
+                "--profiles-dir",
+                "profiles",
+            ),
+            expected_select=("dbt_orders",),
+            expected_exclude=(),
+            expected_full=True,
+            expected_schema_only=False,
+            expected_bounded=None,
+            expected_verbose=False,
+            expected_max_column_examples=7,
+            expected_max_row_only_examples=9,
+            expected_dbt_args=(
+                "--select",
+                "dbt_orders",
+                "--target",
+                "prod",
+                "--profiles-dir",
+                "profiles",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_diff_args_when_parsing_then_returns_expected_options(
     test_case: DbtDiffOptionsTestCase,
@@ -321,8 +147,33 @@ def test_given_diff_args_when_parsing_then_returns_expected_options(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_OPTIONS_ERROR_TEST_CASES,
-    ids=[case.description for case in DIFF_OPTIONS_ERROR_TEST_CASES],
+    (
+        DbtDiffOptionsErrorTestCase(
+            description="rejects no mode",
+            args=("--select", "dbt_orders"),
+            expected_error_fragment="exactly one of --full, --schema-only, or --bounded",
+            expected_code="C201",
+        ),
+        DbtDiffOptionsErrorTestCase(
+            description="rejects two modes",
+            args=("--select", "dbt_orders", "--full", "--schema-only"),
+            expected_error_fragment="exactly one of --full, --schema-only, or --bounded",
+            expected_code="C201",
+        ),
+        DbtDiffOptionsErrorTestCase(
+            description="rejects three modes",
+            args=("--select", "dbt_orders", "--full", "--schema-only", "--bounded", "7d"),
+            expected_error_fragment="exactly one of --full, --schema-only, or --bounded",
+            expected_code="C201",
+        ),
+        DbtDiffOptionsErrorTestCase(
+            description="rejects non positive column examples",
+            args=("--select", "dbt_orders", "--full", "--max-column-examples", "0"),
+            expected_error_fragment="--max-column-examples must be positive",
+            expected_code="C202",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_diff_args_when_parsing_then_raises_clear_error(
     test_case: DbtDiffOptionsErrorTestCase,
@@ -336,8 +187,19 @@ def test_given_invalid_diff_args_when_parsing_then_raises_clear_error(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_UNIQUE_KEY_TEST_CASES,
-    ids=[case.description for case in DIFF_UNIQUE_KEY_TEST_CASES],
+    (
+        DbtDiffUniqueKeyTestCase(
+            description="uses string unique key",
+            config={"unique_key": "order_id"},
+            expected_unique_key=("order_id",),
+        ),
+        DbtDiffUniqueKeyTestCase(
+            description="uses list unique key",
+            config={"unique_key": ["order_id", "line_id"]},
+            expected_unique_key=("order_id", "line_id"),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_dbt_model_unique_key_when_diffing_full_then_uses_expected_key(
     test_case: DbtDiffUniqueKeyTestCase,
@@ -385,8 +247,21 @@ def test_given_dbt_model_unique_key_when_diffing_full_then_uses_expected_key(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_UNIQUE_KEY_ERROR_TEST_CASES,
-    ids=[case.description for case in DIFF_UNIQUE_KEY_ERROR_TEST_CASES],
+    (
+        DbtDiffUniqueKeyErrorTestCase(
+            description="missing unique key errors",
+            config={},
+            expected_error_fragment="requires model 'dbt_orders' to define config.unique_key",
+            expected_code="C341",
+        ),
+        DbtDiffUniqueKeyErrorTestCase(
+            description="empty string unique key errors",
+            config={"unique_key": ""},
+            expected_error_fragment="requires model 'dbt_orders' to define config.unique_key",
+            expected_code="C341",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_missing_unique_key_when_diffing_full_then_raises_clear_error(
     test_case: DbtDiffUniqueKeyErrorTestCase,
@@ -437,8 +312,27 @@ def test_given_missing_unique_key_when_diffing_full_then_raises_clear_error(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_BOUNDED_CURSOR_TEST_CASES,
-    ids=[case.description for case in DIFF_BOUNDED_CURSOR_TEST_CASES],
+    (
+        DbtDiffBoundedCursorTestCase(
+            description="timestamp cursor from node meta",
+            node_meta={"sqlbuild": {"cursor": "updated_at", "cursor_type": "timestamp"}},
+            config_meta=None,
+            bounded="7d",
+            expected_cursor_column="updated_at",
+            expected_cursor_kind="timestamp",
+            expected_has_end_cursor=True,
+        ),
+        DbtDiffBoundedCursorTestCase(
+            description="integer cursor from config meta fallback",
+            node_meta=None,
+            config_meta={"sqlbuild": {"cursor": "batch_id", "cursor_type": "integer"}},
+            bounded="1000",
+            expected_cursor_column="batch_id",
+            expected_cursor_kind="integer",
+            expected_has_end_cursor=False,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_bounded_cursor_metadata_when_diffing_then_runs_without_error(
     test_case: DbtDiffBoundedCursorTestCase,
@@ -491,8 +385,41 @@ def test_given_bounded_cursor_metadata_when_diffing_then_runs_without_error(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_BOUNDED_CURSOR_ERROR_TEST_CASES,
-    ids=[case.description for case in DIFF_BOUNDED_CURSOR_ERROR_TEST_CASES],
+    (
+        DbtDiffBoundedCursorErrorTestCase(
+            description="missing sqlbuild meta errors",
+            node_meta=None,
+            config_meta=None,
+            bounded="7d",
+            expected_error_fragment="requires model 'dbt_orders' to define SQLBuild cursor metadata",
+            expected_code="C342",
+        ),
+        DbtDiffBoundedCursorErrorTestCase(
+            description="bad cursor type errors",
+            node_meta={"sqlbuild": {"cursor": "updated_at", "cursor_type": "weird"}},
+            config_meta=None,
+            bounded="7d",
+            expected_error_fragment="requires model 'dbt_orders' to define SQLBuild cursor metadata",
+            expected_code="C342",
+        ),
+        DbtDiffBoundedCursorErrorTestCase(
+            description="bad timestamp duration errors",
+            node_meta={"sqlbuild": {"cursor": "updated_at", "cursor_type": "timestamp"}},
+            config_meta=None,
+            bounded="seven",
+            expected_error_fragment="requires duration like 30d, 12h, or 15m",
+            expected_code="C344",
+        ),
+        DbtDiffBoundedCursorErrorTestCase(
+            description="bad integer bound errors",
+            node_meta={"sqlbuild": {"cursor": "batch_id", "cursor_type": "integer"}},
+            config_meta=None,
+            bounded="lots",
+            expected_error_fragment="requires an integer bound",
+            expected_code="C343",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_bad_bounded_cursor_metadata_when_diffing_then_raises_clear_error(
     test_case: DbtDiffBoundedCursorErrorTestCase,
@@ -547,8 +474,48 @@ def test_given_bad_bounded_cursor_metadata_when_diffing_then_raises_clear_error(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_EXECUTE_TEST_CASES,
-    ids=[case.description for case in DIFF_EXECUTE_TEST_CASES],
+    (
+        DbtDiffExecuteTestCase(
+            description="schema only path skips row diff",
+            options_args=("--select", "dbt_orders", "--schema-only"),
+            current_rows=((1, 111),),
+            reuse_rows=((1, 900),),
+            node_resource_type="model",
+            expected_model_names=("dbt_orders",),
+            expected_has_row_result=False,
+            expected_unequal_count=0,
+            expected_left_only_count=0,
+            expected_right_only_count=0,
+            expected_has_failures=False,
+        ),
+        DbtDiffExecuteTestCase(
+            description="full path reports row differences",
+            options_args=("--select", "dbt_orders", "--full"),
+            current_rows=((1, 111), (3, 777), (4, 400)),
+            reuse_rows=((1, 900), (2, 250)),
+            node_resource_type="model",
+            expected_model_names=("dbt_orders",),
+            expected_has_row_result=True,
+            expected_unequal_count=1,
+            expected_left_only_count=1,
+            expected_right_only_count=2,
+            expected_has_failures=True,
+        ),
+        DbtDiffExecuteTestCase(
+            description="non model nodes are skipped",
+            options_args=("--select", "dbt_orders", "--schema-only"),
+            current_rows=((1, 111),),
+            reuse_rows=((1, 900),),
+            node_resource_type="test",
+            expected_model_names=(),
+            expected_has_row_result=False,
+            expected_unequal_count=0,
+            expected_left_only_count=0,
+            expected_right_only_count=0,
+            expected_has_failures=False,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_dbt_relations_when_executing_diff_then_returns_expected_result(
     test_case: DbtDiffExecuteTestCase,
@@ -605,8 +572,25 @@ def test_given_dbt_relations_when_executing_diff_then_returns_expected_result(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_EXECUTE_ERROR_TEST_CASES,
-    ids=[case.description for case in DIFF_EXECUTE_ERROR_TEST_CASES],
+    (
+        DbtDiffExecuteErrorTestCase(
+            description="missing reuse relation errors",
+            schema_only=True,
+            create_current_relation=True,
+            create_reuse_relation=False,
+            expected_error_fragment="relation for model 'dbt_orders' does not exist",
+            expected_code="C340",
+        ),
+        DbtDiffExecuteErrorTestCase(
+            description="missing current relation errors",
+            schema_only=True,
+            create_current_relation=False,
+            create_reuse_relation=True,
+            expected_error_fragment="relation for model 'dbt_orders' does not exist",
+            expected_code="C340",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_missing_relation_when_executing_diff_then_raises_clear_error(
     test_case: DbtDiffExecuteErrorTestCase,
@@ -670,7 +654,7 @@ def test_given_missing_relation_when_executing_diff_then_raises_clear_error(
             expected_has_failures=True,
         )
     ],
-    ids=["schema only detects added column as a failure"],
+    ids=lambda case: case.description,
 )
 def test_given_schema_difference_when_diffing_then_reports_failure(
     test_case: DbtDiffExecuteTestCase,

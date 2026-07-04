@@ -81,7 +81,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
             expected_backup_prefix="sqlbuild_state__backup_",
         )
     ],
-    ids=["initializes backs up rolls back and resets state tables"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are_managed(
     test_case: DuckDbStateBackendLifecycleTestCase,
@@ -146,7 +146,7 @@ def test_given_duckdb_state_backend_when_running_lifecycle_then_state_tables_are
             expected_rollback_row_count=5,
         )
     ],
-    ids=["stores and reads VDE node result history by environment"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_node_results_when_reading_then_scopes_by_environment_and_status(
     test_case: DuckDbStateBackendNodeResultTestCase,
@@ -335,7 +335,7 @@ def test_given_duckdb_node_results_when_reading_then_scopes_by_environment_and_s
             expected_issue_count=23,
         )
     ],
-    ids=["reports invalid manually-created state schema"],
+    ids=lambda case: case.description,
 )
 def test_given_broken_duckdb_state_tables_when_validating_then_reports_schema_issues(
     test_case: DuckDbStateBackendValidationTestCase,
@@ -375,7 +375,7 @@ def test_given_broken_duckdb_state_tables_when_validating_then_reports_schema_is
             ),
         )
     ],
-    ids=["rolls back to explicitly selected backup"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backups_when_rolling_back_explicit_id_then_restores_backup(
     test_case: DuckDbStateBackendRollbackTestCase,
@@ -427,7 +427,7 @@ def test_given_duckdb_state_backups_when_rolling_back_explicit_id_then_restores_
             expected_message_fragment="No state backup is available",
         )
     ],
-    ids=["blocks rollback when no backup exists"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_without_backup_when_rolling_back_then_blocks_cleanly(
     test_case: DuckDbStateBackendErrorTestCase,
@@ -454,7 +454,7 @@ def test_given_duckdb_state_without_backup_when_rolling_back_then_blocks_cleanly
             expected_message_fragment="Cannot backup invalid state schema",
         )
     ],
-    ids=["blocks backup when state schema is invalid"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_duckdb_state_schema_when_creating_backup_then_blocks_cleanly(
     test_case: DuckDbStateBackendErrorTestCase,
@@ -492,7 +492,7 @@ def test_given_invalid_duckdb_state_schema_when_creating_backup_then_blocks_clea
             expected_backup_actions=(StateMigrationAction.INIT.value,),
         )
     ],
-    ids=["records init backup and rollback events with backed up event contents"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_lifecycle_when_events_are_recorded_then_backup_contains_event_table(
     test_case: DuckDbStateBackendEventTestCase,
@@ -561,7 +561,7 @@ def test_given_duckdb_state_lifecycle_when_events_are_recorded_then_backup_conta
             expected_latest_sqlbuild_version="0.0.second",
         )
     ],
-    ids=["initialize can run sequentially without duplicate state version rows"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_initializing_twice_then_current_version_row_is_idempotent(
     test_case: DuckDbStateBackendIdempotencyTestCase,
@@ -608,7 +608,7 @@ def test_given_duckdb_state_backend_when_initializing_twice_then_current_version
             ),
         )
     ],
-    ids=["initializes all phase two state tables"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_initializing_then_creates_all_state_tables(
     test_case: DuckDbStateBackendTableCreationTestCase,
@@ -655,7 +655,7 @@ def test_given_duckdb_state_backend_when_initializing_then_creates_all_state_tab
             expected_replaced_relation_name="fact_orders__v_abc123_replaced",
         )
     ],
-    ids=["persists model physical relation and virtual environment refs"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips_state(
     test_case: DuckDbStateBackendCoreRecordsTestCase,
@@ -894,7 +894,7 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
             expected_duplicate_seed_hash="seed-duplicate",
         )
     ],
-    ids=["rolls back VDE status and all ref groups when atomic replacement fails"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_atomic_vde_ref_update_fails_then_rolls_back_all_groups(
     test_case: DuckDbStateBackendAtomicRefUpdateTestCase,
@@ -1020,7 +1020,7 @@ def test_given_duckdb_state_backend_when_atomic_vde_ref_update_fails_then_rolls_
             expected_source_names_after_replace=("raw.orders",),
         )
     ],
-    ids=["persists and replaces source freshness observations"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_replacing_source_freshness_then_round_trips_latest_records(
     test_case: DuckDbStateBackendSourceFreshnessTestCase,
@@ -1142,7 +1142,7 @@ def test_given_duckdb_state_backend_when_replacing_source_freshness_then_round_t
             expected_ref_count_after_replace=0,
         )
     ],
-    ids=["persists seed versions and replaces seed refs"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_replacing_seed_refs_then_round_trips_records(
     test_case: DuckDbStateBackendSeedRefTestCase,
@@ -1300,7 +1300,7 @@ def test_given_duckdb_state_backend_when_replacing_seed_refs_then_round_trips_re
             expected_message_fragment="must match replacement virtual_environment_name",
         )
     ],
-    ids=["blocks mismatched source freshness virtual environment"],
+    ids=lambda case: case.description,
 )
 def test_given_mismatched_duckdb_source_freshness_record_when_replacing_then_blocks_cleanly(
     test_case: DuckDbStateBackendErrorTestCase,
@@ -1341,7 +1341,7 @@ def test_given_mismatched_duckdb_source_freshness_record_when_replacing_then_blo
             expected_message_fragment="Duplicate source freshness record",
         )
     ],
-    ids=["blocks duplicate source freshness records"],
+    ids=lambda case: case.description,
 )
 def test_given_duplicate_duckdb_source_freshness_records_when_replacing_then_blocks_cleanly(
     test_case: DuckDbStateBackendErrorTestCase,
@@ -1401,7 +1401,7 @@ def test_given_duplicate_duckdb_source_freshness_records_when_replacing_then_blo
             expected_pruned_count=1,
         )
     ],
-    ids=["persists python node versions and separate VDE refs"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_upserting_python_node_identity_then_round_trips_refs(
     test_case: DuckDbStateBackendPythonNodeIdentityTestCase,
@@ -1549,7 +1549,7 @@ def test_given_duckdb_state_backend_when_upserting_python_node_identity_then_rou
             expected_replaced_relation_name="unused",
         )
     ],
-    ids=["persists function versions refs and checkpoint refs"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_upserting_function_records_then_round_trips_state(
     test_case: DuckDbStateBackendCoreRecordsTestCase,
@@ -1676,7 +1676,7 @@ def test_given_duckdb_state_backend_when_upserting_function_records_then_round_t
             expected_active_lock_count=1,
         )
     ],
-    ids=["acquires blocks releases and replaces expired locks"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_managing_locks_then_enforces_active_owner(
     test_case: DuckDbStateBackendLockTestCase,
@@ -1761,7 +1761,7 @@ def test_given_duckdb_state_backend_when_managing_locks_then_enforces_active_own
             expected_issue_kind=StateSchemaValidationIssueKind.MISSING_INDEX.value,
         )
     ],
-    ids=["reports missing node results latest index"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_required_index_is_missing_then_validation_reports_it(
     test_case: DuckDbStateBackendIndexValidationTestCase,
@@ -1801,7 +1801,7 @@ def test_given_duckdb_state_backend_when_required_index_is_missing_then_validati
             expected_issue_kind=StateSchemaValidationIssueKind.MISSING_COLUMN.value,
         )
     ],
-    ids=["reports missing node results payload column"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_node_results_column_is_missing_then_validation_reports_it(
     test_case: DuckDbStateBackendColumnValidationTestCase,
@@ -1849,7 +1849,7 @@ def test_given_duckdb_state_backend_when_node_results_column_is_missing_then_val
             expected_ref_count=1,
         )
     ],
-    ids=["rolls back VDE ref replacement when duplicate rows violate unique index"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_ref_replace_fails_then_transaction_rolls_back(
     test_case: DuckDbStateBackendTransactionRollbackTestCase,
@@ -1923,7 +1923,7 @@ def test_given_duckdb_state_backend_when_ref_replace_fails_then_transaction_roll
             expected_replaced_relation_name="fact_orders__v_abc123_replaced",
         )
     ],
-    ids=["preserves created_at across current-state replacements"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_upserting_same_identity_then_created_at_is_preserved(
     test_case: DuckDbStateBackendCoreRecordsTestCase,
@@ -1989,7 +1989,7 @@ def test_given_duckdb_state_backend_when_upserting_same_identity_then_created_at
             expected_replaced_relation_name="fact_orders__v_abc123_replaced",
         )
     ],
-    ids=["preserves created_at for physical relations and virtual environments"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_at(
     test_case: DuckDbStateBackendCoreRecordsTestCase,
@@ -2096,7 +2096,7 @@ def test_given_duckdb_state_backend_when_replacing_rows_then_preserves_created_a
             expected_virtual_environment_name="dev",
         )
     ],
-    ids=["records operation and reconcile events"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_recording_operation_events_then_they_round_trip(
     test_case: DuckDbStateBackendOperationEventTestCase,
@@ -2179,7 +2179,7 @@ def test_given_duckdb_state_backend_when_recording_operation_events_then_they_ro
             expected_active_lock_count=1,
         )
     ],
-    ids=["allows only one winner across two DuckDB connections"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backend_when_two_connections_acquire_same_lock_then_only_one_succeeds(
     test_case: DuckDbStateBackendConcurrentLockTestCase,

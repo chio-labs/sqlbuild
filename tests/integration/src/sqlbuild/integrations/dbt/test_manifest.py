@@ -33,7 +33,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_compiled_sql='select order_id from __dbt_ref("stg_orders")',
         ),
     ],
-    ids=["validates and preserves SQLBuild dbt ref from real dbt manifest"],
+    ids=lambda case: case.description,
 )
 def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_preserves_dbt_ref(
     test_case: RealDbtManifestCompileTestCase,
@@ -80,26 +80,23 @@ def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_preserves_dbt_ref(
     assert compile_inputs.model_inputs[0].query_sql == test_case.expected_compiled_sql
 
 
-REAL_DBT_SEED_CONTENT_IDENTITY_TEST_CASES: list[RealDbtSeedContentIdentityTestCase] = [
-    RealDbtSeedContentIdentityTestCase(
-        description="independent content hash detects a seed edit dbt checksum misses",
-        initial_seed_csv="id,name\n1,a\n2,b\n",
-        mutated_seed_csv="id,name\n1,a\n2,c\n",
-        expected_identity_changes=True,
-    ),
-    RealDbtSeedContentIdentityTestCase(
-        description="newline-only seed edit does not change identity",
-        initial_seed_csv="id,name\n1,a\n2,b\n",
-        mutated_seed_csv="id,name\r\n1,a\r\n2,b",
-        expected_identity_changes=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    REAL_DBT_SEED_CONTENT_IDENTITY_TEST_CASES,
-    ids=[case.description for case in REAL_DBT_SEED_CONTENT_IDENTITY_TEST_CASES],
+    [
+        RealDbtSeedContentIdentityTestCase(
+            description="independent content hash detects a seed edit dbt checksum misses",
+            initial_seed_csv="id,name\n1,a\n2,b\n",
+            mutated_seed_csv="id,name\n1,a\n2,c\n",
+            expected_identity_changes=True,
+        ),
+        RealDbtSeedContentIdentityTestCase(
+            description="newline-only seed edit does not change identity",
+            initial_seed_csv="id,name\n1,a\n2,b\n",
+            mutated_seed_csv="id,name\r\n1,a\r\n2,b",
+            expected_identity_changes=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_stale_dbt_checksum_when_indexing_then_independent_hash_isolates_seed_change(
     test_case: RealDbtSeedContentIdentityTestCase,

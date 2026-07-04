@@ -21,33 +21,35 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_linear_compile_output_graph,
 )
 
-TEST_CASES: tuple[CompileTextOutputTestCase, ...] = (
-    CompileTextOutputTestCase(
-        description="aligns long names and pluralizes singular resource counts",
-        model_count=3,
-        expected_fragments=(
-            "Compile ready (3 models)",
-            "  short                                            OK 0 columns",
-            "  hourly_activity_with_daily_context               OK 0 columns",
-            "  extremely_long_model_name_that_should_be_trun... OK 0 columns",
-            "  Compiled: 3 models, 0 seeds, 0 functions, 0 errors, 0 warnings",
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CompileTextOutputTestCase(
+            description="aligns long names and pluralizes singular resource counts",
+            model_count=3,
+            expected_fragments=(
+                "Compile ready (3 models)",
+                "  short                                            OK 0 columns",
+                "  hourly_activity_with_daily_context               OK 0 columns",
+                "  extremely_long_model_name_that_should_be_trun... OK 0 columns",
+                "  Compiled: 3 models, 0 seeds, 0 functions, 0 errors, 0 warnings",
+            ),
+        ),
+        CompileTextOutputTestCase(
+            description="caps human model list and leaves json guidance",
+            model_count=101,
+            expected_fragments=(
+                "Compile ready (101 models)",
+                "  Showing 100 of 101 models.",
+                "  Use --json for the full compile report.",
+                "  Compiled: 101 models, 0 seeds, 0 functions, 0 errors, 0 warnings",
+            ),
+            unexpected_fragments=("model_100",),
         ),
     ),
-    CompileTextOutputTestCase(
-        description="caps human model list and leaves json guidance",
-        model_count=101,
-        expected_fragments=(
-            "Compile ready (101 models)",
-            "  Showing 100 of 101 models.",
-            "  Use --json for the full compile report.",
-            "  Compiled: 101 models, 0 seeds, 0 functions, 0 errors, 0 warnings",
-        ),
-        unexpected_fragments=("model_100",),
-    ),
+    ids=lambda case: case.description,
 )
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
 def test_given_compiled_project_when_formatting_compile_text_then_matches_expected_shape(
     test_case: CompileTextOutputTestCase,
 ) -> None:
@@ -86,7 +88,7 @@ def test_given_compiled_project_when_formatting_compile_text_then_matches_expect
             expected_execution_layers=1100,
         )
     ],
-    ids=["counts deep linear graph layers without recursion"],
+    ids=lambda case: case.description,
 )
 def test_given_deep_linear_project_when_formatting_compile_json_then_counts_execution_layers(
     test_case: CompileJsonExecutionLayersTestCase,
@@ -130,7 +132,7 @@ def test_given_deep_linear_project_when_formatting_compile_json_then_counts_exec
             ),
         ),
     ],
-    ids=["styles compile summary and model rows semantically"],
+    ids=lambda case: case.description,
 )
 def test_given_compiled_project_when_formatting_compile_text_with_color_then_styles_semantic_parts(
     test_case: CompileTextColorTestCase,

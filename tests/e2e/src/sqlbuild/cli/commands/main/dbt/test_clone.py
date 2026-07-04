@@ -21,28 +21,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
-CLONE_ERROR_E2E_TEST_CASES: tuple[DbtCloneE2ETestCase, ...] = (
-    DbtCloneE2ETestCase(
-        description="missing production_ref config explains how to configure clone",
-        command=("dbt", "clone", "--select", "dbt_orders"),
-        expected_returncode=1,
-        expected_stderr_fragments=(
-            "dbt clone requires [dbt.production_ref] to be configured",
-            "sqb dbt init",
-        ),
-        include_production_ref=False,
-    ),
-    DbtCloneE2ETestCase(
-        description="empty clone selection explains how to select models",
-        command=("dbt", "clone", "--select", "does_not_exist"),
-        expected_returncode=1,
-        expected_stderr_fragments=(
-            "dbt clone selected no dbt models",
-            "Use --select to choose at least one dbt model.",
-        ),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -67,7 +45,7 @@ CLONE_ERROR_E2E_TEST_CASES: tuple[DbtCloneE2ETestCase, ...] = (
             rows_sql="SELECT order_id, amount_cents FROM main.dbt_orders ORDER BY order_id",
         )
     ],
-    ids=["dbt clone copies production table into current target"],
+    ids=lambda case: case.description,
 )
 def test_given_changed_current_model_when_cloning_then_copies_prod_relation(
     tmp_path: Path,
@@ -124,7 +102,7 @@ def test_given_changed_current_model_when_cloning_then_copies_prod_relation(
             rows_sql="SELECT total_amount_cents FROM main.dbt_order_summary",
         )
     ],
-    ids=["dbt clone recreates selected view from current SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_view_model_when_cloning_then_recreates_current_view_sql(
     tmp_path: Path,
@@ -176,7 +154,7 @@ def test_given_view_model_when_cloning_then_recreates_current_view_sql(
             expected_absent_relations=(("main", "dbt_customers"),),
         )
     ],
-    ids=["dbt clone honors multi select and exclude"],
+    ids=lambda case: case.description,
 )
 def test_given_multi_select_with_exclude_when_cloning_then_only_selected_models_clone(
     tmp_path: Path,
@@ -235,7 +213,7 @@ def test_given_multi_select_with_exclude_when_cloning_then_only_selected_models_
             ),
         )
     ],
-    ids=["dbt clone warns when origin warehouse relation is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_origin_relation_missing_when_cloning_then_warns(
     tmp_path: Path,
@@ -261,8 +239,28 @@ def test_given_origin_relation_missing_when_cloning_then_warns(
 
 @pytest.mark.parametrize(
     "test_case",
-    CLONE_ERROR_E2E_TEST_CASES,
-    ids=[case.description for case in CLONE_ERROR_E2E_TEST_CASES],
+    (
+        DbtCloneE2ETestCase(
+            description="missing production_ref config explains how to configure clone",
+            command=("dbt", "clone", "--select", "dbt_orders"),
+            expected_returncode=1,
+            expected_stderr_fragments=(
+                "dbt clone requires [dbt.production_ref] to be configured",
+                "sqb dbt init",
+            ),
+            include_production_ref=False,
+        ),
+        DbtCloneE2ETestCase(
+            description="empty clone selection explains how to select models",
+            command=("dbt", "clone", "--select", "does_not_exist"),
+            expected_returncode=1,
+            expected_stderr_fragments=(
+                "dbt clone selected no dbt models",
+                "Use --select to choose at least one dbt model.",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_clone_request_when_running_then_renders_clear_error(
     tmp_path: Path,

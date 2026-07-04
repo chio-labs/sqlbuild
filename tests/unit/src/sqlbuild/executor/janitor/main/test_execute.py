@@ -29,7 +29,7 @@ from tests.unit.src.sqlbuild.executor.janitor.main.helpers import (
             expected_deleted_state_items=(),
         )
     ],
-    ids=["state cleanup is skipped when physical deletion fails"],
+    ids=lambda case: case.description,
 )
 def test_given_physical_drop_failure_when_executing_janitor_then_state_cleanup_is_skipped(
     test_case: JanitorExecutionOrderTestCase,

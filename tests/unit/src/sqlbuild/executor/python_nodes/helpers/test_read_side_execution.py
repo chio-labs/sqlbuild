@@ -35,7 +35,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
             expected_skip_reasons=(None, None),
         )
     ],
-    ids=["runs sql dependent Python before unrelated SQL completes"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_dep_completes_when_tracking_read_side_then_runs_ready_python_nodes(
     test_case: ReadSidePythonTrackerTestCase,
@@ -86,7 +86,7 @@ def test_given_sql_dep_completes_when_tracking_read_side_then_runs_ready_python_
             ),
         )
     ],
-    ids=["finalizes sql blocked Python nodes as skipped"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_dep_fails_when_finalizing_read_side_then_skips_unrun_python_nodes(
     test_case: ReadSidePythonTrackerTestCase,

@@ -22,43 +22,6 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_lineage_graph_for_output_test,
 )
 
-LINEAGE_OUTPUT_TEST_CASES: tuple[DbtLineageOutputTestCase, ...] = (
-    DbtLineageOutputTestCase(
-        description="formats list output",
-        output_format=DbtLineageOutputFormat.LIST,
-        expected_fragments=(
-            "stg_orders [dbt]",
-            "int_orders [dbt]",
-            "fact_orders [sqb]",
-            "->",
-        ),
-    ),
-    DbtLineageOutputTestCase(
-        description="formats tree output",
-        output_format=DbtLineageOutputFormat.TREE,
-        expected_fragments=(
-            "Lineage",
-            "fact_orders [sqb]",
-            "int_orders [dbt]",
-            "stg_orders [dbt]",
-            "└── ",
-        ),
-    ),
-)
-
-LINEAGE_SINGLE_NODE_OUTPUT_TEST_CASES: tuple[DbtLineageOutputTestCase, ...] = (
-    DbtLineageOutputTestCase(
-        description="formats single node list output",
-        output_format=DbtLineageOutputFormat.LIST,
-        expected_fragments=("mart_orders [sqb]",),
-    ),
-    DbtLineageOutputTestCase(
-        description="formats single node tree output",
-        output_format=DbtLineageOutputFormat.TREE,
-        expected_fragments=("Lineage", "mart_orders [sqb]", "upstream"),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -77,7 +40,7 @@ LINEAGE_SINGLE_NODE_OUTPUT_TEST_CASES: tuple[DbtLineageOutputTestCase, ...] = (
             expected_direction="upstream",
         )
     ],
-    ids=["includes node metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_lineage_graph_when_formatting_json_then_includes_node_metadata(
     test_case: DbtLineageJsonOutputTestCase,
@@ -101,8 +64,30 @@ def test_given_lineage_graph_when_formatting_json_then_includes_node_metadata(
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_OUTPUT_TEST_CASES,
-    ids=[case.description for case in LINEAGE_OUTPUT_TEST_CASES],
+    (
+        DbtLineageOutputTestCase(
+            description="formats list output",
+            output_format=DbtLineageOutputFormat.LIST,
+            expected_fragments=(
+                "stg_orders [dbt]",
+                "int_orders [dbt]",
+                "fact_orders [sqb]",
+                "->",
+            ),
+        ),
+        DbtLineageOutputTestCase(
+            description="formats tree output",
+            output_format=DbtLineageOutputFormat.TREE,
+            expected_fragments=(
+                "Lineage",
+                "fact_orders [sqb]",
+                "int_orders [dbt]",
+                "stg_orders [dbt]",
+                "└── ",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_lineage_graph_when_formatting_human_output_then_includes_expected_fragments(
     test_case: DbtLineageOutputTestCase,
@@ -122,8 +107,19 @@ def test_given_lineage_graph_when_formatting_human_output_then_includes_expected
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_SINGLE_NODE_OUTPUT_TEST_CASES,
-    ids=[case.description for case in LINEAGE_SINGLE_NODE_OUTPUT_TEST_CASES],
+    (
+        DbtLineageOutputTestCase(
+            description="formats single node list output",
+            output_format=DbtLineageOutputFormat.LIST,
+            expected_fragments=("mart_orders [sqb]",),
+        ),
+        DbtLineageOutputTestCase(
+            description="formats single node tree output",
+            output_format=DbtLineageOutputFormat.TREE,
+            expected_fragments=("Lineage", "mart_orders [sqb]", "upstream"),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_single_node_lineage_graph_when_formatting_human_output_then_includes_focus_node(
     test_case: DbtLineageOutputTestCase,
@@ -150,7 +146,7 @@ def test_given_single_node_lineage_graph_when_formatting_human_output_then_inclu
             expected_fragments=("Lineage graph", "mart_orders [sqb]"),
         )
     ],
-    ids=["formats summary fallback without focus"],
+    ids=lambda case: case.description,
 )
 def test_given_lineage_graph_without_focus_when_formatting_tree_then_outputs_summary(
     test_case: DbtLineageOutputTestCase,

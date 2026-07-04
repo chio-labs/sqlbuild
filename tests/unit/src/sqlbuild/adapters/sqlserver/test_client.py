@@ -32,7 +32,7 @@ from tests.unit.src.sqlbuild.adapters.sqlserver.helpers import FakeSqlServerConn
             expected_identifier_length=128,
         )
     ],
-    ids=["returns expected SQL Server adapter defaults and dialect settings"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlserver_adapter_when_checking_defaults_then_returns_expected_values(
     test_case: SqlServerAdapterDefaultsTestCase,
@@ -45,24 +45,21 @@ def test_given_sqlserver_adapter_when_checking_defaults_then_returns_expected_va
     assert adapter.maximum_identifier_length() == test_case.expected_identifier_length
 
 
-SQLSERVER_RENDER_IDENTIFIER_TEST_CASES: list[SqlServerRenderIdentifierTestCase] = [
-    SqlServerRenderIdentifierTestCase(
-        description="quotes identifiers with brackets",
-        name="event_id",
-        expected_identifier="[event_id]",
-    ),
-    SqlServerRenderIdentifierTestCase(
-        description="escapes embedded closing bracket",
-        name="event]id",
-        expected_identifier="[event]]id]",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SQLSERVER_RENDER_IDENTIFIER_TEST_CASES,
-    ids=[case.description for case in SQLSERVER_RENDER_IDENTIFIER_TEST_CASES],
+    [
+        SqlServerRenderIdentifierTestCase(
+            description="quotes identifiers with brackets",
+            name="event_id",
+            expected_identifier="[event_id]",
+        ),
+        SqlServerRenderIdentifierTestCase(
+            description="escapes embedded closing bracket",
+            name="event]id",
+            expected_identifier="[event]]id]",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_identifier_when_rendering_then_sqlserver_bracket_quotes_identifier(
     test_case: SqlServerRenderIdentifierTestCase,
@@ -74,28 +71,25 @@ def test_given_identifier_when_rendering_then_sqlserver_bracket_quotes_identifie
     assert identifier == test_case.expected_identifier
 
 
-SQLSERVER_RENDER_QUALIFIED_NAME_TEST_CASES: list[SqlServerRenderQualifiedNameTestCase] = [
-    SqlServerRenderQualifiedNameTestCase(
-        description="renders three part qualified name",
-        database="tempdb",
-        schema="analytics_dev",
-        name="fact_orders",
-        expected_name="tempdb.analytics_dev.fact_orders",
-    ),
-    SqlServerRenderQualifiedNameTestCase(
-        description="renders schema qualified name",
-        database=None,
-        schema="analytics_dev",
-        name="fact_orders",
-        expected_name="analytics_dev.fact_orders",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SQLSERVER_RENDER_QUALIFIED_NAME_TEST_CASES,
-    ids=[case.description for case in SQLSERVER_RENDER_QUALIFIED_NAME_TEST_CASES],
+    [
+        SqlServerRenderQualifiedNameTestCase(
+            description="renders three part qualified name",
+            database="tempdb",
+            schema="analytics_dev",
+            name="fact_orders",
+            expected_name="tempdb.analytics_dev.fact_orders",
+        ),
+        SqlServerRenderQualifiedNameTestCase(
+            description="renders schema qualified name",
+            database=None,
+            schema="analytics_dev",
+            name="fact_orders",
+            expected_name="analytics_dev.fact_orders",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_relation_parts_when_rendering_qualified_name_then_sqlserver_joins_parts(
     test_case: SqlServerRenderQualifiedNameTestCase,
@@ -124,7 +118,7 @@ def test_given_relation_parts_when_rendering_qualified_name_then_sqlserver_joins
             ),
         )
     ],
-    ids=["renders sp_rename without database and without quoted destination name"],
+    ids=lambda case: case.description,
 )
 def test_given_quoted_dbt_relation_when_rendering_rename_then_sqlserver_normalizes_names(
     test_case: SqlServerRenderRenameTestCase,
@@ -153,7 +147,7 @@ def test_given_quoted_dbt_relation_when_rendering_rename_then_sqlserver_normaliz
             ),
         )
     ],
-    ids=["renders drop and select into for table replacement"],
+    ids=lambda case: case.description,
 )
 def test_given_table_target_when_rendering_create_then_sqlserver_uses_select_into(
     test_case: SqlServerRenderCreateTableAsTestCase,
@@ -183,7 +177,7 @@ def test_given_table_target_when_rendering_create_then_sqlserver_uses_select_int
             ),
         )
     ],
-    ids=["renders scalar SQL function with T-SQL body"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_function_when_rendering_create_then_sqlserver_declares_function_body(
     test_case: SqlServerRenderCreateFunctionTestCase,
@@ -212,7 +206,7 @@ def test_given_sql_function_when_rendering_create_then_sqlserver_declares_functi
             ),
         )
     ],
-    ids=["renders conditional schema creation"],
+    ids=lambda case: case.description,
 )
 def test_given_schema_when_rendering_create_then_sqlserver_checks_sys_schemas(
     test_case: SqlServerRenderCreateSchemaTestCase,
@@ -240,7 +234,7 @@ def test_given_schema_when_rendering_create_then_sqlserver_checks_sys_schemas(
             ),
         )
     ],
-    ids=["renders guarded latest-read index for fingerprint table"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_indexes_then_sqlserver_uses_latest_read_keys(
     test_case: SqlServerIndexSqlTestCase,
@@ -273,7 +267,7 @@ def test_given_fingerprint_table_when_rendering_indexes_then_sqlserver_uses_late
             ),
         )
     ],
-    ids=["renders guarded latest-read index for source freshness table"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_table_when_rendering_indexes_then_sqlserver_uses_latest_read_keys(
     test_case: SqlServerIndexSqlTestCase,
@@ -304,7 +298,7 @@ def test_given_source_freshness_table_when_rendering_indexes_then_sqlserver_uses
             ),
         )
     ],
-    ids=["renders guarded node result table create"],
+    ids=lambda case: case.description,
 )
 def test_given_node_result_table_when_rendering_create_then_sqlserver_guards_missing_table(
     test_case: SqlServerLatestReadSqlTestCase,
@@ -341,7 +335,7 @@ def test_given_node_result_table_when_rendering_create_then_sqlserver_guards_mis
             ),
         )
     ],
-    ids=["renders bounded fingerprint key columns"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_create_then_sqlserver_uses_indexable_keys(
     test_case: SqlServerLatestReadSqlTestCase,
@@ -382,7 +376,7 @@ def test_given_fingerprint_table_when_rendering_create_then_sqlserver_uses_index
             ),
         )
     ],
-    ids=["renders guarded lookup indexes for node result table"],
+    ids=lambda case: case.description,
 )
 def test_given_node_result_table_when_rendering_indexes_then_sqlserver_uses_lookup_keys(
     test_case: SqlServerIndexSqlTestCase,
@@ -412,7 +406,7 @@ def test_given_node_result_table_when_rendering_indexes_then_sqlserver_uses_look
             ),
         )
     ],
-    ids=["renders windowed fingerprint latest read"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_latest_read_then_sqlserver_uses_window_query(
     test_case: SqlServerLatestReadSqlTestCase,
@@ -444,7 +438,7 @@ def test_given_fingerprint_table_when_rendering_latest_read_then_sqlserver_uses_
             ),
         )
     ],
-    ids=["renders windowed source freshness latest read"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_when_rendering_latest_read_then_sqlserver_uses_window_query(
     test_case: SqlServerLatestReadSqlTestCase,
@@ -478,7 +472,7 @@ def test_given_source_freshness_when_rendering_latest_read_then_sqlserver_uses_w
             ),
         )
     ],
-    ids=["renders fingerprint pruning with writable ranked CTE"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_prune_then_sqlserver_uses_history_rank(
     test_case: SqlServerPruneSqlTestCase,
@@ -512,7 +506,7 @@ def test_given_fingerprint_table_when_rendering_prune_then_sqlserver_uses_histor
             ),
         )
     ],
-    ids=["renders source freshness pruning with full identity"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_table_when_rendering_prune_then_sqlserver_uses_history_rank(
     test_case: SqlServerPruneSqlTestCase,
@@ -542,7 +536,7 @@ def test_given_source_freshness_table_when_rendering_prune_then_sqlserver_uses_h
             ),
         )
     ],
-    ids=["moves table across schemas with transfer and rename"],
+    ids=lambda case: case.description,
 )
 def test_given_cross_schema_table_move_when_moving_then_sqlserver_uses_native_transfer(
     test_case: SqlServerMoveOrCopyRelationTestCase,

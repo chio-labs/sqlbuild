@@ -60,7 +60,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             ),
         )
     ],
-    ids=["virtual playground runs state build branch and promote lifecycle"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_playground_when_running_lifecycle_then_it_succeeds(
     test_case: VirtualPlaygroundLifecycleTestCase,
@@ -161,7 +161,7 @@ def test_given_virtual_playground_when_running_lifecycle_then_it_succeeds(
             ),
         )
     ],
-    ids=["python nodes playground runs plan build and check lifecycle"],
+    ids=lambda case: case.description,
 )
 def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
     test_case: PythonNodesPlaygroundLifecycleTestCase,
@@ -238,7 +238,7 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
             ),
         )
     ],
-    ids=["dbt playground second build prunes unchanged models (change-aware)"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_playground_when_building_then_runs_dbt_without_reuse(
     test_case: DbtChangeAwarePlaygroundLifecycleTestCase,

@@ -28,7 +28,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             expected_stdout_fragments=("Execution", "OK"),
         )
     ],
-    ids=["motherduck build creates expected table"],
+    ids=lambda case: case.description,
 )
 def test_given_motherduck_project_when_building_then_expected_table_exists(
     tmp_path: Path,

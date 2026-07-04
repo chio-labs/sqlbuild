@@ -25,26 +25,29 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ExtractSqlScenarioCtesTestCase,
 )
 
-TEST_CASES: list[ExtractSqlScenarioCtesTestCase] = [
-    ExtractSqlScenarioCtesTestCase(
-        description="extracts dbt ref fixtures",
-        sql="""
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExtractSqlScenarioCtesTestCase(
+            description="extracts dbt ref fixtures",
+            sql="""
         WITH
         __dbt_ref__orders AS (SELECT 1 AS order_id),
         __dbt_ref__stripe__payments AS (SELECT 1 AS payment_id),
         __expected__fact_orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__dbt_ref__orders", "__dbt_ref__stripe__payments"),
-        expected_source_fixture_names=(),
-        expected_ref_fixture_names=(),
-        expected_dbt_ref_fixture_names=("orders", "stripe__payments"),
-        expected_expected_model_names=("fact_orders",),
-        expected_assertion_names=(),
-    ),
-    ExtractSqlScenarioCtesTestCase(
-        description="extracts source ref seed fixtures expectations and assertions",
-        sql="""
+            expected_authored_cte_names=("__dbt_ref__orders", "__dbt_ref__stripe__payments"),
+            expected_source_fixture_names=(),
+            expected_ref_fixture_names=(),
+            expected_dbt_ref_fixture_names=("orders", "stripe__payments"),
+            expected_expected_model_names=("fact_orders",),
+            expected_assertion_names=(),
+        ),
+        ExtractSqlScenarioCtesTestCase(
+            description="extracts source ref seed fixtures expectations and assertions",
+            sql="""
         WITH
         helper_customers AS (SELECT 10 AS customer_id),
         __source__raw__orders AS (SELECT 1 AS order_id, 10 AS customer_id),
@@ -56,21 +59,21 @@ TEST_CASES: list[ExtractSqlScenarioCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=(
-            "helper_customers",
-            "__source__raw__orders",
-            "__ref__stg_customers",
-            "__seed__waffle_types",
+            expected_authored_cte_names=(
+                "helper_customers",
+                "__source__raw__orders",
+                "__ref__stg_customers",
+                "__seed__waffle_types",
+            ),
+            expected_source_fixture_names=("raw__orders",),
+            expected_ref_fixture_names=("stg_customers",),
+            expected_seed_fixture_names=("waffle_types",),
+            expected_expected_model_names=("daily_revenue",),
+            expected_assertion_names=("no_negative_revenue",),
         ),
-        expected_source_fixture_names=("raw__orders",),
-        expected_ref_fixture_names=("stg_customers",),
-        expected_seed_fixture_names=("waffle_types",),
-        expected_expected_model_names=("daily_revenue",),
-        expected_assertion_names=("no_negative_revenue",),
-    ),
-    ExtractSqlScenarioCtesTestCase(
-        description="allows assertion only scenario target inference later",
-        sql="""
+        ExtractSqlScenarioCtesTestCase(
+            description="allows assertion only scenario target inference later",
+            sql="""
         WITH
         __source__raw__orders AS (SELECT 1 AS order_id),
         __assert__has_no_null_orders AS (
@@ -78,63 +81,58 @@ TEST_CASES: list[ExtractSqlScenarioCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw__orders",),
-        expected_source_fixture_names=("raw__orders",),
-        expected_ref_fixture_names=(),
-        expected_expected_model_names=(),
-        expected_assertion_names=("has_no_null_orders",),
-    ),
-    ExtractSqlScenarioCtesTestCase(
-        description="allows expected only scenario with ref fixture",
-        sql="""
+            expected_authored_cte_names=("__source__raw__orders",),
+            expected_source_fixture_names=("raw__orders",),
+            expected_ref_fixture_names=(),
+            expected_expected_model_names=(),
+            expected_assertion_names=("has_no_null_orders",),
+        ),
+        ExtractSqlScenarioCtesTestCase(
+            description="allows expected only scenario with ref fixture",
+            sql="""
         WITH
         __ref__orders_base AS (SELECT 1 AS order_id),
         __expected__fact_orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__ref__orders_base",),
-        expected_source_fixture_names=(),
-        expected_ref_fixture_names=("orders_base",),
-        expected_expected_model_names=("fact_orders",),
-        expected_assertion_names=(),
-    ),
-    ExtractSqlScenarioCtesTestCase(
-        description="allows expected only scenario with seed fixture",
-        sql="""
+            expected_authored_cte_names=("__ref__orders_base",),
+            expected_source_fixture_names=(),
+            expected_ref_fixture_names=("orders_base",),
+            expected_expected_model_names=("fact_orders",),
+            expected_assertion_names=(),
+        ),
+        ExtractSqlScenarioCtesTestCase(
+            description="allows expected only scenario with seed fixture",
+            sql="""
         WITH
         __seed__country_codes AS (SELECT 'US' AS country_code),
         __expected__dim_countries AS (SELECT 'US' AS country_code)
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__seed__country_codes",),
-        expected_source_fixture_names=(),
-        expected_ref_fixture_names=(),
-        expected_seed_fixture_names=("country_codes",),
-        expected_expected_model_names=("dim_countries",),
-        expected_assertion_names=(),
-    ),
-    ExtractSqlScenarioCtesTestCase(
-        description="extracts scenario ctes with sql_analysis fallback syntax",
-        sql="""
+            expected_authored_cte_names=("__seed__country_codes",),
+            expected_source_fixture_names=(),
+            expected_ref_fixture_names=(),
+            expected_seed_fixture_names=("country_codes",),
+            expected_expected_model_names=("dim_countries",),
+            expected_assertion_names=(),
+        ),
+        ExtractSqlScenarioCtesTestCase(
+            description="extracts scenario ctes with sql_analysis fallback syntax",
+            sql="""
         WITH
         "__source__raw__orders" AS MATERIALIZED (SELECT 1 AS order_id),
         "__expected__daily_revenue" AS (SELECT order_id FROM "__source__raw__orders")
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw__orders",),
-        expected_source_fixture_names=("raw__orders",),
-        expected_ref_fixture_names=(),
-        expected_seed_fixture_names=(),
-        expected_expected_model_names=("daily_revenue",),
-        expected_assertion_names=(),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+            expected_authored_cte_names=("__source__raw__orders",),
+            expected_source_fixture_names=("raw__orders",),
+            expected_ref_fixture_names=(),
+            expected_seed_fixture_names=(),
+            expected_expected_model_names=("daily_revenue",),
+            expected_assertion_names=(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expected_roles(
     test_case: ExtractSqlScenarioCtesTestCase,
@@ -156,67 +154,64 @@ def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expecte
     assert extracted_ctes.assertion_names == test_case.expected_assertion_names
 
 
-ERROR_TEST_CASES: list[ExtractSqlScenarioCtesErrorTestCase] = [
-    ExtractSqlScenarioCtesErrorTestCase(
-        description="raises when scenario has no fixture ctes",
-        sql="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when scenario has no fixture ctes",
+            sql="""
         WITH __expected__fact_orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment=(
-            r"must define at least one __source__\*, __ref__\*, __seed__\*, "
-            r"or __dbt_ref__\* fixture CTE"
+            expected_error_fragment=(
+                r"must define at least one __source__\*, __ref__\*, __seed__\*, "
+                r"or __dbt_ref__\* fixture CTE"
+            ),
         ),
-    ),
-    ExtractSqlScenarioCtesErrorTestCase(
-        description="raises when scenario has no expected or assertion ctes",
-        sql="""
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when scenario has no expected or assertion ctes",
+            sql="""
         WITH __source__raw__orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment=(
-            "must define at least one __expected__<model> or __assert__<assertion>"
+            expected_error_fragment=(
+                "must define at least one __expected__<model> or __assert__<assertion>"
+            ),
         ),
-    ),
-    ExtractSqlScenarioCtesErrorTestCase(
-        description="raises when scenario uses macro mock cte",
-        sql="""
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when scenario uses macro mock cte",
+            sql="""
         WITH
         __source__raw__orders AS (SELECT 1 AS order_id),
         __macro__country AS (SELECT '''US'''),
         __expected__fact_orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment="does not support macro mock CTE '__macro__country'",
-    ),
-    ExtractSqlScenarioCtesErrorTestCase(
-        description="raises when assertion cte suffix is missing",
-        sql="""
+            expected_error_fragment="does not support macro mock CTE '__macro__country'",
+        ),
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when assertion cte suffix is missing",
+            sql="""
         WITH
         __source__raw__orders AS (SELECT 1 AS order_id),
         __assert__ AS (SELECT * FROM __ref(fact_orders))
         SELECT 1
         """.strip(),
-        expected_error_fragment="__assert__<assertion>",
-    ),
-    ExtractSqlScenarioCtesErrorTestCase(
-        description="raises when duplicate cte names are present",
-        sql="""
+            expected_error_fragment="__assert__<assertion>",
+        ),
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when duplicate cte names are present",
+            sql="""
         WITH
         __source__raw__orders AS (SELECT 1 AS order_id),
         __source__raw__orders AS (SELECT 2 AS order_id),
         __expected__fact_orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment="defines duplicate CTE '__source__raw__orders'",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    ERROR_TEST_CASES,
-    ids=[case.description for case in ERROR_TEST_CASES],
+            expected_error_fragment="defines duplicate CTE '__source__raw__orders'",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_sql_scenario_ctes_when_extracting_then_it_raises_clear_errors(
     test_case: ExtractSqlScenarioCtesErrorTestCase,
@@ -228,42 +223,44 @@ def test_given_invalid_sql_scenario_ctes_when_extracting_then_it_raises_clear_er
         )
 
 
-BUILD_SCENARIO_INPUTS_TEST_CASES: list[BuildScenarioInputsTestCase] = [
-    BuildScenarioInputsTestCase(
-        description="attaches scenario cte roles after authored sql expansion",
-        sql_body="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildScenarioInputsTestCase(
+            description="attaches scenario cte roles after authored sql expansion",
+            sql_body="""
         WITH
         __source__raw__orders AS (SELECT @@customer_id AS customer_id),
         __expected__daily_revenue AS (SELECT @@customer_id AS customer_id)
         SELECT 1
         """.strip(),
-        effective_vars={"customer_id": "10"},
-        expected_source_fixture_names=("raw__orders",),
-        expected_ref_fixture_names=(),
-        expected_seed_fixture_names=(),
-        expected_expected_model_names=("daily_revenue",),
-        expected_assertion_names=(),
-        expected_sql_fragment="SELECT 10 AS customer_id",
-    ),
-    BuildScenarioInputsTestCase(
-        description="attaches seed only scenario fixture roles",
-        sql_body="""
+            effective_vars={"customer_id": "10"},
+            expected_source_fixture_names=("raw__orders",),
+            expected_ref_fixture_names=(),
+            expected_seed_fixture_names=(),
+            expected_expected_model_names=("daily_revenue",),
+            expected_assertion_names=(),
+            expected_sql_fragment="SELECT 10 AS customer_id",
+        ),
+        BuildScenarioInputsTestCase(
+            description="attaches seed only scenario fixture roles",
+            sql_body="""
         WITH
         __seed__country_codes AS (SELECT '@@country_code' AS country_code),
         __expected__dim_countries AS (SELECT '@@country_code' AS country_code)
         SELECT 1
         """.strip(),
-        effective_vars={"country_code": "US"},
-        expected_source_fixture_names=(),
-        expected_ref_fixture_names=(),
-        expected_seed_fixture_names=("country_codes",),
-        expected_expected_model_names=("dim_countries",),
-        expected_assertion_names=(),
-        expected_sql_fragment="SELECT 'US' AS country_code",
-    ),
-    BuildScenarioInputsTestCase(
-        description="allows project source references in scenario fixture ctes",
-        sql_body="""
+            effective_vars={"country_code": "US"},
+            expected_source_fixture_names=(),
+            expected_ref_fixture_names=(),
+            expected_seed_fixture_names=("country_codes",),
+            expected_expected_model_names=("dim_countries",),
+            expected_assertion_names=(),
+            expected_sql_fragment="SELECT 'US' AS country_code",
+        ),
+        BuildScenarioInputsTestCase(
+            description="allows project source references in scenario fixture ctes",
+            sql_body="""
         WITH
         __source__raw__orders AS (
           SELECT order_id FROM __source("raw__orders") WHERE order_id <= 10
@@ -271,44 +268,16 @@ BUILD_SCENARIO_INPUTS_TEST_CASES: list[BuildScenarioInputsTestCase] = [
         __expected__daily_revenue AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        effective_vars={},
-        expected_source_fixture_names=("raw__orders",),
-        expected_ref_fixture_names=(),
-        expected_seed_fixture_names=(),
-        expected_expected_model_names=("daily_revenue",),
-        expected_assertion_names=(),
-        expected_sql_fragment='__source("raw__orders")',
-    ),
-]
-
-BUILD_SCENARIO_INPUTS_ERROR_TEST_CASES: list[BuildScenarioInputsErrorTestCase] = [
-    BuildScenarioInputsErrorTestCase(
-        description="rejects project source references in expected ctes",
-        sql_body="""
-        WITH
-        __source__raw__orders AS (SELECT 1 AS order_id),
-        __expected__daily_revenue AS (SELECT order_id FROM __source("raw__orders"))
-        SELECT 1
-        """.strip(),
-        expected_error_fragment="__expected__daily_revenue.*must not reference project source",
-    ),
-    BuildScenarioInputsErrorTestCase(
-        description="rejects unknown project source references in fixture ctes",
-        sql_body="""
-        WITH
-        __source__raw__orders AS (SELECT order_id FROM __source("missing_source")),
-        __expected__daily_revenue AS (SELECT 1 AS order_id)
-        SELECT 1
-        """.strip(),
-        expected_error_fragment="references unknown source 'missing_source'",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    BUILD_SCENARIO_INPUTS_TEST_CASES,
-    ids=[case.description for case in BUILD_SCENARIO_INPUTS_TEST_CASES],
+            effective_vars={},
+            expected_source_fixture_names=("raw__orders",),
+            expected_ref_fixture_names=(),
+            expected_seed_fixture_names=(),
+            expected_expected_model_names=("daily_revenue",),
+            expected_assertion_names=(),
+            expected_sql_fragment='__source("raw__orders")',
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attaches_cte_roles(
     test_case: BuildScenarioInputsTestCase,
@@ -357,8 +326,29 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
 
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_SCENARIO_INPUTS_ERROR_TEST_CASES,
-    ids=[case.description for case in BUILD_SCENARIO_INPUTS_ERROR_TEST_CASES],
+    [
+        BuildScenarioInputsErrorTestCase(
+            description="rejects project source references in expected ctes",
+            sql_body="""
+        WITH
+        __source__raw__orders AS (SELECT 1 AS order_id),
+        __expected__daily_revenue AS (SELECT order_id FROM __source("raw__orders"))
+        SELECT 1
+        """.strip(),
+            expected_error_fragment="__expected__daily_revenue.*must not reference project source",
+        ),
+        BuildScenarioInputsErrorTestCase(
+            description="rejects unknown project source references in fixture ctes",
+            sql_body="""
+        WITH
+        __source__raw__orders AS (SELECT order_id FROM __source("missing_source")),
+        __expected__daily_revenue AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment="references unknown source 'missing_source'",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_clear_error(
     test_case: BuildScenarioInputsErrorTestCase,

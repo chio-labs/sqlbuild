@@ -16,32 +16,35 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-TEST_CASES: list[CliFailureBuildE2ETestCase] = [
-    CliFailureBuildE2ETestCase(
-        description="bad mapped cursor input column fails at runtime",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "cursor_runtime_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "cursor_runtime.duckdb"\n'
-            ),
-            "seed_raw_data.sql": (
-                "CREATE TABLE main.raw_orders (id INTEGER, ordered_at TIMESTAMP);\n"
-                "INSERT INTO main.raw_orders VALUES (1, '2026-01-01 00:30:00');\n"
-                "CREATE TABLE main.customer_status_snapshot "
-                "(customer_id INTEGER, last_ordered_at TIMESTAMP);\n"
-            ),
-            "models/stg_orders.sql": (
-                "MODEL (materialized view);\n\n"
-                "SELECT id AS order_id, ordered_at FROM main.raw_orders\n"
-            ),
-            "models/fact_orders.sql": (
-                "MODEL (materialized table);\n\n"
-                'SELECT order_id, ordered_at FROM __ref("stg_orders")\n'
-            ),
-            "models/customer_status_snapshot.sql": dedent(
-                """
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CliFailureBuildE2ETestCase(
+            description="bad mapped cursor input column fails at runtime",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "cursor_runtime_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "cursor_runtime.duckdb"\n'
+                ),
+                "seed_raw_data.sql": (
+                    "CREATE TABLE main.raw_orders (id INTEGER, ordered_at TIMESTAMP);\n"
+                    "INSERT INTO main.raw_orders VALUES (1, '2026-01-01 00:30:00');\n"
+                    "CREATE TABLE main.customer_status_snapshot "
+                    "(customer_id INTEGER, last_ordered_at TIMESTAMP);\n"
+                ),
+                "models/stg_orders.sql": (
+                    "MODEL (materialized view);\n\n"
+                    "SELECT id AS order_id, ordered_at FROM main.raw_orders\n"
+                ),
+                "models/fact_orders.sql": (
+                    "MODEL (materialized table);\n\n"
+                    'SELECT order_id, ordered_at FROM __ref("stg_orders")\n'
+                ),
+                "models/customer_status_snapshot.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy merge,
@@ -57,29 +60,29 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
                 SELECT 1 AS customer_id, MAX(ordered_at) AS last_ordered_at
                 FROM __ref("fact_orders")
                 """
-            ).strip()
-            + "\n",
-        },
-        command=("--no-color", "build", "--select", "+customer_status_snapshot"),
-        expected_exit_code=1,
-        expected_stderr_fragments=(),
-        expected_stdout_fragments=("missing_column",),
-        pre_commands=(("--no-color", "build", "--select", "+fact_orders"),),
-    ),
-    CliFailureBuildE2ETestCase(
-        description="broken runtime-owned upstream relation fails at compile time",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "cursor_runtime_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "cursor_runtime.duckdb"\n'
-            ),
-            "seed_raw_data.sql": (
-                "CREATE TABLE main.raw_orders (id INTEGER, ordered_at TIMESTAMP);\n"
-            ),
-            "models/customer_status_snapshot.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+            },
+            command=("--no-color", "build", "--select", "+customer_status_snapshot"),
+            expected_exit_code=1,
+            expected_stderr_fragments=(),
+            expected_stdout_fragments=("missing_column",),
+            pre_commands=(("--no-color", "build", "--select", "+fact_orders"),),
+        ),
+        CliFailureBuildE2ETestCase(
+            description="broken runtime-owned upstream relation fails at compile time",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "cursor_runtime_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "cursor_runtime.duckdb"\n'
+                ),
+                "seed_raw_data.sql": (
+                    "CREATE TABLE main.raw_orders (id INTEGER, ordered_at TIMESTAMP);\n"
+                ),
+                "models/customer_status_snapshot.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy merge,
@@ -95,20 +98,15 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
                 SELECT 1 AS customer_id, MAX(ordered_at) AS last_ordered_at
                 FROM __ref("missing_orders")
                 """
-            ).strip()
-            + "\n",
-        },
-        command=("--no-color", "build", "--select", "customer_status_snapshot"),
-        expected_exit_code=1,
-        expected_stderr_fragments=("references unknown model 'missing_orders'",),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+                ).strip()
+                + "\n",
+            },
+            command=("--no-color", "build", "--select", "customer_status_snapshot"),
+            expected_exit_code=1,
+            expected_stderr_fragments=("references unknown model 'missing_orders'",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_cursor_runtime_failure_projects_when_running_build_then_cli_fails_clearly(
     test_case: CliFailureBuildE2ETestCase,

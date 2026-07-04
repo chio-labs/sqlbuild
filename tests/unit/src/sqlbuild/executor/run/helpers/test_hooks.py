@@ -32,23 +32,6 @@ from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.run.helpers.helpers import build_result_model_plan_entry
 
-HOOK_SKIP_STOP_TEST_CASES: tuple[PythonHookSkipTestCase, ...] = (
-    PythonHookSkipTestCase(
-        description="skipped pre hook stops remaining hooks",
-        expected_skipped=True,
-        expected_status="skipped",
-        expected_skip_reason="stop pre hooks",
-        hook_phase="pre_hooks",
-    ),
-    PythonHookSkipTestCase(
-        description="skipped post hook stops remaining hooks",
-        expected_skipped=True,
-        expected_status="skipped",
-        expected_skip_reason="stop post hooks",
-        hook_phase="post_hooks",
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -58,7 +41,7 @@ HOOK_SKIP_STOP_TEST_CASES: tuple[PythonHookSkipTestCase, ...] = (
             expected_export_name="HookContext",
         )
     ],
-    ids=["exports hook context from public hooks module"],
+    ids=lambda case: case.description,
 )
 def test_given_public_hooks_module_when_importing_then_hook_context_is_exported(
     test_case: PublicHookContextExportTestCase,
@@ -83,7 +66,7 @@ def test_given_public_hooks_module_when_importing_then_hook_context_is_exported(
             ),
         )
     ],
-    ids=["renders only SQL entries from mixed typed hooks"],
+    ids=lambda case: case.description,
 )
 def test_given_typed_hooks_when_rendering_then_returns_expected_statements(
     test_case: RenderHooksTestCase,
@@ -108,7 +91,7 @@ def test_given_typed_hooks_when_rendering_then_returns_expected_statements(
             expected_rows=((1,), (2,)),
         )
     ],
-    ids=["executes typed SQL statements in order"],
+    ids=lambda case: case.description,
 )
 def test_given_typed_sql_hooks_when_executing_then_sql_statements_run_in_order(
     test_case: ExecuteHooksTestCase,
@@ -138,7 +121,7 @@ def test_given_typed_sql_hooks_when_executing_then_sql_statements_run_in_order(
             ),
         )
     ],
-    ids=["fails clearly when runtime hook registry is missing entry"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_without_runtime_registry_when_executing_then_it_fails_clearly(
     test_case: PythonHookExecutionTestCase,
@@ -179,7 +162,7 @@ def test_given_python_hook_without_runtime_registry_when_executing_then_it_fails
             ),
         )
     ],
-    ids=["invokes function with context and kwargs"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_when_executing_then_invokes_function_with_context_and_kwargs(
     test_case: PythonHookInvocationTestCase,
@@ -250,7 +233,7 @@ def test_given_python_hook_when_executing_then_invokes_function_with_context_and
             expected_skip_mode="hard",
         )
     ],
-    ids=["records skipped Python hook result"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_returns_skip_when_executing_then_records_skipped_hook_result(
     test_case: PythonHookSkipTestCase,
@@ -294,8 +277,23 @@ def test_given_python_hook_returns_skip_when_executing_then_records_skipped_hook
 
 @pytest.mark.parametrize(
     "test_case",
-    HOOK_SKIP_STOP_TEST_CASES,
-    ids=[case.description for case in HOOK_SKIP_STOP_TEST_CASES],
+    (
+        PythonHookSkipTestCase(
+            description="skipped pre hook stops remaining hooks",
+            expected_skipped=True,
+            expected_status="skipped",
+            expected_skip_reason="stop pre hooks",
+            hook_phase="pre_hooks",
+        ),
+        PythonHookSkipTestCase(
+            description="skipped post hook stops remaining hooks",
+            expected_skipped=True,
+            expected_status="skipped",
+            expected_skip_reason="stop post hooks",
+            hook_phase="post_hooks",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_returns_skip_when_executing_phase_then_later_hooks_do_not_run(
     test_case: PythonHookSkipTestCase,
@@ -357,7 +355,7 @@ def test_given_python_hook_returns_skip_when_executing_phase_then_later_hooks_do
             expected_skip_reason="source is disabled",
         )
     ],
-    ids=["pre-hook skip skips view materialization"],
+    ids=lambda case: case.description,
 )
 def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_skipped(
     test_case: PythonHookSkipTestCase,
@@ -418,7 +416,7 @@ def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_sk
             ),
         )
     ],
-    ids=["fails when Python hook returns payload"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_returns_payload_when_executing_then_it_fails_clearly(
     test_case: PythonHookInvalidReturnTestCase,
@@ -463,7 +461,7 @@ def test_given_python_hook_returns_payload_when_executing_then_it_fails_clearly(
             expected_return_ignored=None,
         )
     ],
-    ids=["injects context parameter aliases and ignores return values"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hooks_when_executing_then_injects_supported_context_aliases(
     test_case: PythonHookContextParameterTestCase,
@@ -536,7 +534,7 @@ def test_given_python_hooks_when_executing_then_injects_supported_context_aliase
             expected_error_fragment=r"post_hooks\[0\] python\(\"explode\"\) failed: boom",
         )
     ],
-    ids=["wraps Python hook exceptions with hook label"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_raises_when_executing_then_reports_hook_label(
     test_case: PythonHookRuntimeErrorTestCase,
@@ -584,7 +582,7 @@ def test_given_python_hook_raises_when_executing_then_reports_hook_label(
             ),
         )
     ],
-    ids=["fails clearly for invalid hook entry shape"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_hook_entry_when_executing_then_it_reports_hook_index(
     test_case: PythonHookExecutionTestCase,

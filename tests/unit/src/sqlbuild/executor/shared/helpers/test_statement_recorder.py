@@ -28,7 +28,7 @@ from tests.unit.src.sqlbuild.executor.shared.helpers._test_types import (
             ),
         )
     ],
-    ids=["records SQL and log events in order"],
+    ids=lambda case: case.description,
 )
 def test_given_recorded_events_when_snapshotting_then_returns_expected_tuple(
     test_case: StatementRecorderTestCase,

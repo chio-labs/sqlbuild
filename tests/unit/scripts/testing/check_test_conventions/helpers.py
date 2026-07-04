@@ -54,7 +54,7 @@ def compliant_repo_files() -> dict[str, str]:
                         expected_result="alice",
                     )
                 ],
-                ids=["strips surrounding whitespace"],
+                ids=lambda case: case.description,
             )
             def test_given_name_with_surrounding_whitespace_when_parsing_then_returns_trimmed_name(
                 test_case: ParseNameTestCase,

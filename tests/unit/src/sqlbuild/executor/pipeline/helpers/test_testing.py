@@ -29,7 +29,7 @@ from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (
             expected_error_fragment="Run `sqb build` first",
         ),
     ],
-    ids=["missing project function fails before running SQL test"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_test_with_missing_function_when_running_pipeline_then_returns_setup_error(
     test_case: SqlTestFunctionPreflightTestCase,

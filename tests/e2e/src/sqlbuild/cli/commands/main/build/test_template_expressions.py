@@ -128,7 +128,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["build uses if eq ne and coalesce in config interpolation"],
+    ids=lambda case: case.description,
 )
 def test_given_template_expression_project_when_building_then_config_expressions_resolve(
     test_case: TemplateExpressionsBuildE2ETestCase,

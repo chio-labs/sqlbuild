@@ -39,7 +39,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             unexpected_fragments=("Query changed", "query diff:"),
         )
     ],
-    ids=["standard plan shows config-only change without query diff"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_project_with_config_only_change_when_planning_then_reports_config_change(
     test_case: DirectPlanE2ETestCase,
@@ -92,7 +92,7 @@ def test_given_direct_project_with_config_only_change_when_planning_then_reports
             unexpected_fragments=("Normal (1)", "orders"),
         )
     ],
-    ids=["standard changes-only plan prunes unchanged selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_planning_changes_only_then_selects_no_unchanged_models(
     test_case: DirectPlanE2ETestCase,
@@ -140,7 +140,7 @@ def test_given_built_direct_project_when_planning_changes_only_then_selects_no_u
             unexpected_fragments=("Models (1 standard run)", "orders"),
         )
     ],
-    ids=["standard changes-only explicit select prunes unchanged selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_planning_selected_changes_only_then_prunes_model(
     test_case: DirectPlanE2ETestCase,
@@ -192,7 +192,7 @@ def test_given_built_direct_project_when_planning_selected_changes_only_then_pru
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["direct force explicit select keeps unchanged selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_planning_selected_with_force_then_keeps_model(
     test_case: DirectPlanE2ETestCase,
@@ -245,7 +245,7 @@ def test_given_built_direct_project_when_planning_selected_with_force_then_keeps
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["standard changes-only plan keeps changed selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_query_change_when_planning_changes_only_then_selects_changed_model(
     test_case: DirectPlanE2ETestCase,
@@ -302,7 +302,7 @@ def test_given_direct_query_change_when_planning_changes_only_then_selects_chang
             unexpected_fragments=("Plan ready (1 selected)",),
         )
     ],
-    ids=["standard changes-only query change advances selected downstream by default"],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_query_change_when_planning_changes_only_then_keeps_downstream_forward_run(
     test_case: DirectPlanE2ETestCase,
@@ -363,7 +363,7 @@ def test_given_upstream_query_change_when_planning_changes_only_then_keeps_downs
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["standard changes-only retains downstream stale state outside scoped build"],
+    ids=lambda case: case.description,
 )
 def test_given_scoped_upstream_changes_only_build_when_planning_later_then_downstream_remains_stale(
     test_case: DirectPlanE2ETestCase,
@@ -434,7 +434,7 @@ def test_given_scoped_upstream_changes_only_build_when_planning_later_then_downs
             unexpected_fragments=("Plan ready (0 selected)", "Query changed"),
         )
     ],
-    ids=["standard changes-only plan keeps config-only changed selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_config_change_when_planning_changes_only_then_selects_changed_model(
     test_case: DirectPlanE2ETestCase,
@@ -492,7 +492,7 @@ def test_given_direct_config_change_when_planning_changes_only_then_selects_chan
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["standard changes-only plan keeps function and downstream model"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_function_change_when_planning_changes_only_then_selects_dependent_model(
     test_case: DirectPlanE2ETestCase,
@@ -555,7 +555,7 @@ def test_given_direct_function_change_when_planning_changes_only_then_selects_de
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["standard changes-only plan keeps schema changed model"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_schema_change_when_planning_changes_only_then_selects_changed_model(
     test_case: DirectPlanE2ETestCase,
@@ -634,7 +634,7 @@ def test_given_direct_schema_change_when_planning_changes_only_then_selects_chan
             unexpected_fragments=("Audits", "Tests", "test_orders", "not_null"),
         )
     ],
-    ids=["standard changes-only plan prunes tests and audits with unchanged target"],
+    ids=lambda case: case.description,
 )
 def test_given_unchanged_direct_model_when_planning_changes_only_then_prunes_tests_and_audits(
     test_case: DirectPlanE2ETestCase,
@@ -696,7 +696,7 @@ def test_given_unchanged_direct_model_when_planning_changes_only_then_prunes_tes
             expected_function_count=0,
         )
     ],
-    ids=["standard changes-only JSON plan reports zero selected work"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_planning_changes_only_json_then_selected_count_is_zero(
     test_case: DirectPlanJsonE2ETestCase,
@@ -749,7 +749,7 @@ def test_given_built_direct_project_when_planning_changes_only_json_then_selecte
             unexpected_fragments=("source-stale models: orders",),
         )
     ],
-    ids=["standard changes-only plan reads normal-build source freshness state"],
+    ids=lambda case: case.description,
 )
 def test_given_observable_source_freshness_when_planning_changes_only_then_reads_build_state(
     test_case: DirectPlanE2ETestCase,
@@ -830,7 +830,7 @@ def test_given_observable_source_freshness_when_planning_changes_only_then_reads
             ),
         )
     ],
-    ids=["standard changes-only plan respects timestamp source freshness lag tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_lag_tolerance_when_planning_changes_only_then_skips_within_tolerance(
     test_case: DirectPlanE2ETestCase,
@@ -928,7 +928,7 @@ def test_given_timestamp_lag_tolerance_when_planning_changes_only_then_skips_wit
             unexpected_fragments=("source-stale models: fact_orders, stg_orders",),
         )
     ],
-    ids=["standard source freshness skips view downstream when unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_view_chain_when_planning_changes_only_then_skips_downstream(
     test_case: DirectPlanE2ETestCase,
@@ -996,7 +996,7 @@ def test_given_source_freshness_view_chain_when_planning_changes_only_then_skips
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["direct unknown source freshness conservatively keeps downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_unknown_source_freshness_when_planning_changes_only_then_keeps_downstream(
     test_case: DirectPlanE2ETestCase,
@@ -1057,7 +1057,7 @@ def test_given_unknown_source_freshness_when_planning_changes_only_then_keeps_do
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["run_despite_unchanged duration keeps recent rolling table and downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_recent_source_data_when_planning_changes_only_then_runs_despite_unchanged(
     test_case: DirectPlanE2ETestCase,
@@ -1134,7 +1134,7 @@ def test_given_recent_source_data_when_planning_changes_only_then_runs_despite_u
             unexpected_fragments=("Runs despite unchanged", "rolling_orders"),
         )
     ],
-    ids=["expired run_despite_unchanged duration skips unchanged table"],
+    ids=lambda case: case.description,
 )
 def test_given_old_source_data_when_planning_changes_only_then_skips_unchanged_table(
     test_case: DirectPlanE2ETestCase,
@@ -1196,7 +1196,7 @@ def test_given_old_source_data_when_planning_changes_only_then_skips_unchanged_t
             unexpected_fragments=("Plan ready",),
         )
     ],
-    ids=["run_despite_unchanged duration fails without timestamp source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_duration_without_source_freshness_when_planning_changes_only_then_fails(
     test_case: DirectPlanE2ETestCase,
@@ -1254,7 +1254,7 @@ def test_given_duration_without_source_freshness_when_planning_changes_only_then
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["run_despite_unchanged default applies to table model"],
+    ids=lambda case: case.description,
 )
 def test_given_run_despite_unchanged_default_when_planning_changes_only_then_runs_table(
     test_case: DirectPlanE2ETestCase,
@@ -1307,7 +1307,7 @@ def test_given_run_despite_unchanged_default_when_planning_changes_only_then_run
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["path default run_despite_unchanged applies to matching table"],
+    ids=lambda case: case.description,
 )
 def test_given_run_despite_unchanged_path_default_when_planning_then_runs_matching_table(
     test_case: DirectPlanE2ETestCase,
@@ -1363,7 +1363,7 @@ def test_given_run_despite_unchanged_path_default_when_planning_then_runs_matchi
             unexpected_fragments=("Plan ready (2 selected)",),
         )
     ],
-    ids=["scoped run_despite_unchanged plan reports downstream remaining stale"],
+    ids=lambda case: case.description,
 )
 def test_given_scoped_run_despite_unchanged_when_planning_then_reports_remaining_stale(
     test_case: DirectPlanE2ETestCase,
@@ -1417,7 +1417,7 @@ def test_given_scoped_run_despite_unchanged_when_planning_then_reports_remaining
             ),
         )
     ],
-    ids=["standard changes-only plan observes column freshness on expression source"],
+    ids=lambda case: case.description,
 )
 def test_given_column_freshness_expression_when_planning_changes_only_then_observes(
     test_case: DirectPlanE2ETestCase,
@@ -1475,7 +1475,7 @@ def test_given_column_freshness_expression_when_planning_changes_only_then_obser
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["standard changes-only plan keeps downstream cascade"],
+    ids=lambda case: case.description,
 )
 def test_given_selected_upstream_query_change_when_planning_changes_only_then_keeps_cascade(
     test_case: DirectPlanE2ETestCase,
@@ -1542,7 +1542,7 @@ def test_given_selected_upstream_query_change_when_planning_changes_only_then_ke
             unexpected_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["direct full-refresh changes-only keeps selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_planning_full_refresh_changes_only_then_keeps_model(
     test_case: DirectPlanE2ETestCase,
@@ -1603,7 +1603,7 @@ def test_given_built_direct_project_when_planning_full_refresh_changes_only_then
             ),
         )
     ],
-    ids=["standard plan shows selected Python lifecycle nodes"],
+    ids=lambda case: case.description,
 )
 def test_given_python_lifecycle_project_when_planning_then_shows_python_sections(
     test_case: DirectPlanE2ETestCase,
@@ -1646,7 +1646,7 @@ def test_given_python_lifecycle_project_when_planning_then_shows_python_sections
             unexpected_fragments=("Python ingress", "python    task      prepare_orders"),
         )
     ],
-    ids=["direct source plan warns for skipped task ingress dependency"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_source_with_task_ingress_when_planning_without_expansion_then_warns(
     test_case: DirectPlanE2ETestCase,
@@ -1722,7 +1722,7 @@ def test_given_direct_source_with_task_ingress_when_planning_without_expansion_t
             unexpected_fragments=("task (new)",),
         )
     ],
-    ids=["direct Python task plan shows persisted identity statuses"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_python_task_identity_when_planning_then_reports_identity_status(
     test_case: DirectPlanE2ETestCase,
@@ -1849,7 +1849,7 @@ def test_given_direct_python_task_identity_when_planning_then_reports_identity_s
             unexpected_fragments=("Models (", "First run (", "Query changed (", "fact_orders"),
         )
     ],
-    ids=["changed Python identity remains display only for changes-only SQL selection"],
+    ids=lambda case: case.description,
 )
 def test_given_changed_python_identity_when_planning_changes_only_then_sql_work_is_not_selected(
     test_case: DirectPlanE2ETestCase,
@@ -1931,7 +1931,7 @@ def test_given_changed_python_identity_when_planning_changes_only_then_sql_work_
             unexpected_fragments=("Python ingress",),
         )
     ],
-    ids=["direct source plan warns for skipped asset ingress dependency"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_source_with_asset_ingress_when_planning_without_expansion_then_warns(
     test_case: DirectPlanE2ETestCase,
@@ -1999,7 +1999,7 @@ def test_given_direct_source_with_asset_ingress_when_planning_without_expansion_
             ),
         )
     ],
-    ids=["standard plan json includes selected Python lifecycle nodes"],
+    ids=lambda case: case.description,
 )
 def test_given_python_lifecycle_project_when_planning_json_then_includes_python_nodes(
     test_case: DirectPlanE2ETestCase,
@@ -2063,7 +2063,7 @@ def test_given_python_lifecycle_project_when_planning_json_then_includes_python_
             ),
         )
     ],
-    ids=["standard plan rejects unselected Python dependencies"],
+    ids=lambda case: case.description,
 )
 def test_given_python_lifecycle_project_when_planning_without_dependency_then_fails(
     test_case: DirectPlanE2ETestCase,

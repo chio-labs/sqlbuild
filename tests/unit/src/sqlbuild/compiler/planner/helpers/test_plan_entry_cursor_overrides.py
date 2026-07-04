@@ -34,7 +34,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
             ),
         )
     ],
-    ids=["explicit cursor overrides work without cursor snapshot"],
+    ids=lambda case: case.description,
 )
 def test_given_explicit_cursor_overrides_without_snapshot_when_planning_then_uses_overrides(
     test_case: PlanEntryCursorOverrideTestCase,

@@ -145,7 +145,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
             expected_rendered_marker="adapter-rendered-timestamp",
         )
     ],
-    ids=["timestamp snapshot DML is rendered by adapter"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_snapshot_target_when_executing_then_uses_adapter_rendered_dml(
     test_case: SnapshotAdapterRenderingTestCase,
@@ -227,7 +227,7 @@ def test_given_existing_snapshot_target_when_executing_then_uses_adapter_rendere
             expected_rendered_marker="adapter-rendered-historical-timestamp",
         )
     ],
-    ids=["historical timestamp snapshot DML is rendered by adapter"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_adapter_dml(
     test_case: SnapshotAdapterRenderingTestCase,
@@ -308,7 +308,7 @@ def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_a
             expected_rendered_marker="adapter-rendered-historical-timestamp-changes",
         )
     ],
-    ids=["historical timestamp changes DML is rendered by adapter"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_historical_timestamp_changes_snapshot_when_executing_then_uses_adapter_dml(
     test_case: SnapshotAdapterRenderingTestCase,
@@ -387,7 +387,7 @@ def test_given_existing_historical_timestamp_changes_snapshot_when_executing_the
             expected_rendered_marker="adapter-rendered-initial-historical-timestamp-changes",
         )
     ],
-    ids=["initial historical timestamp changes target is rendered by adapter"],
+    ids=lambda case: case.description,
 )
 def test_given_new_historical_timestamp_changes_when_executing_then_uses_adapter_target_sql(
     test_case: SnapshotAdapterRenderingTestCase,

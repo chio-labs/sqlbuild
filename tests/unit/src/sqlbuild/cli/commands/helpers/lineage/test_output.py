@@ -25,95 +25,37 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.lineage.helpers import (
     build_lineage_test_graph,
 )
 
-LINEAGE_OUTPUT_TEST_CASES: list[LineageOutputTestCase] = [
-    LineageOutputTestCase(
-        description="renders tree output with branch glyphs and metadata",
-        output_format="tree",
-        expected_output=(
-            "Lineage  model  fact_orders  models/fact_orders.sql  upstream\n"
-            "├── model  stg_orders  models/stg_orders.sql\n"
-            "│   └── source  raw_orders  sources/raw.yml\n"
-            "└── seed  waffle_types  seeds/waffle_types.csv"
-        ),
-        expected_color_fragments=(
-            "\033[34m\033[1mLineage\033[0m",
-            "\033[2mmodel\033[0m  \033[1mfact_orders\033[0m",
-            "\033[2mupstream\033[0m",
-            "\033[2m├── \033[0m\033[2mmodel\033[0m  \033[1mstg_orders\033[0m",
-        ),
-    ),
-    LineageOutputTestCase(
-        description="renders list output as aligned edge list",
-        output_format="list",
-        expected_output=(
-            "model:stg_orders  -> model:fact_orders\n"
-            "seed:waffle_types -> model:fact_orders\n"
-            "source:raw_orders -> model:stg_orders"
-        ),
-    ),
-]
-
-COLUMN_LINEAGE_OUTPUT_TEST_CASES: list[ColumnLineageOutputTestCase] = [
-    ColumnLineageOutputTestCase(
-        description="renders column tree output with end-user dependency labels",
-        output_format="tree",
-        expected_output=(
-            "Column trace  fact_orders.line_total_cents  upstream\n\n"
-            "├── stg_orders.quantity (expression)\n"
-            "└── wide_model_1.line_total_cents (from SELECT *)"
-        ),
-        expected_color_fragments=(
-            "\033[34m\033[1mColumn trace\033[0m",
-            "\033[1mfact_orders.line_total_cents\033[0m",
-            "\033[2mupstream\033[0m",
-            "\033[2m├── \033[0m\033[1mstg_orders.quantity\033[0m",
-        ),
-    ),
-    ColumnLineageOutputTestCase(
-        description="renders column list output as dependency list",
-        output_format="list",
-        expected_output=(
-            "Column dependencies\n\n"
-            "stg_orders.quantity           -> fact_orders.line_total_cents expression\n"
-            "wide_model_1.line_total_cents -> fact_orders.line_total_cents from SELECT *"
-        ),
-    ),
-    ColumnLineageOutputTestCase(
-        description="renders column json output with graph terms for machines",
-        output_format="json",
-        expected_output=(
-            '{\n  "target": {\n    "resource_type": "model",\n'
-            '    "resource_name": "fact_orders",\n'
-            '    "column_name": "line_total_cents"\n  },\n'
-            '  "direction": "upstream",\n  "metadata": {\n'
-            '    "mode": "rich",\n    "max_depth": 3,\n'
-            '    "analyzed_models": 7,\n    "truncated": true\n  },\n'
-            '  "trace": [\n    {\n'
-            '      "source": {\n        "resource_type": "model",\n'
-            '        "resource_name": "stg_orders",\n'
-            '        "column_name": "quantity"\n      },\n'
-            '      "target": {\n        "resource_type": "model",\n'
-            '        "resource_name": "fact_orders",\n'
-            '        "column_name": "line_total_cents"\n      },\n'
-            '      "transform": "expression",\n'
-            '      "confidence": "high"\n    },\n    {\n'
-            '      "source": {\n        "resource_type": "model",\n'
-            '        "resource_name": "wide_model_1",\n'
-            '        "column_name": "line_total_cents"\n      },\n'
-            '      "target": {\n        "resource_type": "model",\n'
-            '        "resource_name": "fact_orders",\n'
-            '        "column_name": "line_total_cents"\n      },\n'
-            '      "transform": "star",\n'
-            '      "confidence": "medium"\n    }\n  ]\n}'
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_OUTPUT_TEST_CASES,
-    ids=[case.description for case in LINEAGE_OUTPUT_TEST_CASES],
+    [
+        LineageOutputTestCase(
+            description="renders tree output with branch glyphs and metadata",
+            output_format="tree",
+            expected_output=(
+                "Lineage  model  fact_orders  models/fact_orders.sql  upstream\n"
+                "├── model  stg_orders  models/stg_orders.sql\n"
+                "│   └── source  raw_orders  sources/raw.yml\n"
+                "└── seed  waffle_types  seeds/waffle_types.csv"
+            ),
+            expected_color_fragments=(
+                "\033[34m\033[1mLineage\033[0m",
+                "\033[2mmodel\033[0m  \033[1mfact_orders\033[0m",
+                "\033[2mupstream\033[0m",
+                "\033[2m├── \033[0m\033[2mmodel\033[0m  \033[1mstg_orders\033[0m",
+            ),
+        ),
+        LineageOutputTestCase(
+            description="renders list output as aligned edge list",
+            output_format="list",
+            expected_output=(
+                "model:stg_orders  -> model:fact_orders\n"
+                "seed:waffle_types -> model:fact_orders\n"
+                "source:raw_orders -> model:stg_orders"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_lineage_graph_when_formatting_then_returns_expected_human_output(
     test_case: LineageOutputTestCase,
@@ -137,8 +79,62 @@ def test_given_lineage_graph_when_formatting_then_returns_expected_human_output(
 
 @pytest.mark.parametrize(
     "test_case",
-    COLUMN_LINEAGE_OUTPUT_TEST_CASES,
-    ids=[case.description for case in COLUMN_LINEAGE_OUTPUT_TEST_CASES],
+    [
+        ColumnLineageOutputTestCase(
+            description="renders column tree output with end-user dependency labels",
+            output_format="tree",
+            expected_output=(
+                "Column trace  fact_orders.line_total_cents  upstream\n\n"
+                "├── stg_orders.quantity (expression)\n"
+                "└── wide_model_1.line_total_cents (from SELECT *)"
+            ),
+            expected_color_fragments=(
+                "\033[34m\033[1mColumn trace\033[0m",
+                "\033[1mfact_orders.line_total_cents\033[0m",
+                "\033[2mupstream\033[0m",
+                "\033[2m├── \033[0m\033[1mstg_orders.quantity\033[0m",
+            ),
+        ),
+        ColumnLineageOutputTestCase(
+            description="renders column list output as dependency list",
+            output_format="list",
+            expected_output=(
+                "Column dependencies\n\n"
+                "stg_orders.quantity           -> fact_orders.line_total_cents expression\n"
+                "wide_model_1.line_total_cents -> fact_orders.line_total_cents from SELECT *"
+            ),
+        ),
+        ColumnLineageOutputTestCase(
+            description="renders column json output with graph terms for machines",
+            output_format="json",
+            expected_output=(
+                '{\n  "target": {\n    "resource_type": "model",\n'
+                '    "resource_name": "fact_orders",\n'
+                '    "column_name": "line_total_cents"\n  },\n'
+                '  "direction": "upstream",\n  "metadata": {\n'
+                '    "mode": "rich",\n    "max_depth": 3,\n'
+                '    "analyzed_models": 7,\n    "truncated": true\n  },\n'
+                '  "trace": [\n    {\n'
+                '      "source": {\n        "resource_type": "model",\n'
+                '        "resource_name": "stg_orders",\n'
+                '        "column_name": "quantity"\n      },\n'
+                '      "target": {\n        "resource_type": "model",\n'
+                '        "resource_name": "fact_orders",\n'
+                '        "column_name": "line_total_cents"\n      },\n'
+                '      "transform": "expression",\n'
+                '      "confidence": "high"\n    },\n    {\n'
+                '      "source": {\n        "resource_type": "model",\n'
+                '        "resource_name": "wide_model_1",\n'
+                '        "column_name": "line_total_cents"\n      },\n'
+                '      "target": {\n        "resource_type": "model",\n'
+                '        "resource_name": "fact_orders",\n'
+                '        "column_name": "line_total_cents"\n      },\n'
+                '      "transform": "star",\n'
+                '      "confidence": "medium"\n    }\n  ]\n}'
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_column_lineage_trace_when_formatting_then_returns_expected_output(
     test_case: ColumnLineageOutputTestCase,
@@ -170,7 +166,7 @@ def test_given_column_lineage_trace_when_formatting_then_returns_expected_output
             ),
         ),
     ],
-    ids=["styles lineage tree semantic parts"],
+    ids=lambda case: case.description,
 )
 def test_given_lineage_graph_when_formatting_with_color_then_styles_semantic_parts(
     test_case: LineageOutputTestCase,
@@ -208,7 +204,7 @@ def test_given_lineage_graph_when_formatting_with_color_then_styles_semantic_par
             ),
         ),
     ],
-    ids=["styles column lineage tree semantic parts"],
+    ids=lambda case: case.description,
 )
 def test_given_column_lineage_trace_when_formatting_with_color_then_styles_semantic_parts(
     test_case: ColumnLineageOutputTestCase,
@@ -237,7 +233,7 @@ def test_given_column_lineage_trace_when_formatting_with_color_then_styles_seman
             expected_json_tip_fragment="Use --format json for the full trace.",
         )
     ],
-    ids=["limits large human column traces"],
+    ids=lambda case: case.description,
 )
 def test_given_large_column_trace_when_formatting_tree_then_limits_human_output(
     test_case: LargeColumnLineageOutputTestCase,

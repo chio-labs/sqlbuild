@@ -35,7 +35,7 @@ class RuntimeFreshProvider(Provider):
             expected_second_events=("setup:first", "setup:second"),
         )
     ],
-    ids=["builds independent sessions with fresh provider instances"],
+    ids=lambda case: case.description,
 )
 def test_given_discovered_providers_when_building_sessions_then_each_session_gets_fresh_instances(
     test_case: BuildProviderSessionTestCase,
@@ -79,7 +79,7 @@ def test_given_discovered_providers_when_building_sessions_then_each_session_get
             expected_second_events=("setup:first", "setup:second", "teardown:", "teardown:"),
         )
     ],
-    ids=["closing one built session does not teardown another session"],
+    ids=lambda case: case.description,
 )
 def test_given_two_built_sessions_when_closing_one_then_other_session_remains_active(
     test_case: BuildProviderSessionTestCase,

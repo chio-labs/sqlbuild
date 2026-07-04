@@ -30,75 +30,37 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.lineage.helpers import (
     node_ids,
 )
 
-SELECTION_TEST_CASES: list[LineageSelectionTestCase] = [
-    LineageSelectionTestCase(
-        description="limits downstream target lineage to one hop",
-        target="fact_orders",
-        direction="downstream",
-        depth=1,
-        expected_node_ids=("model:daily_rollup", "model:fact_orders"),
-        expected_edge_ids=("model:fact_orders->model:daily_rollup",),
-    ),
-    LineageSelectionTestCase(
-        description="keeps full upstream target lineage",
-        target="fact_orders",
-        direction="upstream",
-        depth=None,
-        expected_node_ids=(
-            "model:fact_orders",
-            "model:stg_orders",
-            "seed:waffle_types",
-            "source:raw_orders",
-        ),
-        expected_edge_ids=(
-            "model:stg_orders->model:fact_orders",
-            "seed:waffle_types->model:fact_orders",
-            "source:raw_orders->model:stg_orders",
-        ),
-    ),
-]
-
-COLUMN_SELECTION_TEST_CASES: list[ColumnLineageSelectionTestCase] = [
-    ColumnLineageSelectionTestCase(
-        description="selects upstream column trace for dot target",
-        target="fact_orders.order_id",
-        direction="upstream",
-        depth=None,
-        expected_resource_name="fact_orders",
-        expected_column_name="order_id",
-        expected_trace_ids=("stg_orders.order_id->fact_orders.order_id",),
-        expected_analyzed_model_names=("fact_orders", "stg_orders"),
-        expected_truncated=False,
-    ),
-    ColumnLineageSelectionTestCase(
-        description="respects zero depth for column target",
-        target="fact_orders.order_id",
-        direction="upstream",
-        depth=0,
-        expected_resource_name="fact_orders",
-        expected_column_name="order_id",
-        expected_trace_ids=(),
-        expected_analyzed_model_names=("fact_orders",),
-        expected_truncated=True,
-    ),
-    ColumnLineageSelectionTestCase(
-        description="selects downstream candidate models for column target",
-        target="fact_orders.order_id",
-        direction="downstream",
-        depth=1,
-        expected_resource_name="fact_orders",
-        expected_column_name="order_id",
-        expected_trace_ids=("fact_orders.order_id->daily_rollup.order_id",),
-        expected_analyzed_model_names=("daily_rollup", "fact_orders"),
-        expected_truncated=False,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SELECTION_TEST_CASES,
-    ids=[case.description for case in SELECTION_TEST_CASES],
+    [
+        LineageSelectionTestCase(
+            description="limits downstream target lineage to one hop",
+            target="fact_orders",
+            direction="downstream",
+            depth=1,
+            expected_node_ids=("model:daily_rollup", "model:fact_orders"),
+            expected_edge_ids=("model:fact_orders->model:daily_rollup",),
+        ),
+        LineageSelectionTestCase(
+            description="keeps full upstream target lineage",
+            target="fact_orders",
+            direction="upstream",
+            depth=None,
+            expected_node_ids=(
+                "model:fact_orders",
+                "model:stg_orders",
+                "seed:waffle_types",
+                "source:raw_orders",
+            ),
+            expected_edge_ids=(
+                "model:stg_orders->model:fact_orders",
+                "seed:waffle_types->model:fact_orders",
+                "source:raw_orders->model:stg_orders",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_target_lineage_request_when_selecting_then_returns_expected_subgraph(
     test_case: LineageSelectionTestCase,
@@ -118,8 +80,42 @@ def test_given_target_lineage_request_when_selecting_then_returns_expected_subgr
 
 @pytest.mark.parametrize(
     "test_case",
-    COLUMN_SELECTION_TEST_CASES,
-    ids=[case.description for case in COLUMN_SELECTION_TEST_CASES],
+    [
+        ColumnLineageSelectionTestCase(
+            description="selects upstream column trace for dot target",
+            target="fact_orders.order_id",
+            direction="upstream",
+            depth=None,
+            expected_resource_name="fact_orders",
+            expected_column_name="order_id",
+            expected_trace_ids=("stg_orders.order_id->fact_orders.order_id",),
+            expected_analyzed_model_names=("fact_orders", "stg_orders"),
+            expected_truncated=False,
+        ),
+        ColumnLineageSelectionTestCase(
+            description="respects zero depth for column target",
+            target="fact_orders.order_id",
+            direction="upstream",
+            depth=0,
+            expected_resource_name="fact_orders",
+            expected_column_name="order_id",
+            expected_trace_ids=(),
+            expected_analyzed_model_names=("fact_orders",),
+            expected_truncated=True,
+        ),
+        ColumnLineageSelectionTestCase(
+            description="selects downstream candidate models for column target",
+            target="fact_orders.order_id",
+            direction="downstream",
+            depth=1,
+            expected_resource_name="fact_orders",
+            expected_column_name="order_id",
+            expected_trace_ids=("fact_orders.order_id->daily_rollup.order_id",),
+            expected_analyzed_model_names=("daily_rollup", "fact_orders"),
+            expected_truncated=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_column_target_when_selecting_then_returns_column_trace(
     test_case: ColumnLineageSelectionTestCase,
@@ -209,7 +205,7 @@ def test_given_column_target_when_selecting_then_returns_column_trace(
             ),
         )
     ],
-    ids=["trims expanded name selector to requested depth"],
+    ids=lambda case: case.description,
 )
 def test_given_expanded_selector_with_depth_when_selecting_then_trims_selected_subgraph(
     test_case: LineageSelectionTestCase,
@@ -238,7 +234,7 @@ def test_given_expanded_selector_with_depth_when_selecting_then_trims_selected_s
             ),
         )
     ],
-    ids=["rejects tag selector with depth"],
+    ids=lambda case: case.description,
 )
 def test_given_unclear_selector_anchor_with_depth_when_selecting_then_raises_user_error(
     test_case: LineageSelectorDepthErrorTestCase,

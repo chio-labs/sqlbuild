@@ -50,7 +50,7 @@ MODEL_PAYMENTS_TABLE: WatermarkGraphKey = graph_key("stg_payments")
             ),
         )
     ],
-    ids=["finds all raw sources through views and materialized nodes"],
+    ids=lambda case: case.description,
 )
 def test_given_watermark_graph_when_resolving_source_ancestry_then_returns_all_raw_source_ancestors(
     test_case: WatermarkSourceAncestryResolverTestCase,

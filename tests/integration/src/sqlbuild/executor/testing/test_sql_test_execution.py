@@ -26,179 +26,57 @@ class TinySqlLimitDuckDbAdapter(DuckDbAdapter):
         return 80
 
 
-COMPARISON_SQL_TEST_CASES: list[SqlTestComparisonSqlTestCase] = [
-    SqlTestComparisonSqlTestCase(
-        description="uses readable sanitized model names for comparison ctes",
-        chain_steps=(
-            (
-                "stg-orders",
-                "SELECT 1 AS id",
-                "SELECT 1 AS id",
-            ),
-            (
-                "1 fact.orders",
-                "SELECT 1 AS id",
-                "SELECT 1 AS id",
-            ),
-        ),
-        expected_fragments=(
-            "__actual__stg_orders AS (",
-            "__expected__stg_orders AS (",
-            "__actual__model_1_fact_orders AS (",
-            "__expected__model_1_fact_orders AS (",
-        ),
-        unexpected_fragments=(
-            "__actual_0",
-            "__expected_0",
-        ),
-    ),
-    SqlTestComparisonSqlTestCase(
-        description="adds suffixes when sanitized model names collide",
-        chain_steps=(
-            (
-                "orders-v1",
-                "SELECT 1 AS id",
-                "SELECT 1 AS id",
-            ),
-            (
-                "orders.v1",
-                "SELECT 1 AS id",
-                "SELECT 1 AS id",
-            ),
-        ),
-        expected_fragments=(
-            "__actual__orders_v1 AS (",
-            "__expected__orders_v1 AS (",
-            "__actual__orders_v1_2 AS (",
-            "__expected__orders_v1_2 AS (",
-        ),
-    ),
-]
-
-
-SUCCESS_TEST_CASES: list[SqlTestExecutionTestCase] = [
-    SqlTestExecutionTestCase(
-        description="single step passes when actual matches expected",
-        chain_steps=(
-            (
-                "stg_orders",
-                "SELECT 1 AS id, 'alice' AS name",
-                "SELECT 1 AS id, 'alice' AS name",
-            ),
-        ),
-        expected_outcome=SqlTestOutcome.PASS,
-        expected_step_count=1,
-    ),
-    SqlTestExecutionTestCase(
-        description="multi-step chain passes when all steps match",
-        chain_steps=(
-            (
-                "stg_orders",
-                "SELECT 1 AS id, 'alice' AS name",
-                "SELECT 1 AS id, 'alice' AS name",
-            ),
-            (
-                "dim_customers",
-                "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2 AS id, 'bob' AS name",
-                "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2 AS id, 'bob' AS name",
-            ),
-        ),
-        expected_outcome=SqlTestOutcome.PASS,
-        expected_step_count=2,
-    ),
-    SqlTestExecutionTestCase(
-        description="multiple rows pass when all match",
-        chain_steps=(
-            (
-                "fact_events",
-                "SELECT 1 AS id UNION ALL SELECT 2 AS id UNION ALL SELECT 3 AS id",
-                "SELECT 1 AS id UNION ALL SELECT 2 AS id UNION ALL SELECT 3 AS id",
-            ),
-        ),
-        expected_outcome=SqlTestOutcome.PASS,
-        expected_step_count=1,
-    ),
-    SqlTestExecutionTestCase(
-        description="empty results pass when both return zero rows",
-        chain_steps=(
-            (
-                "stg_orders",
-                "SELECT 1 AS id WHERE FALSE",
-                "SELECT 1 AS id WHERE FALSE",
-            ),
-        ),
-        expected_outcome=SqlTestOutcome.PASS,
-        expected_step_count=1,
-    ),
-]
-
-FAILURE_TEST_CASES: list[SqlTestExecutionTestCase] = [
-    SqlTestExecutionTestCase(
-        description="single step fails when rows differ",
-        chain_steps=(
-            (
-                "stg_orders",
-                "SELECT 1 AS id, 'alice' AS name",
-                "SELECT 1 AS id, 'bob' AS name",
-            ),
-        ),
-        expected_outcome=SqlTestOutcome.FAIL,
-        expected_step_count=1,
-        expected_failed_models=("stg_orders",),
-        expected_error_fragment="stg_orders",
-    ),
-    SqlTestExecutionTestCase(
-        description="fails when actual has extra rows",
-        chain_steps=(
-            (
-                "stg_orders",
-                "SELECT 1 AS id UNION ALL SELECT 2 AS id",
-                "SELECT 1 AS id",
-            ),
-        ),
-        expected_outcome=SqlTestOutcome.FAIL,
-        expected_step_count=1,
-        expected_failed_models=("stg_orders",),
-    ),
-    SqlTestExecutionTestCase(
-        description="fails when actual is missing rows",
-        chain_steps=(
-            (
-                "stg_orders",
-                "SELECT 1 AS id",
-                "SELECT 1 AS id UNION ALL SELECT 2 AS id",
-            ),
-        ),
-        expected_outcome=SqlTestOutcome.FAIL,
-        expected_step_count=1,
-        expected_failed_models=("stg_orders",),
-    ),
-    SqlTestExecutionTestCase(
-        description="multi-step chain with second step failing",
-        chain_steps=(
-            (
-                "stg_orders",
-                "SELECT 1 AS id, 'alice' AS name",
-                "SELECT 1 AS id, 'alice' AS name",
-            ),
-            (
-                "dim_customers",
-                "SELECT 1 AS id, 'wrong' AS name",
-                "SELECT 1 AS id, 'right' AS name",
-            ),
-        ),
-        expected_outcome=SqlTestOutcome.FAIL,
-        expected_step_count=2,
-        expected_failed_models=("dim_customers",),
-        expected_error_fragment="dim_customers",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    COMPARISON_SQL_TEST_CASES,
-    ids=[case.description for case in COMPARISON_SQL_TEST_CASES],
+    [
+        SqlTestComparisonSqlTestCase(
+            description="uses readable sanitized model names for comparison ctes",
+            chain_steps=(
+                (
+                    "stg-orders",
+                    "SELECT 1 AS id",
+                    "SELECT 1 AS id",
+                ),
+                (
+                    "1 fact.orders",
+                    "SELECT 1 AS id",
+                    "SELECT 1 AS id",
+                ),
+            ),
+            expected_fragments=(
+                "__actual__stg_orders AS (",
+                "__expected__stg_orders AS (",
+                "__actual__model_1_fact_orders AS (",
+                "__expected__model_1_fact_orders AS (",
+            ),
+            unexpected_fragments=(
+                "__actual_0",
+                "__expected_0",
+            ),
+        ),
+        SqlTestComparisonSqlTestCase(
+            description="adds suffixes when sanitized model names collide",
+            chain_steps=(
+                (
+                    "orders-v1",
+                    "SELECT 1 AS id",
+                    "SELECT 1 AS id",
+                ),
+                (
+                    "orders.v1",
+                    "SELECT 1 AS id",
+                    "SELECT 1 AS id",
+                ),
+            ),
+            expected_fragments=(
+                "__actual__orders_v1 AS (",
+                "__expected__orders_v1 AS (",
+                "__actual__orders_v1_2 AS (",
+                "__expected__orders_v1_2 AS (",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ctes(
     test_case: SqlTestComparisonSqlTestCase,
@@ -220,8 +98,62 @@ def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ct
 
 @pytest.mark.parametrize(
     "test_case",
-    SUCCESS_TEST_CASES,
-    ids=[case.description for case in SUCCESS_TEST_CASES],
+    [
+        SqlTestExecutionTestCase(
+            description="single step passes when actual matches expected",
+            chain_steps=(
+                (
+                    "stg_orders",
+                    "SELECT 1 AS id, 'alice' AS name",
+                    "SELECT 1 AS id, 'alice' AS name",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.PASS,
+            expected_step_count=1,
+        ),
+        SqlTestExecutionTestCase(
+            description="multi-step chain passes when all steps match",
+            chain_steps=(
+                (
+                    "stg_orders",
+                    "SELECT 1 AS id, 'alice' AS name",
+                    "SELECT 1 AS id, 'alice' AS name",
+                ),
+                (
+                    "dim_customers",
+                    "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2 AS id, 'bob' AS name",
+                    "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2 AS id, 'bob' AS name",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.PASS,
+            expected_step_count=2,
+        ),
+        SqlTestExecutionTestCase(
+            description="multiple rows pass when all match",
+            chain_steps=(
+                (
+                    "fact_events",
+                    "SELECT 1 AS id UNION ALL SELECT 2 AS id UNION ALL SELECT 3 AS id",
+                    "SELECT 1 AS id UNION ALL SELECT 2 AS id UNION ALL SELECT 3 AS id",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.PASS,
+            expected_step_count=1,
+        ),
+        SqlTestExecutionTestCase(
+            description="empty results pass when both return zero rows",
+            chain_steps=(
+                (
+                    "stg_orders",
+                    "SELECT 1 AS id WHERE FALSE",
+                    "SELECT 1 AS id WHERE FALSE",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.PASS,
+            expected_step_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_matching_sql_when_executing_test_then_passes(
     test_case: SqlTestExecutionTestCase,
@@ -238,8 +170,68 @@ def test_given_matching_sql_when_executing_test_then_passes(
 
 @pytest.mark.parametrize(
     "test_case",
-    FAILURE_TEST_CASES,
-    ids=[case.description for case in FAILURE_TEST_CASES],
+    [
+        SqlTestExecutionTestCase(
+            description="single step fails when rows differ",
+            chain_steps=(
+                (
+                    "stg_orders",
+                    "SELECT 1 AS id, 'alice' AS name",
+                    "SELECT 1 AS id, 'bob' AS name",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.FAIL,
+            expected_step_count=1,
+            expected_failed_models=("stg_orders",),
+            expected_error_fragment="stg_orders",
+        ),
+        SqlTestExecutionTestCase(
+            description="fails when actual has extra rows",
+            chain_steps=(
+                (
+                    "stg_orders",
+                    "SELECT 1 AS id UNION ALL SELECT 2 AS id",
+                    "SELECT 1 AS id",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.FAIL,
+            expected_step_count=1,
+            expected_failed_models=("stg_orders",),
+        ),
+        SqlTestExecutionTestCase(
+            description="fails when actual is missing rows",
+            chain_steps=(
+                (
+                    "stg_orders",
+                    "SELECT 1 AS id",
+                    "SELECT 1 AS id UNION ALL SELECT 2 AS id",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.FAIL,
+            expected_step_count=1,
+            expected_failed_models=("stg_orders",),
+        ),
+        SqlTestExecutionTestCase(
+            description="multi-step chain with second step failing",
+            chain_steps=(
+                (
+                    "stg_orders",
+                    "SELECT 1 AS id, 'alice' AS name",
+                    "SELECT 1 AS id, 'alice' AS name",
+                ),
+                (
+                    "dim_customers",
+                    "SELECT 1 AS id, 'wrong' AS name",
+                    "SELECT 1 AS id, 'right' AS name",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.FAIL,
+            expected_step_count=2,
+            expected_failed_models=("dim_customers",),
+            expected_error_fragment="dim_customers",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_mismatching_sql_when_executing_test_then_fails(
     test_case: SqlTestExecutionTestCase,
@@ -276,7 +268,7 @@ def test_given_mismatching_sql_when_executing_test_then_fails(
             expected_error_fragment="nonexistent_table_xyz",
         ),
     ],
-    ids=["error on invalid SQL stops chain early"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_sql_when_executing_test_then_errors(
     test_case: SqlTestExecutionTestCase,
@@ -308,7 +300,7 @@ def test_given_invalid_sql_when_executing_test_then_errors(
             expected_error_fragment="wide_model",
         ),
     ],
-    ids=["oversized combined unit test sql fails with clear guidance"],
+    ids=lambda case: case.description,
 )
 def test_given_oversized_unit_test_sql_when_executing_then_it_returns_clear_error(
     test_case: SqlTestExecutionTestCase,

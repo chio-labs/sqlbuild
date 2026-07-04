@@ -20,232 +20,238 @@ from tests.e2e.src.sqlbuild.cli.commands.main.check.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run_sqb
 
-TEST_CASES: tuple[CheckCommandTestCase, ...] = (
-    CheckCommandTestCase(
-        description="runs all checks without implicit dependency execution",
-        command=("--no-color", "check"),
-        expected_returncode=1,
-        expected_stdout_fragments=(
-            "Execution  sqb check",
-            "Python checks",
-            "check_orders_export",
-            "warn_orders_export",
-            "WARN",
-            "fail_orders_export",
-            "FAIL",
-            "false_orders_export",
-            "exception_orders_export",
-            "orders exception check failed",
-            "PASS=1  WARN=1  FAIL=5  TOTAL=7",
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CheckCommandTestCase(
+            description="runs all checks without implicit dependency execution",
+            command=("--no-color", "check"),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                "Execution  sqb check",
+                "Python checks",
+                "check_orders_export",
+                "warn_orders_export",
+                "WARN",
+                "fail_orders_export",
+                "FAIL",
+                "false_orders_export",
+                "exception_orders_export",
+                "orders exception check failed",
+                "PASS=1  WARN=1  FAIL=5  TOTAL=7",
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="runs directly selected check without dependency execution",
-        command=("--no-color", "check", "--select", "check:check_orders_export"),
-        expected_returncode=0,
-        expected_stdout_fragments=(
-            "Python checks",
-            "check_orders_export",
-            "PASS",
-            "PASS=1  WARN=0  FAIL=0  TOTAL=1",
+        CheckCommandTestCase(
+            description="runs directly selected check without dependency execution",
+            command=("--no-color", "check", "--select", "check:check_orders_export"),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                "Python checks",
+                "check_orders_export",
+                "PASS",
+                "PASS=1  WARN=0  FAIL=0  TOTAL=1",
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="rejects graph operator check selector",
-        command=("--no-color", "check", "--select", "+check:check_orders_export"),
-        expected_returncode=1,
-        expected_stdout_fragments=("sqb check selectors do not support graph operators",),
-    ),
-    CheckCommandTestCase(
-        description="build executes relevant checks",
-        command=("--no-color", "build", "--exclude", "tag:failure"),
-        expected_returncode=0,
-        expected_stdout_fragments=(
-            "Python checks",
-            "check_orders_export",
-            "check_orders_asset",
-            "check_order_customer_exports",
-            "warn_orders_export",
-            "WARN",
+        CheckCommandTestCase(
+            description="rejects graph operator check selector",
+            command=("--no-color", "check", "--select", "+check:check_orders_export"),
+            expected_returncode=1,
+            expected_stdout_fragments=("sqb check selectors do not support graph operators",),
         ),
-    ),
-    CheckCommandTestCase(
-        description="failing check fails build",
-        command=("--no-color", "build"),
-        expected_returncode=1,
-        expected_stdout_fragments=(
-            "Python checks",
-            "fail_orders_export",
-            "FAIL",
-            "orders export failed",
+        CheckCommandTestCase(
+            description="build executes relevant checks",
+            command=("--no-color", "build", "--exclude", "tag:failure"),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                "Python checks",
+                "check_orders_export",
+                "check_orders_asset",
+                "check_order_customer_exports",
+                "warn_orders_export",
+                "WARN",
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="selected false check fails check command",
-        command=("--no-color", "check", "--select", "check:false_orders_export"),
-        expected_returncode=1,
-        expected_stdout_fragments=(
-            "false_orders_export",
-            "FAIL",
-            "PASS=0  WARN=0  FAIL=1  TOTAL=1",
+        CheckCommandTestCase(
+            description="failing check fails build",
+            command=("--no-color", "build"),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                "Python checks",
+                "fail_orders_export",
+                "FAIL",
+                "orders export failed",
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="selected exception check fails check command",
-        command=("--no-color", "check", "--select", "check:exception_orders_export"),
-        expected_returncode=1,
-        expected_stdout_fragments=(
-            "exception_orders_export",
-            "orders exception check failed",
-            "PASS=0  WARN=0  FAIL=1  TOTAL=1",
+        CheckCommandTestCase(
+            description="selected false check fails check command",
+            command=("--no-color", "check", "--select", "check:false_orders_export"),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                "false_orders_export",
+                "FAIL",
+                "PASS=0  WARN=0  FAIL=1  TOTAL=1",
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="build json includes Python check results",
-        command=("--no-color", "build", "--json", "--exclude", "tag:failure"),
-        expected_returncode=0,
-        expected_stdout_fragments=(
-            '"kind": "python_check"',
-            '"name": "check_orders_asset"',
-            '"python_check_warn_count": 1',
+        CheckCommandTestCase(
+            description="selected exception check fails check command",
+            command=("--no-color", "check", "--select", "check:exception_orders_export"),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                "exception_orders_export",
+                "orders exception check failed",
+                "PASS=0  WARN=0  FAIL=1  TOTAL=1",
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="build json marks failed Python checks",
-        command=("--no-color", "build", "--json"),
-        expected_returncode=1,
-        expected_stdout_fragments=(
-            '"status": "failed"',
-            '"kind": "python_check"',
-            '"name": "false_orders_export"',
-            '"python_check_fail_count": 3',
+        CheckCommandTestCase(
+            description="build json includes Python check results",
+            command=("--no-color", "build", "--json", "--exclude", "tag:failure"),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                '"kind": "python_check"',
+                '"name": "check_orders_asset"',
+                '"python_check_warn_count": 1',
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="tag selector runs multi-dependency check",
-        command=("--no-color", "check", "--select", "tag:multi"),
-        expected_returncode=1,
-        expected_stdout_fragments=(
-            "check_order_customer_exports",
-            "No persisted result found for Python node 'export_orders'",
-            "PASS=0  WARN=0  FAIL=1  TOTAL=1",
+        CheckCommandTestCase(
+            description="build json marks failed Python checks",
+            command=("--no-color", "build", "--json"),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                '"status": "failed"',
+                '"kind": "python_check"',
+                '"name": "false_orders_export"',
+                '"python_check_fail_count": 3',
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="json output includes selected Python check",
-        command=("--no-color", "check", "--json", "--select", "check:check_orders_export"),
-        expected_returncode=0,
-        expected_stdout_fragments=(
-            '"checks"',
-            '"name": "check_orders_export"',
-            '"status": "pass"',
-            '"metadata": {',
+        CheckCommandTestCase(
+            description="tag selector runs multi-dependency check",
+            command=("--no-color", "check", "--select", "tag:multi"),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                "check_order_customer_exports",
+                "No persisted result found for Python node 'export_orders'",
+                "PASS=0  WARN=0  FAIL=1  TOTAL=1",
+            ),
         ),
-    ),
-    CheckCommandTestCase(
-        description="json output path writes selected Python check",
-        command=(
-            "--no-color",
-            "check",
-            "--json-output",
-            "{project_dir}/target/check.json",
-            "--select",
-            "check:check_orders_export",
+        CheckCommandTestCase(
+            description="json output includes selected Python check",
+            command=("--no-color", "check", "--json", "--select", "check:check_orders_export"),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                '"checks"',
+                '"name": "check_orders_export"',
+                '"status": "pass"',
+                '"metadata": {',
+            ),
         ),
-        expected_returncode=0,
-        expected_stdout_fragments=("PASS=1  WARN=0  FAIL=0  TOTAL=1",),
-        expected_file_fragments=(
-            (
-                "target/check.json",
+        CheckCommandTestCase(
+            description="json output path writes selected Python check",
+            command=(
+                "--no-color",
+                "check",
+                "--json-output",
+                "{project_dir}/target/check.json",
+                "--select",
+                "check:check_orders_export",
+            ),
+            expected_returncode=0,
+            expected_stdout_fragments=("PASS=1  WARN=0  FAIL=0  TOTAL=1",),
+            expected_file_fragments=(
                 (
-                    '"command": "check"',
-                    '"name": "check_orders_export"',
-                    '"check_id": "python_check:check_orders_export"',
+                    "target/check.json",
+                    (
+                        '"command": "check"',
+                        '"name": "check_orders_export"',
+                        '"check_id": "python_check:check_orders_export"',
+                    ),
+                ),
+            ),
+        ),
+        CheckCommandTestCase(
+            description="check command executes terminal loader check",
+            command=("--no-color", "check"),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                "check_raw_orders_loader",
+                "PASS=1  WARN=0  FAIL=0  TOTAL=1",
+            ),
+            project_kind="terminal_loader",
+        ),
+        CheckCommandTestCase(
+            description="virtual build executes relevant Python checks",
+            command=("--no-color", "build"),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                "Python checks",
+                "check_virtual_orders",
+                "PASS",
+            ),
+            project_kind="virtual",
+            initialize_state=True,
+        ),
+        CheckCommandTestCase(
+            description="virtual build fails on error Python check",
+            command=("--no-color", "build"),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                "Python checks",
+                "fail_virtual_orders",
+                "FAIL",
+                "virtual orders failed",
+            ),
+            project_kind="virtual_failure",
+            initialize_state=True,
+        ),
+        CheckCommandTestCase(
+            description="build without tests or audits still executes Python checks",
+            command=(
+                "--no-color",
+                "build",
+                "--no-tests",
+                "--no-audits",
+                "--exclude",
+                "tag:failure",
+            ),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                "Execution  sqb build",
+                "Python checks",
+                "check_orders_export",
+            ),
+        ),
+        CheckCommandTestCase(
+            description="audit remains SQL audit only",
+            command=("--no-color", "audit"),
+            expected_returncode=0,
+            expected_stdout_fragments=("Execution  sqb audit",),
+            expected_absent_fragments=("Python checks", "check_orders_export"),
+        ),
+        CheckCommandTestCase(
+            description="build no python suppresses read-side checks",
+            command=("--no-color", "build", "--no-python"),
+            expected_returncode=0,
+            expected_stdout_fragments=("Completed successfully",),
+            expected_absent_fragments=("Python checks", "check_orders_export"),
+        ),
+        CheckCommandTestCase(
+            description="check command writes runtime target artifact",
+            command=("--no-color", "check", "--select", "check:check_orders_export"),
+            expected_returncode=0,
+            expected_stdout_fragments=("check_orders_export",),
+            expected_file_fragments=(
+                (
+                    "target/run/checks/python_checks.json",
+                    (
+                        '"kind": "python_check"',
+                        '"display_name": "check_orders_export"',
+                    ),
                 ),
             ),
         ),
     ),
-    CheckCommandTestCase(
-        description="check command executes terminal loader check",
-        command=("--no-color", "check"),
-        expected_returncode=0,
-        expected_stdout_fragments=(
-            "check_raw_orders_loader",
-            "PASS=1  WARN=0  FAIL=0  TOTAL=1",
-        ),
-        project_kind="terminal_loader",
-    ),
-    CheckCommandTestCase(
-        description="virtual build executes relevant Python checks",
-        command=("--no-color", "build"),
-        expected_returncode=0,
-        expected_stdout_fragments=(
-            "Python checks",
-            "check_virtual_orders",
-            "PASS",
-        ),
-        project_kind="virtual",
-        initialize_state=True,
-    ),
-    CheckCommandTestCase(
-        description="virtual build fails on error Python check",
-        command=("--no-color", "build"),
-        expected_returncode=1,
-        expected_stdout_fragments=(
-            "Python checks",
-            "fail_virtual_orders",
-            "FAIL",
-            "virtual orders failed",
-        ),
-        project_kind="virtual_failure",
-        initialize_state=True,
-    ),
-    CheckCommandTestCase(
-        description="build without tests or audits still executes Python checks",
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--exclude",
-            "tag:failure",
-        ),
-        expected_returncode=0,
-        expected_stdout_fragments=("Execution  sqb build", "Python checks", "check_orders_export"),
-    ),
-    CheckCommandTestCase(
-        description="audit remains SQL audit only",
-        command=("--no-color", "audit"),
-        expected_returncode=0,
-        expected_stdout_fragments=("Execution  sqb audit",),
-        expected_absent_fragments=("Python checks", "check_orders_export"),
-    ),
-    CheckCommandTestCase(
-        description="build no python suppresses read-side checks",
-        command=("--no-color", "build", "--no-python"),
-        expected_returncode=0,
-        expected_stdout_fragments=("Completed successfully",),
-        expected_absent_fragments=("Python checks", "check_orders_export"),
-    ),
-    CheckCommandTestCase(
-        description="check command writes runtime target artifact",
-        command=("--no-color", "check", "--select", "check:check_orders_export"),
-        expected_returncode=0,
-        expected_stdout_fragments=("check_orders_export",),
-        expected_file_fragments=(
-            (
-                "target/run/checks/python_checks.json",
-                (
-                    '"kind": "python_check"',
-                    '"display_name": "check_orders_export"',
-                ),
-            ),
-        ),
-    ),
+    ids=lambda case: case.description,
 )
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
 def test_given_python_checks_when_running_check_then_reports_expected_results(
     tmp_path: Path, test_case: CheckCommandTestCase
 ) -> None:
@@ -280,7 +286,7 @@ def test_given_python_checks_when_running_check_then_reports_expected_results(
             expected_stdout_fragments=("check_orders_export",),
         )
     ],
-    ids=["standard selected Python check persists check identity"],
+    ids=lambda case: case.description,
 )
 def test_given_successful_python_check_when_running_check_then_persists_check_identity(
     tmp_path: Path,
@@ -324,7 +330,7 @@ def test_given_successful_python_check_when_running_check_then_persists_check_id
             expected_stdout_fragments=("warn_orders_export", "WARN"),
         )
     ],
-    ids=["standard Python checks persist warn and fail result rows"],
+    ids=lambda case: case.description,
 )
 def test_given_warning_and_failing_python_checks_when_running_check_then_persists_status_rows(
     tmp_path: Path,
@@ -390,7 +396,7 @@ def test_given_warning_and_failing_python_checks_when_running_check_then_persist
             ),
         )
     ],
-    ids=["Python check reads persisted dependency result after producer build"],
+    ids=lambda case: case.description,
 )
 def test_given_python_check_dependency_result_when_persisted_then_check_reads_result(
     tmp_path: Path,

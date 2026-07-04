@@ -21,45 +21,26 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.scenario._test_types import (
     ScenarioRunOutputTestCase,
 )
 
-SCENARIO_RUN_OUTPUT_TEST_CASES: tuple[ScenarioRunOutputTestCase, ...] = (
-    ScenarioRunOutputTestCase(
-        description="styles scenario and check statuses semantically",
-        expected_fragments=(
-            "orders_paid",
-            "\033[32mPASS\033[0m",
-            "expected fact_orders",
-            "\033[31mFAIL\033[0m  2 mismatched",
-        ),
-    ),
-    ScenarioRunOutputTestCase(
-        description="leaves no-color scenario output plain",
-        expected_fragments=("orders_paid", "PASS", "FAIL  2 mismatched"),
-        unexpected_fragments=("\033[",),
-    ),
-)
-
-SCENARIO_CAPTURE_OUTPUT_TEST_CASES: tuple[ScenarioCaptureOutputTestCase, ...] = (
-    ScenarioCaptureOutputTestCase(
-        description="styles capture result and relation statuses semantically",
-        expected_fragments=(
-            "orders_paid",
-            "\033[32mPASS\033[0m",
-            "source   raw__orders",
-            "\033[31mFAIL\033[0m  4 rows, 128 B",
-        ),
-    ),
-    ScenarioCaptureOutputTestCase(
-        description="leaves no-color capture output plain",
-        expected_fragments=("orders_paid", "PASS", "source   raw__orders", "FAIL  4 rows"),
-        unexpected_fragments=("\033[",),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_RUN_OUTPUT_TEST_CASES,
-    ids=[case.description for case in SCENARIO_RUN_OUTPUT_TEST_CASES],
+    (
+        ScenarioRunOutputTestCase(
+            description="styles scenario and check statuses semantically",
+            expected_fragments=(
+                "orders_paid",
+                "\033[32mPASS\033[0m",
+                "expected fact_orders",
+                "\033[31mFAIL\033[0m  2 mismatched",
+            ),
+        ),
+        ScenarioRunOutputTestCase(
+            description="leaves no-color scenario output plain",
+            expected_fragments=("orders_paid", "PASS", "FAIL  2 mismatched"),
+            unexpected_fragments=("\033[",),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_scenario_result_when_writing_output_then_styles_statuses(
     test_case: ScenarioRunOutputTestCase,
@@ -91,8 +72,23 @@ def test_given_scenario_result_when_writing_output_then_styles_statuses(
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_CAPTURE_OUTPUT_TEST_CASES,
-    ids=[case.description for case in SCENARIO_CAPTURE_OUTPUT_TEST_CASES],
+    (
+        ScenarioCaptureOutputTestCase(
+            description="styles capture result and relation statuses semantically",
+            expected_fragments=(
+                "orders_paid",
+                "\033[32mPASS\033[0m",
+                "source   raw__orders",
+                "\033[31mFAIL\033[0m  4 rows, 128 B",
+            ),
+        ),
+        ScenarioCaptureOutputTestCase(
+            description="leaves no-color capture output plain",
+            expected_fragments=("orders_paid", "PASS", "source   raw__orders", "FAIL  4 rows"),
+            unexpected_fragments=("\033[",),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_scenario_capture_result_when_writing_output_then_styles_statuses(
     test_case: ScenarioCaptureOutputTestCase,

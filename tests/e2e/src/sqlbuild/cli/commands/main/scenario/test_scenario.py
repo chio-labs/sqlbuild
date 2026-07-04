@@ -38,161 +38,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-SCENARIO_CLI_TEST_CASES: list[ScenarioCliE2ETestCase] = [
-    ScenarioCliE2ETestCase(
-        description="runs selected scenario by name and cleans up artifacts",
-        command=("--no-color", "scenario", "test", "order_totals_pass"),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Execution  sqb scenario test  (target: order_totals_pass, concurrency: 1)",
-            "Scenario (1 selected)",
-            "order_totals_pass",
-            "expect    expected order_totals",
-            "PASS=1  FAIL=0  TOTAL=1",
-        ),
-        expected_retained_prefix_count=0,
-    ),
-    ScenarioCliE2ETestCase(
-        description="runs assertion scenario and reports passing assertion expectation",
-        command=("--no-color", "scenario", "test", "orders_assert_pass"),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Scenario (1 selected)",
-            "orders_assert_pass",
-            "expect    assertion no_negative_orders",
-            "PASS=1  FAIL=0  TOTAL=1",
-        ),
-        expected_retained_prefix_count=0,
-    ),
-    ScenarioCliE2ETestCase(
-        description="runs selected scenario by path and cleans up artifacts",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "tests/scenarios/nested/orders_assert_pass.sql",
-        ),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Scenario (1 selected)",
-            "orders_assert_pass",
-            "expect    assertion no_negative_orders",
-            "PASS=1  FAIL=0  TOTAL=1",
-        ),
-        expected_retained_prefix_count=0,
-    ),
-    ScenarioCliE2ETestCase(
-        description="runs multiple selected scenarios by name and path",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "tests/scenarios/nested/orders_assert_pass.sql",
-        ),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Scenario (2 selected)",
-            "order_totals_pass",
-            "orders_assert_pass",
-            "expect    expected order_totals",
-            "expect    assertion no_negative_orders",
-            "PASS=2  FAIL=0  TOTAL=2",
-        ),
-        expected_retained_prefix_count=0,
-    ),
-    ScenarioCliE2ETestCase(
-        description="runs scenarios under project relative folder selector",
-        command=("--no-color", "scenario", "test", "tests/scenarios/nested"),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Scenario (1 selected)",
-            "orders_assert_pass",
-            "expect    assertion no_negative_orders",
-            "PASS=1  FAIL=0  TOTAL=1",
-        ),
-        expected_retained_prefix_count=0,
-    ),
-    ScenarioCliE2ETestCase(
-        description="deduplicates selected scenarios from name and folder selectors",
-        command=("--no-color", "scenario", "test", "orders_assert_pass", "nested"),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Scenario (1 selected)",
-            "orders_assert_pass",
-            "expect    assertion no_negative_orders",
-            "PASS=1  FAIL=0  TOTAL=1",
-        ),
-        expected_retained_prefix_count=0,
-    ),
-    ScenarioCliE2ETestCase(
-        description="retains artifacts and prints relation map",
-        command=("--no-color", "scenario", "test", "order_totals_pass", "--retain"),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Scenario (1 selected)",
-            "order_totals_pass",
-            "Retained relations:",
-            "expect    expected order_totals",
-            "source raw_orders -> __sqb_",
-            "model  orders -> __sqb_",
-            "model  order_totals -> __sqb_",
-            "PASS=1  FAIL=0  TOTAL=1",
-        ),
-        expected_retained_prefix_count=3,
-    ),
-    ScenarioCliE2ETestCase(
-        description="failed scenario suggests retain after cleanup",
-        command=("--no-color", "scenario", "test", "order_totals_fail"),
-        expected_exit_code=1,
-        expected_stdout_fragments=(
-            "Scenario (1 selected)",
-            "order_totals_fail",
-            "error[X506]: scenario 'order_totals_fail' expected comparison for model "
-            "'order_totals' failed: actual=1 expected=1 mismatched=1",
-            "= help: Compare the expected CTE with the retained scenario model relation.",
-            "expect    expected order_totals",
-            "expected order_totals:",
-            "Rerun with --retain to inspect scenario-owned artifacts.",
-            "PASS=0  FAIL=1  TOTAL=1",
-        ),
-        expected_retained_prefix_count=0,
-    ),
-]
-
-SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES: tuple[ScenarioLocalCliE2ETestCase, ...] = (
-    ScenarioLocalCliE2ETestCase(
-        description="missing snapshot skips by default",
-        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "order_totals_pass",
-            "SKIP",
-            "error[X601]:",
-            "PASS=0  FAIL=0  ERROR=0  SKIP=1  TOTAL=1",
-        ),
-    ),
-    ScenarioLocalCliE2ETestCase(
-        description="missing snapshot errors with strict",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "--local",
-            "--strict",
-        ),
-        expected_exit_code=1,
-        expected_stdout_fragments=(
-            "order_totals_pass",
-            "ERROR",
-            "error[X601]:",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-    ),
-)
-
-SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
+SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ScenarioLocalRetainE2ETestCase(
         description="captured snapshot keeps local DuckDB by default",
         scenario_name="order_totals_pass",
@@ -636,259 +482,131 @@ SCENARIO_LOCAL_DUCKDB_TEST_CASES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ),
 )
 
-SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
-    ScenarioCliE2ETestCase(
-        description="local replay rejects disabled sql_analysis",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "--local",
-        ),
-        expected_exit_code=1,
-        expected_stderr_fragments=(
-            "error[C455]: scenario test --local requires SQL analysis and SQL validation",
-            "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
-            "scenario replay, snapshot sync, or snapshot refresh.",
-        ),
-    ),
-    ScenarioCliE2ETestCase(
-        description="local snapshot sync rejects disabled SQL validation",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "--local",
-            "--sync-snapshots",
-        ),
-        expected_exit_code=1,
-        expected_stderr_fragments=(
-            "error[C455]: scenario test --local requires SQL analysis and SQL validation",
-            "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
-            "scenario replay, snapshot sync, or snapshot refresh.",
-        ),
-    ),
-)
-
-SCENARIO_LOCAL_SNAPSHOT_SYNC_TEST_CASES: tuple[ScenarioLocalSnapshotSyncE2ETestCase, ...] = (
-    ScenarioLocalSnapshotSyncE2ETestCase(
-        description="sync captures missing snapshot before local replay",
-        scenario_name="order_totals_pass",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "--local",
-            "--sync-snapshots",
-        ),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Snapshot Sync (1 selected)",
-            "CAPTURED  1 relation, 2 rows",
-            "source   raw_orders",
-            "2 rows, 41 B",
-            "snapshot tests/_scenario_snapshots/order_totals_pass/scenario.json",
-            "SYNC_PASS=1  SYNC_FAIL=0",
-            "order_totals_pass",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-    ),
-    ScenarioLocalSnapshotSyncE2ETestCase(
-        description="sync reuses fresh snapshot",
-        scenario_name="order_totals_pass",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "--local",
-            "--sync-snapshots",
-        ),
-        expected_exit_code=1,
-        expected_stdout_fragments=(
-            "Snapshots are fresh.",
-            "order_totals_pass",
-            "ERROR",
-            "error[X604]:",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-        initial_capture=True,
-        corrupt_jsonl=True,
-        query_when_exists=False,
-    ),
-    ScenarioLocalSnapshotSyncE2ETestCase(
-        description="refresh recaptures fresh snapshot before local replay",
-        scenario_name="order_totals_pass",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "--local",
-            "--refresh",
-        ),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Snapshot Refresh (1 selected)",
-            "REFRESHED  1 relation, 2 rows",
-            "source   raw_orders",
-            "2 rows, 41 B",
-            "snapshot tests/_scenario_snapshots/order_totals_pass/scenario.json",
-            "REFRESH_PASS=1  REFRESH_FAIL=0",
-            "order_totals_pass",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-        initial_capture=True,
-        corrupt_jsonl=True,
-    ),
-    ScenarioLocalSnapshotSyncE2ETestCase(
-        description="sync recaptures stale snapshot before local replay",
-        scenario_name="order_totals_pass",
-        command=(
-            "--no-color",
-            "scenario",
-            "test",
-            "order_totals_pass",
-            "--local",
-            "--sync-snapshots",
-        ),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Snapshot Sync (1 selected)",
-            "CAPTURED  1 relation, 3 rows",
-            "source   raw_orders",
-            "3 rows",
-            "snapshot tests/_scenario_snapshots/order_totals_pass/scenario.json",
-            "SYNC_PASS=1  SYNC_FAIL=0",
-            "order_totals_pass",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-        initial_capture=True,
-        update_scenario_after_capture=True,
-        expected_count=3,
-    ),
-)
-
-SCENARIO_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioRuntimeArtifactTestCase] = [
-    ScenarioRuntimeArtifactTestCase(
-        description="writes fixture runtime SQL under target run scenarios",
-        command=("--no-color", "scenario", "test", "order_totals_pass"),
-        expected_exit_code=0,
-        artifact_relative_path=Path(
-            "target/run/scenarios/order_totals_pass/fixtures/source__raw_orders.sql"
-        ),
-        expected_artifact_fragments=(
-            "CREATE",
-            "__source__raw_orders",
-            "SELECT 1 AS id, 10 AS amount",
-        ),
-    ),
-    ScenarioRuntimeArtifactTestCase(
-        description="writes model runtime SQL under target run scenarios",
-        command=("--no-color", "scenario", "test", "order_totals_pass"),
-        expected_exit_code=0,
-        artifact_relative_path=Path(
-            "target/run/scenarios/order_totals_pass/models/order_totals.sql"
-        ),
-        expected_artifact_fragments=(
-            "CREATE",
-            "__model__order_totals",
-            "FROM main.__sqb_",
-        ),
-    ),
-    ScenarioRuntimeArtifactTestCase(
-        description="writes expected comparison SQL under target run scenarios",
-        command=("--no-color", "scenario", "test", "order_totals_pass"),
-        expected_exit_code=0,
-        artifact_relative_path=Path(
-            "target/run/scenarios/order_totals_pass/expectations/expected__order_totals.sql"
-        ),
-        expected_artifact_fragments=(
-            "WITH __actual AS",
-            "__expected AS",
-            "mismatched_count",
-        ),
-    ),
-    ScenarioRuntimeArtifactTestCase(
-        description="writes cleanup SQL under target run scenarios",
-        command=("--no-color", "scenario", "test", "order_totals_pass"),
-        expected_exit_code=0,
-        artifact_relative_path=Path("target/run/scenarios/order_totals_pass/cleanup/final.sql"),
-        expected_artifact_fragments=("DROP", "__model__order_totals"),
-    ),
-]
-
-SCENARIO_LOCAL_RUNTIME_ARTIFACT_TEST_CASES: list[ScenarioLocalRuntimeArtifactTestCase] = [
-    ScenarioLocalRuntimeArtifactTestCase(
-        description="writes local fixture artifact",
-        scenario_name="order_totals_pass",
-        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
-        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
-        expected_exit_code=0,
-        artifact_relative_path=Path(
-            "target/run/scenarios/order_totals_pass/local/fixtures/source__raw_orders.sql"
-        ),
-        expected_artifact_fragments=(
-            "loaded from",
-            "sources/raw_orders.jsonl",
-            'CREATE TABLE "__sqb_local__source__raw_orders"',
-        ),
-    ),
-    ScenarioLocalRuntimeArtifactTestCase(
-        description="writes local model artifact",
-        scenario_name="order_totals_pass",
-        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
-        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
-        expected_exit_code=0,
-        artifact_relative_path=Path(
-            "target/run/scenarios/order_totals_pass/local/models/order_totals.sql"
-        ),
-        expected_artifact_fragments=(
-            "SUM(amount) AS total_amount",
-            "__sqb_local__model__orders",
-        ),
-    ),
-    ScenarioLocalRuntimeArtifactTestCase(
-        description="writes local expected comparison artifact",
-        scenario_name="order_totals_pass",
-        capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
-        command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
-        expected_exit_code=0,
-        artifact_relative_path=Path(
-            "target/run/scenarios/order_totals_pass/local/expectations/expected__order_totals.sql"
-        ),
-        expected_artifact_fragments=(
-            "WITH __actual AS",
-            "__sqb_local__model__order_totals",
-            "mismatched_count",
-        ),
-    ),
-    ScenarioLocalRuntimeArtifactTestCase(
-        description="writes local SQL function artifact",
-        scenario_name="local_sql_function_pass",
-        capture_command=("--no-color", "scenario", "capture", "local_sql_function_pass"),
-        command=("--no-color", "scenario", "test", "local_sql_function_pass", "--local"),
-        expected_exit_code=0,
-        artifact_relative_path=Path(
-            "target/run/scenarios/local_sql_function_pass/local/functions/sql/is_large_order.sql"
-        ),
-        expected_artifact_fragments=(
-            "CREATE OR REPLACE MACRO",
-            "is_large_order",
-            "amount > 9",
-        ),
-        additional_project_files=SCENARIO_LOCAL_DUCKDB_TEST_CASES[4].additional_project_files,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_CLI_TEST_CASES,
-    ids=[case.description for case in SCENARIO_CLI_TEST_CASES],
+    [
+        ScenarioCliE2ETestCase(
+            description="runs selected scenario by name and cleans up artifacts",
+            command=("--no-color", "scenario", "test", "order_totals_pass"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Execution  sqb scenario test  (target: order_totals_pass, concurrency: 1)",
+                "Scenario (1 selected)",
+                "order_totals_pass",
+                "expect    expected order_totals",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_retained_prefix_count=0,
+        ),
+        ScenarioCliE2ETestCase(
+            description="runs assertion scenario and reports passing assertion expectation",
+            command=("--no-color", "scenario", "test", "orders_assert_pass"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "orders_assert_pass",
+                "expect    assertion no_negative_orders",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_retained_prefix_count=0,
+        ),
+        ScenarioCliE2ETestCase(
+            description="runs selected scenario by path and cleans up artifacts",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "tests/scenarios/nested/orders_assert_pass.sql",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "orders_assert_pass",
+                "expect    assertion no_negative_orders",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_retained_prefix_count=0,
+        ),
+        ScenarioCliE2ETestCase(
+            description="runs multiple selected scenarios by name and path",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "tests/scenarios/nested/orders_assert_pass.sql",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (2 selected)",
+                "order_totals_pass",
+                "orders_assert_pass",
+                "expect    expected order_totals",
+                "expect    assertion no_negative_orders",
+                "PASS=2  FAIL=0  TOTAL=2",
+            ),
+            expected_retained_prefix_count=0,
+        ),
+        ScenarioCliE2ETestCase(
+            description="runs scenarios under project relative folder selector",
+            command=("--no-color", "scenario", "test", "tests/scenarios/nested"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "orders_assert_pass",
+                "expect    assertion no_negative_orders",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_retained_prefix_count=0,
+        ),
+        ScenarioCliE2ETestCase(
+            description="deduplicates selected scenarios from name and folder selectors",
+            command=("--no-color", "scenario", "test", "orders_assert_pass", "nested"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "orders_assert_pass",
+                "expect    assertion no_negative_orders",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_retained_prefix_count=0,
+        ),
+        ScenarioCliE2ETestCase(
+            description="retains artifacts and prints relation map",
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--retain"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "order_totals_pass",
+                "Retained relations:",
+                "expect    expected order_totals",
+                "source raw_orders -> __sqb_",
+                "model  orders -> __sqb_",
+                "model  order_totals -> __sqb_",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            expected_retained_prefix_count=3,
+        ),
+        ScenarioCliE2ETestCase(
+            description="failed scenario suggests retain after cleanup",
+            command=("--no-color", "scenario", "test", "order_totals_fail"),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "Scenario (1 selected)",
+                "order_totals_fail",
+                "error[X506]: scenario 'order_totals_fail' expected comparison for model "
+                "'order_totals' failed: actual=1 expected=1 mismatched=1",
+                "= help: Compare the expected CTE with the retained scenario model relation.",
+                "expect    expected order_totals",
+                "expected order_totals:",
+                "Rerun with --retain to inspect scenario-owned artifacts.",
+                "PASS=0  FAIL=1  TOTAL=1",
+            ),
+            expected_retained_prefix_count=0,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_project_when_running_scenario_test_then_cli_behaves_as_expected(
     test_case: ScenarioCliE2ETestCase,
@@ -931,7 +649,7 @@ def test_given_scenario_project_when_running_scenario_test_then_cli_behaves_as_e
             expected_hook_log_rows=(("orders", "post_hooks"),),
         )
     ],
-    ids=["scenario CLI executes discovered Python model hook"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_project_with_python_hooks_when_running_cli_then_hooks_execute(
     test_case: ScenarioPythonHooksCliE2ETestCase,
@@ -960,8 +678,38 @@ def test_given_scenario_project_with_python_hooks_when_running_cli_then_hooks_ex
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES,
-    ids=[case.description for case in SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES],
+    (
+        ScenarioLocalCliE2ETestCase(
+            description="missing snapshot skips by default",
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "order_totals_pass",
+                "SKIP",
+                "error[X601]:",
+                "PASS=0  FAIL=0  ERROR=0  SKIP=1  TOTAL=1",
+            ),
+        ),
+        ScenarioLocalCliE2ETestCase(
+            description="missing snapshot errors with strict",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "--local",
+                "--strict",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "order_totals_pass",
+                "ERROR",
+                "error[X601]:",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_missing_snapshot_when_running_local_scenario_then_reports_expected_status(
     test_case: ScenarioLocalCliE2ETestCase,
@@ -986,8 +734,473 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_LOCAL_DUCKDB_TEST_CASES,
-    ids=[case.description for case in SCENARIO_LOCAL_DUCKDB_TEST_CASES],
+    (
+        ScenarioLocalRetainE2ETestCase(
+            description="captured snapshot keeps local DuckDB by default",
+            scenario_name="order_totals_pass",
+            capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "order_totals_pass",
+                "Retained local DuckDB:",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=2,
+            retained_rows_sql=(
+                'SELECT id, amount FROM "__sqb_local__source__raw_orders" ORDER BY id'
+            ),
+            expected_rows=((1, 10), (2, 5)),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="malformed local JSONL errors and retains local DuckDB",
+            scenario_name="order_totals_pass",
+            capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "order_totals_pass",
+                "ERROR",
+                "error[X604]:",
+                "Retained local DuckDB:",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=0,
+            corrupt_jsonl=True,
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="expected mismatch is local FAIL",
+            scenario_name="order_totals_fail",
+            capture_command=("--no-color", "scenario", "capture", "order_totals_fail"),
+            command=("--no-color", "scenario", "test", "order_totals_fail", "--local"),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "order_totals_fail",
+                "FAIL",
+                "error[X506]:",
+                "expect    expected order_totals",
+                "PASS=0  FAIL=1  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/order_totals_fail/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=1,
+            retained_rows_sql=(
+                'SELECT id, amount FROM "__sqb_local__source__raw_orders" ORDER BY id'
+            ),
+            expected_rows=((1, 10),),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="local model execution error is ERROR",
+            scenario_name="local_model_error",
+            capture_command=("--no-color", "scenario", "capture", "local_model_error"),
+            command=("--no-color", "scenario", "test", "local_model_error", "--local"),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "local_model_error",
+                "ERROR",
+                "error[X608]:",
+                "missing_function",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/local_model_error/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=1,
+            additional_project_files=(
+                (
+                    "models/local_model_error.sql",
+                    "MODEL (materialized table);\n\n"
+                    "SELECT missing_function(amount) AS bad_value\n"
+                    'FROM __source("raw_orders")\n',
+                ),
+                (
+                    "tests/scenarios/local_model_error.sql",
+                    "SCENARIO ();\n\n"
+                    "WITH\n"
+                    "__source__raw_orders AS (\n"
+                    "  SELECT 1 AS id, 10 AS amount\n"
+                    "),\n"
+                    "__expected__local_model_error AS (\n"
+                    "  SELECT 10 AS bad_value\n"
+                    ")\n"
+                    "SELECT 1\n",
+                ),
+            ),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="local SQL function scenario passes",
+            scenario_name="local_sql_function_pass",
+            capture_command=("--no-color", "scenario", "capture", "local_sql_function_pass"),
+            command=("--no-color", "scenario", "test", "local_sql_function_pass", "--local"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "local_sql_function_pass",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/local_sql_function_pass/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=2,
+            additional_project_files=(
+                (
+                    "functions/sql/is_large_order.sql",
+                    "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\namount > 9\n",
+                ),
+                (
+                    "models/local_sql_function_pass.sql",
+                    "MODEL (materialized table);\n\n"
+                    'SELECT id, __udf("is_large_order")(amount) AS is_large_order\n'
+                    'FROM __source("raw_orders")\n',
+                ),
+                (
+                    "tests/scenarios/local_sql_function_pass.sql",
+                    "SCENARIO ();\n\n"
+                    "WITH\n"
+                    "__source__raw_orders AS (\n"
+                    "  SELECT 1 AS id, 10 AS amount\n"
+                    "  UNION ALL\n"
+                    "  SELECT 2 AS id, 5 AS amount\n"
+                    "),\n"
+                    "__expected__local_sql_function_pass AS (\n"
+                    "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                    "  UNION ALL\n"
+                    "  SELECT 2 AS id, FALSE AS is_large_order\n"
+                    ")\n"
+                    "SELECT 1\n",
+                ),
+            ),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="local SQL function setup error is ERROR",
+            scenario_name="local_sql_function_setup_error",
+            capture_command=("--no-color", "scenario", "capture", "local_sql_function_setup_error"),
+            command=("--no-color", "scenario", "test", "local_sql_function_setup_error", "--local"),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "local_sql_function_setup_error",
+                "ERROR",
+                "error[X609]:",
+                "local function 'bad_sql_function' failed",
+                "missing_col",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/local_sql_function_setup_error/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=1,
+            additional_project_files=(
+                (
+                    "functions/sql/bad_sql_function.sql",
+                    "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\nmissing_col > 9\n",
+                ),
+                (
+                    "models/local_sql_function_setup_error.sql",
+                    "MODEL (materialized table);\n\n"
+                    'SELECT id, __udf("bad_sql_function")(amount) AS is_large_order\n'
+                    'FROM __source("raw_orders")\n',
+                ),
+                (
+                    "tests/scenarios/local_sql_function_setup_error.sql",
+                    "SCENARIO ();\n\n"
+                    "WITH\n"
+                    "__source__raw_orders AS (\n"
+                    "  SELECT 1 AS id, 10 AS amount\n"
+                    "),\n"
+                    "__expected__local_sql_function_setup_error AS (\n"
+                    "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                    ")\n"
+                    "SELECT 1\n",
+                ),
+            ),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="local SQL function transpile error is ERROR",
+            scenario_name="local_sql_function_transpile_error",
+            capture_command=(
+                "--no-color",
+                "scenario",
+                "capture",
+                "local_sql_function_transpile_error",
+            ),
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "local_sql_function_transpile_error",
+                "--local",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "local_sql_function_transpile_error",
+                "ERROR",
+                "error[X607]:",
+                "bad_transpile_function",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/local_sql_function_transpile_error/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=1,
+            corrupt_capture_dialect=True,
+            additional_project_files=(
+                (
+                    "functions/sql/bad_transpile_function.sql",
+                    "FUNCTION (arguments (amount INTEGER), returns BOOLEAN);\n\namount > 9\n",
+                ),
+                (
+                    "models/local_sql_function_transpile_error.sql",
+                    "MODEL (materialized table);\n\n"
+                    'SELECT id, __udf("bad_transpile_function")(amount) AS is_large_order\n'
+                    'FROM __source("raw_orders")\n',
+                ),
+                (
+                    "tests/scenarios/local_sql_function_transpile_error.sql",
+                    "SCENARIO ();\n\n"
+                    "WITH\n"
+                    "__source__raw_orders AS (\n"
+                    "  SELECT 1 AS id, 10 AS amount\n"
+                    "),\n"
+                    "__expected__local_sql_function_transpile_error AS (\n"
+                    "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                    ")\n"
+                    "SELECT 1\n",
+                ),
+            ),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="local SQL function runtime error is ERROR",
+            scenario_name="local_sql_function_runtime_error",
+            capture_command=(
+                "--no-color",
+                "scenario",
+                "capture",
+                "local_sql_function_runtime_error",
+            ),
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "local_sql_function_runtime_error",
+                "--local",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "local_sql_function_runtime_error",
+                "ERROR",
+                "error[X608]:",
+                "Could not convert string",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/local_sql_function_runtime_error/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=1,
+            additional_project_files=(
+                (
+                    "functions/sql/sql_runtime_error.sql",
+                    "FUNCTION (arguments (amount INTEGER), returns INTEGER);\n\n"
+                    "CAST('bad' AS INTEGER)\n",
+                ),
+                (
+                    "models/local_sql_function_runtime_error.sql",
+                    "MODEL (materialized table);\n\n"
+                    'SELECT id, __udf("sql_runtime_error")(amount) AS bad_value\n'
+                    'FROM __source("raw_orders")\n',
+                ),
+                (
+                    "tests/scenarios/local_sql_function_runtime_error.sql",
+                    "SCENARIO ();\n\n"
+                    "WITH\n"
+                    "__source__raw_orders AS (\n"
+                    "  SELECT 1 AS id, 10 AS amount\n"
+                    "),\n"
+                    "__expected__local_sql_function_runtime_error AS (\n"
+                    "  SELECT 1 AS id, 10 AS bad_value\n"
+                    ")\n"
+                    "SELECT 1\n",
+                ),
+            ),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="local Python function scenario passes",
+            scenario_name="local_python_function_pass",
+            capture_command=("--no-color", "scenario", "capture", "local_python_function_pass"),
+            command=("--no-color", "scenario", "test", "local_python_function_pass", "--local"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "local_python_function_pass",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/local_python_function_pass/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=2,
+            additional_project_files=(
+                (
+                    "functions/python/is_large_order_py.py",
+                    "from sqlbuild.functions import udf\n\n\n"
+                    "@udf(\n"
+                    '    arguments={"amount": "INTEGER"},\n'
+                    '    returns="BOOLEAN",\n'
+                    '    runtime_version="3.11",\n'
+                    ")\n"
+                    "def main(amount: int | None) -> bool:\n"
+                    "    return amount is not None and amount > 9\n",
+                ),
+                (
+                    "models/local_python_function_pass.sql",
+                    "MODEL (materialized table);\n\n"
+                    'SELECT id, __udf("is_large_order_py")(amount) AS is_large_order\n'
+                    'FROM __source("raw_orders")\n',
+                ),
+                (
+                    "tests/scenarios/local_python_function_pass.sql",
+                    "SCENARIO ();\n\n"
+                    "WITH\n"
+                    "__source__raw_orders AS (\n"
+                    "  SELECT 1 AS id, 10 AS amount\n"
+                    "  UNION ALL\n"
+                    "  SELECT 2 AS id, 5 AS amount\n"
+                    "),\n"
+                    "__expected__local_python_function_pass AS (\n"
+                    "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                    "  UNION ALL\n"
+                    "  SELECT 2 AS id, FALSE AS is_large_order\n"
+                    ")\n"
+                    "SELECT 1\n",
+                ),
+            ),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="local Python function setup error is ERROR",
+            scenario_name="local_python_function_error",
+            capture_command=("--no-color", "scenario", "capture", "local_python_function_error"),
+            command=("--no-color", "scenario", "test", "local_python_function_error", "--local"),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "local_python_function_error",
+                "ERROR",
+                "error[X609]:",
+                "cannot set database or schema",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/local_python_function_error/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=1,
+            additional_project_files=(
+                (
+                    "functions/python/is_large_order_py.py",
+                    "from sqlbuild.functions import udf\n\n\n"
+                    "@udf(\n"
+                    '    arguments={"amount": "INTEGER"},\n'
+                    '    returns="BOOLEAN",\n'
+                    '    runtime_version="3.11",\n'
+                    '    schema="analytics",\n'
+                    ")\n"
+                    "def main(amount: int | None) -> bool:\n"
+                    "    return amount is not None and amount > 9\n",
+                ),
+                (
+                    "models/local_python_function_error.sql",
+                    "MODEL (materialized table);\n\n"
+                    'SELECT id, __udf("is_large_order_py")(amount) AS is_large_order\n'
+                    'FROM __source("raw_orders")\n',
+                ),
+                (
+                    "tests/scenarios/local_python_function_error.sql",
+                    "SCENARIO ();\n\n"
+                    "WITH\n"
+                    "__source__raw_orders AS (\n"
+                    "  SELECT 1 AS id, 10 AS amount\n"
+                    "),\n"
+                    "__expected__local_python_function_error AS (\n"
+                    "  SELECT 1 AS id, TRUE AS is_large_order\n"
+                    ")\n"
+                    "SELECT 1\n",
+                ),
+            ),
+        ),
+        ScenarioLocalRetainE2ETestCase(
+            description="local Python function runtime error is ERROR",
+            scenario_name="local_python_function_runtime_error",
+            capture_command=(
+                "--no-color",
+                "scenario",
+                "capture",
+                "local_python_function_runtime_error",
+            ),
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "local_python_function_runtime_error",
+                "--local",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "local_python_function_runtime_error",
+                "ERROR",
+                "error[X608]:",
+                "python udf exploded",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            retained_duckdb_relative_path=Path(
+                "target/run/scenarios/local_python_function_runtime_error/local.duckdb"
+            ),
+            retained_count_sql='SELECT COUNT(*) FROM "__sqb_local__source__raw_orders"',
+            expected_count=1,
+            additional_project_files=(
+                (
+                    "functions/python/python_runtime_error.py",
+                    "from sqlbuild.functions import udf\n\n\n"
+                    "@udf(\n"
+                    '    arguments={"amount": "INTEGER"},\n'
+                    '    returns="INTEGER",\n'
+                    '    runtime_version="3.11",\n'
+                    ")\n"
+                    "def main(amount: int | None) -> int:\n"
+                    '    raise ValueError("python udf exploded")\n',
+                ),
+                (
+                    "models/local_python_function_runtime_error.sql",
+                    "MODEL (materialized table);\n\n"
+                    'SELECT id, __udf("python_runtime_error")(amount) AS bad_value\n'
+                    'FROM __source("raw_orders")\n',
+                ),
+                (
+                    "tests/scenarios/local_python_function_runtime_error.sql",
+                    "SCENARIO ();\n\n"
+                    "WITH\n"
+                    "__source__raw_orders AS (\n"
+                    "  SELECT 1 AS id, 10 AS amount\n"
+                    "),\n"
+                    "__expected__local_python_function_runtime_error AS (\n"
+                    "  SELECT 1 AS id, 10 AS bad_value\n"
+                    ")\n"
+                    "SELECT 1\n",
+                ),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_captured_snapshot_when_running_local_scenario_then_manages_local_duckdb(
     test_case: ScenarioLocalRetainE2ETestCase,
@@ -1062,7 +1275,7 @@ def test_given_captured_snapshot_when_running_local_scenario_then_manages_local_
             expected_rows=((1, 10), (2, 5)),
         ),
     ],
-    ids=["replays committed local snapshot without capture"],
+    ids=lambda case: case.description,
 )
 def test_given_committed_snapshot_when_running_local_scenario_then_replays_without_capture(
     test_case: ScenarioLocalCommittedSnapshotE2ETestCase,
@@ -1102,8 +1315,106 @@ def test_given_committed_snapshot_when_running_local_scenario_then_replays_witho
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_LOCAL_SNAPSHOT_SYNC_TEST_CASES,
-    ids=[case.description for case in SCENARIO_LOCAL_SNAPSHOT_SYNC_TEST_CASES],
+    (
+        ScenarioLocalSnapshotSyncE2ETestCase(
+            description="sync captures missing snapshot before local replay",
+            scenario_name="order_totals_pass",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "--local",
+                "--sync-snapshots",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Snapshot Sync (1 selected)",
+                "CAPTURED  1 relation, 2 rows",
+                "source   raw_orders",
+                "2 rows, 41 B",
+                "snapshot tests/_scenario_snapshots/order_totals_pass/scenario.json",
+                "SYNC_PASS=1  SYNC_FAIL=0",
+                "order_totals_pass",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+        ),
+        ScenarioLocalSnapshotSyncE2ETestCase(
+            description="sync reuses fresh snapshot",
+            scenario_name="order_totals_pass",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "--local",
+                "--sync-snapshots",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "Snapshots are fresh.",
+                "order_totals_pass",
+                "ERROR",
+                "error[X604]:",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            initial_capture=True,
+            corrupt_jsonl=True,
+            query_when_exists=False,
+        ),
+        ScenarioLocalSnapshotSyncE2ETestCase(
+            description="refresh recaptures fresh snapshot before local replay",
+            scenario_name="order_totals_pass",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "--local",
+                "--refresh",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Snapshot Refresh (1 selected)",
+                "REFRESHED  1 relation, 2 rows",
+                "source   raw_orders",
+                "2 rows, 41 B",
+                "snapshot tests/_scenario_snapshots/order_totals_pass/scenario.json",
+                "REFRESH_PASS=1  REFRESH_FAIL=0",
+                "order_totals_pass",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            initial_capture=True,
+            corrupt_jsonl=True,
+        ),
+        ScenarioLocalSnapshotSyncE2ETestCase(
+            description="sync recaptures stale snapshot before local replay",
+            scenario_name="order_totals_pass",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "--local",
+                "--sync-snapshots",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Snapshot Sync (1 selected)",
+                "CAPTURED  1 relation, 3 rows",
+                "source   raw_orders",
+                "3 rows",
+                "snapshot tests/_scenario_snapshots/order_totals_pass/scenario.json",
+                "SYNC_PASS=1  SYNC_FAIL=0",
+                "order_totals_pass",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            initial_capture=True,
+            update_scenario_after_capture=True,
+            expected_count=3,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_local_snapshot_sync_when_running_local_scenario_then_captures_expected_snapshots(
     test_case: ScenarioLocalSnapshotSyncE2ETestCase,
@@ -1170,7 +1481,7 @@ def test_given_local_snapshot_sync_when_running_local_scenario_then_captures_exp
             expected_retained_prefix_count=0,
         )
     ],
-    ids=["runs all discovered scenarios"],
+    ids=lambda case: case.description,
 )
 def test_given_multiple_scenarios_when_running_without_selector_then_runs_all_scenarios(
     test_case: ScenarioCliE2ETestCase,
@@ -1224,7 +1535,7 @@ def test_given_multiple_scenarios_when_running_without_selector_then_runs_all_sc
             expected_retained_prefix_count=5,
         )
     ],
-    ids=["multiple selected scenarios retain materialized artifacts"],
+    ids=lambda case: case.description,
 )
 def test_given_multiple_selected_scenarios_when_running_with_retain_then_materializes_each_scenario(
     test_case: ScenarioCliE2ETestCase,
@@ -1297,7 +1608,7 @@ def test_given_multiple_selected_scenarios_when_running_with_retain_then_materia
             ),
         )
     ],
-    ids=["unknown selector fails clearly"],
+    ids=lambda case: case.description,
 )
 def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_clearly(
     test_case: ScenarioCliE2ETestCase,
@@ -1322,8 +1633,42 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES,
-    ids=[case.description for case in SCENARIO_LOCAL_SQL_VALIDATION_REQUIRED_TEST_CASES],
+    (
+        ScenarioCliE2ETestCase(
+            description="local replay rejects disabled sql_analysis",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "--local",
+            ),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "error[C455]: scenario test --local requires SQL analysis and SQL validation",
+                "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
+                "scenario replay, snapshot sync, or snapshot refresh.",
+            ),
+        ),
+        ScenarioCliE2ETestCase(
+            description="local snapshot sync rejects disabled SQL validation",
+            command=(
+                "--no-color",
+                "scenario",
+                "test",
+                "order_totals_pass",
+                "--local",
+                "--sync-snapshots",
+            ),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "error[C455]: scenario test --local requires SQL analysis and SQL validation",
+                "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
+                "scenario replay, snapshot sync, or snapshot refresh.",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_local_scenario_command_when_sql_validation_disabled_then_fails_clearly(
     test_case: ScenarioCliE2ETestCase,
@@ -1375,7 +1720,7 @@ def test_given_local_scenario_command_when_sql_validation_disabled_then_fails_cl
             expected_retained_prefix_count=0,
         )
     ],
-    ids=["waffle shop fixture scenarios pass on duckdb"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_fixture_when_running_scenario_test_then_scenarios_pass_on_duckdb(
     test_case: ScenarioCliE2ETestCase,
@@ -1427,7 +1772,7 @@ def test_given_waffle_shop_fixture_when_running_scenario_test_then_scenarios_pas
             expected_retained_prefix_count=5,
         )
     ],
-    ids=["waffle shop fixture retain keeps scenario artifacts on duckdb"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_fixture_when_running_with_retain_then_keeps_scenario_artifacts(
     test_case: ScenarioCliE2ETestCase,
@@ -1471,8 +1816,55 @@ def test_given_waffle_shop_fixture_when_running_with_retain_then_keeps_scenario_
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_RUNTIME_ARTIFACT_TEST_CASES,
-    ids=[case.description for case in SCENARIO_RUNTIME_ARTIFACT_TEST_CASES],
+    [
+        ScenarioRuntimeArtifactTestCase(
+            description="writes fixture runtime SQL under target run scenarios",
+            command=("--no-color", "scenario", "test", "order_totals_pass"),
+            expected_exit_code=0,
+            artifact_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/fixtures/source__raw_orders.sql"
+            ),
+            expected_artifact_fragments=(
+                "CREATE",
+                "__source__raw_orders",
+                "SELECT 1 AS id, 10 AS amount",
+            ),
+        ),
+        ScenarioRuntimeArtifactTestCase(
+            description="writes model runtime SQL under target run scenarios",
+            command=("--no-color", "scenario", "test", "order_totals_pass"),
+            expected_exit_code=0,
+            artifact_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/models/order_totals.sql"
+            ),
+            expected_artifact_fragments=(
+                "CREATE",
+                "__model__order_totals",
+                "FROM main.__sqb_",
+            ),
+        ),
+        ScenarioRuntimeArtifactTestCase(
+            description="writes expected comparison SQL under target run scenarios",
+            command=("--no-color", "scenario", "test", "order_totals_pass"),
+            expected_exit_code=0,
+            artifact_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/expectations/expected__order_totals.sql"
+            ),
+            expected_artifact_fragments=(
+                "WITH __actual AS",
+                "__expected AS",
+                "mismatched_count",
+            ),
+        ),
+        ScenarioRuntimeArtifactTestCase(
+            description="writes cleanup SQL under target run scenarios",
+            command=("--no-color", "scenario", "test", "order_totals_pass"),
+            expected_exit_code=0,
+            artifact_relative_path=Path("target/run/scenarios/order_totals_pass/cleanup/final.sql"),
+            expected_artifact_fragments=("DROP", "__model__order_totals"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_project_when_running_scenario_test_then_writes_runtime_artifacts(
     test_case: ScenarioRuntimeArtifactTestCase,
@@ -1499,8 +1891,71 @@ def test_given_scenario_project_when_running_scenario_test_then_writes_runtime_a
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_LOCAL_RUNTIME_ARTIFACT_TEST_CASES,
-    ids=[case.description for case in SCENARIO_LOCAL_RUNTIME_ARTIFACT_TEST_CASES],
+    [
+        ScenarioLocalRuntimeArtifactTestCase(
+            description="writes local fixture artifact",
+            scenario_name="order_totals_pass",
+            capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+            expected_exit_code=0,
+            artifact_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/local/fixtures/source__raw_orders.sql"
+            ),
+            expected_artifact_fragments=(
+                "loaded from",
+                "sources/raw_orders.jsonl",
+                'CREATE TABLE "__sqb_local__source__raw_orders"',
+            ),
+        ),
+        ScenarioLocalRuntimeArtifactTestCase(
+            description="writes local model artifact",
+            scenario_name="order_totals_pass",
+            capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+            expected_exit_code=0,
+            artifact_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/local/models/order_totals.sql"
+            ),
+            expected_artifact_fragments=(
+                "SUM(amount) AS total_amount",
+                "__sqb_local__model__orders",
+            ),
+        ),
+        ScenarioLocalRuntimeArtifactTestCase(
+            description="writes local expected comparison artifact",
+            scenario_name="order_totals_pass",
+            capture_command=("--no-color", "scenario", "capture", "order_totals_pass"),
+            command=("--no-color", "scenario", "test", "order_totals_pass", "--local"),
+            expected_exit_code=0,
+            artifact_relative_path=Path(
+                "target/run/scenarios/order_totals_pass/local/expectations/expected__order_totals.sql"
+            ),
+            expected_artifact_fragments=(
+                "WITH __actual AS",
+                "__sqb_local__model__order_totals",
+                "mismatched_count",
+            ),
+        ),
+        ScenarioLocalRuntimeArtifactTestCase(
+            description="writes local SQL function artifact",
+            scenario_name="local_sql_function_pass",
+            capture_command=("--no-color", "scenario", "capture", "local_sql_function_pass"),
+            command=("--no-color", "scenario", "test", "local_sql_function_pass", "--local"),
+            expected_exit_code=0,
+            artifact_relative_path=Path(
+                "target/run/scenarios/local_sql_function_pass/local/functions/sql/is_large_order.sql"
+            ),
+            expected_artifact_fragments=(
+                "CREATE OR REPLACE MACRO",
+                "is_large_order",
+                "amount > 9",
+            ),
+            additional_project_files=SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES[
+                4
+            ].additional_project_files,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_local_scenario_when_running_then_writes_local_runtime_artifacts(
     test_case: ScenarioLocalRuntimeArtifactTestCase,

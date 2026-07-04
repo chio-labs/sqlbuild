@@ -36,7 +36,7 @@ from tests.unit.src.sqlbuild.executor.build.helpers.helpers import (
             expected_rows=((1, "loaded"),),
         )
     ],
-    ids=["executes source load and records callbacks"],
+    ids=lambda case: case.description,
 )
 def test_given_build_source_node_when_executing_then_runs_loader_runtime(
     test_case: BuildSourceNodeExecutionTestCase,

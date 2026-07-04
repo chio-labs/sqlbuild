@@ -18,37 +18,35 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
     build_orders_python_node_graph,
 )
 
-PYTHON_NODE_PARSE_SELECTOR_TEST_CASES: list[PythonNodeParseSelectorTestCase] = [
-    PythonNodeParseSelectorTestCase(
-        description="parses task typed selector",
-        raw="task:prepare_orders",
-        expected_result=ParsedSelector(kind=SelectorKind.TASK, value="prepare_orders"),
-    ),
-    PythonNodeParseSelectorTestCase(
-        description="parses asset typed selector",
-        raw="asset:export_orders",
-        expected_result=ParsedSelector(kind=SelectorKind.ASSET, value="export_orders"),
-    ),
-    PythonNodeParseSelectorTestCase(
-        description="parses loader typed selector",
-        raw="loader:load_events",
-        expected_result=ParsedSelector(kind=SelectorKind.LOADER, value="load_events"),
-    ),
-    PythonNodeParseSelectorTestCase(
-        description="parses check typed selector",
-        raw="check:check_orders_export",
-        expected_result=ParsedSelector(
-            kind=SelectorKind.CHECK,
-            value="check_orders_export",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_NODE_PARSE_SELECTOR_TEST_CASES,
-    ids=[case.description for case in PYTHON_NODE_PARSE_SELECTOR_TEST_CASES],
+    [
+        PythonNodeParseSelectorTestCase(
+            description="parses task typed selector",
+            raw="task:prepare_orders",
+            expected_result=ParsedSelector(kind=SelectorKind.TASK, value="prepare_orders"),
+        ),
+        PythonNodeParseSelectorTestCase(
+            description="parses asset typed selector",
+            raw="asset:export_orders",
+            expected_result=ParsedSelector(kind=SelectorKind.ASSET, value="export_orders"),
+        ),
+        PythonNodeParseSelectorTestCase(
+            description="parses loader typed selector",
+            raw="loader:load_events",
+            expected_result=ParsedSelector(kind=SelectorKind.LOADER, value="load_events"),
+        ),
+        PythonNodeParseSelectorTestCase(
+            description="parses check typed selector",
+            raw="check:check_orders_export",
+            expected_result=ParsedSelector(
+                kind=SelectorKind.CHECK,
+                value="check_orders_export",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_node_typed_selector_when_parsing_then_returns_expected_kind(
     test_case: PythonNodeParseSelectorTestCase,
@@ -58,108 +56,105 @@ def test_given_python_node_typed_selector_when_parsing_then_returns_expected_kin
     assert result == test_case.expected_result
 
 
-PYTHON_NODE_SELECTOR_TEST_CASES: list[PythonNodeSelectorTestCase] = [
-    PythonNodeSelectorTestCase(
-        description="selects Python node by bare name",
-        select=("prepare_orders",),
-        exclude=(),
-        expected_names=frozenset({"prepare_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects Python node by typed selector",
-        select=("asset:export_orders",),
-        exclude=(),
-        expected_names=frozenset({"export_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects upstream Python nodes with leading plus",
-        select=("+check_orders_export",),
-        exclude=(),
-        expected_names=frozenset({"prepare_orders", "export_orders", "check_orders_export"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects downstream Python nodes with trailing plus",
-        select=("prepare_orders+",),
-        exclude=(),
-        expected_names=frozenset(
-            {"prepare_orders", "load_events", "export_orders", "check_orders_export"}
-        ),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects Python nodes by tag",
-        select=("tag:daily",),
-        exclude=(),
-        expected_names=frozenset({"prepare_orders", "export_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects Python nodes by explicit tasks path",
-        select=("path:tasks",),
-        exclude=(),
-        expected_names=frozenset({"prepare_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects Python nodes by explicit loaders path",
-        select=("path:loaders",),
-        exclude=(),
-        expected_names=frozenset({"load_events"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects Python nodes by explicit assets path",
-        select=("path:assets",),
-        exclude=(),
-        expected_names=frozenset({"export_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects Python nodes by explicit assets slash path",
-        select=("assets/",),
-        exclude=(),
-        expected_names=frozenset({"export_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects Python nodes by leading slash assets path",
-        select=("/assets",),
-        exclude=(),
-        expected_names=frozenset({"export_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects Python nodes by explicit checks path with upstream expansion",
-        select=("+path:checks",),
-        exclude=(),
-        expected_names=frozenset({"prepare_orders", "export_orders", "check_orders_export"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="selects tagged Python nodes with downstream expansion",
-        select=("tag:exports+",),
-        exclude=(),
-        expected_names=frozenset({"export_orders", "check_orders_export"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="intersects comma-separated Python-node selectors",
-        select=("tag:daily,asset:export_orders",),
-        exclude=(),
-        expected_names=frozenset({"export_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="excludes Python nodes after expansion",
-        select=("prepare_orders+",),
-        exclude=("check:check_orders_export",),
-        expected_names=frozenset({"prepare_orders", "load_events", "export_orders"}),
-    ),
-    PythonNodeSelectorTestCase(
-        description="returns all Python nodes when select is empty",
-        select=(),
-        exclude=(),
-        expected_names=frozenset(
-            {"load_events", "prepare_orders", "export_orders", "check_orders_export"}
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_NODE_SELECTOR_TEST_CASES,
-    ids=[case.description for case in PYTHON_NODE_SELECTOR_TEST_CASES],
+    [
+        PythonNodeSelectorTestCase(
+            description="selects Python node by bare name",
+            select=("prepare_orders",),
+            exclude=(),
+            expected_names=frozenset({"prepare_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python node by typed selector",
+            select=("asset:export_orders",),
+            exclude=(),
+            expected_names=frozenset({"export_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects upstream Python nodes with leading plus",
+            select=("+check_orders_export",),
+            exclude=(),
+            expected_names=frozenset({"prepare_orders", "export_orders", "check_orders_export"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects downstream Python nodes with trailing plus",
+            select=("prepare_orders+",),
+            exclude=(),
+            expected_names=frozenset(
+                {"prepare_orders", "load_events", "export_orders", "check_orders_export"}
+            ),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python nodes by tag",
+            select=("tag:daily",),
+            exclude=(),
+            expected_names=frozenset({"prepare_orders", "export_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python nodes by explicit tasks path",
+            select=("path:tasks",),
+            exclude=(),
+            expected_names=frozenset({"prepare_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python nodes by explicit loaders path",
+            select=("path:loaders",),
+            exclude=(),
+            expected_names=frozenset({"load_events"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python nodes by explicit assets path",
+            select=("path:assets",),
+            exclude=(),
+            expected_names=frozenset({"export_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python nodes by explicit assets slash path",
+            select=("assets/",),
+            exclude=(),
+            expected_names=frozenset({"export_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python nodes by leading slash assets path",
+            select=("/assets",),
+            exclude=(),
+            expected_names=frozenset({"export_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python nodes by explicit checks path with upstream expansion",
+            select=("+path:checks",),
+            exclude=(),
+            expected_names=frozenset({"prepare_orders", "export_orders", "check_orders_export"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects tagged Python nodes with downstream expansion",
+            select=("tag:exports+",),
+            exclude=(),
+            expected_names=frozenset({"export_orders", "check_orders_export"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="intersects comma-separated Python-node selectors",
+            select=("tag:daily,asset:export_orders",),
+            exclude=(),
+            expected_names=frozenset({"export_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="excludes Python nodes after expansion",
+            select=("prepare_orders+",),
+            exclude=("check:check_orders_export",),
+            expected_names=frozenset({"prepare_orders", "load_events", "export_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="returns all Python nodes when select is empty",
+            select=(),
+            exclude=(),
+            expected_names=frozenset(
+                {"load_events", "prepare_orders", "export_orders", "check_orders_export"}
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_node_selectors_when_resolving_then_returns_expected_names(
     test_case: PythonNodeSelectorTestCase,
@@ -175,49 +170,46 @@ def test_given_python_node_selectors_when_resolving_then_returns_expected_names(
     assert result == test_case.expected_names
 
 
-PYTHON_NODE_SELECTOR_ERROR_TEST_CASES: list[PythonNodeSelectorErrorTestCase] = [
-    PythonNodeSelectorErrorTestCase(
-        description="raises when typed selector has wrong Python node kind",
-        select=("task:export_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="unknown Python node selector 'export_orders'",
-    ),
-    PythonNodeSelectorErrorTestCase(
-        description="raises when tag selector matches no Python nodes",
-        select=("tag:missing",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="no Python nodes found with tag 'missing'",
-    ),
-    PythonNodeSelectorErrorTestCase(
-        description="raises when path selector omits explicit root",
-        select=("path:missing",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="path selectors require an explicit root",
-    ),
-    PythonNodeSelectorErrorTestCase(
-        description="raises when explicit path selector matches no Python nodes",
-        select=("path:tasks/missing",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="no Python nodes found under path 'tasks/missing'",
-    ),
-    PythonNodeSelectorErrorTestCase(
-        description="raises when SQL source selector is used for Python nodes",
-        select=("source:raw_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="does not map to a Python node type",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_NODE_SELECTOR_ERROR_TEST_CASES,
-    ids=[case.description for case in PYTHON_NODE_SELECTOR_ERROR_TEST_CASES],
+    [
+        PythonNodeSelectorErrorTestCase(
+            description="raises when typed selector has wrong Python node kind",
+            select=("task:export_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="unknown Python node selector 'export_orders'",
+        ),
+        PythonNodeSelectorErrorTestCase(
+            description="raises when tag selector matches no Python nodes",
+            select=("tag:missing",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="no Python nodes found with tag 'missing'",
+        ),
+        PythonNodeSelectorErrorTestCase(
+            description="raises when path selector omits explicit root",
+            select=("path:missing",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="path selectors require an explicit root",
+        ),
+        PythonNodeSelectorErrorTestCase(
+            description="raises when explicit path selector matches no Python nodes",
+            select=("path:tasks/missing",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="no Python nodes found under path 'tasks/missing'",
+        ),
+        PythonNodeSelectorErrorTestCase(
+            description="raises when SQL source selector is used for Python nodes",
+            select=("source:raw_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="does not map to a Python node type",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_python_node_selector_when_resolving_then_raises_clear_error(
     test_case: PythonNodeSelectorErrorTestCase,

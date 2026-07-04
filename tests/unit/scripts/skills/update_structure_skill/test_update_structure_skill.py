@@ -69,7 +69,7 @@ def check_example(file_path):
             ),
         )
     ],
-    ids=["renders structure skill from violation messages"],
+    ids=lambda case: case.description,
 )
 def test_given_structure_rules_when_building_skill_then_renders_boundary_guidance(
     test_case: StructureSkillGenerationTestCase,

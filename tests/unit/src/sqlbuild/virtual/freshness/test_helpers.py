@@ -82,37 +82,34 @@ class UnsupportedFreshnessMetadataDuckDbAdapter(DuckDbAdapter):
         )
 
 
-TEST_CASES: list[SourceFreshnessObservationTestCase] = [
-    SourceFreshnessObservationTestCase(
-        description="observes max column data version",
-        setup_sql=(
-            "CREATE TABLE raw_orders (updated_at INTEGER)",
-            "INSERT INTO raw_orders VALUES (1), (3), (2)",
-        ),
-        source_name="raw_orders",
-        table="raw_orders",
-        strategy="column",
-        column="updated_at",
-        value_kind="integer",
-        expected_data_version=3,
-    ),
-    SourceFreshnessObservationTestCase(
-        description="observes sql data version",
-        setup_sql=(),
-        source_name="raw_orders",
-        table=None,
-        strategy="sql",
-        query="SELECT 'version-1' AS data_version",
-        value_kind="string",
-        expected_data_version="version-1",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        SourceFreshnessObservationTestCase(
+            description="observes max column data version",
+            setup_sql=(
+                "CREATE TABLE raw_orders (updated_at INTEGER)",
+                "INSERT INTO raw_orders VALUES (1), (3), (2)",
+            ),
+            source_name="raw_orders",
+            table="raw_orders",
+            strategy="column",
+            column="updated_at",
+            value_kind="integer",
+            expected_data_version=3,
+        ),
+        SourceFreshnessObservationTestCase(
+            description="observes sql data version",
+            setup_sql=(),
+            source_name="raw_orders",
+            table=None,
+            strategy="sql",
+            query="SELECT 'version-1' AS data_version",
+            value_kind="string",
+            expected_data_version="version-1",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_config_when_observing_then_returns_data_version(
     test_case: SourceFreshnessObservationTestCase,
@@ -148,53 +145,50 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
     assert observation.observed_at == observed_at
 
 
-ERROR_TEST_CASES: list[SourceFreshnessObservationErrorTestCase] = [
-    SourceFreshnessObservationErrorTestCase(
-        description="raises when sql freshness returns multiple columns",
-        setup_sql=(),
-        source_name="raw_orders",
-        table=None,
-        strategy="sql",
-        query="SELECT 1 AS left_value, 2 AS right_value",
-        value_kind="integer",
-        expected_error_fragment="must return exactly one column",
-    ),
-    SourceFreshnessObservationErrorTestCase(
-        description="raises when sql freshness returns zero rows",
-        setup_sql=(),
-        source_name="raw_orders",
-        table=None,
-        strategy="sql",
-        query="SELECT 1 AS data_version WHERE FALSE",
-        value_kind="integer",
-        expected_error_fragment="must return exactly one row",
-    ),
-    SourceFreshnessObservationErrorTestCase(
-        description="raises when sql freshness returns null",
-        setup_sql=(),
-        source_name="raw_orders",
-        table=None,
-        strategy="sql",
-        query="SELECT NULL AS data_version",
-        value_kind="integer",
-        expected_error_fragment="data_version cannot be null",
-    ),
-    SourceFreshnessObservationErrorTestCase(
-        description="raises when adapter metadata is unsupported",
-        setup_sql=(),
-        source_name="raw_orders",
-        table="raw_orders",
-        strategy="adapter",
-        value_kind=None,
-        expected_error_fragment="does not support table freshness metadata",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ERROR_TEST_CASES,
-    ids=[case.description for case in ERROR_TEST_CASES],
+    [
+        SourceFreshnessObservationErrorTestCase(
+            description="raises when sql freshness returns multiple columns",
+            setup_sql=(),
+            source_name="raw_orders",
+            table=None,
+            strategy="sql",
+            query="SELECT 1 AS left_value, 2 AS right_value",
+            value_kind="integer",
+            expected_error_fragment="must return exactly one column",
+        ),
+        SourceFreshnessObservationErrorTestCase(
+            description="raises when sql freshness returns zero rows",
+            setup_sql=(),
+            source_name="raw_orders",
+            table=None,
+            strategy="sql",
+            query="SELECT 1 AS data_version WHERE FALSE",
+            value_kind="integer",
+            expected_error_fragment="must return exactly one row",
+        ),
+        SourceFreshnessObservationErrorTestCase(
+            description="raises when sql freshness returns null",
+            setup_sql=(),
+            source_name="raw_orders",
+            table=None,
+            strategy="sql",
+            query="SELECT NULL AS data_version",
+            value_kind="integer",
+            expected_error_fragment="data_version cannot be null",
+        ),
+        SourceFreshnessObservationErrorTestCase(
+            description="raises when adapter metadata is unsupported",
+            setup_sql=(),
+            source_name="raw_orders",
+            table="raw_orders",
+            strategy="adapter",
+            value_kind=None,
+            expected_error_fragment="does not support table freshness metadata",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_source_freshness_result_when_observing_then_raises_clear_error(
     test_case: SourceFreshnessObservationErrorTestCase,
@@ -243,7 +237,7 @@ def test_given_invalid_source_freshness_result_when_observing_then_raises_clear_
             expected_metadata_requested=False,
         )
     ],
-    ids=["unsupported adapter guard prevents metadata lookup"],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_freshness_is_unsupported_when_observing_then_metadata_is_not_requested(
     test_case: UnsupportedTableFreshnessMetadataGuardTestCase,
@@ -275,44 +269,41 @@ def test_given_adapter_freshness_is_unsupported_when_observing_then_metadata_is_
     assert adapter.metadata_requested is test_case.expected_metadata_requested
 
 
-STATE_TEST_CASES: list[SourceFreshnessStateTestCase] = [
-    SourceFreshnessStateTestCase(
-        description="normalizes timestamp freshness value",
-        source_name="raw.orders",
-        strategy="column",
-        value_kind="timestamp",
-        data_version=datetime(2026, 1, 1, 12, 34, 56, tzinfo=UTC),
-        observed_at=datetime(2026, 1, 1, 13, 0, 0),
-        expected_data_version="2026-01-01T12:34:56+00:00",
-        expected_hash_changes_with_observed_at=False,
-    ),
-    SourceFreshnessStateTestCase(
-        description="normalizes integer freshness value",
-        source_name="raw.orders",
-        strategy="column",
-        value_kind="integer",
-        data_version=123,
-        observed_at=datetime(2026, 1, 1, 13, 0, 0),
-        expected_data_version="123",
-        expected_hash_changes_with_observed_at=False,
-    ),
-    SourceFreshnessStateTestCase(
-        description="preserves string freshness value",
-        source_name="raw.orders",
-        strategy="sql",
-        value_kind="string",
-        data_version="batch-001",
-        observed_at=datetime(2026, 1, 1, 13, 0, 0),
-        expected_data_version="batch-001",
-        expected_hash_changes_with_observed_at=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    STATE_TEST_CASES,
-    ids=[case.description for case in STATE_TEST_CASES],
+    [
+        SourceFreshnessStateTestCase(
+            description="normalizes timestamp freshness value",
+            source_name="raw.orders",
+            strategy="column",
+            value_kind="timestamp",
+            data_version=datetime(2026, 1, 1, 12, 34, 56, tzinfo=UTC),
+            observed_at=datetime(2026, 1, 1, 13, 0, 0),
+            expected_data_version="2026-01-01T12:34:56+00:00",
+            expected_hash_changes_with_observed_at=False,
+        ),
+        SourceFreshnessStateTestCase(
+            description="normalizes integer freshness value",
+            source_name="raw.orders",
+            strategy="column",
+            value_kind="integer",
+            data_version=123,
+            observed_at=datetime(2026, 1, 1, 13, 0, 0),
+            expected_data_version="123",
+            expected_hash_changes_with_observed_at=False,
+        ),
+        SourceFreshnessStateTestCase(
+            description="preserves string freshness value",
+            source_name="raw.orders",
+            strategy="sql",
+            value_kind="string",
+            data_version="batch-001",
+            observed_at=datetime(2026, 1, 1, 13, 0, 0),
+            expected_data_version="batch-001",
+            expected_hash_changes_with_observed_at=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_observation_when_building_state_record_then_hashes_value(
     test_case: SourceFreshnessStateTestCase,
@@ -349,38 +340,35 @@ def test_given_source_freshness_observation_when_building_state_record_then_hash
     assert test_case.expected_hash_changes_with_observed_at is False
 
 
-STATE_ERROR_TEST_CASES: list[SourceFreshnessStateErrorTestCase] = [
-    SourceFreshnessStateErrorTestCase(
-        description="rejects non datetime timestamp value",
-        value_kind="timestamp",
-        data_version="2026-01-01T12:00:00Z",
-        expected_error_fragment="must be datetime values",
-    ),
-    SourceFreshnessStateErrorTestCase(
-        description="rejects bool integer value",
-        value_kind="integer",
-        data_version=True,
-        expected_error_fragment="must be integer values",
-    ),
-    SourceFreshnessStateErrorTestCase(
-        description="rejects non integer value",
-        value_kind="integer",
-        data_version="123",
-        expected_error_fragment="must be integer values",
-    ),
-    SourceFreshnessStateErrorTestCase(
-        description="rejects non string value",
-        value_kind="string",
-        data_version=123,
-        expected_error_fragment="must be string values",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    STATE_ERROR_TEST_CASES,
-    ids=[case.description for case in STATE_ERROR_TEST_CASES],
+    [
+        SourceFreshnessStateErrorTestCase(
+            description="rejects non datetime timestamp value",
+            value_kind="timestamp",
+            data_version="2026-01-01T12:00:00Z",
+            expected_error_fragment="must be datetime values",
+        ),
+        SourceFreshnessStateErrorTestCase(
+            description="rejects bool integer value",
+            value_kind="integer",
+            data_version=True,
+            expected_error_fragment="must be integer values",
+        ),
+        SourceFreshnessStateErrorTestCase(
+            description="rejects non integer value",
+            value_kind="integer",
+            data_version="123",
+            expected_error_fragment="must be integer values",
+        ),
+        SourceFreshnessStateErrorTestCase(
+            description="rejects non string value",
+            value_kind="string",
+            data_version=123,
+            expected_error_fragment="must be string values",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_source_freshness_value_when_normalizing_then_raises_clear_error(
     test_case: SourceFreshnessStateErrorTestCase,
@@ -403,7 +391,7 @@ def test_given_invalid_source_freshness_value_when_normalizing_then_raises_clear
             expected_generated_sources=(),
         )
     ],
-    ids=["observes explicit config before adapter default and tracks unknowns"],
+    ids=lambda case: case.description,
 )
 def test_given_unmanaged_sources_when_observing_runtime_freshness_then_applies_precedence(
     test_case: SourceFreshnessRuntimeTestCase,
@@ -460,7 +448,7 @@ def test_given_unmanaged_sources_when_observing_runtime_freshness_then_applies_p
             expected_generated_sources=("raw.inventory",),
         )
     ],
-    ids=["preserves soft skipped source and generates load version"],
+    ids=lambda case: case.description,
 )
 def test_given_managed_loader_results_when_observing_freshness_then_applies_loader_semantics(
     test_case: SourceFreshnessRuntimeTestCase,
@@ -527,34 +515,31 @@ def test_given_managed_loader_results_when_observing_freshness_then_applies_load
     assert records_by_source["raw.inventory"].data_version == "run-123"
 
 
-RUNTIME_LAG_TOLERANCE_TEST_CASES: tuple[SourceFreshnessRuntimeLagToleranceTestCase, ...] = (
-    SourceFreshnessRuntimeLagToleranceTestCase(
-        description="preserves previous within lag tolerance",
-        current_data_version="2026-01-01T12:05:00",
-        expected_record_data_version="2026-01-01T12:00:00",
-    ),
-    SourceFreshnessRuntimeLagToleranceTestCase(
-        description="preserves previous at lag tolerance boundary",
-        current_data_version="2026-01-01T12:10:00",
-        expected_record_data_version="2026-01-01T12:00:00",
-    ),
-    SourceFreshnessRuntimeLagToleranceTestCase(
-        description="advances beyond lag tolerance",
-        current_data_version="2026-01-01T12:11:00",
-        expected_record_data_version="2026-01-01T12:11:00",
-    ),
-    SourceFreshnessRuntimeLagToleranceTestCase(
-        description="advances on backwards timestamp movement",
-        current_data_version="2026-01-01T11:59:00",
-        expected_record_data_version="2026-01-01T11:59:00",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RUNTIME_LAG_TOLERANCE_TEST_CASES,
-    ids=[case.description for case in RUNTIME_LAG_TOLERANCE_TEST_CASES],
+    (
+        SourceFreshnessRuntimeLagToleranceTestCase(
+            description="preserves previous within lag tolerance",
+            current_data_version="2026-01-01T12:05:00",
+            expected_record_data_version="2026-01-01T12:00:00",
+        ),
+        SourceFreshnessRuntimeLagToleranceTestCase(
+            description="preserves previous at lag tolerance boundary",
+            current_data_version="2026-01-01T12:10:00",
+            expected_record_data_version="2026-01-01T12:00:00",
+        ),
+        SourceFreshnessRuntimeLagToleranceTestCase(
+            description="advances beyond lag tolerance",
+            current_data_version="2026-01-01T12:11:00",
+            expected_record_data_version="2026-01-01T12:11:00",
+        ),
+        SourceFreshnessRuntimeLagToleranceTestCase(
+            description="advances on backwards timestamp movement",
+            current_data_version="2026-01-01T11:59:00",
+            expected_record_data_version="2026-01-01T11:59:00",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_virtual_runtime_lag_tolerance_when_observing_then_preserves_baseline(
     test_case: SourceFreshnessRuntimeLagToleranceTestCase,

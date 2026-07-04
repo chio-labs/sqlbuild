@@ -16,41 +16,39 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import (
     build_table_function_test_entry,
 )
 
-TEST_CASES: list[BuildComparisonSqlTestCase] = [
-    BuildComparisonSqlTestCase(
-        description="duckdb comparison sql uses EXCEPT",
-        adapter_name="duckdb",
-        expected_fragments=(
-            "FROM __actual__orders",
-            "FROM __expected__orders",
-            "EXCEPT",
-        ),
-    ),
-    BuildComparisonSqlTestCase(
-        description="snowflake comparison sql uses EXCEPT",
-        adapter_name="snowflake",
-        expected_fragments=(
-            "FROM __actual__orders",
-            "FROM __expected__orders",
-            "EXCEPT",
-        ),
-    ),
-    BuildComparisonSqlTestCase(
-        description="bigquery comparison sql preserves EXCEPT DISTINCT formatting",
-        adapter_name="bigquery",
-        expected_fragments=(
-            "FROM __actual__orders",
-            "FROM __expected__orders",
-            "EXCEPT DISTINCT",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        BuildComparisonSqlTestCase(
+            description="duckdb comparison sql uses EXCEPT",
+            adapter_name="duckdb",
+            expected_fragments=(
+                "FROM __actual__orders",
+                "FROM __expected__orders",
+                "EXCEPT",
+            ),
+        ),
+        BuildComparisonSqlTestCase(
+            description="snowflake comparison sql uses EXCEPT",
+            adapter_name="snowflake",
+            expected_fragments=(
+                "FROM __actual__orders",
+                "FROM __expected__orders",
+                "EXCEPT",
+            ),
+        ),
+        BuildComparisonSqlTestCase(
+            description="bigquery comparison sql preserves EXCEPT DISTINCT formatting",
+            adapter_name="bigquery",
+            expected_fragments=(
+                "FROM __actual__orders",
+                "FROM __expected__orders",
+                "EXCEPT DISTINCT",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_difference(
     test_case: BuildComparisonSqlTestCase,
@@ -81,7 +79,7 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
             sql_analysis_enabled=False,
         )
     ],
-    ids=["disabled formatting builds comparison sql without importing polyglot"],
+    ids=lambda case: case.description,
 )
 def test_given_formatting_disabled_when_building_comparison_sql_then_it_does_not_import_polyglot(
     test_case: BuildComparisonSqlTestCase,
@@ -119,7 +117,7 @@ def test_given_formatting_disabled_when_building_comparison_sql_then_it_does_not
             ),
         )
     ],
-    ids=["assertion test SQL counts zero-row assertion failures"],
+    ids=lambda case: case.description,
 )
 def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failing_rows(
     test_case: BuildComparisonSqlTestCase,
@@ -150,7 +148,7 @@ def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failin
             ),
         )
     ],
-    ids=["matching helper CTEs are lifted once from actual and expected SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_once(
     test_case: BuildComparisonSqlTestCase,
@@ -178,7 +176,7 @@ def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_once
             expected_fragments=("`workspace`.`test`.`customer_orders`(1)",),
         )
     ],
-    ids=["databricks quoted table function names preserve case"],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_table_fn_when_building_comparison_sql_then_preserves_case(
     test_case: BuildComparisonSqlTestCase,
@@ -207,7 +205,7 @@ def test_given_databricks_table_fn_when_building_comparison_sql_then_preserves_c
             expected_fragments=("`project-d5f92072-d107-4987-9ef.test.customer_orders`(1)",),
         )
     ],
-    ids=["bigquery quoted table function names preserve hyphenated project id"],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_table_fn_when_building_comparison_sql_then_preserves_backticks(
     test_case: BuildComparisonSqlTestCase,

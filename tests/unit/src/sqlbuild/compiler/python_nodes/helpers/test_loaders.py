@@ -49,7 +49,7 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
             expected_connection_mode=LoaderConnectionMode.EXTERNAL,
         )
     ],
-    ids=["preserves source loader metadata in internal Python-node view"],
+    ids=lambda case: case.description,
 )
 def test_given_discovered_loader_when_building_python_node_then_preserves_loader_metadata(
     test_case: PythonLoaderNodeConversionTestCase,

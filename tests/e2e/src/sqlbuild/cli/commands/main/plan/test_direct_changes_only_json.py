@@ -39,7 +39,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             },
         )
     ],
-    ids=["reports semantic staleness with identity diagnostics"],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_change_when_planning_json_then_reports_semantic_staleness(
     test_case: DirectChangesOnlyJsonE2ETestCase,
@@ -95,7 +95,7 @@ def test_given_upstream_change_when_planning_json_then_reports_semantic_stalenes
             expected_built_version_present=False,
         )
     ],
-    ids=["first run reports missing built identity"],
+    ids=lambda case: case.description,
 )
 def test_given_first_run_when_planning_json_then_reports_missing_identity(
     test_case: DirectPlanIdentityJsonE2ETestCase,
@@ -138,7 +138,7 @@ def test_given_first_run_when_planning_json_then_reports_missing_identity(
             expected_built_version_present=True,
         )
     ],
-    ids=["current build reports current identity"],
+    ids=lambda case: case.description,
 )
 def test_given_current_build_when_planning_json_then_reports_current_identity(
     test_case: DirectPlanIdentityJsonE2ETestCase,

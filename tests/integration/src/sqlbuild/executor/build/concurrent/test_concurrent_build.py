@@ -29,158 +29,86 @@ _PROJECT_YML: str = (
     'default_audit_severity = "error"\n'
 )
 
-SUCCESS_TEST_CASES: list[ConcurrentBuildTestCase] = [
-    ConcurrentBuildTestCase(
-        description=("two independent tables both materialize with concurrency 2"),
-        max_concurrency=2,
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_YML,
-            "models/alpha.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id, 'alpha' AS name"),
-            "models/beta.sql": ("MODEL (materialized table);\n\nSELECT 2 AS id, 'beta' AS name"),
-        },
-        expected_status=BuildStatus.SUCCESS,
-        expected_success_count=2,
-        expected_query_results=(
-            (
-                "SELECT id, name FROM main.alpha",
-                ((1, "alpha"),),
-            ),
-            (
-                "SELECT id, name FROM main.beta",
-                ((2, "beta"),),
-            ),
-        ),
-    ),
-    ConcurrentBuildTestCase(
-        description=("diamond DAG with shared upstream materializes all four nodes correctly"),
-        max_concurrency=3,
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_YML,
-            "models/staging/stg_raw.sql": (
-                "MODEL (materialized view);\n\nSELECT 10 AS id, 'row' AS val"
-            ),
-            "models/branch_a.sql": (
-                "MODEL (materialized table);\n\n"
-                "SELECT id, val || '_a' AS val FROM __ref(\"stg_raw\")"
-            ),
-            "models/branch_b.sql": (
-                "MODEL (materialized table);\n\n"
-                "SELECT id, val || '_b' AS val FROM __ref(\"stg_raw\")"
-            ),
-            "models/merged.sql": (
-                "MODEL (materialized table);\n\n"
-                "SELECT a.id, a.val AS a_val, b.val AS b_val "
-                'FROM __ref("branch_a") a '
-                'JOIN __ref("branch_b") b ON a.id = b.id'
-            ),
-        },
-        expected_status=BuildStatus.SUCCESS,
-        expected_success_count=4,
-        expected_query_results=(
-            (
-                "SELECT id, a_val, b_val FROM main.merged",
-                ((10, "row_a", "row_b"),),
-            ),
-        ),
-    ),
-    ConcurrentBuildTestCase(
-        description=("three-layer chain preserves data flow with concurrency 2"),
-        max_concurrency=2,
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_YML,
-            "models/layer_1.sql": ("MODEL (materialized table);\n\nSELECT 100 AS val"),
-            "models/layer_2.sql": (
-                'MODEL (materialized table);\n\nSELECT val * 2 AS val FROM __ref("layer_1")'
-            ),
-            "models/layer_3.sql": (
-                'MODEL (materialized table);\n\nSELECT val + 1 AS val FROM __ref("layer_2")'
-            ),
-        },
-        expected_status=BuildStatus.SUCCESS,
-        expected_success_count=3,
-        expected_query_results=(("SELECT val FROM main.layer_3", ((201,),)),),
-    ),
-]
-
-FAILURE_TEST_CASES: list[ConcurrentBuildTestCase] = [
-    ConcurrentBuildTestCase(
-        description=(
-            "failure in one independent branch does not affect the other with concurrency 2"
-        ),
-        max_concurrency=2,
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_YML,
-            "models/broken.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"),
-            "models/healthy.sql": ("MODEL (materialized table);\n\nSELECT 42 AS val"),
-        },
-        expected_status=BuildStatus.FAILED,
-        expected_success_count=1,
-        expected_failure_count=1,
-        expected_model_statuses=(
-            ("broken", ExecutionStatus.FAILED),
-            ("healthy", ExecutionStatus.SUCCESS),
-        ),
-        expected_query_results=(("SELECT val FROM main.healthy", ((42,),)),),
-        expected_missing_relations=("main.broken",),
-    ),
-    ConcurrentBuildTestCase(
-        description=(
-            "failure blocks downstream but independent branch still completes with concurrency 2"
-        ),
-        max_concurrency=2,
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_YML,
-            "models/broken.sql": ("MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"),
-            "models/downstream.sql": (
-                'MODEL (materialized table);\n\nSELECT 1 AS id FROM __ref("broken")'
-            ),
-            "models/independent.sql": ("MODEL (materialized table);\n\nSELECT 99 AS val"),
-        },
-        expected_status=BuildStatus.FAILED,
-        expected_success_count=1,
-        expected_failure_count=1,
-        expected_skipped_count=1,
-        expected_model_statuses=(
-            ("broken", ExecutionStatus.FAILED),
-            ("downstream", ExecutionStatus.SKIPPED),
-            ("independent", ExecutionStatus.SUCCESS),
-        ),
-        expected_query_results=(("SELECT val FROM main.independent", ((99,),)),),
-        expected_missing_relations=(
-            "main.broken",
-            "main.downstream",
-        ),
-    ),
-    ConcurrentBuildTestCase(
-        description=("fail_fast stops dispatching independent nodes after first failure"),
-        max_concurrency=1,
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_YML,
-            "models/aaa_broken.sql": (
-                "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
-            ),
-            "models/zzz_independent.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
-        },
-        fail_fast=True,
-        expected_status=BuildStatus.FAILED,
-        expected_failure_count=1,
-        expected_skipped_count=1,
-        expected_model_statuses=(
-            ("aaa_broken", ExecutionStatus.FAILED),
-            ("zzz_independent", ExecutionStatus.SKIPPED),
-        ),
-        expected_missing_relations=(
-            "main.aaa_broken",
-            "main.zzz_independent",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SUCCESS_TEST_CASES,
-    ids=[case.description for case in SUCCESS_TEST_CASES],
+    [
+        ConcurrentBuildTestCase(
+            description=("two independent tables both materialize with concurrency 2"),
+            max_concurrency=2,
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "models/alpha.sql": (
+                    "MODEL (materialized table);\n\nSELECT 1 AS id, 'alpha' AS name"
+                ),
+                "models/beta.sql": (
+                    "MODEL (materialized table);\n\nSELECT 2 AS id, 'beta' AS name"
+                ),
+            },
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=2,
+            expected_query_results=(
+                (
+                    "SELECT id, name FROM main.alpha",
+                    ((1, "alpha"),),
+                ),
+                (
+                    "SELECT id, name FROM main.beta",
+                    ((2, "beta"),),
+                ),
+            ),
+        ),
+        ConcurrentBuildTestCase(
+            description=("diamond DAG with shared upstream materializes all four nodes correctly"),
+            max_concurrency=3,
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "models/staging/stg_raw.sql": (
+                    "MODEL (materialized view);\n\nSELECT 10 AS id, 'row' AS val"
+                ),
+                "models/branch_a.sql": (
+                    "MODEL (materialized table);\n\n"
+                    "SELECT id, val || '_a' AS val FROM __ref(\"stg_raw\")"
+                ),
+                "models/branch_b.sql": (
+                    "MODEL (materialized table);\n\n"
+                    "SELECT id, val || '_b' AS val FROM __ref(\"stg_raw\")"
+                ),
+                "models/merged.sql": (
+                    "MODEL (materialized table);\n\n"
+                    "SELECT a.id, a.val AS a_val, b.val AS b_val "
+                    'FROM __ref("branch_a") a '
+                    'JOIN __ref("branch_b") b ON a.id = b.id'
+                ),
+            },
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=4,
+            expected_query_results=(
+                (
+                    "SELECT id, a_val, b_val FROM main.merged",
+                    ((10, "row_a", "row_b"),),
+                ),
+            ),
+        ),
+        ConcurrentBuildTestCase(
+            description=("three-layer chain preserves data flow with concurrency 2"),
+            max_concurrency=2,
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "models/layer_1.sql": ("MODEL (materialized table);\n\nSELECT 100 AS val"),
+                "models/layer_2.sql": (
+                    'MODEL (materialized table);\n\nSELECT val * 2 AS val FROM __ref("layer_1")'
+                ),
+                "models/layer_3.sql": (
+                    'MODEL (materialized table);\n\nSELECT val + 1 AS val FROM __ref("layer_2")'
+                ),
+            },
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=3,
+            expected_query_results=(("SELECT val FROM main.layer_3", ((201,),)),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_concurrent_build_when_executing_then_succeeds(
     test_case: ConcurrentBuildTestCase,
@@ -220,7 +148,7 @@ def test_given_concurrent_build_when_executing_then_succeeds(
             ),
         )
     ],
-    ids=["concurrent provider-backed source loaders share one provider session"],
+    ids=lambda case: case.description,
 )
 def test_given_concurrent_provider_backed_loaders_when_executing_then_share_provider_session(
     test_case: ConcurrentBuildTestCase,
@@ -332,8 +260,84 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
 
 @pytest.mark.parametrize(
     "test_case",
-    FAILURE_TEST_CASES,
-    ids=[case.description for case in FAILURE_TEST_CASES],
+    [
+        ConcurrentBuildTestCase(
+            description=(
+                "failure in one independent branch does not affect the other with concurrency 2"
+            ),
+            max_concurrency=2,
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "models/broken.sql": (
+                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                ),
+                "models/healthy.sql": ("MODEL (materialized table);\n\nSELECT 42 AS val"),
+            },
+            expected_status=BuildStatus.FAILED,
+            expected_success_count=1,
+            expected_failure_count=1,
+            expected_model_statuses=(
+                ("broken", ExecutionStatus.FAILED),
+                ("healthy", ExecutionStatus.SUCCESS),
+            ),
+            expected_query_results=(("SELECT val FROM main.healthy", ((42,),)),),
+            expected_missing_relations=("main.broken",),
+        ),
+        ConcurrentBuildTestCase(
+            description=(
+                "failure blocks downstream but independent branch still completes with concurrency 2"
+            ),
+            max_concurrency=2,
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "models/broken.sql": (
+                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                ),
+                "models/downstream.sql": (
+                    'MODEL (materialized table);\n\nSELECT 1 AS id FROM __ref("broken")'
+                ),
+                "models/independent.sql": ("MODEL (materialized table);\n\nSELECT 99 AS val"),
+            },
+            expected_status=BuildStatus.FAILED,
+            expected_success_count=1,
+            expected_failure_count=1,
+            expected_skipped_count=1,
+            expected_model_statuses=(
+                ("broken", ExecutionStatus.FAILED),
+                ("downstream", ExecutionStatus.SKIPPED),
+                ("independent", ExecutionStatus.SUCCESS),
+            ),
+            expected_query_results=(("SELECT val FROM main.independent", ((99,),)),),
+            expected_missing_relations=(
+                "main.broken",
+                "main.downstream",
+            ),
+        ),
+        ConcurrentBuildTestCase(
+            description=("fail_fast stops dispatching independent nodes after first failure"),
+            max_concurrency=1,
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "models/aaa_broken.sql": (
+                    "MODEL (materialized table);\n\nSELECT * FROM nonexistent_table"
+                ),
+                "models/zzz_independent.sql": ("MODEL (materialized table);\n\nSELECT 1 AS id"),
+            },
+            fail_fast=True,
+            expected_status=BuildStatus.FAILED,
+            expected_failure_count=1,
+            expected_skipped_count=1,
+            expected_model_statuses=(
+                ("aaa_broken", ExecutionStatus.FAILED),
+                ("zzz_independent", ExecutionStatus.SKIPPED),
+            ),
+            expected_missing_relations=(
+                "main.aaa_broken",
+                "main.zzz_independent",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_concurrent_build_when_executing_then_fails(
     test_case: ConcurrentBuildTestCase,

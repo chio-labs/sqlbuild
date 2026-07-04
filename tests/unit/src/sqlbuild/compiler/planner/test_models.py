@@ -16,39 +16,37 @@ from tests.unit.src.sqlbuild.compiler.planner._test_types import (
     RelationReuseValidationTestCase,
 )
 
-RELATION_REUSE_VALIDATION_TEST_CASES: list[RelationReuseValidationTestCase] = [
-    RelationReuseValidationTestCase(
-        description="complete relation reuse rejects incremental materialization",
-        materialization_type=MaterializationType.INCREMENTAL,
-        action=PlanAction.INCREMENTAL_APPEND,
-        reuse_kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
-        expected_error_fragment="complete relation reuse requires table materialization",
-    ),
-    RelationReuseValidationTestCase(
-        description="seeded relation reuse rejects table materialization",
-        materialization_type=MaterializationType.TABLE,
-        action=PlanAction.CREATE_TABLE,
-        reuse_kind=RelationReuseKind.SEEDED_RELATION_REUSE,
-        expected_error_fragment=(
-            "seeded relation reuse requires incremental, snapshot, or custom materialization"
-        ),
-    ),
-    RelationReuseValidationTestCase(
-        description="seeded relation reuse rejects non incremental action",
-        materialization_type=MaterializationType.INCREMENTAL,
-        action=PlanAction.CREATE_TABLE,
-        reuse_kind=RelationReuseKind.SEEDED_RELATION_REUSE,
-        expected_error_fragment=(
-            "seeded relation reuse requires an incremental or snapshot action"
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    RELATION_REUSE_VALIDATION_TEST_CASES,
-    ids=[case.description for case in RELATION_REUSE_VALIDATION_TEST_CASES],
+    [
+        RelationReuseValidationTestCase(
+            description="complete relation reuse rejects incremental materialization",
+            materialization_type=MaterializationType.INCREMENTAL,
+            action=PlanAction.INCREMENTAL_APPEND,
+            reuse_kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
+            expected_error_fragment="complete relation reuse requires table materialization",
+        ),
+        RelationReuseValidationTestCase(
+            description="seeded relation reuse rejects table materialization",
+            materialization_type=MaterializationType.TABLE,
+            action=PlanAction.CREATE_TABLE,
+            reuse_kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            expected_error_fragment=(
+                "seeded relation reuse requires incremental, snapshot, or custom materialization"
+            ),
+        ),
+        RelationReuseValidationTestCase(
+            description="seeded relation reuse rejects non incremental action",
+            materialization_type=MaterializationType.INCREMENTAL,
+            action=PlanAction.CREATE_TABLE,
+            reuse_kind=RelationReuseKind.SEEDED_RELATION_REUSE,
+            expected_error_fragment=(
+                "seeded relation reuse requires an incremental or snapshot action"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_relation_reuse_plan_when_building_model_entry_then_it_raises(
     test_case: RelationReuseValidationTestCase,

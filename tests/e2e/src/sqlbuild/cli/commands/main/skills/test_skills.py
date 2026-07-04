@@ -15,53 +15,32 @@ from tests.e2e.src.sqlbuild.cli.commands.main.skills.helpers import (
     write_existing_skill_file,
 )
 
-SKILLS_CLI_TEST_CASES: list[SkillsCliTestCase] = [
-    SkillsCliTestCase(
-        description="updates all local skill targets by default",
-        argv=["skills", "update"],
-        expected_exit_code=0,
-        expected_files=(
-            Path(".opencode/skills/sqlbuild/SKILL.md"),
-            Path(".claude/skills/sqlbuild/SKILL.md"),
-            Path(".agents/skills/sqlbuild/SKILL.md"),
-        ),
-    ),
-    SkillsCliTestCase(
-        description="updates only requested local skill target",
-        argv=["skills", "update", "--target", "opencode"],
-        expected_exit_code=0,
-        expected_files=(Path(".opencode/skills/sqlbuild/SKILL.md"),),
-        unexpected_files=(
-            Path(".claude/skills/sqlbuild/SKILL.md"),
-            Path(".agents/skills/sqlbuild/SKILL.md"),
-        ),
-    ),
-]
-
-SKILLS_CLI_OVERWRITE_TEST_CASES: list[SkillsCliOverwriteTestCase] = [
-    SkillsCliOverwriteTestCase(
-        description="refuses to overwrite custom skill file without force",
-        argv=["skills", "update", "--target", "opencode"],
-        existing_file=Path(".opencode/skills/sqlbuild/SKILL.md"),
-        existing_content="custom project instructions\n",
-        expected_exit_code=1,
-        expected_content_fragment="custom project instructions",
-    ),
-    SkillsCliOverwriteTestCase(
-        description="overwrites custom skill file with force",
-        argv=["skills", "update", "--target", "opencode", "--force"],
-        existing_file=Path(".opencode/skills/sqlbuild/SKILL.md"),
-        existing_content="custom project instructions\n",
-        expected_exit_code=0,
-        expected_content_fragment="# SQLBuild Skill",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SKILLS_CLI_TEST_CASES,
-    ids=[case.description for case in SKILLS_CLI_TEST_CASES],
+    [
+        SkillsCliTestCase(
+            description="updates all local skill targets by default",
+            argv=["skills", "update"],
+            expected_exit_code=0,
+            expected_files=(
+                Path(".opencode/skills/sqlbuild/SKILL.md"),
+                Path(".claude/skills/sqlbuild/SKILL.md"),
+                Path(".agents/skills/sqlbuild/SKILL.md"),
+            ),
+        ),
+        SkillsCliTestCase(
+            description="updates only requested local skill target",
+            argv=["skills", "update", "--target", "opencode"],
+            expected_exit_code=0,
+            expected_files=(Path(".opencode/skills/sqlbuild/SKILL.md"),),
+            unexpected_files=(
+                Path(".claude/skills/sqlbuild/SKILL.md"),
+                Path(".agents/skills/sqlbuild/SKILL.md"),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_skills_update_cli_when_running_then_writes_expected_skill_files(
     test_case: SkillsCliTestCase,
@@ -86,8 +65,25 @@ def test_given_skills_update_cli_when_running_then_writes_expected_skill_files(
 
 @pytest.mark.parametrize(
     "test_case",
-    SKILLS_CLI_OVERWRITE_TEST_CASES,
-    ids=[case.description for case in SKILLS_CLI_OVERWRITE_TEST_CASES],
+    [
+        SkillsCliOverwriteTestCase(
+            description="refuses to overwrite custom skill file without force",
+            argv=["skills", "update", "--target", "opencode"],
+            existing_file=Path(".opencode/skills/sqlbuild/SKILL.md"),
+            existing_content="custom project instructions\n",
+            expected_exit_code=1,
+            expected_content_fragment="custom project instructions",
+        ),
+        SkillsCliOverwriteTestCase(
+            description="overwrites custom skill file with force",
+            argv=["skills", "update", "--target", "opencode", "--force"],
+            existing_file=Path(".opencode/skills/sqlbuild/SKILL.md"),
+            existing_content="custom project instructions\n",
+            expected_exit_code=0,
+            expected_content_fragment="# SQLBuild Skill",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_existing_custom_skill_when_running_update_then_force_controls_overwrite(
     test_case: SkillsCliOverwriteTestCase,

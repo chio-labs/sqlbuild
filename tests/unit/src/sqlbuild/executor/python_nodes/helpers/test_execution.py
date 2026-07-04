@@ -51,50 +51,6 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     successful_sibling,
 )
 
-MIXED_SKIP_EXECUTOR_TEST_CASES: tuple[PythonNodeExecutorTestCase, ...] = (
-    PythonNodeExecutorTestCase(
-        description="runs downstream when soft-skipped branch has successful sibling",
-        expected_names=(
-            "skip_empty_orders",
-            "successful_sibling",
-            "export_after_skip",
-            "export_after_mixed_skip",
-        ),
-        expected_statuses=(
-            PythonNodeStatus.SKIPPED,
-            PythonNodeStatus.SUCCESS,
-            PythonNodeStatus.SKIPPED,
-            PythonNodeStatus.SUCCESS,
-        ),
-        expected_payloads=(
-            None,
-            {"status": "ready"},
-            None,
-            {"uri": "s3://exports/orders.json"},
-        ),
-        expected_materialized=(None, None, None, True),
-        expected_error_fragments=(None, None, None, None),
-    ),
-    PythonNodeExecutorTestCase(
-        description="skips downstream when hard-skipped branch has successful sibling",
-        expected_names=(
-            "skip_empty_orders",
-            "successful_sibling",
-            "export_after_skip",
-            "export_after_mixed_skip",
-        ),
-        expected_statuses=(
-            PythonNodeStatus.SKIPPED,
-            PythonNodeStatus.SUCCESS,
-            PythonNodeStatus.SKIPPED,
-            PythonNodeStatus.SKIPPED,
-        ),
-        expected_payloads=(None, {"status": "ready"}, None, None),
-        expected_materialized=(None, None, None, None),
-        expected_error_fragments=(None, None, None, None),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -111,7 +67,7 @@ MIXED_SKIP_EXECUTOR_TEST_CASES: tuple[PythonNodeExecutorTestCase, ...] = (
             expected_error_fragments=(None, None),
         )
     ],
-    ids=["executes task and asset chain with same-run state"],
+    ids=lambda case: case.description,
 )
 def test_given_task_asset_chain_when_executing_python_nodes_then_records_results(
     test_case: PythonNodeExecutorTestCase,
@@ -177,7 +133,7 @@ def test_given_task_asset_chain_when_executing_python_nodes_then_records_results
             expected_error_fragments=(None, None),
         )
     ],
-    ids=["injects provider into task and asset execution"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_parameters_when_executing_python_nodes_then_providers_are_injected(
     test_case: PythonNodeExecutorTestCase,
@@ -233,7 +189,7 @@ def test_given_provider_parameters_when_executing_python_nodes_then_providers_ar
             expected_error_fragments=(None, None),
         )
     ],
-    ids=["exposes providers on task and asset contexts"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_executing_python_nodes_then_context_exposes_providers(
     test_case: PythonNodeExecutorTestCase,
@@ -291,7 +247,7 @@ def test_given_provider_container_when_executing_python_nodes_then_context_expos
             ),
         )
     ],
-    ids=["normalizes missing provider container as task and asset failures"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_provider_container_when_executing_python_nodes_then_failures_are_recorded(
     test_case: PythonNodeExecutorTestCase,
@@ -346,7 +302,7 @@ def test_given_missing_provider_container_when_executing_python_nodes_then_failu
             ),
         )
     ],
-    ids=["missing context provider lookup records task failure"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_context_provider_when_executing_python_node_then_failure_is_recorded(
     test_case: PythonNodeExecutorTestCase,
@@ -393,7 +349,7 @@ def test_given_missing_context_provider_when_executing_python_node_then_failure_
             expected_error_fragments=(None, None),
         )
     ],
-    ids=["executes one ready asset with existing run state"],
+    ids=lambda case: case.description,
 )
 def test_given_ready_python_node_when_executing_then_uses_existing_run_state(
     test_case: PythonNodeExecutorTestCase,
@@ -480,7 +436,7 @@ def test_given_ready_python_node_when_executing_then_uses_existing_run_state(
             expected_error_fragments=(None,),
         )
     ],
-    ids=["passes cursor overrides into task context"],
+    ids=lambda case: case.description,
 )
 def test_given_cursor_overrides_when_executing_python_nodes_then_context_receives_cursors(
     test_case: PythonNodeExecutorTestCase,
@@ -536,7 +492,7 @@ def test_given_cursor_overrides_when_executing_python_nodes_then_context_receive
             expected_error_fragments=(None, None),
         )
     ],
-    ids=["skips downstream after hard skip"],
+    ids=lambda case: case.description,
 )
 def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_downstream(
     test_case: PythonNodeExecutorTestCase,
@@ -585,8 +541,50 @@ def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_down
 
 @pytest.mark.parametrize(
     "test_case",
-    MIXED_SKIP_EXECUTOR_TEST_CASES,
-    ids=[case.description for case in MIXED_SKIP_EXECUTOR_TEST_CASES],
+    (
+        PythonNodeExecutorTestCase(
+            description="runs downstream when soft-skipped branch has successful sibling",
+            expected_names=(
+                "skip_empty_orders",
+                "successful_sibling",
+                "export_after_skip",
+                "export_after_mixed_skip",
+            ),
+            expected_statuses=(
+                PythonNodeStatus.SKIPPED,
+                PythonNodeStatus.SUCCESS,
+                PythonNodeStatus.SKIPPED,
+                PythonNodeStatus.SUCCESS,
+            ),
+            expected_payloads=(
+                None,
+                {"status": "ready"},
+                None,
+                {"uri": "s3://exports/orders.json"},
+            ),
+            expected_materialized=(None, None, None, True),
+            expected_error_fragments=(None, None, None, None),
+        ),
+        PythonNodeExecutorTestCase(
+            description="skips downstream when hard-skipped branch has successful sibling",
+            expected_names=(
+                "skip_empty_orders",
+                "successful_sibling",
+                "export_after_skip",
+                "export_after_mixed_skip",
+            ),
+            expected_statuses=(
+                PythonNodeStatus.SKIPPED,
+                PythonNodeStatus.SUCCESS,
+                PythonNodeStatus.SKIPPED,
+                PythonNodeStatus.SKIPPED,
+            ),
+            expected_payloads=(None, {"status": "ready"}, None, None),
+            expected_materialized=(None, None, None, None),
+            expected_error_fragments=(None, None, None, None),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_mixed_python_skips_when_executing_nodes_then_fan_in_matches_mode(
     test_case: PythonNodeExecutorTestCase,
@@ -663,7 +661,7 @@ def test_given_mixed_python_skips_when_executing_nodes_then_fan_in_matches_mode(
             expected_error_fragments=("API unavailable", "Upstream Python node failed"),
         )
     ],
-    ids=["blocks downstream after upstream failure"],
+    ids=lambda case: case.description,
 )
 def test_given_failed_upstream_when_executing_python_nodes_then_blocks_downstream(
     test_case: PythonNodeExecutorTestCase,
@@ -727,7 +725,7 @@ def test_given_failed_upstream_when_executing_python_nodes_then_blocks_downstrea
             expected_sleeps=(0.5, 1.0),
         )
     ],
-    ids=["retries selected exception and succeeds"],
+    ids=lambda case: case.description,
 )
 def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
     test_case: PythonNodeRetryExecutorTestCase,
@@ -782,7 +780,7 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
             expected_sleeps=(0.25,),
         )
     ],
-    ids=["exhausts retries and records final exception"],
+    ids=lambda case: case.description,
 )
 def test_given_retry_policy_when_attempts_exhausted_then_records_final_exception(
     test_case: PythonNodeRetryExecutorTestCase,
@@ -839,7 +837,7 @@ def test_given_retry_policy_when_attempts_exhausted_then_records_final_exception
             expected_sleeps=(),
         )
     ],
-    ids=["does not retry unlisted exception"],
+    ids=lambda case: case.description,
 )
 def test_given_retry_policy_when_exception_is_not_selected_then_does_not_retry(
     test_case: PythonNodeRetryExecutorTestCase,
@@ -891,7 +889,7 @@ def test_given_retry_policy_when_exception_is_not_selected_then_does_not_retry(
             expected_sleeps=(1.0, 1.5, 1.5),
         )
     ],
-    ids=["caps exponential backoff delays"],
+    ids=lambda case: case.description,
 )
 def test_given_retry_policy_when_backoff_exceeds_cap_then_sleep_is_capped(
     test_case: PythonNodeRetryExecutorTestCase,

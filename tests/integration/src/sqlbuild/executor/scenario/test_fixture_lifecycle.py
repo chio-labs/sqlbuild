@@ -81,7 +81,7 @@ from tests.integration.src.sqlbuild.executor.scenario.helpers import (
             },
         )
     ],
-    ids=["materializes source ref and seed fixtures in duckdb"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_fixture_plans_when_executing_then_materializes_fixture_tables(
     test_case: ScenarioFixtureMaterializationIntegrationTestCase,
@@ -115,7 +115,7 @@ def test_given_scenario_fixture_plans_when_executing_then_materializes_fixture_t
             retained_relation_name="__sqb_51b385aebe20__model__stale_not_in_plan",
         )
     ],
-    ids=["drops planned relations and leaves unrelated prefix relation"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_plan_when_cleaning_up_then_drops_only_planned_relations(
     test_case: ScenarioCleanupIntegrationTestCase,
@@ -154,7 +154,7 @@ def test_given_scenario_plan_when_cleaning_up_then_drops_only_planned_relations(
             expected_log_fragment="revenue__customer_refund:source:raw__orders",
         )
     ],
-    ids=["returns failed result for invalid fixture SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_fixture_materialization_failure_when_executing_then_returns_failed_result(
     test_case: ScenarioFixtureFailureIntegrationTestCase,
@@ -185,7 +185,7 @@ def test_given_fixture_materialization_failure_when_executing_then_returns_faile
             expected_rows=(("US", "United States"),),
         )
     ],
-    ids=["loads required unmocked project seed into scenario target"],
+    ids=lambda case: case.description,
 )
 def test_given_required_unmocked_seed_when_executing_then_loads_project_seed_to_scenario_target(
     test_case: ScenarioProjectSeedLoadIntegrationTestCase,
@@ -234,7 +234,7 @@ def test_given_required_unmocked_seed_when_executing_then_loads_project_seed_to_
             expected_rows=((1, "Ada", "United States"),),
         )
     ],
-    ids=["builds scenario model graph from fixture and seed relations"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_plan_when_executing_models_then_builds_model_relations(
     test_case: ScenarioModelBuildIntegrationTestCase,
@@ -283,34 +283,31 @@ def test_given_scenario_plan_when_executing_models_then_builds_model_relations(
     assert relation_rows(connection, "scenario_hook_log") == (("stg_orders", "pre_hooks"),)
 
 
-EXPECTED_EXPECTATION_TEST_CASES: list[ScenarioExpectedExpectationIntegrationTestCase] = [
-    ScenarioExpectedExpectationIntegrationTestCase(
-        description="expected output matches scenario model relation",
-        expected_sql=(
-            "SELECT 1 AS order_id, 'Ada' AS customer_name, 'United States' AS country_name"
-        ),
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_actual_row_count=1,
-        expected_expected_row_count=1,
-        expected_mismatched_row_count=0,
-    ),
-    ScenarioExpectedExpectationIntegrationTestCase(
-        description="expected output mismatch fails scenario check",
-        expected_sql=(
-            "SELECT 1 AS order_id, 'Grace' AS customer_name, 'United States' AS country_name"
-        ),
-        expected_status=ExecutionStatus.FAILED,
-        expected_actual_row_count=1,
-        expected_expected_row_count=1,
-        expected_mismatched_row_count=1,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    EXPECTED_EXPECTATION_TEST_CASES,
-    ids=[case.description for case in EXPECTED_EXPECTATION_TEST_CASES],
+    [
+        ScenarioExpectedExpectationIntegrationTestCase(
+            description="expected output matches scenario model relation",
+            expected_sql=(
+                "SELECT 1 AS order_id, 'Ada' AS customer_name, 'United States' AS country_name"
+            ),
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_actual_row_count=1,
+            expected_expected_row_count=1,
+            expected_mismatched_row_count=0,
+        ),
+        ScenarioExpectedExpectationIntegrationTestCase(
+            description="expected output mismatch fails scenario check",
+            expected_sql=(
+                "SELECT 1 AS order_id, 'Grace' AS customer_name, 'United States' AS country_name"
+            ),
+            expected_status=ExecutionStatus.FAILED,
+            expected_actual_row_count=1,
+            expected_expected_row_count=1,
+            expected_mismatched_row_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_expected_check_when_executing_then_returns_comparison_result(
     test_case: ScenarioExpectedExpectationIntegrationTestCase,
@@ -341,35 +338,32 @@ def test_given_expected_check_when_executing_then_returns_comparison_result(
     assert results[0].mismatched_row_count == test_case.expected_mismatched_row_count
 
 
-ASSERTION_EXPECTATION_TEST_CASES: list[ScenarioAssertionExpectationIntegrationTestCase] = [
-    ScenarioAssertionExpectationIntegrationTestCase(
-        description="zero-row assertion passes",
-        assertion_sql=(
-            "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue "
-            "WHERE customer_name = 'Grace'"
-        ),
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_failing_row_count=0,
-        expected_sample_rows=(),
-    ),
-    ScenarioAssertionExpectationIntegrationTestCase(
-        description="assertion returning rows fails with sample rows",
-        assertion_sql=(
-            "SELECT order_id, customer_name "
-            "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue "
-            "WHERE customer_name = 'Ada'"
-        ),
-        expected_status=ExecutionStatus.FAILED,
-        expected_failing_row_count=1,
-        expected_sample_rows=((1, "Ada"),),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ASSERTION_EXPECTATION_TEST_CASES,
-    ids=[case.description for case in ASSERTION_EXPECTATION_TEST_CASES],
+    [
+        ScenarioAssertionExpectationIntegrationTestCase(
+            description="zero-row assertion passes",
+            assertion_sql=(
+                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue "
+                "WHERE customer_name = 'Grace'"
+            ),
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_failing_row_count=0,
+            expected_sample_rows=(),
+        ),
+        ScenarioAssertionExpectationIntegrationTestCase(
+            description="assertion returning rows fails with sample rows",
+            assertion_sql=(
+                "SELECT order_id, customer_name "
+                "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue "
+                "WHERE customer_name = 'Ada'"
+            ),
+            expected_status=ExecutionStatus.FAILED,
+            expected_failing_row_count=1,
+            expected_sample_rows=((1, "Ada"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_assertion_check_when_executing_then_returns_zero_row_result(
     test_case: ScenarioAssertionExpectationIntegrationTestCase,

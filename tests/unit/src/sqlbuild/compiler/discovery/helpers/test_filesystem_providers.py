@@ -16,11 +16,14 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     DiscoverProviderSecretErrorTestCase,
 )
 
-TEST_CASES: tuple[DiscoverProviderClassesTestCase, ...] = (
-    DiscoverProviderClassesTestCase(
-        description="discovers provider classes",
-        repo_files={
-            "providers/notifications.py": """
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiscoverProviderClassesTestCase(
+            description="discovers provider classes",
+            repo_files={
+                "providers/notifications.py": """
 from typing import ClassVar
 
 from sqlbuild.providers import Provider
@@ -33,52 +36,52 @@ class SlackProvider(Provider):
 class AlertsProvider(Provider):
     provider_name: ClassVar[str] = "alerts"
 """.strip()
-            + "\n",
-            "providers/nested/clock.py": """
+                + "\n",
+                "providers/nested/clock.py": """
 from sqlbuild.providers import Provider
 
 
 class Clock(Provider):
     pass
 """.strip()
-            + "\n",
-        },
-        expected_provider_names=("clock", "alerts", "slack_provider"),
-        expected_provider_paths=(
-            "providers/nested/clock.py",
-            "providers/notifications.py",
-            "providers/notifications.py",
+                + "\n",
+            },
+            expected_provider_names=("clock", "alerts", "slack_provider"),
+            expected_provider_paths=(
+                "providers/nested/clock.py",
+                "providers/notifications.py",
+                "providers/notifications.py",
+            ),
+            expected_provider_class_names=("Clock", "AlertsProvider", "SlackProvider"),
         ),
-        expected_provider_class_names=("Clock", "AlertsProvider", "SlackProvider"),
-    ),
-    DiscoverProviderClassesTestCase(
-        description="ignores private files init files imported classes and abstract classes",
-        repo_files={
-            "providers/__init__.py": """
+        DiscoverProviderClassesTestCase(
+            description="ignores private files init files imported classes and abstract classes",
+            repo_files={
+                "providers/__init__.py": """
 from sqlbuild.providers import Provider
 
 
 class PackageProvider(Provider):
     pass
 """.strip()
-            + "\n",
-            "providers/_private.py": """
+                + "\n",
+                "providers/_private.py": """
 from sqlbuild.providers import Provider
 
 
 class PrivateProvider(Provider):
     pass
 """.strip()
-            + "\n",
-            "providers/nested/_private.py": """
+                + "\n",
+                "providers/nested/_private.py": """
 from sqlbuild.providers import Provider
 
 
 class NestedPrivateProvider(Provider):
     pass
 """.strip()
-            + "\n",
-            "providers/shared.py": """
+                + "\n",
+                "providers/shared.py": """
 from abc import ABC, abstractmethod
 
 from sqlbuild.providers import Provider
@@ -93,8 +96,8 @@ class AbstractProvider(Provider, ABC):
     def send(self) -> None:
         raise NotImplementedError
 """.strip()
-            + "\n",
-            "providers/public.py": """
+                + "\n",
+                "providers/public.py": """
 from providers.shared import AbstractProvider, ImportedProvider
 from sqlbuild.providers import Provider
 
@@ -102,28 +105,28 @@ from sqlbuild.providers import Provider
 class PublicProvider(Provider):
     pass
 """.strip()
-            + "\n",
-        },
-        expected_provider_names=("public_provider", "imported_provider"),
-        expected_provider_paths=("providers/public.py", "providers/shared.py"),
-        expected_provider_class_names=("PublicProvider", "ImportedProvider"),
-    ),
-    DiscoverProviderClassesTestCase(
-        description="skips provider base class imported into provider module",
-        repo_files={
-            "providers/base_only.py": """
+                + "\n",
+            },
+            expected_provider_names=("public_provider", "imported_provider"),
+            expected_provider_paths=("providers/public.py", "providers/shared.py"),
+            expected_provider_class_names=("PublicProvider", "ImportedProvider"),
+        ),
+        DiscoverProviderClassesTestCase(
+            description="skips provider base class imported into provider module",
+            repo_files={
+                "providers/base_only.py": """
 from sqlbuild.providers import Provider
 """.strip()
-            + "\n",
-        },
-        expected_provider_names=(),
-        expected_provider_paths=(),
-        expected_provider_class_names=(),
-    ),
-    DiscoverProviderClassesTestCase(
-        description="does not call setup during discovery",
-        repo_files={
-            "providers/no_setup.py": """
+                + "\n",
+            },
+            expected_provider_names=(),
+            expected_provider_paths=(),
+            expected_provider_class_names=(),
+        ),
+        DiscoverProviderClassesTestCase(
+            description="does not call setup during discovery",
+            repo_files={
+                "providers/no_setup.py": """
 from pathlib import Path
 
 from sqlbuild.providers import Provider
@@ -133,17 +136,16 @@ class NoSetupProvider(Provider):
     def setup(self, ctx):
         Path(__file__).with_name("setup.marker").write_text("setup", encoding="utf-8")
 """.strip()
-            + "\n",
-        },
-        expected_provider_names=("no_setup_provider",),
-        expected_provider_paths=("providers/no_setup.py",),
-        expected_provider_class_names=("NoSetupProvider",),
-        expected_marker_file_exists=False,
+                + "\n",
+            },
+            expected_provider_names=("no_setup_provider",),
+            expected_provider_paths=("providers/no_setup.py",),
+            expected_provider_class_names=("NoSetupProvider",),
+            expected_marker_file_exists=False,
+        ),
     ),
+    ids=lambda case: case.description,
 )
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
 def test_given_provider_files_when_discovering_then_returns_provider_classes(
     test_case: DiscoverProviderClassesTestCase,
     tmp_path: Path,
@@ -209,7 +211,7 @@ class PublicProvider(Provider):
             expected_second_provider_names=("public_provider", "imported_provider"),
         )
     ],
-    ids=["isolates provider package cache between project directories"],
+    ids=lambda case: case.description,
 )
 def test_given_previous_project_provider_package_when_discovering_then_uses_current_project_package(
     test_case: DiscoverProviderCacheIsolationTestCase,
@@ -236,11 +238,13 @@ def test_given_previous_project_provider_package_when_discovering_then_uses_curr
     )
 
 
-ERROR_TEST_CASES: tuple[DiscoverProviderClassesErrorTestCase, ...] = (
-    DiscoverProviderClassesErrorTestCase(
-        description="duplicate provider names fail",
-        repo_files={
-            "providers/first.py": """
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiscoverProviderClassesErrorTestCase(
+            description="duplicate provider names fail",
+            repo_files={
+                "providers/first.py": """
 from typing import ClassVar
 
 from sqlbuild.providers import Provider
@@ -249,8 +253,8 @@ from sqlbuild.providers import Provider
 class FirstProvider(Provider):
     provider_name: ClassVar[str] = "alerts"
 """.strip()
-            + "\n",
-            "providers/second.py": """
+                + "\n",
+                "providers/second.py": """
 from typing import ClassVar
 
 from sqlbuild.providers import Provider
@@ -259,14 +263,14 @@ from sqlbuild.providers import Provider
 class SecondProvider(Provider):
     provider_name: ClassVar[str] = "alerts"
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Duplicate provider name 'alerts'",
-    ),
-    DiscoverProviderClassesErrorTestCase(
-        description="duplicate provider names in same file fail",
-        repo_files={
-            "providers/duplicates.py": """
+                + "\n",
+            },
+            expected_error_fragment="Duplicate provider name 'alerts'",
+        ),
+        DiscoverProviderClassesErrorTestCase(
+            description="duplicate provider names in same file fail",
+            repo_files={
+                "providers/duplicates.py": """
 from typing import ClassVar
 
 from sqlbuild.providers import Provider
@@ -279,40 +283,40 @@ class FirstProvider(Provider):
 class SecondProvider(Provider):
     provider_name: ClassVar[str] = "alerts"
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Duplicate provider name 'alerts' found in providers/duplicates.py",
-    ),
-    DiscoverProviderClassesErrorTestCase(
-        description="provider import failure identifies file",
-        repo_files={
-            "providers/broken.py": """
+                + "\n",
+            },
+            expected_error_fragment="Duplicate provider name 'alerts' found in providers/duplicates.py",
+        ),
+        DiscoverProviderClassesErrorTestCase(
+            description="provider import failure identifies file",
+            repo_files={
+                "providers/broken.py": """
 from missing_package import missing_provider
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Failed to import provider file providers/broken.py",
-    ),
-    DiscoverProviderClassesErrorTestCase(
-        description="provider settings failure identifies provider",
-        repo_files={
-            "providers/slack.py": """
+                + "\n",
+            },
+            expected_error_fragment="Failed to import provider file providers/broken.py",
+        ),
+        DiscoverProviderClassesErrorTestCase(
+            description="provider settings failure identifies provider",
+            repo_files={
+                "providers/slack.py": """
 from sqlbuild.providers import Provider
 
 
 class SlackProvider(Provider):
     webhook_url: str
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment=(
-            "Provider 'slack_provider' in providers/slack.py has invalid settings"
+                + "\n",
+            },
+            expected_error_fragment=(
+                "Provider 'slack_provider' in providers/slack.py has invalid settings"
+            ),
         ),
-    ),
-    DiscoverProviderClassesErrorTestCase(
-        description="invalid provider name identifies provider",
-        repo_files={
-            "providers/slack.py": """
+        DiscoverProviderClassesErrorTestCase(
+            description="invalid provider name identifies provider",
+            repo_files={
+                "providers/slack.py": """
 from typing import ClassVar
 
 from sqlbuild.providers import Provider
@@ -321,19 +325,14 @@ from sqlbuild.providers import Provider
 class SlackProvider(Provider):
     provider_name: ClassVar[str] = "bad-name"
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment=(
-            "Provider class SlackProvider in providers/slack.py has an invalid provider name"
+                + "\n",
+            },
+            expected_error_fragment=(
+                "Provider class SlackProvider in providers/slack.py has an invalid provider name"
+            ),
         ),
     ),
-)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    ERROR_TEST_CASES,
-    ids=[case.description for case in ERROR_TEST_CASES],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_provider_files_when_discovering_then_raises(
     test_case: DiscoverProviderClassesErrorTestCase,
@@ -370,7 +369,7 @@ class SlackProvider(Provider):
             expected_field_value="https://hooks.example/secret",
         ),
     ],
-    ids=["env-backed settings resolve during discovery"],
+    ids=lambda case: case.description,
 )
 def test_given_env_backed_provider_settings_when_discovering_then_instance_has_env_value(
     test_case: DiscoverProviderEnvSettingsTestCase,
@@ -415,7 +414,7 @@ class SlackProvider(Provider):
             unexpected_error_fragment="super-secret-token-value",
         ),
     ],
-    ids=["invalid plain env setting error redacts raw input value"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_plain_env_setting_when_discovering_then_error_redacts_raw_value(
     test_case: DiscoverProviderSecretErrorTestCase,

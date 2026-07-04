@@ -43,32 +43,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[
-    PostgresStateLifecycleErrorE2ETestCase, ...
-] = (
-    PostgresStateLifecycleErrorE2ETestCase(
-        description="reset blocks when allow reset is false",
-        allow_reset=False,
-        command=("--no-color", "state", "reset", "--auto-approve"),
-        expected_exit_code=1,
-        expected_error_fragment=("set `allow_reset = true` under `[targets.<name>.state]`"),
-    ),
-    PostgresStateLifecycleErrorE2ETestCase(
-        description="reset blocks without auto approve",
-        allow_reset=True,
-        command=("--no-color", "state", "reset"),
-        expected_exit_code=1,
-        expected_error_fragment="state reset requires --auto-approve",
-    ),
-    PostgresStateLifecycleErrorE2ETestCase(
-        description="rollback blocks before backup exists",
-        allow_reset=False,
-        command=("--no-color", "state", "rollback"),
-        expected_exit_code=1,
-        expected_error_fragment="No state backup is available for rollback",
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -79,7 +53,7 @@ POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[
             expected_schema_version=1,
         )
     ],
-    ids=["postgres state lifecycle commands manage state tables"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_config_when_running_state_lifecycle_then_state_store_is_updated(
     test_case: PostgresStateLifecycleE2ETestCase,
@@ -179,7 +153,7 @@ def test_given_postgres_state_config_when_running_state_lifecycle_then_state_sto
             expected_detached_status="detached",
         )
     ],
-    ids=["postgres adopt and detach preserve logical table name"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_virtual_state_when_adopting_and_detaching_then_state_is_detached(
     test_case: PostgresStateAdoptDetachE2ETestCase,
@@ -293,7 +267,7 @@ def test_given_postgres_virtual_state_when_adopting_and_detaching_then_state_is_
             expected_error_fragment="unsuffixed_virtual_env",
         )
     ],
-    ids=["postgres adopt blocks without unsuffixed virtual env"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_missing_unsuffixed_virtual_env_when_adopting_then_it_blocks(
     test_case: PostgresStateAdoptDetachErrorE2ETestCase,
@@ -352,7 +326,7 @@ def test_given_postgres_missing_unsuffixed_virtual_env_when_adopting_then_it_blo
             expected_error_fragment="requires --allow-copy",
         )
     ],
-    ids=["postgres adopt blocks view copy fallback without explicit permission"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_copy_fallback_required_when_adopting_without_allow_copy_then_it_blocks(
     test_case: PostgresStateAdoptDetachErrorE2ETestCase,
@@ -418,7 +392,7 @@ def test_given_postgres_copy_fallback_required_when_adopting_without_allow_copy_
             expected_error_fragment="simulated detach copy failure",
         )
     ],
-    ids=["postgres interrupted detach records failed operation"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_detach_copy_failure_when_detaching_then_operation_is_marked_failed(
     test_case: PostgresStateAdoptDetachErrorE2ETestCase,
@@ -565,7 +539,7 @@ def test_given_postgres_detach_copy_failure_when_detaching_then_operation_is_mar
             expected_error_fragment="VIEW",
         )
     ],
-    ids=["postgres detach recreates view models as views"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_view_model_when_detaching_then_stateless_target_remains_a_view(
     test_case: PostgresStateAdoptDetachErrorE2ETestCase,
@@ -654,7 +628,7 @@ def test_given_postgres_view_model_when_detaching_then_stateless_target_remains_
             expected_error_fragment="cancelled",
         )
     ],
-    ids=["postgres adopt cancels on wrong confirmation"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_wrong_confirmation_when_adopting_then_it_cancels(
     test_case: PostgresStateAdoptDetachErrorE2ETestCase,
@@ -716,7 +690,7 @@ def test_given_postgres_wrong_confirmation_when_adopting_then_it_cancels(
             expected_error_fragment="requires a finalized virtual environment",
         )
     ],
-    ids=["postgres detach blocks non-finalized virtual environment"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_non_finalized_virtual_environment_when_detaching_then_it_blocks(
     test_case: PostgresStateAdoptDetachErrorE2ETestCase,
@@ -787,7 +761,7 @@ def test_given_postgres_non_finalized_virtual_environment_when_detaching_then_it
             expected_ref_count_after=0,
         )
     ],
-    ids=["postgres janitor prunes detached VDE refs and physical versions"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical_are_pruned(
     test_case: PostgresJanitorDetachedVdeE2ETestCase,
@@ -932,7 +906,7 @@ def test_given_postgres_detached_vde_when_running_janitor_then_refs_and_physical
             expected_ref_count_after=1,
         )
     ],
-    ids=["postgres janitor prunes detached VDE after positive retention"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_old_detached_vde_when_running_janitor_then_retention_allows_cleanup(
     test_case: PostgresJanitorDetachedVdeE2ETestCase,
@@ -1036,7 +1010,7 @@ def test_given_postgres_old_detached_vde_when_running_janitor_then_retention_all
             expected_ref_count_after=1,
         )
     ],
-    ids=["postgres janitor prunes expired non-active VDE"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_non_active_vde_when_running_janitor_then_it_prunes_expired_environment(
     test_case: PostgresJanitorDetachedVdeE2ETestCase,
@@ -1136,7 +1110,7 @@ def test_given_postgres_non_active_vde_when_running_janitor_then_it_prunes_expir
             expected_ref_count_after=0,
         )
     ],
-    ids=["postgres janitor prunes old state backups and expired locks"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backups_and_expired_locks_when_running_janitor_then_state_is_pruned(
     test_case: PostgresJanitorDetachedVdeE2ETestCase,
@@ -1228,7 +1202,7 @@ def test_given_postgres_state_backups_and_expired_locks_when_running_janitor_the
             expected_ref_count_after=1,
         )
     ],
-    ids=["postgres janitor skips state cleanup when warehouse cleanup fails"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_warehouse_cleanup_failure_when_janitor_then_state_cleanup_is_skipped(
     test_case: PostgresJanitorDetachedVdeE2ETestCase,
@@ -1361,7 +1335,7 @@ def test_given_postgres_warehouse_cleanup_failure_when_janitor_then_state_cleanu
             expected_ref_count_after=3,
         )
     ],
-    ids=["postgres janitor prunes old checkpoints and newly unprotected physicals"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prunes_old_history(
     test_case: PostgresJanitorDetachedVdeE2ETestCase,
@@ -1499,7 +1473,7 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
             expected_ref_count_after=1,
         )
     ],
-    ids=["postgres janitor preserves active VDE refs"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_active_vde_ref_when_running_janitor_then_it_preserves_physical_version(
     test_case: PostgresJanitorDetachedVdeE2ETestCase,
@@ -1584,7 +1558,7 @@ def test_given_postgres_active_vde_ref_when_running_janitor_then_it_preserves_ph
             expected_error_fragment="janitor.delete_tracked_only requires",
         )
     ],
-    ids=["postgres tracked-only janitor requires query tracking"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_query_tracking_disabled_when_running_tracked_only_janitor_then_it_errors(
     test_case: PostgresStateLifecycleErrorE2ETestCase,
@@ -1638,7 +1612,7 @@ def test_given_postgres_query_tracking_disabled_when_running_tracked_only_janito
             expected_checkpoint_count=2,
         )
     ],
-    ids=["postgres rollback restores previous finalized checkpoint"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_finalized_checkpoints_when_rolling_back_then_refs_and_view_restore(
     test_case: PostgresVirtualRollbackE2ETestCase,
@@ -1798,7 +1772,7 @@ def test_given_postgres_finalized_checkpoints_when_rolling_back_then_refs_and_vi
             expected_exit_code=1,
         )
     ],
-    ids=["postgres rollback blocks when checkpoint physical relation is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_then_it_blocks(
     test_case: PostgresVirtualRollbackE2ETestCase,
@@ -1907,7 +1881,7 @@ def test_given_postgres_checkpoint_physical_relation_missing_when_rolling_back_t
             expected_exit_code=1,
         )
     ],
-    ids=["postgres rollback blocks when no previous checkpoint exists"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_only_current_checkpoint_when_rolling_back_then_it_blocks(
     test_case: PostgresVirtualRollbackE2ETestCase,
@@ -1983,7 +1957,7 @@ def test_given_postgres_only_current_checkpoint_when_rolling_back_then_it_blocks
             expected_exit_code=1,
         )
     ],
-    ids=["postgres rollback blocks when target VDE lock exists"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_target_virtual_environment_lock_when_rolling_back_then_it_blocks(
     test_case: PostgresVirtualRollbackE2ETestCase,
@@ -2061,7 +2035,7 @@ def test_given_postgres_target_virtual_environment_lock_when_rolling_back_then_i
             expected_exit_code=1,
         )
     ],
-    ids=["postgres checkpoint show blocks for unknown checkpoint"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_unknown_checkpoint_when_showing_checkpoint_then_it_blocks(
     test_case: PostgresVirtualRollbackE2ETestCase,
@@ -2128,7 +2102,7 @@ def test_given_postgres_unknown_checkpoint_when_showing_checkpoint_then_it_block
             expected_exit_code=0,
         )
     ],
-    ids=["postgres partial rollback requires override and marks VDE working"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_partial_rollback_when_allowed_then_it_marks_vde_working(
     test_case: PostgresVirtualRollbackE2ETestCase,
@@ -2233,7 +2207,7 @@ def test_given_postgres_partial_rollback_when_allowed_then_it_marks_vde_working(
             expected_exit_code=0,
         )
     ],
-    ids=["postgres partial rollback can include stale required upstreams"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_partial_rollback_missing_stale_upstreams_when_including_then_succeeds(
     test_case: PostgresVirtualRollbackE2ETestCase,
@@ -2317,25 +2291,22 @@ def test_given_postgres_partial_rollback_missing_stale_upstreams_when_including_
         )
 
 
-POSTGRES_VIRTUAL_SEED_E2E_TEST_CASES: tuple[PostgresVirtualSeedE2ETestCase, ...] = (
-    PostgresVirtualSeedE2ETestCase(
-        description="postgres virtual seeded incremental build uses copy",
-        expected_rows=((1, 10), (2, 21), (3, 31)),
-        expected_seed_strategy="copy",
-    ),
-    PostgresVirtualSeedE2ETestCase(
-        description="postgres virtual append bounded seeded build uses bounded copy",
-        expected_rows=((1, 10), (2, 21), (3, 31)),
-        expected_seed_strategy="bounded_append_copy",
-        incremental_strategy="append",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_VIRTUAL_SEED_E2E_TEST_CASES,
-    ids=[case.description for case in POSTGRES_VIRTUAL_SEED_E2E_TEST_CASES],
+    (
+        PostgresVirtualSeedE2ETestCase(
+            description="postgres virtual seeded incremental build uses copy",
+            expected_rows=((1, 10), (2, 21), (3, 31)),
+            expected_seed_strategy="copy",
+        ),
+        PostgresVirtualSeedE2ETestCase(
+            description="postgres virtual append bounded seeded build uses bounded copy",
+            expected_rows=((1, 10), (2, 21), (3, 31)),
+            expected_seed_strategy="bounded_append_copy",
+            incremental_strategy="append",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with_copy(
     test_case: PostgresVirtualSeedE2ETestCase,
@@ -2507,7 +2478,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
             expected_rows=((2,),),
         )
     ],
-    ids=["postgres virtual plan and partial build parity"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches_duckdb_parity(
     test_case: PostgresVirtualParityE2ETestCase,
@@ -2704,7 +2675,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
             ),
         )
     ],
-    ids=["postgres virtual config and function change plan parity"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_config_and_function_changes_when_planning_then_reasons_match_parity(
     test_case: PostgresVirtualParityE2ETestCase,
@@ -2852,7 +2823,7 @@ def test_given_postgres_config_and_function_changes_when_planning_then_reasons_m
             expected_rows=((3,),),
         )
     ],
-    ids=["postgres virtual diff and promotion parity"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duckdb_parity(
     test_case: PostgresVirtualParityE2ETestCase,
@@ -3098,7 +3069,7 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
             expected_rows=((True,),),
         )
     ],
-    ids=["postgres virtual promotion publishes function definitions"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_function_change_when_promoting_then_publishes_function_definition(
     test_case: PostgresVirtualParityE2ETestCase,
@@ -3286,7 +3257,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
             expected_exit_code=1,
         )
     ],
-    ids=["postgres standard mode promotion guard"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_direct_mode_project_when_promoting_then_fails_with_mode_error(
     test_case: PostgresVirtualParityE2ETestCase,
@@ -3349,7 +3320,7 @@ def test_given_postgres_direct_mode_project_when_promoting_then_fails_with_mode_
             expected_rows=((7,),),
         )
     ],
-    ids=["postgres virtual clone parity"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
     test_case: PostgresVirtualParityE2ETestCase,
@@ -3642,7 +3613,7 @@ def test_given_postgres_virtual_clone_when_running_then_matches_duckdb_parity(
             ),
         )
     ],
-    ids=["postgres reconcile repair-view recreates logical view"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_missing_logical_view_when_repairing_then_view_is_recreated(
     test_case: PostgresReconcileE2ETestCase,
@@ -3746,7 +3717,7 @@ def test_given_postgres_missing_logical_view_when_repairing_then_view_is_recreat
             expected_stdout_fragments=("Attach", "model     orders", "result    attached"),
         )
     ],
-    ids=["postgres reconcile attach rebinds logical view"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_tracked_physical_relation_when_attaching_then_view_is_rebound(
     test_case: PostgresReconcileE2ETestCase,
@@ -3881,7 +3852,7 @@ def test_given_postgres_tracked_physical_relation_when_attaching_then_view_is_re
             expected_exit_code=1,
         )
     ],
-    ids=["postgres reconcile repair-view blocks missing physical relation"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_missing_physical_relation_when_repairing_then_it_blocks(
     test_case: PostgresReconcileE2ETestCase,
@@ -3975,7 +3946,7 @@ def test_given_postgres_missing_physical_relation_when_repairing_then_it_blocks(
             expected_exit_code=1,
         )
     ],
-    ids=["postgres reconcile attach blocks untracked physical relation"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_untracked_physical_relation_when_attaching_then_it_blocks(
     test_case: PostgresReconcileE2ETestCase,
@@ -4056,7 +4027,7 @@ def test_given_postgres_untracked_physical_relation_when_attaching_then_it_block
             expected_exit_code=1,
         )
     ],
-    ids=["postgres reconcile attach blocks wrong-model tracked physical relation"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_are_unchanged(
     test_case: PostgresReconcileE2ETestCase,
@@ -4165,7 +4136,7 @@ def test_given_postgres_wrong_model_physical_relation_when_attaching_then_refs_a
             input_text="nope\n",
         )
     ],
-    ids=["postgres reconcile attach cancellation leaves refs unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchanged(
     test_case: PostgresReconcileE2ETestCase,
@@ -4272,7 +4243,7 @@ def test_given_postgres_wrong_confirmation_when_attaching_then_refs_are_unchange
             expected_exit_code=1,
         )
     ],
-    ids=["postgres repair-view blocks logical target table"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_logical_target_table_when_repairing_then_it_blocks(
     test_case: PostgresReconcileE2ETestCase,
@@ -4349,7 +4320,7 @@ def test_given_postgres_logical_target_table_when_repairing_then_it_blocks(
             expected_exit_code=1,
         )
     ],
-    ids=["postgres attach blocks logical target table before ref update"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchanged(
     test_case: PostgresReconcileE2ETestCase,
@@ -4464,7 +4435,7 @@ def test_given_postgres_logical_target_table_when_attaching_then_refs_are_unchan
             expected_exit_code=1,
         )
     ],
-    ids=["postgres repair-view blocks when target vde is locked"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_target_virtual_environment_lock_when_repairing_then_it_blocks(
     test_case: PostgresReconcileE2ETestCase,
@@ -4558,7 +4529,7 @@ def test_given_postgres_target_virtual_environment_lock_when_repairing_then_it_b
             expected_exit_code=1,
         )
     ],
-    ids=["postgres attach blocks when target vde is locked"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs_are_unchanged(
     test_case: PostgresReconcileE2ETestCase,
@@ -4667,8 +4638,30 @@ def test_given_postgres_target_virtual_environment_lock_when_attaching_then_refs
 
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES,
-    ids=[case.description for case in POSTGRES_STATE_LIFECYCLE_ERROR_E2E_TEST_CASES],
+    (
+        PostgresStateLifecycleErrorE2ETestCase(
+            description="reset blocks when allow reset is false",
+            allow_reset=False,
+            command=("--no-color", "state", "reset", "--auto-approve"),
+            expected_exit_code=1,
+            expected_error_fragment=("set `allow_reset = true` under `[targets.<name>.state]`"),
+        ),
+        PostgresStateLifecycleErrorE2ETestCase(
+            description="reset blocks without auto approve",
+            allow_reset=True,
+            command=("--no-color", "state", "reset"),
+            expected_exit_code=1,
+            expected_error_fragment="state reset requires --auto-approve",
+        ),
+        PostgresStateLifecycleErrorE2ETestCase(
+            description="rollback blocks before backup exists",
+            allow_reset=False,
+            command=("--no-color", "state", "rollback"),
+            expected_exit_code=1,
+            expected_error_fragment="No state backup is available for rollback",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_config_when_running_blocked_state_command_then_cli_reports_error(
     test_case: PostgresStateLifecycleErrorE2ETestCase,
@@ -4710,37 +4703,32 @@ def test_given_postgres_state_config_when_running_blocked_state_command_then_cli
         cleanup_postgres_state_schemas(schema_name=state_schema, config=postgres_e2e_config)
 
 
-POSTGRES_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES: tuple[
-    PostgresStateSchemaCorruptionE2ETestCase, ...
-] = (
-    PostgresStateSchemaCorruptionE2ETestCase(
-        description="postgres migrate blocks cleanly when required state table is missing",
-        mutation_sql_template="DROP TABLE {virtual_environment_node_refs}",
-        expected_exit_code=1,
-        expected_error_fragment="Cannot backup invalid state schema",
-    ),
-    PostgresStateSchemaCorruptionE2ETestCase(
-        description="postgres migrate blocks cleanly when required state column is missing",
-        mutation_sql_template='ALTER TABLE {state_versions} DROP COLUMN "updated_at"',
-        expected_exit_code=1,
-        expected_error_fragment="Cannot backup invalid state schema",
-    ),
-    PostgresStateSchemaCorruptionE2ETestCase(
-        description="postgres migrate blocks cleanly when required state column has wrong type",
-        mutation_sql_template=(
-            'ALTER TABLE {state_versions} ALTER COLUMN "schema_version" '
-            'TYPE text USING "schema_version"::text'
-        ),
-        expected_exit_code=1,
-        expected_error_fragment="Cannot backup invalid state schema",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES,
-    ids=[case.description for case in POSTGRES_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES],
+    (
+        PostgresStateSchemaCorruptionE2ETestCase(
+            description="postgres migrate blocks cleanly when required state table is missing",
+            mutation_sql_template="DROP TABLE {virtual_environment_node_refs}",
+            expected_exit_code=1,
+            expected_error_fragment="Cannot backup invalid state schema",
+        ),
+        PostgresStateSchemaCorruptionE2ETestCase(
+            description="postgres migrate blocks cleanly when required state column is missing",
+            mutation_sql_template='ALTER TABLE {state_versions} DROP COLUMN "updated_at"',
+            expected_exit_code=1,
+            expected_error_fragment="Cannot backup invalid state schema",
+        ),
+        PostgresStateSchemaCorruptionE2ETestCase(
+            description="postgres migrate blocks cleanly when required state column has wrong type",
+            mutation_sql_template=(
+                'ALTER TABLE {state_versions} ALTER COLUMN "schema_version" '
+                'TYPE text USING "schema_version"::text'
+            ),
+            expected_exit_code=1,
+            expected_error_fragment="Cannot backup invalid state schema",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_corrupt_postgres_state_schema_when_migrating_then_cli_blocks_cleanly(
     test_case: PostgresStateSchemaCorruptionE2ETestCase,
@@ -4803,7 +4791,7 @@ def test_given_corrupt_postgres_state_schema_when_migrating_then_cli_blocks_clea
             expected_error_fragment="backup_",
         )
     ],
-    ids=["postgres explicit rollback blocks cleanly when backup schema is deleted"],
+    ids=lambda case: case.description,
 )
 def test_given_deleted_postgres_state_backup_when_rolling_back_then_it_blocks_cleanly(
     test_case: PostgresStateResetInvalidE2ETestCase,
@@ -4873,7 +4861,7 @@ def test_given_deleted_postgres_state_backup_when_rolling_back_then_it_blocks_cl
             expected_error_fragment="No state backup is available for rollback",
         )
     ],
-    ids=["postgres latest rollback blocks cleanly when backup schema is deleted"],
+    ids=lambda case: case.description,
 )
 def test_given_deleted_latest_postgres_state_backup_when_rolling_back_then_it_blocks_cleanly(
     test_case: PostgresStateResetInvalidE2ETestCase,
@@ -4943,7 +4931,7 @@ def test_given_deleted_latest_postgres_state_backup_when_rolling_back_then_it_bl
             expected_schema_version=1,
         )
     ],
-    ids=["postgres rollback accepts explicit backup id"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backup_when_rolling_back_explicit_backup_id_then_restores_backup(
     test_case: PostgresStateExplicitRollbackE2ETestCase,
@@ -5043,7 +5031,7 @@ def test_given_postgres_state_backup_when_rolling_back_explicit_backup_id_then_r
             expected_schema_version=1,
         )
     ],
-    ids=["local state connection override controls postgres state database"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_local_state_override_when_running_state_init_then_cli_uses_local_config(
     test_case: PostgresStateLocalOverrideE2ETestCase,
@@ -5095,7 +5083,7 @@ def test_given_postgres_local_state_override_when_running_state_init_then_cli_us
             expected_error_fragment="Could not connect to Postgres state backend",
         )
     ],
-    ids=["postgres state connection failure renders coded cli error"],
+    ids=lambda case: case.description,
 )
 def test_given_bad_postgres_state_connection_when_running_state_init_then_cli_reports_error(
     test_case: PostgresStateConnectionErrorE2ETestCase,
@@ -5138,7 +5126,7 @@ def test_given_bad_postgres_state_connection_when_running_state_init_then_cli_re
             expected_error_fragment="Cannot backup invalid state schema",
         )
     ],
-    ids=["postgres reset makes migrate block until state is initialized again"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_reset_when_running_migrate_then_cli_reports_invalid_state(
     test_case: PostgresStateResetInvalidE2ETestCase,

@@ -15,33 +15,31 @@ from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.auditing.main.helpers import build_audit_plan_entry
 
-AUDIT_GATE_IDENTITY_TEST_CASES: list[AuditGateIdentityTestCase] = [
-    AuditGateIdentityTestCase(
-        description="definition ignores target-specific relation names",
-        unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        prod_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
-        dev_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        expected_definition_equal=True,
-        expected_execution_equal=False,
-        expected_binding_set_equal=True,
-    ),
-    AuditGateIdentityTestCase(
-        description="binding changes alter binding set hash",
-        unresolved_sql='SELECT status FROM __ref("orders") WHERE status IS NULL',
-        prod_resolved_sql="SELECT status FROM prod.orders WHERE status IS NULL",
-        dev_resolved_sql="SELECT status FROM prod.orders WHERE status IS NULL",
-        dev_attached_column_name="status",
-        expected_definition_equal=False,
-        expected_execution_equal=False,
-        expected_binding_set_equal=False,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    AUDIT_GATE_IDENTITY_TEST_CASES,
-    ids=[case.description for case in AUDIT_GATE_IDENTITY_TEST_CASES],
+    [
+        AuditGateIdentityTestCase(
+            description="definition ignores target-specific relation names",
+            unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            prod_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+            dev_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            expected_definition_equal=True,
+            expected_execution_equal=False,
+            expected_binding_set_equal=True,
+        ),
+        AuditGateIdentityTestCase(
+            description="binding changes alter binding set hash",
+            unresolved_sql='SELECT status FROM __ref("orders") WHERE status IS NULL',
+            prod_resolved_sql="SELECT status FROM prod.orders WHERE status IS NULL",
+            dev_resolved_sql="SELECT status FROM prod.orders WHERE status IS NULL",
+            dev_attached_column_name="status",
+            expected_definition_equal=False,
+            expected_execution_equal=False,
+            expected_binding_set_equal=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_audit_plan_entries_when_building_identity_then_hashes_expected_fields(
     test_case: AuditGateIdentityTestCase,
@@ -85,7 +83,7 @@ def test_given_audit_plan_entries_when_building_identity_then_hashes_expected_fi
             expected_blocking_set_equal=True,
         )
     ],
-    ids=["audit order does not affect aggregate hashes"],
+    ids=lambda case: case.description,
 )
 def test_given_same_audits_in_different_order_when_building_identity_then_aggregate_hashes_match(
     test_case: AuditGateAggregateIdentityTestCase,
@@ -123,7 +121,7 @@ def test_given_same_audits_in_different_order_when_building_identity_then_aggreg
             expected_blocking_set_equal=True,
         )
     ],
-    ids=["warn audits do not affect blocking hash"],
+    ids=lambda case: case.description,
 )
 def test_given_warn_audit_changes_when_building_identity_then_blocking_hash_is_unchanged(
     test_case: AuditGateAggregateIdentityTestCase,
@@ -154,58 +152,57 @@ def test_given_warn_audit_changes_when_building_identity_then_blocking_hash_is_u
     ) is test_case.expected_blocking_set_equal
 
 
-SINGLE_FIELD_TEST_CASES: list[AuditGateSingleFieldIdentityTestCase] = [
-    AuditGateSingleFieldIdentityTestCase(
-        description="sql whitespace is normalized",
-        left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        right_unresolved_sql=(
-            '  SELECT   order_id\nFROM   __ref("orders")\nWHERE   order_id   IS NULL  '
-        ),
-        right_resolved_sql=("  SELECT   order_id\nFROM   dev.orders\nWHERE   order_id   IS NULL  "),
-        expected_definition_equal=True,
-        expected_execution_equal=True,
-    ),
-    AuditGateSingleFieldIdentityTestCase(
-        description="run scope changes identity",
-        left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        right_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        right_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        left_run_scope=AuditRunScope.FINAL,
-        right_run_scope=AuditRunScope.DELTA_AND_FINAL,
-        expected_definition_equal=False,
-        expected_execution_equal=False,
-    ),
-    AuditGateSingleFieldIdentityTestCase(
-        description="attachment kind changes identity",
-        left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        right_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        right_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        left_attachment_kind=AuditAttachmentKind.MODEL,
-        right_attachment_kind=AuditAttachmentKind.END,
-        expected_definition_equal=False,
-        expected_execution_equal=False,
-    ),
-    AuditGateSingleFieldIdentityTestCase(
-        description="always_run changes identity",
-        left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        right_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        right_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        left_always_run=False,
-        right_always_run=True,
-        expected_definition_equal=False,
-        expected_execution_equal=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SINGLE_FIELD_TEST_CASES,
-    ids=[case.description for case in SINGLE_FIELD_TEST_CASES],
+    [
+        AuditGateSingleFieldIdentityTestCase(
+            description="sql whitespace is normalized",
+            left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            right_unresolved_sql=(
+                '  SELECT   order_id\nFROM   __ref("orders")\nWHERE   order_id   IS NULL  '
+            ),
+            right_resolved_sql=(
+                "  SELECT   order_id\nFROM   dev.orders\nWHERE   order_id   IS NULL  "
+            ),
+            expected_definition_equal=True,
+            expected_execution_equal=True,
+        ),
+        AuditGateSingleFieldIdentityTestCase(
+            description="run scope changes identity",
+            left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            right_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            right_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            left_run_scope=AuditRunScope.FINAL,
+            right_run_scope=AuditRunScope.DELTA_AND_FINAL,
+            expected_definition_equal=False,
+            expected_execution_equal=False,
+        ),
+        AuditGateSingleFieldIdentityTestCase(
+            description="attachment kind changes identity",
+            left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            right_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            right_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            left_attachment_kind=AuditAttachmentKind.MODEL,
+            right_attachment_kind=AuditAttachmentKind.END,
+            expected_definition_equal=False,
+            expected_execution_equal=False,
+        ),
+        AuditGateSingleFieldIdentityTestCase(
+            description="always_run changes identity",
+            left_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            left_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            right_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            right_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            left_always_run=False,
+            right_always_run=True,
+            expected_definition_equal=False,
+            expected_execution_equal=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_single_audit_field_difference_when_building_identity_then_hashes_expected_fields(
     test_case: AuditGateSingleFieldIdentityTestCase,

@@ -62,7 +62,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_build_fragments=("Execution  sqb build  (concurrency: 8)",),
         )
     ],
-    ids=["wide virtual DAG builds with concurrent physical schema setup"],
+    ids=lambda case: case.description,
 )
 def test_given_wide_virtual_dag_when_building_concurrently_then_physical_schema_setup_is_safe(
     test_case: VirtualConcurrentBuildE2ETestCase,
@@ -118,7 +118,7 @@ def test_given_wide_virtual_dag_when_building_concurrently_then_physical_schema_
             expected_physical_version_count=3,
         )
     ],
-    ids=["default VDE creates physical versions and queryable views"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_default_vde_when_building_then_it_creates_physical_versions_and_views(
     test_case: VirtualBuildE2ETestCase,
@@ -245,7 +245,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
             ),
         )
     ],
-    ids=["virtual seed build persists seed refs and reloads changed seeds"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_state_and_model(
     test_case: VirtualSeedBuildE2ETestCase,
@@ -351,7 +351,7 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
             expected_physical_seed_count=2,
         )
     ],
-    ids=["two VDEs bind isolated seed physical versions"],
+    ids=lambda case: case.description,
 )
 def test_given_two_virtual_environments_when_seed_differs_then_each_reads_bound_seed_version(
     test_case: VirtualSeedBuildE2ETestCase,
@@ -431,7 +431,7 @@ def test_given_two_virtual_environments_when_seed_differs_then_each_reads_bound_
             expected_physical_seed_count=1,
         )
     ],
-    ids=["second VDE uses existing physical seed artifact"],
+    ids=lambda case: case.description,
 )
 def test_given_second_vde_when_seed_version_exists_then_uses_existing_physical_seed(
     test_case: VirtualSeedBuildE2ETestCase,
@@ -496,7 +496,7 @@ def test_given_second_vde_when_seed_version_exists_then_uses_existing_physical_s
             expected_changed_fragments=("order_amounts", "fact_orders"),
         )
     ],
-    ids=["explicit model selection updates stale upstream seed artifact"],
+    ids=lambda case: case.description,
 )
 def test_given_explicit_model_selection_when_upstream_seed_changed_then_model_reads_new_seed(
     test_case: VirtualSeedBuildE2ETestCase,
@@ -556,7 +556,7 @@ def test_given_explicit_model_selection_when_upstream_seed_changed_then_model_re
             expected_fragments=("order_amounts", "FAIL", "Completed with errors."),
         )
     ],
-    ids=["failed virtual seed reload leaves seed ref unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_seed_load_failure_when_building_changes_only_then_seed_state_is_unchanged(
     test_case: VirtualSeedGapE2ETestCase,
@@ -636,7 +636,7 @@ def test_given_virtual_seed_load_failure_when_building_changes_only_then_seed_st
             expected_fragments=("order_amounts", "config_changed"),
         )
     ],
-    ids=["virtual seed JSON includes seed reasons"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_seed_change_when_plan_and_build_json_then_seed_reason_is_reported(
     test_case: VirtualSeedGapE2ETestCase,
@@ -709,7 +709,7 @@ def test_given_virtual_seed_change_when_plan_and_build_json_then_seed_reason_is_
             ),
         )
     ],
-    ids=["virtual seed schema change reloads seed and model"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_seed_schema_change_when_building_changes_only_then_reloads_seed_and_model(
     test_case: VirtualSeedGapE2ETestCase,
@@ -767,7 +767,7 @@ def test_given_virtual_seed_schema_change_when_building_changes_only_then_reload
             unexpected_fragments=("country_codes", "dim_countries"),
         )
     ],
-    ids=["multi seed virtual graph selects only changed seed closure"],
+    ids=lambda case: case.description,
 )
 def test_given_multi_seed_graph_when_one_seed_changes_then_only_its_closure_is_selected(
     test_case: VirtualSeedGapE2ETestCase,
@@ -828,7 +828,7 @@ def test_given_multi_seed_graph_when_one_seed_changes_then_only_its_closure_is_s
             unexpected_fragments=("Seeds (", "seed      order_amounts"),
         )
     ],
-    ids=["virtual model change with current seed does not reload seed"],
+    ids=lambda case: case.description,
 )
 def test_given_model_change_with_current_seed_when_building_then_seed_is_not_reloaded(
     test_case: VirtualSeedGapE2ETestCase,
@@ -886,7 +886,7 @@ def test_given_model_change_with_current_seed_when_building_then_seed_is_not_rel
             expected_identity_rows=(("hook", "log_virtual_hook"),),
         )
     ],
-    ids=["virtual build executes discovered Python lifecycle hook"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_build_with_python_hooks_when_building_then_hooks_execute(
     test_case: VirtualPythonHooksBuildE2ETestCase,
@@ -966,7 +966,7 @@ def test_given_virtual_build_with_python_hooks_when_building_then_hooks_execute(
             expected_updated_rows=((8,),),
         )
     ],
-    ids=["unchanged source freshness skips and changed freshness reruns downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_when_building_then_skips_until_data_version_changes(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1071,7 +1071,7 @@ def test_given_virtual_source_freshness_when_building_then_skips_until_data_vers
             expected_updated_rows=((7,),),
         )
     ],
-    ids=["virtual changes-only builds runtime stale table and downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_run_despite_unchanged_when_building_changes_only_then_builds_downstream(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1110,7 +1110,7 @@ def test_given_virtual_run_despite_unchanged_when_building_changes_only_then_bui
             """
             CREATE SCHEMA raw;
             CREATE TABLE raw.raw_orders (id INTEGER, order_ts TIMESTAMP);
-            INSERT INTO raw.raw_orders VALUES (7, TIMESTAMP '2026-06-01 00:00:00');
+            INSERT INTO raw.raw_orders VALUES (7, CURRENT_TIMESTAMP);
             """
         ).strip(),
     )
@@ -1151,7 +1151,7 @@ def test_given_virtual_run_despite_unchanged_when_building_changes_only_then_bui
             expected_updated_rows=((9,),),
         )
     ],
-    ids=["virtual build respects timestamp source freshness lag tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_timestamp_lag_tolerance_when_building_then_skips_within_tolerance(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1239,7 +1239,7 @@ def test_given_virtual_timestamp_lag_tolerance_when_building_then_skips_within_t
             expected_updated_rows=((8,),),
         )
     ],
-    ids=["unknown source freshness does not skip virtual builds"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_without_freshness_when_rebuilding_then_it_does_not_skip(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1314,7 +1314,7 @@ def test_given_virtual_source_without_freshness_when_rebuilding_then_it_does_not
             expected_updated_rows=((8,),),
         )
     ],
-    ids=["source freshness propagates through views to downstream tables"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_through_view_when_changed_then_downstream_table_reruns(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1400,7 +1400,7 @@ def test_given_virtual_source_freshness_through_view_when_changed_then_downstrea
             expected_updated_rows=((7,),),
         )
     ],
-    ids=["managed loader freshness does not cause spurious virtual rebuilds"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_managed_source_freshness_when_unchanged_then_build_skips_downstream(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1471,7 +1471,7 @@ def test_given_virtual_managed_source_freshness_when_unchanged_then_build_skips_
             expected_updated_rows=((7,),),
         )
     ],
-    ids=["managed configured freshness conservatively rebinds after first load"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_managed_source_configured_freshness_when_building_then_rebinds_safely(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1558,7 +1558,7 @@ def test_given_virtual_managed_source_configured_freshness_when_building_then_re
             expected_error_fragment="does not support table freshness metadata",
         )
     ],
-    ids=["explicit adapter freshness fails clearly on unsupported adapter"],
+    ids=lambda case: case.description,
 )
 def test_given_unsupported_adapter_freshness_when_building_then_it_fails_clearly(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1616,7 +1616,7 @@ def test_given_unsupported_adapter_freshness_when_building_then_it_fails_clearly
             expected_updated_rows=((True,),),
         )
     ],
-    ids=["function and source freshness changes independently rerun virtual model"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_and_function_when_each_changes_then_model_reruns(
     test_case: VirtualSourceFreshnessBuildE2ETestCase,
@@ -1727,7 +1727,7 @@ def test_given_virtual_source_freshness_and_function_when_each_changes_then_mode
             expected_source_profile_text="1",
         )
     ],
-    ids=["runs loader-side and read-side Python nodes"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side_python(
     test_case: VirtualPythonBuildE2ETestCase,
@@ -1855,7 +1855,7 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
             expected_build_fragments=("check_produce_result", "PASS"),
         )
     ],
-    ids=["persists loader task asset and check node results in virtual state"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_python_result_when_building_then_persists_node_results_in_state(
     test_case: VirtualNodeResultStateE2ETestCase,
@@ -1998,13 +1998,15 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
     assert warehouse_result_table_count == [(test_case.expected_warehouse_result_table_count,)]
 
 
-VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETestCase, ...] = (
-    VirtualNodeResultFailureStateE2ETestCase(
-        description="failed virtual task persists failed state row",
-        project_name="virtual_failed_task_result_state",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        VirtualNodeResultFailureStateE2ETestCase(
+            description="failed virtual task persists failed state row",
+            project_name="virtual_failed_task_result_state",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
                 name = "virtual_failed_task_result_state"
                 adapter = "duckdb"
                 default_target = "dev"
@@ -2025,27 +2027,27 @@ VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETe
                 [targets.dev.state.connection]
                 database = "state.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-            "tasks/results.py": (
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('orders'))\n"
-                "def produce_result(ctx):\n"
-                "    raise RuntimeError('producer failed')\n"
-            ),
-        },
-        command=("--no-color", "build", "--select", "orders"),
-        expected_exit_code=1,
-        expected_state_rows=(("task", "produce_result", "failed", "producer failed"),),
-    ),
-    VirtualNodeResultFailureStateE2ETestCase(
-        description="failed virtual check persists failed state row",
-        project_name="virtual_failed_check_result_state",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+                "tasks/results.py": (
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('orders'))\n"
+                    "def produce_result(ctx):\n"
+                    "    raise RuntimeError('producer failed')\n"
+                ),
+            },
+            command=("--no-color", "build", "--select", "orders"),
+            expected_exit_code=1,
+            expected_state_rows=(("task", "produce_result", "failed", "producer failed"),),
+        ),
+        VirtualNodeResultFailureStateE2ETestCase(
+            description="failed virtual check persists failed state row",
+            project_name="virtual_failed_check_result_state",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
                 name = "virtual_failed_check_result_state"
                 adapter = "duckdb"
                 default_target = "dev"
@@ -2066,37 +2068,37 @@ VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETe
                 [targets.dev.state.connection]
                 database = "state.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-            "tasks/results.py": (
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('orders'))\n"
-                "def produce_result(ctx):\n"
-                "    return ctx.result(payload={'value': 1})\n"
+                ).strip()
+                + "\n",
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+                "tasks/results.py": (
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('orders'))\n"
+                    "def produce_result(ctx):\n"
+                    "    return ctx.result(payload={'value': 1})\n"
+                ),
+                "checks/results.py": (
+                    "from sqlbuild.checks import check\n"
+                    "from tasks.results import produce_result\n\n"
+                    "@check(depends_on=produce_result)\n"
+                    "def check_produce_result(ctx):\n"
+                    "    return False\n"
+                ),
+            },
+            command=("--no-color", "build", "--select", "orders"),
+            expected_exit_code=1,
+            expected_state_rows=(
+                ("check", "check_produce_result", "failed", ""),
+                ("task", "produce_result", "success", ""),
             ),
-            "checks/results.py": (
-                "from sqlbuild.checks import check\n"
-                "from tasks.results import produce_result\n\n"
-                "@check(depends_on=produce_result)\n"
-                "def check_produce_result(ctx):\n"
-                "    return False\n"
-            ),
-        },
-        command=("--no-color", "build", "--select", "orders"),
-        expected_exit_code=1,
-        expected_state_rows=(
-            ("check", "check_produce_result", "failed", ""),
-            ("task", "produce_result", "success", ""),
         ),
-    ),
-    VirtualNodeResultFailureStateE2ETestCase(
-        description="skipped virtual task persists skipped state row",
-        project_name="virtual_skipped_task_result_state",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+        VirtualNodeResultFailureStateE2ETestCase(
+            description="skipped virtual task persists skipped state row",
+            project_name="virtual_skipped_task_result_state",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
                 name = "virtual_skipped_task_result_state"
                 adapter = "duckdb"
                 default_target = "dev"
@@ -2117,28 +2119,28 @@ VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETe
                 [targets.dev.state.connection]
                 database = "state.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-            "tasks/results.py": (
-                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('orders'))\n"
-                "def prepare_orders(ctx):\n"
-                "    return ctx.skip('not needed', mode=SkipMode.SOFT)\n"
-            ),
-        },
-        command=("--no-color", "build", "--select", "orders"),
-        expected_exit_code=0,
-        expected_state_rows=(("task", "prepare_orders", "skipped", "not needed"),),
-    ),
-    VirtualNodeResultFailureStateE2ETestCase(
-        description="skipped virtual loader persists skipped state row",
-        project_name="virtual_skipped_loader_result_state",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+                "tasks/results.py": (
+                    "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('orders'))\n"
+                    "def prepare_orders(ctx):\n"
+                    "    return ctx.skip('not needed', mode=SkipMode.SOFT)\n"
+                ),
+            },
+            command=("--no-color", "build", "--select", "orders"),
+            expected_exit_code=0,
+            expected_state_rows=(("task", "prepare_orders", "skipped", "not needed"),),
+        ),
+        VirtualNodeResultFailureStateE2ETestCase(
+            description="skipped virtual loader persists skipped state row",
+            project_name="virtual_skipped_loader_result_state",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
                 name = "virtual_skipped_loader_result_state"
                 adapter = "duckdb"
                 default_target = "dev"
@@ -2160,48 +2162,48 @@ VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETe
                 [targets.dev.state.connection]
                 database = "state.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "tasks/prepare.py": (
-                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def prepare_events(ctx):\n"
-                "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+                ).strip()
+                + "\n",
+                "tasks/prepare.py": (
+                    "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def prepare_events(ctx):\n"
+                    "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+                ),
+                "loaders/events.py": (
+                    "from tasks.prepare import prepare_events\n"
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader(depends_on=(prepare_events,))\n"
+                    "def raw_events(ctx):\n"
+                    "    return [{'event_id': 1}]\n"
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_events\n"
+                    "    managed: true\n"
+                    "    write_strategy: table\n"
+                    "    columns:\n"
+                    "      - name: event_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/events.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
+                ),
+            },
+            command=("--no-color", "build", "--select", "+events"),
+            expected_exit_code=0,
+            expected_state_rows=(
+                ("loader", "raw_events", "skipped", "Upstream node hard-skipped: prepare_events"),
+                ("task", "prepare_events", "skipped", "no input"),
             ),
-            "loaders/events.py": (
-                "from tasks.prepare import prepare_events\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(prepare_events,))\n"
-                "def raw_events(ctx):\n"
-                "    return [{'event_id': 1}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_events\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: event_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/events.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
-            ),
-        },
-        command=("--no-color", "build", "--select", "+events"),
-        expected_exit_code=0,
-        expected_state_rows=(
-            ("loader", "raw_events", "skipped", "Upstream node hard-skipped: prepare_events"),
-            ("task", "prepare_events", "skipped", "no input"),
         ),
-    ),
-    VirtualNodeResultFailureStateE2ETestCase(
-        description="non JSON virtual payload persists failed state row",
-        project_name="virtual_non_json_payload_result_state",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+        VirtualNodeResultFailureStateE2ETestCase(
+            description="non JSON virtual payload persists failed state row",
+            project_name="virtual_non_json_payload_result_state",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
                 name = "virtual_non_json_payload_result_state"
                 adapter = "duckdb"
                 default_target = "dev"
@@ -2222,27 +2224,27 @@ VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETe
                 [targets.dev.state.connection]
                 database = "state.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-            "tasks/results.py": (
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('orders'))\n"
-                "def produce_result(ctx):\n"
-                "    return ctx.result(payload={'bad': {1, 2}})\n"
-            ),
-        },
-        command=("--no-color", "build", "--select", "orders"),
-        expected_exit_code=1,
-        expected_state_rows=(("task", "produce_result", "failed", "non-JSON-serializable"),),
-    ),
-    VirtualNodeResultFailureStateE2ETestCase(
-        description="non JSON virtual metadata persists failed state row",
-        project_name="virtual_non_json_metadata_result_state",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+                "tasks/results.py": (
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('orders'))\n"
+                    "def produce_result(ctx):\n"
+                    "    return ctx.result(payload={'bad': {1, 2}})\n"
+                ),
+            },
+            command=("--no-color", "build", "--select", "orders"),
+            expected_exit_code=1,
+            expected_state_rows=(("task", "produce_result", "failed", "non-JSON-serializable"),),
+        ),
+        VirtualNodeResultFailureStateE2ETestCase(
+            description="non JSON virtual metadata persists failed state row",
+            project_name="virtual_non_json_metadata_result_state",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
                 name = "virtual_non_json_metadata_result_state"
                 adapter = "duckdb"
                 default_target = "dev"
@@ -2263,28 +2265,23 @@ VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES: tuple[VirtualNodeResultFailureStateE2ETe
                 [targets.dev.state.connection]
                 database = "state.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-            "tasks/results.py": (
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('orders'))\n"
-                "def produce_result(ctx):\n"
-                "    return ctx.result(payload={'ok': True}, metadata={'bad': {1, 2}})\n"
-            ),
-        },
-        command=("--no-color", "build", "--select", "orders"),
-        expected_exit_code=1,
-        expected_state_rows=(("task", "produce_result", "failed", "non-JSON-serializable"),),
+                ).strip()
+                + "\n",
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+                "tasks/results.py": (
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('orders'))\n"
+                    "def produce_result(ctx):\n"
+                    "    return ctx.result(payload={'ok': True}, metadata={'bad': {1, 2}})\n"
+                ),
+            },
+            command=("--no-color", "build", "--select", "orders"),
+            expected_exit_code=1,
+            expected_state_rows=(("task", "produce_result", "failed", "non-JSON-serializable"),),
+        ),
     ),
-)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES,
-    ids=[case.description for case in VIRTUAL_NODE_RESULT_FAILURE_TEST_CASES],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_node_result_failure_when_building_then_persists_failed_state_row(
     test_case: VirtualNodeResultFailureStateE2ETestCase,
@@ -2349,7 +2346,7 @@ def test_given_virtual_node_result_failure_when_building_then_persists_failed_st
             ),
         )
     ],
-    ids=["stores Python identities in virtual state for later planning"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_python_identities_when_replanning_then_reads_virtual_state(
     test_case: VirtualPythonIdentityBuildE2ETestCase,
@@ -2483,7 +2480,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
             ),
         )
     ],
-    ids=["prints read-side Python failure rows"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_read_side_python_failure_when_building_then_prints_python_failure_row(
     test_case: VirtualPythonBuildE2ETestCase,
@@ -2550,7 +2547,7 @@ def test_given_virtual_read_side_python_failure_when_building_then_prints_python
             ),
         )
     ],
-    ids=["prints read-side Python skip rows"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_read_side_python_skip_when_building_then_prints_python_skip_row(
     test_case: VirtualPythonBuildE2ETestCase,
@@ -2616,7 +2613,7 @@ def test_given_virtual_read_side_python_skip_when_building_then_prints_python_sk
             expected_profile_exists=False,
         )
     ],
-    ids=["no-python only runs loader-side Python nodes"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_runs(
     test_case: VirtualPythonBuildE2ETestCase,
@@ -2728,7 +2725,7 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
             expected_ref_rows=(),
         )
     ],
-    ids=["delete-insert incremental seeds new physical version from prior version"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_incremental_change_when_building_then_it_seeds_new_physical_version(
     test_case: VirtualBuildE2ETestCase,
@@ -2799,7 +2796,7 @@ def test_given_virtual_incremental_change_when_building_then_it_seeds_new_physic
             expected_ref_rows=(),
         )
     ],
-    ids=["explicit cursor overrides work without target or upstream snapshots"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_incremental_without_cursor_snapshot_when_building_then_cli_bounds_apply(
     test_case: VirtualBuildE2ETestCase,
@@ -2862,7 +2859,7 @@ def test_given_virtual_incremental_without_cursor_snapshot_when_building_then_cl
             expected_ancestry_rows=(("custom_prepare_version",),),
         )
     ],
-    ids=["custom materialization prepare_version seeds changed physical target"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_custom_materialization_when_model_changes_then_prepare_version_seeds_target(
     test_case: VirtualCustomMaterializationE2ETestCase,
@@ -3022,7 +3019,7 @@ UNION ALL SELECT 3 AS id, 30 AS amount_cents
             ),
         )
     ],
-    ids=["full waffle shop fixture builds in virtual mode"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_project_when_virtual_building_then_vde_outputs_are_queryable(
     test_case: VirtualWaffleShopE2ETestCase,
@@ -3111,7 +3108,7 @@ database = "state.duckdb"
             expected_ref_rows=(),
         )
     ],
-    ids=["append bounded incremental seeds only rows before replay window"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_append_bounded_change_when_building_then_seed_excludes_replay_window(
     test_case: VirtualBuildE2ETestCase,
@@ -3191,7 +3188,7 @@ def test_given_virtual_append_bounded_change_when_building_then_seed_excludes_re
             expected_final_plan_fragments=("Plan ready (0 selected)", "status: finalized"),
         )
     ],
-    ids=["explicit VDE graph selection diverges refs and leaves downstream working"],
+    ids=lambda case: case.description,
 )
 def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs_diverge(
     test_case: VirtualBuildE2ETestCase,
@@ -3313,7 +3310,7 @@ def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((2,),)),),
         )
     ],
-    ids=["selected downstream with stale upstream blocks then expands"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_build_selected_downstream_with_stale_upstream_when_running_then_it_blocks(
     test_case: VirtualBuildSelectionGuardE2ETestCase,
@@ -3382,7 +3379,7 @@ def test_given_virtual_build_selected_downstream_with_stale_upstream_when_runnin
             expected_checkpoint_count=2,
         )
     ],
-    ids=["rollback blocks when checkpoint physical relation is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_checkpoint_physical_relation_missing_when_rolling_back_then_it_blocks_cleanly(
     test_case: VirtualRollbackE2ETestCase,
@@ -3465,7 +3462,7 @@ def test_given_checkpoint_physical_relation_missing_when_rolling_back_then_it_bl
             expected_checkpoint_count=1,
         )
     ],
-    ids=["rollback blocks when no previous checkpoint exists"],
+    ids=lambda case: case.description,
 )
 def test_given_only_current_checkpoint_when_rolling_back_then_it_blocks_cleanly(
     test_case: VirtualRollbackE2ETestCase,
@@ -3516,7 +3513,7 @@ def test_given_only_current_checkpoint_when_rolling_back_then_it_blocks_cleanly(
             expected_checkpoint_count=2,
         )
     ],
-    ids=["rollback blocks when target VDE lock exists"],
+    ids=lambda case: case.description,
 )
 def test_given_target_virtual_environment_lock_when_rolling_back_then_it_fails_clearly(
     test_case: VirtualRollbackE2ETestCase,
@@ -3585,7 +3582,7 @@ def test_given_target_virtual_environment_lock_when_rolling_back_then_it_fails_c
             expected_checkpoint_count=1,
         )
     ],
-    ids=["checkpoint show blocks for unknown checkpoint"],
+    ids=lambda case: case.description,
 )
 def test_given_unknown_checkpoint_when_showing_checkpoint_then_it_blocks_cleanly(
     test_case: VirtualRollbackE2ETestCase,
@@ -3639,7 +3636,7 @@ def test_given_unknown_checkpoint_when_showing_checkpoint_then_it_blocks_cleanly
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((2,),)),),
         )
     ],
-    ids=["whole VDE promotion swaps target refs and views"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_env_when_promoting_then_it_updates_target_refs_and_views(
     test_case: VirtualPromoteE2ETestCase,
@@ -3730,7 +3727,7 @@ def test_given_virtual_env_when_promoting_then_it_updates_target_refs_and_views(
             ),
         )
     ],
-    ids=["whole VDE promotion carries seed refs and views"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_change_when_promoting_then_it_updates_destination_seed_refs_and_views(
     test_case: VirtualPromoteE2ETestCase,
@@ -3817,7 +3814,7 @@ def test_given_seed_change_when_promoting_then_it_updates_destination_seed_refs_
             ),
         )
     ],
-    ids=["partial promotion carries upstream seed refs and views"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_change_when_partially_promoting_then_it_updates_upstream_seed_refs_and_views(
     test_case: VirtualPromoteE2ETestCase,
@@ -3886,7 +3883,7 @@ def test_given_seed_change_when_partially_promoting_then_it_updates_upstream_see
             ),
         )
     ],
-    ids=["whole VDE promotion carries function definitions"],
+    ids=lambda case: case.description,
 )
 def test_given_function_change_when_promoting_then_it_publishes_target_function_definition(
     test_case: VirtualPromoteE2ETestCase,
@@ -3975,7 +3972,7 @@ def test_given_function_change_when_promoting_then_it_publishes_target_function_
             expected_checkpoint_count=2,
         )
     ],
-    ids=["whole VDE rollback restores previous finalized checkpoint"],
+    ids=lambda case: case.description,
 )
 def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous_refs_and_views(
     test_case: VirtualRollbackE2ETestCase,
@@ -4097,7 +4094,7 @@ def test_given_finalized_checkpoints_when_rolling_back_then_it_restores_previous
             expected_checkpoint_count=0,
         )
     ],
-    ids=["whole rollback restores seed refs and views"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_change_when_rolling_back_then_it_restores_checkpointed_seed_refs_and_views(
     test_case: VirtualRollbackE2ETestCase,
@@ -4195,7 +4192,7 @@ def test_given_seed_change_when_rolling_back_then_it_restores_checkpointed_seed_
             expected_checkpoint_count=0,
         )
     ],
-    ids=["partial rollback restores upstream seed refs and views"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_change_when_partial_rollback_then_restores_upstream_seed_refs_and_views(
     test_case: VirtualRollbackE2ETestCase,
@@ -4263,7 +4260,7 @@ def test_given_seed_change_when_partial_rollback_then_restores_upstream_seed_ref
             expected_checkpoint_count=2,
         )
     ],
-    ids=["whole VDE rollback restores checkpointed function definitions"],
+    ids=lambda case: case.description,
 )
 def test_given_function_change_when_rolling_back_then_it_restores_checkpointed_definition(
     test_case: VirtualRollbackE2ETestCase,
@@ -4336,7 +4333,7 @@ def test_given_function_change_when_rolling_back_then_it_restores_checkpointed_d
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),),
         )
     ],
-    ids=["explicit checkpoint restores selected checkpoint"],
+    ids=lambda case: case.description,
 )
 def test_given_explicit_checkpoint_when_rolling_back_then_it_restores_that_checkpoint(
     test_case: VirtualExplicitCheckpointRollbackE2ETestCase,
@@ -4404,7 +4401,7 @@ def test_given_explicit_checkpoint_when_rolling_back_then_it_restores_that_check
             expected_query_results=(("SELECT id FROM dev__dev.stg_orders ORDER BY id", ((1,),)),),
         )
     ],
-    ids=["partial rollback requires override and marks VDE working"],
+    ids=lambda case: case.description,
 )
 def test_given_partial_rollback_when_allowed_then_it_marks_vde_working(
     test_case: VirtualPartialRollbackE2ETestCase,
@@ -4476,7 +4473,7 @@ def test_given_partial_rollback_when_allowed_then_it_marks_vde_working(
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),),
         )
     ],
-    ids=["partial rollback can include stale required upstreams"],
+    ids=lambda case: case.description,
 )
 def test_given_partial_rollback_missing_stale_upstreams_when_including_them_then_it_succeeds(
     test_case: VirtualPartialRollbackE2ETestCase,
@@ -4538,7 +4535,7 @@ def test_given_partial_rollback_missing_stale_upstreams_when_including_them_then
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),),
         )
     ],
-    ids=["partial rollback matches checkpoint when workspace changed"],
+    ids=lambda case: case.description,
 )
 def test_given_partial_rollback_matches_checkpoint_when_workspace_changed_then_no_override_needed(
     test_case: VirtualPartialRollbackE2ETestCase,
@@ -4589,7 +4586,7 @@ def test_given_partial_rollback_matches_checkpoint_when_workspace_changed_then_n
             expected_query_results=(("SELECT id FROM dev__dev.stg_orders ORDER BY id", ((2,),)),),
         )
     ],
-    ids=["finalized source promotes after workspace changes again"],
+    ids=lambda case: case.description,
 )
 def test_given_finalized_source_vde_when_workspace_changes_again_then_whole_promotion_succeeds(
     test_case: VirtualPromoteE2ETestCase,
@@ -4682,7 +4679,7 @@ def test_given_finalized_source_vde_when_workspace_changes_again_then_whole_prom
             ),
         )
     ],
-    ids=["partial promotion requires explicit working target acceptance"],
+    ids=lambda case: case.description,
 )
 def test_given_partial_virtual_promotion_when_target_stays_working_then_it_requires_override(
     test_case: VirtualPromoteE2ETestCase,
@@ -4754,7 +4751,7 @@ def test_given_partial_virtual_promotion_when_target_stays_working_then_it_requi
             expected_query_results=(),
         )
     ],
-    ids=["standard mode promotion fails with mode error"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_mode_project_when_promoting_then_it_fails_with_mode_error(
     test_case: VirtualPromoteE2ETestCase,
@@ -4808,7 +4805,7 @@ def test_given_direct_mode_project_when_promoting_then_it_fails_with_mode_error(
             expected_query_results=(),
         )
     ],
-    ids=["missing promoted physical relation fails clearly"],
+    ids=lambda case: case.description,
 )
 def test_given_promoted_physical_relation_is_missing_when_promoting_then_it_fails_clearly(
     test_case: VirtualPromoteE2ETestCase,
@@ -4876,7 +4873,7 @@ def test_given_promoted_physical_relation_is_missing_when_promoting_then_it_fail
             expected_query_results=(),
         )
     ],
-    ids=["target VDE lock blocks promotion"],
+    ids=lambda case: case.description,
 )
 def test_given_target_virtual_environment_lock_when_promoting_then_it_fails_clearly(
     test_case: VirtualPromoteE2ETestCase,
@@ -4938,7 +4935,7 @@ def test_given_target_virtual_environment_lock_when_promoting_then_it_fails_clea
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders", ((1,),)),),
         )
     ],
-    ids=["interrupted promotion records failed operation"],
+    ids=lambda case: case.description,
 )
 def test_given_view_refresh_failure_when_promoting_then_operation_is_marked_failed(
     test_case: VirtualPromoteE2ETestCase,
@@ -5045,7 +5042,7 @@ def test_given_view_refresh_failure_when_promoting_then_operation_is_marked_fail
             ),
         )
     ],
-    ids=["working source blocks whole promotion but allows coherent partial promotion"],
+    ids=lambda case: case.description,
 )
 def test_given_working_source_vde_when_promoting_then_whole_blocks_and_partial_succeeds(
     test_case: VirtualPromoteE2ETestCase,

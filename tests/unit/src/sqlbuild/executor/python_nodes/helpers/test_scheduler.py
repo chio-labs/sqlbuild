@@ -13,59 +13,57 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import apply_completion_order
 
-PYTHON_NODE_SCHEDULER_TEST_CASES: list[PythonNodeSchedulerTestCase] = [
-    PythonNodeSchedulerTestCase(
-        description="unlocks linear downstream nodes after upstream completion",
-        node_names=("fetch", "load"),
-        upstream_names={"fetch": (), "load": ("fetch",)},
-        downstream_names={"fetch": ("load",), "load": ()},
-        completion_order=("fetch",),
-        expected_initial_ready=("fetch",),
-        expected_final_ready=("fetch", "load"),
-        expected_final_in_degree={"fetch": 0, "load": 0},
-    ),
-    PythonNodeSchedulerTestCase(
-        description="unlocks fan-out downstream nodes in downstream order",
-        node_names=("fetch", "load_orders", "load_customers"),
-        upstream_names={
-            "fetch": (),
-            "load_orders": ("fetch",),
-            "load_customers": ("fetch",),
-        },
-        downstream_names={"fetch": ("load_orders", "load_customers")},
-        completion_order=("fetch",),
-        expected_initial_ready=("fetch",),
-        expected_final_ready=("fetch", "load_orders", "load_customers"),
-        expected_final_in_degree={"fetch": 0, "load_orders": 0, "load_customers": 0},
-    ),
-    PythonNodeSchedulerTestCase(
-        description="unlocks fan-in downstream only after all upstreams complete",
-        node_names=("fetch_orders", "fetch_customers", "load_enriched"),
-        upstream_names={
-            "fetch_orders": (),
-            "fetch_customers": (),
-            "load_enriched": ("fetch_orders", "fetch_customers"),
-        },
-        downstream_names={
-            "fetch_orders": ("load_enriched",),
-            "fetch_customers": ("load_enriched",),
-        },
-        completion_order=("fetch_orders", "fetch_customers"),
-        expected_initial_ready=("fetch_orders", "fetch_customers"),
-        expected_final_ready=("fetch_orders", "fetch_customers", "load_enriched"),
-        expected_final_in_degree={
-            "fetch_orders": 0,
-            "fetch_customers": 0,
-            "load_enriched": 0,
-        },
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_NODE_SCHEDULER_TEST_CASES,
-    ids=[case.description for case in PYTHON_NODE_SCHEDULER_TEST_CASES],
+    [
+        PythonNodeSchedulerTestCase(
+            description="unlocks linear downstream nodes after upstream completion",
+            node_names=("fetch", "load"),
+            upstream_names={"fetch": (), "load": ("fetch",)},
+            downstream_names={"fetch": ("load",), "load": ()},
+            completion_order=("fetch",),
+            expected_initial_ready=("fetch",),
+            expected_final_ready=("fetch", "load"),
+            expected_final_in_degree={"fetch": 0, "load": 0},
+        ),
+        PythonNodeSchedulerTestCase(
+            description="unlocks fan-out downstream nodes in downstream order",
+            node_names=("fetch", "load_orders", "load_customers"),
+            upstream_names={
+                "fetch": (),
+                "load_orders": ("fetch",),
+                "load_customers": ("fetch",),
+            },
+            downstream_names={"fetch": ("load_orders", "load_customers")},
+            completion_order=("fetch",),
+            expected_initial_ready=("fetch",),
+            expected_final_ready=("fetch", "load_orders", "load_customers"),
+            expected_final_in_degree={"fetch": 0, "load_orders": 0, "load_customers": 0},
+        ),
+        PythonNodeSchedulerTestCase(
+            description="unlocks fan-in downstream only after all upstreams complete",
+            node_names=("fetch_orders", "fetch_customers", "load_enriched"),
+            upstream_names={
+                "fetch_orders": (),
+                "fetch_customers": (),
+                "load_enriched": ("fetch_orders", "fetch_customers"),
+            },
+            downstream_names={
+                "fetch_orders": ("load_enriched",),
+                "fetch_customers": ("load_enriched",),
+            },
+            completion_order=("fetch_orders", "fetch_customers"),
+            expected_initial_ready=("fetch_orders", "fetch_customers"),
+            expected_final_ready=("fetch_orders", "fetch_customers", "load_enriched"),
+            expected_final_in_degree={
+                "fetch_orders": 0,
+                "fetch_customers": 0,
+                "load_enriched": 0,
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_node_dag_when_completing_nodes_then_unlocks_ready_nodes(
     test_case: PythonNodeSchedulerTestCase,

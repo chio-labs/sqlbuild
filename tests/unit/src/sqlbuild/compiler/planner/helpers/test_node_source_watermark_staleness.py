@@ -44,71 +44,69 @@ MODEL_B_IDENTITY: NodeSourceWatermarkIdentity = NodeSourceWatermarkIdentity(
     node_name="b",
 )
 
-TEST_CASES: list[NodeSourceWatermarkWarningTestCase] = [
-    NodeSourceWatermarkWarningTestCase(
-        description="stale materialized frontier emits grouped warning",
-        upstream_deps={
-            MODEL_A_KEY: (MODEL_B_KEY,),
-            MODEL_B_KEY: (SOURCE_KEY,),
-        },
-        model_names=("a", "b"),
-        source_names=("raw_orders",),
-        watermark_records={
-            MODEL_B_IDENTITY: watermark_record(
-                MODEL_B_IDENTITY,
-                sources=(
-                    source_entry(
-                        SOURCE_IDENTITY,
-                        data_version="2026-06-29T17:00:00+00:00",
-                        data_hash="hash-stale",
-                    ),
-                ),
-            )
-        },
-        expected_warning_fragments=(
-            "Stale inputs detected",
-            "Affected selected models:",
-            "a",
-            "Stale frontier tables:",
-            "b",
-            "Changed sources:",
-            "raw_orders",
-        ),
-        unexpected_warning_fragments=("Unknown freshness proofs",),
-    ),
-    NodeSourceWatermarkWarningTestCase(
-        description="missing materialized frontier watermark is unknown",
-        upstream_deps={
-            MODEL_A_KEY: (MODEL_B_KEY,),
-            MODEL_B_KEY: (SOURCE_KEY,),
-        },
-        model_names=("a", "b"),
-        source_names=("raw_orders",),
-        watermark_records={},
-        expected_warning_fragments=(
-            "Stale inputs detected",
-            "Affected selected models:",
-            "a",
-            "Unknown freshness proofs:",
-            "b (missing_frontier_watermark)",
-        ),
-        unexpected_warning_fragments=("Stale frontier tables", "Changed sources"),
-    ),
-    NodeSourceWatermarkWarningTestCase(
-        description="direct source frontier does not warn",
-        upstream_deps={MODEL_A_KEY: (SOURCE_KEY,)},
-        model_names=("a",),
-        source_names=("raw_orders",),
-        watermark_records={},
-        expected_warning_fragments=(),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        NodeSourceWatermarkWarningTestCase(
+            description="stale materialized frontier emits grouped warning",
+            upstream_deps={
+                MODEL_A_KEY: (MODEL_B_KEY,),
+                MODEL_B_KEY: (SOURCE_KEY,),
+            },
+            model_names=("a", "b"),
+            source_names=("raw_orders",),
+            watermark_records={
+                MODEL_B_IDENTITY: watermark_record(
+                    MODEL_B_IDENTITY,
+                    sources=(
+                        source_entry(
+                            SOURCE_IDENTITY,
+                            data_version="2026-06-29T17:00:00+00:00",
+                            data_hash="hash-stale",
+                        ),
+                    ),
+                )
+            },
+            expected_warning_fragments=(
+                "Stale inputs detected",
+                "Affected selected models:",
+                "a",
+                "Stale frontier tables:",
+                "b",
+                "Changed sources:",
+                "raw_orders",
+            ),
+            unexpected_warning_fragments=("Unknown freshness proofs",),
+        ),
+        NodeSourceWatermarkWarningTestCase(
+            description="missing materialized frontier watermark is unknown",
+            upstream_deps={
+                MODEL_A_KEY: (MODEL_B_KEY,),
+                MODEL_B_KEY: (SOURCE_KEY,),
+            },
+            model_names=("a", "b"),
+            source_names=("raw_orders",),
+            watermark_records={},
+            expected_warning_fragments=(
+                "Stale inputs detected",
+                "Affected selected models:",
+                "a",
+                "Unknown freshness proofs:",
+                "b (missing_frontier_watermark)",
+            ),
+            unexpected_warning_fragments=("Stale frontier tables", "Changed sources"),
+        ),
+        NodeSourceWatermarkWarningTestCase(
+            description="direct source frontier does not warn",
+            upstream_deps={MODEL_A_KEY: (SOURCE_KEY,)},
+            model_names=("a",),
+            source_names=("raw_orders",),
+            watermark_records={},
+            expected_warning_fragments=(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_native_plan_when_building_watermark_warnings_then_reports_expected_inputs(
     test_case: NodeSourceWatermarkWarningTestCase,

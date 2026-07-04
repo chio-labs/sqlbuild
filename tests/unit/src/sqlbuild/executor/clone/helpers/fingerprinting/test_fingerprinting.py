@@ -24,21 +24,26 @@ from tests.unit.src.sqlbuild.executor.clone.helpers.fingerprinting.helpers impor
     patch_fingerprint_io,
 )
 
-TEST_CASES: list[CloneFingerprintPropagationTestCase] = [
-    CloneFingerprintPropagationTestCase(
-        description="copies table and seed fingerprints for successful physical clones",
-        cloned_actions=(("orders", CloneAction.CLONED), ("countries", CloneAction.COPIED)),
-        expected_written_identities=((NODE_TYPE_SEED, "countries"), (NODE_TYPE_MODEL, "orders")),
-    ),
-    CloneFingerprintPropagationTestCase(
-        description="skips recreated view fingerprints",
-        cloned_actions=(("orders_view", CloneAction.RECREATED_VIEW),),
-        expected_written_identities=(),
-    ),
-]
 
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CloneFingerprintPropagationTestCase(
+            description="copies table and seed fingerprints for successful physical clones",
+            cloned_actions=(("orders", CloneAction.CLONED), ("countries", CloneAction.COPIED)),
+            expected_written_identities=(
+                (NODE_TYPE_SEED, "countries"),
+                (NODE_TYPE_MODEL, "orders"),
+            ),
+        ),
+        CloneFingerprintPropagationTestCase(
+            description="skips recreated view fingerprints",
+            cloned_actions=(("orders_view", CloneAction.RECREATED_VIEW),),
+            expected_written_identities=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
     test_case: CloneFingerprintPropagationTestCase,
     monkeypatch: pytest.MonkeyPatch,
@@ -119,7 +124,7 @@ def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
             expected_read_schemas=("prod",),
         )
     ],
-    ids=["reads origin fingerprints once for many entries sharing one schema"],
+    ids=lambda case: case.description,
 )
 def test_given_many_entries_one_schema_when_copying_then_reads_origin_fingerprints_once(
     test_case: CloneFingerprintReadDedupTestCase,

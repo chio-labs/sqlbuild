@@ -51,7 +51,7 @@ from tests.integration.src.sqlbuild.executor.scenario._test_types import (
             ),
         )
     ],
-    ids=["typed duckdb capture jsonl reloads with manifest schema"],
+    ids=lambda case: case.description,
 )
 def test_given_typed_duckdb_relation_when_capturing_then_jsonl_reloads_with_manifest_schema(
     test_case: ScenarioSnapshotCaptureTypesIntegrationTestCase,

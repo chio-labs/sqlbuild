@@ -60,7 +60,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared.helpers.helpers import build_au
             expected_asset_status="success",
         )
     ],
-    ids=["build json includes Python node assets and summary counts"],
+    ids=lambda case: case.description,
 )
 def test_given_build_result_with_python_nodes_when_formatting_json_then_includes_python_assets(
     test_case: ExecutionJsonTestCase,
@@ -98,7 +98,7 @@ def test_given_build_result_with_python_nodes_when_formatting_json_then_includes
             },
         )
     ],
-    ids=["build json includes relation reuse metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_reused_model_when_formatting_build_json_then_includes_relation_reuse_metadata(
     test_case: ExecutionJsonRelationReuseTestCase,
@@ -146,7 +146,7 @@ def test_given_reused_model_when_formatting_build_json_then_includes_relation_re
             expected_relation_reuse={},
         )
     ],
-    ids=["build json includes reused audit marker"],
+    ids=lambda case: case.description,
 )
 def test_given_reused_audit_when_formatting_build_json_then_includes_reused_marker(
     test_case: ExecutionJsonRelationReuseTestCase,
@@ -189,7 +189,7 @@ def test_given_reused_audit_when_formatting_build_json_then_includes_reused_mark
             expected_reason="config_changed",
         )
     ],
-    ids=["build json includes seed reason"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_result_when_formatting_build_json_then_includes_seed_reason(
     test_case: ExecutionJsonSeedReasonTestCase,

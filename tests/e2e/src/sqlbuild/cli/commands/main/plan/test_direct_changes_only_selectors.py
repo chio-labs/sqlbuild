@@ -19,66 +19,64 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-TEST_CASES: list[DirectChangesOnlySelectorE2ETestCase] = [
-    DirectChangesOnlySelectorE2ETestCase(
-        description="name selector stays on changed upstream",
-        selector="stg_orders",
-        expected_selected_count=1,
-        expected_model_names=("stg_orders",),
-        unexpected_model_names=(),
-        expected_remaining_stale_names=("fact_orders",),
-    ),
-    DirectChangesOnlySelectorE2ETestCase(
-        description="name downstream expansion includes stale downstream",
-        selector="stg_orders+",
-        expected_selected_count=2,
-        expected_model_names=("stg_orders", "fact_orders"),
-        unexpected_model_names=(),
-    ),
-    DirectChangesOnlySelectorE2ETestCase(
-        description="upstream expansion includes changed upstream and downstream",
-        selector="+fact_orders",
-        expected_selected_count=2,
-        expected_model_names=("stg_orders", "fact_orders"),
-        unexpected_model_names=(),
-    ),
-    DirectChangesOnlySelectorE2ETestCase(
-        description="tag selector stays inside tagged upstream",
-        selector="tag:staging",
-        expected_selected_count=1,
-        expected_model_names=("stg_orders",),
-        unexpected_model_names=(),
-        expected_remaining_stale_names=("fact_orders",),
-    ),
-    DirectChangesOnlySelectorE2ETestCase(
-        description="tag downstream expansion includes stale downstream",
-        selector="tag:staging+",
-        expected_selected_count=2,
-        expected_model_names=("stg_orders", "fact_orders"),
-        unexpected_model_names=(),
-    ),
-    DirectChangesOnlySelectorE2ETestCase(
-        description="path selector stays inside matched upstream path",
-        selector="path:models/staging",
-        expected_selected_count=1,
-        expected_model_names=("stg_orders",),
-        unexpected_model_names=(),
-        expected_remaining_stale_names=("fact_orders",),
-    ),
-    DirectChangesOnlySelectorE2ETestCase(
-        description="path downstream expansion includes stale downstream",
-        selector="path:models/staging+",
-        expected_selected_count=2,
-        expected_model_names=("stg_orders", "fact_orders"),
-        unexpected_model_names=(),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        DirectChangesOnlySelectorE2ETestCase(
+            description="name selector stays on changed upstream",
+            selector="stg_orders",
+            expected_selected_count=1,
+            expected_model_names=("stg_orders",),
+            unexpected_model_names=(),
+            expected_remaining_stale_names=("fact_orders",),
+        ),
+        DirectChangesOnlySelectorE2ETestCase(
+            description="name downstream expansion includes stale downstream",
+            selector="stg_orders+",
+            expected_selected_count=2,
+            expected_model_names=("stg_orders", "fact_orders"),
+            unexpected_model_names=(),
+        ),
+        DirectChangesOnlySelectorE2ETestCase(
+            description="upstream expansion includes changed upstream and downstream",
+            selector="+fact_orders",
+            expected_selected_count=2,
+            expected_model_names=("stg_orders", "fact_orders"),
+            unexpected_model_names=(),
+        ),
+        DirectChangesOnlySelectorE2ETestCase(
+            description="tag selector stays inside tagged upstream",
+            selector="tag:staging",
+            expected_selected_count=1,
+            expected_model_names=("stg_orders",),
+            unexpected_model_names=(),
+            expected_remaining_stale_names=("fact_orders",),
+        ),
+        DirectChangesOnlySelectorE2ETestCase(
+            description="tag downstream expansion includes stale downstream",
+            selector="tag:staging+",
+            expected_selected_count=2,
+            expected_model_names=("stg_orders", "fact_orders"),
+            unexpected_model_names=(),
+        ),
+        DirectChangesOnlySelectorE2ETestCase(
+            description="path selector stays inside matched upstream path",
+            selector="path:models/staging",
+            expected_selected_count=1,
+            expected_model_names=("stg_orders",),
+            unexpected_model_names=(),
+            expected_remaining_stale_names=("fact_orders",),
+        ),
+        DirectChangesOnlySelectorE2ETestCase(
+            description="path downstream expansion includes stale downstream",
+            selector="path:models/staging+",
+            expected_selected_count=2,
+            expected_model_names=("stg_orders", "fact_orders"),
+            unexpected_model_names=(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_change_when_planning_with_selector_then_respects_selector_scope(
     test_case: DirectChangesOnlySelectorE2ETestCase,

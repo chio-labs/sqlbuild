@@ -21,7 +21,7 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
             expected_path_default="staging/nested",
         )
     ],
-    ids=["matches Windows-style model path against nested path default"],
+    ids=lambda case: case.description,
 )
 def test_given_windows_style_model_path_when_finding_path_default_then_returns_nearest_match(
     test_case: FindMatchingPathDefaultTestCase,

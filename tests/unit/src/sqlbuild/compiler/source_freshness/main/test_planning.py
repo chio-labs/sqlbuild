@@ -85,35 +85,32 @@ class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
         }
 
 
-PLANNING_COMPARISON_TEST_CASES: list[StandardSourceFreshnessPlanningTestCase] = [
-    StandardSourceFreshnessPlanningTestCase(
-        description="classifies first standard source freshness observation as changed",
-        previous_data_version=None,
-        current_query="SELECT 1 AS data_version",
-        expected_changed_count=1,
-        expected_unchanged_count=0,
-    ),
-    StandardSourceFreshnessPlanningTestCase(
-        description="classifies matching previous standard source freshness as unchanged",
-        previous_data_version="1",
-        current_query="SELECT 1 AS data_version",
-        expected_changed_count=0,
-        expected_unchanged_count=1,
-    ),
-    StandardSourceFreshnessPlanningTestCase(
-        description="classifies different previous standard source freshness as changed",
-        previous_data_version="1",
-        current_query="SELECT 2 AS data_version",
-        expected_changed_count=1,
-        expected_unchanged_count=0,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PLANNING_COMPARISON_TEST_CASES,
-    ids=[case.description for case in PLANNING_COMPARISON_TEST_CASES],
+    [
+        StandardSourceFreshnessPlanningTestCase(
+            description="classifies first standard source freshness observation as changed",
+            previous_data_version=None,
+            current_query="SELECT 1 AS data_version",
+            expected_changed_count=1,
+            expected_unchanged_count=0,
+        ),
+        StandardSourceFreshnessPlanningTestCase(
+            description="classifies matching previous standard source freshness as unchanged",
+            previous_data_version="1",
+            current_query="SELECT 1 AS data_version",
+            expected_changed_count=0,
+            expected_unchanged_count=1,
+        ),
+        StandardSourceFreshnessPlanningTestCase(
+            description="classifies different previous standard source freshness as changed",
+            previous_data_version="1",
+            current_query="SELECT 2 AS data_version",
+            expected_changed_count=1,
+            expected_unchanged_count=0,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_standard_source_freshness_state_when_planning_then_classifies_hash_comparison(
     test_case: StandardSourceFreshnessPlanningTestCase,
@@ -164,50 +161,47 @@ def test_given_standard_source_freshness_state_when_planning_then_classifies_has
     assert len(result.observed_records) == 1
 
 
-AGE_POLICY_TEST_CASES: tuple[StandardSourceFreshnessAgePolicyTestCase, ...] = (
-    StandardSourceFreshnessAgePolicyTestCase(
-        description="fresh timestamp passes age policy",
-        current_query="SELECT CAST('2026-01-15 11:30:00' AS TIMESTAMP) AS data_version",
-        warn_after="1h",
-        error_after="2h",
-        expected_age_status="pass",
-    ),
-    StandardSourceFreshnessAgePolicyTestCase(
-        description="older timestamp warns before error threshold",
-        current_query="SELECT CAST('2026-01-15 10:30:00' AS TIMESTAMP) AS data_version",
-        warn_after="1h",
-        error_after="2h",
-        expected_age_status="warn",
-    ),
-    StandardSourceFreshnessAgePolicyTestCase(
-        description="old timestamp errors after error threshold",
-        current_query="SELECT CAST('2026-01-15 09:30:00' AS TIMESTAMP) AS data_version",
-        warn_after="1h",
-        error_after="2h",
-        expected_age_status="error",
-    ),
-    StandardSourceFreshnessAgePolicyTestCase(
-        description="naive timestamp compares against aware observed timestamp",
-        current_query="SELECT CAST('2026-01-15 09:30:00' AS TIMESTAMP) AS data_version",
-        warn_after="1h",
-        error_after="2h",
-        expected_age_status="error",
-        observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
-    ),
-    StandardSourceFreshnessAgePolicyTestCase(
-        description="non timestamp observation is unknown for age policy",
-        current_query="SELECT 42 AS data_version",
-        warn_after="1h",
-        error_after="2h",
-        expected_age_status="unknown",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    AGE_POLICY_TEST_CASES,
-    ids=[case.description for case in AGE_POLICY_TEST_CASES],
+    (
+        StandardSourceFreshnessAgePolicyTestCase(
+            description="fresh timestamp passes age policy",
+            current_query="SELECT CAST('2026-01-15 11:30:00' AS TIMESTAMP) AS data_version",
+            warn_after="1h",
+            error_after="2h",
+            expected_age_status="pass",
+        ),
+        StandardSourceFreshnessAgePolicyTestCase(
+            description="older timestamp warns before error threshold",
+            current_query="SELECT CAST('2026-01-15 10:30:00' AS TIMESTAMP) AS data_version",
+            warn_after="1h",
+            error_after="2h",
+            expected_age_status="warn",
+        ),
+        StandardSourceFreshnessAgePolicyTestCase(
+            description="old timestamp errors after error threshold",
+            current_query="SELECT CAST('2026-01-15 09:30:00' AS TIMESTAMP) AS data_version",
+            warn_after="1h",
+            error_after="2h",
+            expected_age_status="error",
+        ),
+        StandardSourceFreshnessAgePolicyTestCase(
+            description="naive timestamp compares against aware observed timestamp",
+            current_query="SELECT CAST('2026-01-15 09:30:00' AS TIMESTAMP) AS data_version",
+            warn_after="1h",
+            error_after="2h",
+            expected_age_status="error",
+            observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
+        ),
+        StandardSourceFreshnessAgePolicyTestCase(
+            description="non timestamp observation is unknown for age policy",
+            current_query="SELECT 42 AS data_version",
+            warn_after="1h",
+            error_after="2h",
+            expected_age_status="unknown",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_age_policy_when_planning_then_records_age_status(
     test_case: StandardSourceFreshnessAgePolicyTestCase,
@@ -267,7 +261,7 @@ def test_given_source_freshness_age_policy_when_planning_then_records_age_status
             expected_age_status="error",
         )
     ],
-    ids=["adapter metadata timestamp can error age policy"],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_metadata_age_policy_when_planning_then_records_age_status(
     test_case: StandardSourceFreshnessAgePolicyTestCase,
@@ -317,38 +311,35 @@ def test_given_adapter_metadata_age_policy_when_planning_then_records_age_status
     assert next(iter(result.age_statuses.values())) == test_case.expected_age_status
 
 
-LAG_TOLERANCE_TEST_CASES: tuple[StandardSourceFreshnessLagToleranceTestCase, ...] = (
-    StandardSourceFreshnessLagToleranceTestCase(
-        description="within timestamp lag tolerance",
-        current_query="SELECT CAST('2026-01-15 12:05:00' AS TIMESTAMP) AS data_version",
-        expected_changed_count=0,
-        expected_unchanged_count=1,
-    ),
-    StandardSourceFreshnessLagToleranceTestCase(
-        description="exactly at timestamp lag tolerance boundary",
-        current_query="SELECT CAST('2026-01-15 12:10:00' AS TIMESTAMP) AS data_version",
-        expected_changed_count=0,
-        expected_unchanged_count=1,
-    ),
-    StandardSourceFreshnessLagToleranceTestCase(
-        description="beyond timestamp lag tolerance",
-        current_query="SELECT CAST('2026-01-15 12:11:00' AS TIMESTAMP) AS data_version",
-        expected_changed_count=1,
-        expected_unchanged_count=0,
-    ),
-    StandardSourceFreshnessLagToleranceTestCase(
-        description="backwards timestamp movement is conservative",
-        current_query="SELECT CAST('2026-01-15 11:59:00' AS TIMESTAMP) AS data_version",
-        expected_changed_count=1,
-        expected_unchanged_count=0,
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    LAG_TOLERANCE_TEST_CASES,
-    ids=[case.description for case in LAG_TOLERANCE_TEST_CASES],
+    (
+        StandardSourceFreshnessLagToleranceTestCase(
+            description="within timestamp lag tolerance",
+            current_query="SELECT CAST('2026-01-15 12:05:00' AS TIMESTAMP) AS data_version",
+            expected_changed_count=0,
+            expected_unchanged_count=1,
+        ),
+        StandardSourceFreshnessLagToleranceTestCase(
+            description="exactly at timestamp lag tolerance boundary",
+            current_query="SELECT CAST('2026-01-15 12:10:00' AS TIMESTAMP) AS data_version",
+            expected_changed_count=0,
+            expected_unchanged_count=1,
+        ),
+        StandardSourceFreshnessLagToleranceTestCase(
+            description="beyond timestamp lag tolerance",
+            current_query="SELECT CAST('2026-01-15 12:11:00' AS TIMESTAMP) AS data_version",
+            expected_changed_count=1,
+            expected_unchanged_count=0,
+        ),
+        StandardSourceFreshnessLagToleranceTestCase(
+            description="backwards timestamp movement is conservative",
+            current_query="SELECT CAST('2026-01-15 11:59:00' AS TIMESTAMP) AS data_version",
+            expected_changed_count=1,
+            expected_unchanged_count=0,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_movement(
     test_case: StandardSourceFreshnessLagToleranceTestCase,
@@ -430,7 +421,7 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
             expected_unknown_source_names=("raw.orders",),
         )
     ],
-    ids=["classifies unsupported default source freshness as unknown"],
+    ids=lambda case: case.description,
 )
 def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_marks_unknown(
     test_case: StandardSourceFreshnessUnknownTestCase,
@@ -473,7 +464,7 @@ def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_m
             expected_data_version="7",
         )
     ],
-    ids=["column freshness observes an expression source via subquery"],
+    ids=lambda case: case.description,
 )
 def test_given_column_freshness_expression_when_planning_then_observes_subquery(
     test_case: StandardSourceFreshnessExpressionTestCase,
@@ -527,7 +518,7 @@ def test_given_column_freshness_expression_when_planning_then_observes_subquery(
             expected_batch_call_count=1,
         )
     ],
-    ids=["adapter default freshness observes unconfigured physical sources in batch"],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_observes_default(
     test_case: StandardSourceFreshnessAdapterDefaultTestCase,
@@ -574,7 +565,7 @@ def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_o
             expected_unknown_source_names=(),
         )
     ],
-    ids=["managed sources are skipped during standard planning observation"],
+    ids=lambda case: case.description,
 )
 def test_given_managed_source_when_planning_source_freshness_then_skips_observation(
     test_case: StandardSourceFreshnessManagedSkipTestCase,
@@ -618,7 +609,7 @@ def test_given_managed_source_when_planning_source_freshness_then_skips_observat
             expected_unchanged_count=1,
         )
     ],
-    ids=["reads previous standard source freshness across multiple state schemas"],
+    ids=lambda case: case.description,
 )
 def test_given_multiple_state_schemas_when_planning_then_merges_previous_records(
     test_case: StandardSourceFreshnessMultiSchemaTestCase,
@@ -689,7 +680,7 @@ def test_given_multiple_state_schemas_when_planning_then_merges_previous_records
             expected_changed_count=0,
         )
     ],
-    ids=["uses newest duplicate source freshness record across state schemas"],
+    ids=lambda case: case.description,
 )
 def test_given_duplicate_state_schema_records_when_planning_then_uses_newest_observation(
     test_case: StandardSourceFreshnessDuplicateSchemaTestCase,

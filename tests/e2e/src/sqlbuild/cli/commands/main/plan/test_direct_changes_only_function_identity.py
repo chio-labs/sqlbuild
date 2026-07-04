@@ -29,7 +29,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             expected_model_name="orders",
         )
     ],
-    ids=["function change updates dependent model version hash after build"],
+    ids=lambda case: case.description,
 )
 def test_given_function_change_when_building_dependent_then_model_version_hash_changes(
     test_case: DirectFunctionIdentityE2ETestCase,
@@ -63,29 +63,26 @@ def test_given_function_change_when_building_dependent_then_model_version_hash_c
     assert changed_hashes[0][0] != changed_hashes[-1][0]
 
 
-TEST_CASES: list[DirectFunctionSelectorE2ETestCase] = [
-    DirectFunctionSelectorE2ETestCase(
-        description="function selector stays on changed function only",
-        selector="is_large_order",
-        expected_plan_fragment="Plan ready (",
-        expected_fragments=("Changed functions (1)", "is_large_order"),
-        unexpected_fragments=("Upstream changed",),
-        expected_remaining_stale_names=("orders",),
-    ),
-    DirectFunctionSelectorE2ETestCase(
-        description="dependent upstream expansion includes changed function and model",
-        selector="+orders",
-        expected_plan_fragment="Plan ready (",
-        expected_fragments=("Changed functions (1)", "is_large_order", "orders"),
-        unexpected_fragments=("Plan ready (0 selected)",),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        DirectFunctionSelectorE2ETestCase(
+            description="function selector stays on changed function only",
+            selector="is_large_order",
+            expected_plan_fragment="Plan ready (",
+            expected_fragments=("Changed functions (1)", "is_large_order"),
+            unexpected_fragments=("Upstream changed",),
+            expected_remaining_stale_names=("orders",),
+        ),
+        DirectFunctionSelectorE2ETestCase(
+            description="dependent upstream expansion includes changed function and model",
+            selector="+orders",
+            expected_plan_fragment="Plan ready (",
+            expected_fragments=("Changed functions (1)", "is_large_order", "orders"),
+            unexpected_fragments=("Plan ready (0 selected)",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_function_change_when_planning_with_selector_then_respects_function_scope(
     test_case: DirectFunctionSelectorE2ETestCase,

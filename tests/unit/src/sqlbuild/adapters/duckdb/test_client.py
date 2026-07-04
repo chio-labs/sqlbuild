@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
             expected_rule_results={"LOWER": InferredNullability.NON_NULL},
         )
     ],
-    ids=["returns DuckDB inference rules"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_adapter_when_getting_inference_profile_then_returns_expected_rules(
     test_case: DuckDbExpressionInferenceProfileTestCase,
@@ -49,39 +49,21 @@ def test_given_duckdb_adapter_when_getting_inference_profile_then_returns_expect
         assert rule((InferredNullability.NON_NULL,)) == expected
 
 
-TEST_CASES: list[DuckDbRenderCursorBoundLiteralTestCase] = [
-    DuckDbRenderCursorBoundLiteralTestCase(
-        description="renders timestamp cursor bounds as typed literals",
-        value="2024-01-15T00:00:00",
-        cursor_type=CursorKind.TIMESTAMP,
-        expected_literal="TIMESTAMP '2024-01-15T00:00:00'",
-    ),
-    DuckDbRenderCursorBoundLiteralTestCase(
-        description="renders integer cursor bounds without quotes",
-        value="42",
-        cursor_type=CursorKind.INTEGER,
-        expected_literal="42",
-    ),
-]
-
-DUCKDB_RENDER_IDENTIFIER_TEST_CASES: list[DuckDbRenderIdentifierTestCase] = [
-    DuckDbRenderIdentifierTestCase(
-        description="quotes lowercase identifiers without changing case",
-        name="event_id",
-        expected_identifier='"event_id"',
-    ),
-    DuckDbRenderIdentifierTestCase(
-        description="escapes embedded double quotes",
-        name='event"id',
-        expected_identifier='"event""id"',
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DUCKDB_RENDER_IDENTIFIER_TEST_CASES,
-    ids=[case.description for case in DUCKDB_RENDER_IDENTIFIER_TEST_CASES],
+    [
+        DuckDbRenderIdentifierTestCase(
+            description="quotes lowercase identifiers without changing case",
+            name="event_id",
+            expected_identifier='"event_id"',
+        ),
+        DuckDbRenderIdentifierTestCase(
+            description="escapes embedded double quotes",
+            name='event"id',
+            expected_identifier='"event""id"',
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_identifier_when_rendering_then_duckdb_quotes_identifier(
     test_case: DuckDbRenderIdentifierTestCase,
@@ -95,8 +77,21 @@ def test_given_identifier_when_rendering_then_duckdb_quotes_identifier(
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        DuckDbRenderCursorBoundLiteralTestCase(
+            description="renders timestamp cursor bounds as typed literals",
+            value="2024-01-15T00:00:00",
+            cursor_type=CursorKind.TIMESTAMP,
+            expected_literal="TIMESTAMP '2024-01-15T00:00:00'",
+        ),
+        DuckDbRenderCursorBoundLiteralTestCase(
+            description="renders integer cursor bounds without quotes",
+            value="42",
+            cursor_type=CursorKind.INTEGER,
+            expected_literal="42",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_cursor_bounds_when_rendering_then_duckdb_returns_expected_literal(
     test_case: DuckDbRenderCursorBoundLiteralTestCase,
@@ -117,7 +112,7 @@ def test_given_cursor_bounds_when_rendering_then_duckdb_returns_expected_literal
             expected_empty_value=None,
         )
     ],
-    ids=["returns max cursor from populated relation and none from empty relation"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_relation_when_getting_max_cursor_then_returns_relation_max(
     test_case: DuckDbRelationMaxCursorTestCase,
@@ -158,7 +153,7 @@ def test_given_duckdb_relation_when_getting_max_cursor_then_returns_relation_max
             ),
         )
     ],
-    ids=["renders table function as DuckDB table macro"],
+    ids=lambda case: case.description,
 )
 def test_given_table_function_when_rendering_then_duckdb_returns_expected_macro(
     test_case: DuckDbRenderTableFunctionTestCase,
@@ -193,7 +188,7 @@ def test_given_table_function_when_rendering_then_duckdb_returns_expected_macro(
             ),
         )
     ],
-    ids=["renders fingerprint history pruning with rowid window delete"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_prune_then_duckdb_uses_history_rank(
     test_case: DuckDbPruneSqlTestCase,
@@ -227,7 +222,7 @@ def test_given_fingerprint_table_when_rendering_prune_then_duckdb_uses_history_r
             ),
         )
     ],
-    ids=["renders source freshness history pruning with full identity"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_table_when_rendering_prune_then_duckdb_uses_history_rank(
     test_case: DuckDbPruneSqlTestCase,
@@ -278,7 +273,7 @@ def test_given_source_freshness_table_when_rendering_prune_then_duckdb_uses_hist
             ),
         )
     ],
-    ids=["escapes single quotes in DuckDB metadata SQL literals"],
+    ids=lambda case: case.description,
 )
 def test_given_metadata_names_with_quotes_when_querying_then_duckdb_escapes_literals(
     test_case: DuckDbMetadataSqlTestCase,
@@ -321,37 +316,34 @@ def test_given_metadata_names_with_quotes_when_querying_then_duckdb_escapes_lite
     assert tuple(connection.executed_sql) == test_case.expected_sql
 
 
-RENDER_SWAP_TEST_CASES: tuple[DuckDbRenderSwapTestCase, ...] = (
-    DuckDbRenderSwapTestCase(
-        description="renders swap for unquoted qualified relations",
-        left="dev_marts.agg_daily_revenue",
-        right="dev_marts.agg_daily_revenue__stage",
-        expected_statements=(
-            'ALTER TABLE dev_marts.agg_daily_revenue RENAME TO "agg_daily_revenue__swap_staging"',
-            "ALTER TABLE dev_marts.agg_daily_revenue__stage RENAME TO agg_daily_revenue",
-            'ALTER TABLE dev_marts."agg_daily_revenue__swap_staging" '
-            "RENAME TO agg_daily_revenue__stage",
-        ),
-    ),
-    DuckDbRenderSwapTestCase(
-        description="renders swap for quoted qualified relations",
-        left='"dev_marts"."agg_daily_revenue"',
-        right='"dev_marts"."agg_daily_revenue__stage"',
-        expected_statements=(
-            'ALTER TABLE "dev_marts"."agg_daily_revenue" '
-            'RENAME TO "agg_daily_revenue__swap_staging"',
-            'ALTER TABLE "dev_marts"."agg_daily_revenue__stage" RENAME TO "agg_daily_revenue"',
-            'ALTER TABLE "dev_marts"."agg_daily_revenue__swap_staging" '
-            'RENAME TO "agg_daily_revenue__stage"',
-        ),
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RENDER_SWAP_TEST_CASES,
-    ids=[case.description for case in RENDER_SWAP_TEST_CASES],
+    (
+        DuckDbRenderSwapTestCase(
+            description="renders swap for unquoted qualified relations",
+            left="dev_marts.agg_daily_revenue",
+            right="dev_marts.agg_daily_revenue__stage",
+            expected_statements=(
+                'ALTER TABLE dev_marts.agg_daily_revenue RENAME TO "agg_daily_revenue__swap_staging"',
+                "ALTER TABLE dev_marts.agg_daily_revenue__stage RENAME TO agg_daily_revenue",
+                'ALTER TABLE dev_marts."agg_daily_revenue__swap_staging" '
+                "RENAME TO agg_daily_revenue__stage",
+            ),
+        ),
+        DuckDbRenderSwapTestCase(
+            description="renders swap for quoted qualified relations",
+            left='"dev_marts"."agg_daily_revenue"',
+            right='"dev_marts"."agg_daily_revenue__stage"',
+            expected_statements=(
+                'ALTER TABLE "dev_marts"."agg_daily_revenue" '
+                'RENAME TO "agg_daily_revenue__swap_staging"',
+                'ALTER TABLE "dev_marts"."agg_daily_revenue__stage" RENAME TO "agg_daily_revenue"',
+                'ALTER TABLE "dev_marts"."agg_daily_revenue__swap_staging" '
+                'RENAME TO "agg_daily_revenue__stage"',
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_qualified_relations_when_rendering_swap_then_keeps_staging_in_schema(
     test_case: DuckDbRenderSwapTestCase,
@@ -375,7 +367,7 @@ def test_given_qualified_relations_when_rendering_swap_then_keeps_staging_in_sch
             expected_sql='SELECT MAX("event_ts") AS data_version FROM (SELECT 1 AS event_ts)',
         )
     ],
-    ids=["subquery source renders without a derived-table alias"],
+    ids=lambda case: case.description,
 )
 def test_given_subquery_source_when_rendering_freshness_query_then_duckdb_omits_alias(
     test_case: DuckDbRenderSourceFreshnessQueryTestCase,

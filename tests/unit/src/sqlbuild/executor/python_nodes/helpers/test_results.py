@@ -41,101 +41,44 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     build_check_context,
 )
 
-CHECK_RETURN_NORMALIZATION_TEST_CASES: list[PythonCheckReturnNormalizationTestCase] = [
-    PythonCheckReturnNormalizationTestCase(
-        description="preserves explicit check result metadata",
-        returned=PythonCheckResult(
-            passed=False,
-            message="Export file is missing",
-            metadata={"uri": "s3://exports/customers.parquet"},
-            severity=PythonCheckSeverity.WARN,
-        ),
-        default_severity=PythonCheckSeverity.ERROR,
-        expected_passed=False,
-        expected_message="Export file is missing",
-        expected_metadata={"uri": "s3://exports/customers.parquet"},
-        expected_severity=PythonCheckSeverity.WARN,
-    ),
-    PythonCheckReturnNormalizationTestCase(
-        description="normalizes true shorthand as pass",
-        returned=True,
-        default_severity=PythonCheckSeverity.ERROR,
-        expected_passed=True,
-        expected_message=None,
-        expected_metadata={},
-        expected_severity=PythonCheckSeverity.ERROR,
-    ),
-    PythonCheckReturnNormalizationTestCase(
-        description="normalizes false shorthand as failure",
-        returned=False,
-        default_severity=PythonCheckSeverity.WARN,
-        expected_passed=False,
-        expected_message=None,
-        expected_metadata={},
-        expected_severity=PythonCheckSeverity.WARN,
-    ),
-]
-
-RETURN_NORMALIZATION_TEST_CASES: list[PythonNodeReturnNormalizationTestCase] = [
-    PythonNodeReturnNormalizationTestCase(
-        description="normalizes plain return as successful payload",
-        kind=PythonNodeKind.TASK,
-        returned={"rows": 3},
-        expected_status=PythonNodeStatus.SUCCESS,
-        expected_payload={"rows": 3},
-        expected_metadata={},
-        expected_materialized=None,
-        expected_skip_mode=None,
-        expected_skip_reason=None,
-    ),
-    PythonNodeReturnNormalizationTestCase(
-        description="normalizes none return as empty success",
-        kind=PythonNodeKind.TASK,
-        returned=None,
-        expected_status=PythonNodeStatus.SUCCESS,
-        expected_payload=None,
-        expected_metadata={},
-        expected_materialized=None,
-        expected_skip_mode=None,
-        expected_skip_reason=None,
-    ),
-    PythonNodeReturnNormalizationTestCase(
-        description="normalizes explicit asset result with materialized flag",
-        kind=PythonNodeKind.ASSET,
-        returned=PythonNodeResult(
-            payload={"uri": "s3://exports/customers.parquet"},
-            metadata={"format": "parquet"},
-            materialized=False,
-        ),
-        expected_status=PythonNodeStatus.SUCCESS,
-        expected_payload={"uri": "s3://exports/customers.parquet"},
-        expected_metadata={"format": "parquet"},
-        expected_materialized=False,
-        expected_skip_mode=None,
-        expected_skip_reason=None,
-    ),
-    PythonNodeReturnNormalizationTestCase(
-        description="normalizes downstream skip signal",
-        kind=PythonNodeKind.TASK,
-        returned=PythonNodeSkipResult(
-            reason="No new source rows",
-            mode=SkipMode.HARD,
-            metadata={"cursor": "2026-05-30"},
-        ),
-        expected_status=PythonNodeStatus.SKIPPED,
-        expected_payload=None,
-        expected_metadata={"cursor": "2026-05-30"},
-        expected_materialized=None,
-        expected_skip_mode=SkipMode.HARD,
-        expected_skip_reason="No new source rows",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    CHECK_RETURN_NORMALIZATION_TEST_CASES,
-    ids=[case.description for case in CHECK_RETURN_NORMALIZATION_TEST_CASES],
+    [
+        PythonCheckReturnNormalizationTestCase(
+            description="preserves explicit check result metadata",
+            returned=PythonCheckResult(
+                passed=False,
+                message="Export file is missing",
+                metadata={"uri": "s3://exports/customers.parquet"},
+                severity=PythonCheckSeverity.WARN,
+            ),
+            default_severity=PythonCheckSeverity.ERROR,
+            expected_passed=False,
+            expected_message="Export file is missing",
+            expected_metadata={"uri": "s3://exports/customers.parquet"},
+            expected_severity=PythonCheckSeverity.WARN,
+        ),
+        PythonCheckReturnNormalizationTestCase(
+            description="normalizes true shorthand as pass",
+            returned=True,
+            default_severity=PythonCheckSeverity.ERROR,
+            expected_passed=True,
+            expected_message=None,
+            expected_metadata={},
+            expected_severity=PythonCheckSeverity.ERROR,
+        ),
+        PythonCheckReturnNormalizationTestCase(
+            description="normalizes false shorthand as failure",
+            returned=False,
+            default_severity=PythonCheckSeverity.WARN,
+            expected_passed=False,
+            expected_message=None,
+            expected_metadata={},
+            expected_severity=PythonCheckSeverity.WARN,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_check_return_when_normalizing_then_returns_check_result(
     test_case: PythonCheckReturnNormalizationTestCase,
@@ -161,7 +104,7 @@ def test_given_python_check_return_when_normalizing_then_returns_check_result(
             expected_error_fragment="Python checks must return",
         )
     ],
-    ids=["rejects none check return"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_python_check_return_when_normalizing_then_raises(
     test_case: PythonCheckReturnNormalizationErrorTestCase,
@@ -194,7 +137,7 @@ def test_given_invalid_python_check_return_when_normalizing_then_raises(
             expected_severities=(None, None, PythonCheckSeverity.WARN),
         )
     ],
-    ids=["builds pass fail and warn check results"],
+    ids=lambda case: case.description,
 )
 def test_given_check_context_when_building_results_then_returns_check_results(
     test_case: PythonCheckContextResultTestCase,
@@ -232,49 +175,63 @@ def test_given_check_context_when_building_results_then_returns_check_results(
     )
 
 
-FAN_IN_POLICY_TEST_CASES: list[PythonNodeFanInPolicyTestCase] = [
-    PythonNodeFanInPolicyTestCase(
-        description="runs when there are no upstream nodes",
-        upstream_statuses=(),
-        upstream_skip_modes=(),
-        expected_action=PythonNodeFanInAction.RUN,
-        expected_reason=None,
-    ),
-    PythonNodeFanInPolicyTestCase(
-        description="blocks when any upstream failed",
-        upstream_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.FAILED),
-        upstream_skip_modes=(None, None),
-        expected_action=PythonNodeFanInAction.BLOCK,
-        expected_reason="Upstream Python node failed: upstream_1",
-    ),
-    PythonNodeFanInPolicyTestCase(
-        description="skips when any upstream hard-skipped",
-        upstream_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SKIPPED),
-        upstream_skip_modes=(None, SkipMode.HARD),
-        expected_action=PythonNodeFanInAction.SKIP,
-        expected_reason="Upstream Python node hard-skipped: upstream_1",
-    ),
-    PythonNodeFanInPolicyTestCase(
-        description="runs with successful sibling when another upstream soft-skipped",
-        upstream_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SKIPPED),
-        upstream_skip_modes=(None, SkipMode.SOFT),
-        expected_action=PythonNodeFanInAction.RUN,
-        expected_reason=None,
-    ),
-    PythonNodeFanInPolicyTestCase(
-        description="skips when all upstream nodes soft-skipped",
-        upstream_statuses=(PythonNodeStatus.SKIPPED, PythonNodeStatus.SKIPPED),
-        upstream_skip_modes=(SkipMode.SOFT, SkipMode.SOFT),
-        expected_action=PythonNodeFanInAction.SKIP,
-        expected_reason="All upstream Python nodes were skipped",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RETURN_NORMALIZATION_TEST_CASES,
-    ids=[case.description for case in RETURN_NORMALIZATION_TEST_CASES],
+    [
+        PythonNodeReturnNormalizationTestCase(
+            description="normalizes plain return as successful payload",
+            kind=PythonNodeKind.TASK,
+            returned={"rows": 3},
+            expected_status=PythonNodeStatus.SUCCESS,
+            expected_payload={"rows": 3},
+            expected_metadata={},
+            expected_materialized=None,
+            expected_skip_mode=None,
+            expected_skip_reason=None,
+        ),
+        PythonNodeReturnNormalizationTestCase(
+            description="normalizes none return as empty success",
+            kind=PythonNodeKind.TASK,
+            returned=None,
+            expected_status=PythonNodeStatus.SUCCESS,
+            expected_payload=None,
+            expected_metadata={},
+            expected_materialized=None,
+            expected_skip_mode=None,
+            expected_skip_reason=None,
+        ),
+        PythonNodeReturnNormalizationTestCase(
+            description="normalizes explicit asset result with materialized flag",
+            kind=PythonNodeKind.ASSET,
+            returned=PythonNodeResult(
+                payload={"uri": "s3://exports/customers.parquet"},
+                metadata={"format": "parquet"},
+                materialized=False,
+            ),
+            expected_status=PythonNodeStatus.SUCCESS,
+            expected_payload={"uri": "s3://exports/customers.parquet"},
+            expected_metadata={"format": "parquet"},
+            expected_materialized=False,
+            expected_skip_mode=None,
+            expected_skip_reason=None,
+        ),
+        PythonNodeReturnNormalizationTestCase(
+            description="normalizes downstream skip signal",
+            kind=PythonNodeKind.TASK,
+            returned=PythonNodeSkipResult(
+                reason="No new source rows",
+                mode=SkipMode.HARD,
+                metadata={"cursor": "2026-05-30"},
+            ),
+            expected_status=PythonNodeStatus.SKIPPED,
+            expected_payload=None,
+            expected_metadata={"cursor": "2026-05-30"},
+            expected_materialized=None,
+            expected_skip_mode=SkipMode.HARD,
+            expected_skip_reason="No new source rows",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_node_return_when_normalizing_then_returns_execution_result(
     test_case: PythonNodeReturnNormalizationTestCase,
@@ -305,7 +262,7 @@ def test_given_python_node_return_when_normalizing_then_returns_execution_result
             expected_error_fragment="Only asset Python nodes",
         )
     ],
-    ids=["rejects materialized flag on task result"],
+    ids=lambda case: case.description,
 )
 def test_given_non_asset_materialized_result_when_normalizing_then_raises(
     test_case: PythonNodeReturnNormalizationErrorTestCase,
@@ -328,7 +285,7 @@ def test_given_non_asset_materialized_result_when_normalizing_then_raises(
             expected_error_message="API unavailable",
         )
     ],
-    ids=["records failed status and error message"],
+    ids=lambda case: case.description,
 )
 def test_given_python_node_exception_when_building_failure_result_then_records_message(
     test_case: PythonNodeFailureResultTestCase,
@@ -345,8 +302,44 @@ def test_given_python_node_exception_when_building_failure_result_then_records_m
 
 @pytest.mark.parametrize(
     "test_case",
-    FAN_IN_POLICY_TEST_CASES,
-    ids=[case.description for case in FAN_IN_POLICY_TEST_CASES],
+    [
+        PythonNodeFanInPolicyTestCase(
+            description="runs when there are no upstream nodes",
+            upstream_statuses=(),
+            upstream_skip_modes=(),
+            expected_action=PythonNodeFanInAction.RUN,
+            expected_reason=None,
+        ),
+        PythonNodeFanInPolicyTestCase(
+            description="blocks when any upstream failed",
+            upstream_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.FAILED),
+            upstream_skip_modes=(None, None),
+            expected_action=PythonNodeFanInAction.BLOCK,
+            expected_reason="Upstream Python node failed: upstream_1",
+        ),
+        PythonNodeFanInPolicyTestCase(
+            description="skips when any upstream hard-skipped",
+            upstream_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SKIPPED),
+            upstream_skip_modes=(None, SkipMode.HARD),
+            expected_action=PythonNodeFanInAction.SKIP,
+            expected_reason="Upstream Python node hard-skipped: upstream_1",
+        ),
+        PythonNodeFanInPolicyTestCase(
+            description="runs with successful sibling when another upstream soft-skipped",
+            upstream_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SKIPPED),
+            upstream_skip_modes=(None, SkipMode.SOFT),
+            expected_action=PythonNodeFanInAction.RUN,
+            expected_reason=None,
+        ),
+        PythonNodeFanInPolicyTestCase(
+            description="skips when all upstream nodes soft-skipped",
+            upstream_statuses=(PythonNodeStatus.SKIPPED, PythonNodeStatus.SKIPPED),
+            upstream_skip_modes=(SkipMode.SOFT, SkipMode.SOFT),
+            expected_action=PythonNodeFanInAction.SKIP,
+            expected_reason="All upstream Python nodes were skipped",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_python_node_results_when_evaluating_fan_in_then_returns_decision(
     test_case: PythonNodeFanInPolicyTestCase,

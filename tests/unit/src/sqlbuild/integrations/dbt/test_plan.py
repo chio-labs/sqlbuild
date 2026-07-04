@@ -31,280 +31,202 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_sqlbuild_plan_output
 
-PLAN_TEST_CASES: list[DbtPlanTestCase] = [
-    DbtPlanTestCase(
-        description="formats mixed dbt and SQLBuild work",
-        command="run",
-        dbt_command_argv=("dbt", "run", "--select", "tag:nightly"),
-        dbt_ls_unique_ids=("model.analytics.int_orders",),
-        sqlbuild_command_argvs=(
-            ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_orders"),
-        ),
-        selection_sqlbuild_model_names=("fact_orders", "mart_orders"),
-        selection_dbt_required_unique_ids=(),
-        selection_dbt_anchor_terms=(),
-        selection_dbt_anchor_unique_ids_by_term={},
-        selection_path_translations=(),
-        warnings=(),
-        expected_dbt_skipped=False,
-        expected_sqlbuild_skipped=False,
-        expected_human_fragments=(
-            "Plan ready (3 selected resources)",
-            "dbt",
-            "command: dbt run --select tag:nightly",
-            "SQLBuild",
-            "fact_orders",
-            "mart_orders",
-        ),
-        expected_json_fragments=(
-            '"command": "run"',
-            '"selected_unique_ids": [',
-            '"model.analytics.int_orders"',
-            '"selected_models": [',
-            '"fact_orders"',
-        ),
-    ),
-    DbtPlanTestCase(
-        description="skips dbt for SQLBuild-only work",
-        command="run",
-        dbt_command_argv=("dbt", "run", "--select", "local_only"),
-        dbt_ls_unique_ids=(),
-        sqlbuild_command_argvs=(
-            ("sqb", "build", "--no-tests", "--no-audits", "--select", "local_only"),
-        ),
-        selection_sqlbuild_model_names=("local_only",),
-        selection_dbt_required_unique_ids=(),
-        selection_dbt_anchor_terms=(),
-        selection_dbt_anchor_unique_ids_by_term={},
-        selection_path_translations=(),
-        warnings=(),
-        expected_dbt_skipped=True,
-        expected_sqlbuild_skipped=False,
-        expected_human_fragments=(
-            "Plan ready (1 selected resources)",
-            "skipped: no dbt work selected",
-            "local_only",
-        ),
-        expected_json_fragments=(
-            '"skip_reason": "no_dbt_work"',
-            '"selected_models": [',
-            '"local_only"',
-        ),
-    ),
-    DbtPlanTestCase(
-        description="skips SQLBuild for dbt-only work",
-        command="build",
-        dbt_command_argv=("dbt", "build", "--select", "state:modified"),
-        dbt_ls_unique_ids=("model.analytics.stg_orders",),
-        sqlbuild_command_argvs=(),
-        selection_sqlbuild_model_names=(),
-        selection_dbt_required_unique_ids=(),
-        selection_dbt_anchor_terms=(),
-        selection_dbt_anchor_unique_ids_by_term={},
-        selection_path_translations=(),
-        warnings=(),
-        expected_dbt_skipped=False,
-        expected_sqlbuild_skipped=True,
-        expected_human_fragments=(
-            "Plan ready (1 selected resources)",
-            "command: dbt build --select state:modified",
-            "skipped: no SQLBuild work selected",
-        ),
-        expected_json_fragments=(
-            '"command": "build"',
-            '"skip_reason": "no_sqlbuild_work"',
-            '"model.analytics.stg_orders"',
-        ),
-    ),
-    DbtPlanTestCase(
-        description="counts required dbt upstreams for SQLBuild-owned selectors",
-        command="run",
-        dbt_command_argv=("dbt", "run", "--select", "model.analytics.int_orders"),
-        dbt_ls_unique_ids=(),
-        sqlbuild_command_argvs=(
-            ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_orders"),
-        ),
-        selection_sqlbuild_model_names=("fact_orders",),
-        selection_dbt_required_unique_ids=("model.analytics.int_orders",),
-        selection_dbt_anchor_terms=(),
-        selection_dbt_anchor_unique_ids_by_term={},
-        selection_path_translations=(),
-        warnings=(),
-        expected_dbt_skipped=False,
-        expected_sqlbuild_skipped=False,
-        expected_human_fragments=(
-            "Plan ready (1 required dbt, 1 SQLBuild)",
-            "fact_orders",
-        ),
-        expected_json_fragments=(
-            '"required_unique_ids": [',
-            '"model.analytics.int_orders"',
-            '"selected_models": [',
-            '"fact_orders"',
-        ),
-    ),
-    DbtPlanTestCase(
-        description="formats no-work plan",
-        command="run",
-        dbt_command_argv=("dbt", "run", "--select", "missing"),
-        dbt_ls_unique_ids=(),
-        sqlbuild_command_argvs=(),
-        selection_sqlbuild_model_names=(),
-        selection_dbt_required_unique_ids=(),
-        selection_dbt_anchor_terms=(),
-        selection_dbt_anchor_unique_ids_by_term={},
-        selection_path_translations=(),
-        warnings=("No dbt or SQLBuild resources matched the selection.",),
-        expected_dbt_skipped=True,
-        expected_sqlbuild_skipped=True,
-        expected_human_fragments=(
-            "Plan ready (0 selected resources)",
-            "skipped: no dbt work selected",
-            "skipped: no SQLBuild work selected",
-            "No dbt or SQLBuild resources matched the selection.",
-        ),
-        expected_json_fragments=(
-            '"selected_unique_ids": []',
-            '"selected_models": []',
-            '"skip_reason": "no_dbt_work"',
-            '"skip_reason": "no_sqlbuild_work"',
-        ),
-    ),
-    DbtPlanTestCase(
-        description="formats anchors and path normalizations",
-        command="run",
-        dbt_command_argv=("dbt", "run", "--select", "package:stripe+"),
-        dbt_ls_unique_ids=("model.stripe.stg_charges",),
-        sqlbuild_command_argvs=(
-            ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_charges"),
-        ),
-        selection_sqlbuild_model_names=("fact_charges",),
-        selection_dbt_required_unique_ids=("model.stripe.stg_charges",),
-        selection_dbt_anchor_terms=("package:stripe+",),
-        selection_dbt_anchor_unique_ids_by_term={"package:stripe+": ("model.stripe.stg_charges",)},
-        selection_path_translations=(("path:models\\marts", "path:models/marts"),),
-        warnings=(),
-        expected_dbt_skipped=False,
-        expected_sqlbuild_skipped=False,
-        expected_human_fragments=(
-            "Path translations (1)",
-            "path:models\\marts -> path:models/marts",
-        ),
-        expected_json_fragments=(
-            '"required_unique_ids": [',
-            '"term": "package:stripe+"',
-            '"from": "path:models\\\\marts"',
-            '"to": "path:models/marts"',
-        ),
-    ),
-    DbtPlanTestCase(
-        description="formats warnings in human and JSON output",
-        command="plan",
-        dbt_command_argv=("dbt", "ls", "--select", "fact_orders"),
-        dbt_ls_unique_ids=(),
-        sqlbuild_command_argvs=(("sqb", "plan", "--select", "fact_orders"),),
-        selection_sqlbuild_model_names=("fact_orders",),
-        selection_dbt_required_unique_ids=(),
-        selection_dbt_anchor_terms=(),
-        selection_dbt_anchor_unique_ids_by_term={},
-        selection_path_translations=(),
-        warnings=("dbt options were ignored",),
-        expected_dbt_skipped=True,
-        expected_sqlbuild_skipped=False,
-        expected_human_fragments=(
-            "Warnings (1)",
-            "- dbt options were ignored",
-        ),
-        expected_json_fragments=(
-            '"warnings": [',
-            '"dbt options were ignored"',
-        ),
-    ),
-]
-
-FORMATTER_TEST_CASES: list[DbtPlanHumanFormatterTestCase] = [
-    DbtPlanHumanFormatterTestCase(
-        description="caps dbt and SQLBuild resource sections with verbose guidance",
-        dbt_ls_nodes=tuple(
-            DbtLsNode(
-                unique_id=f"model.analytics.model_{index}",
-                resource_type="model",
-                package_name="analytics",
-                name=f"model_{index}",
-            )
-            for index in range(3)
-        ),
-        sqlbuild_model_names=("local_one", "local_two", "local_three"),
-        sqlbuild_plan_model_names=(),
-        display_limit=2,
-        use_color=False,
-        expected_human_fragments=(
-            "analytics.model_0",
-            "analytics.model_1",
-            "local_one",
-            "local_two",
-            "... and 1 more (use --verbose to show all)",
-        ),
-        expected_human_regex_fragments=(),
-        expected_absent_fragments=("analytics.model_2", "local_three          model"),
-    ),
-    DbtPlanHumanFormatterTestCase(
-        description="groups dbt resources with SQLBuild section styling and dbt names orange",
-        dbt_ls_nodes=(
-            DbtLsNode(
-                unique_id="test.analytics.unique_orders.abc123",
-                resource_type="test",
-                package_name="analytics",
-                name="unique_orders",
-            ),
-            DbtLsNode(
-                unique_id="model.analytics.orders",
-                resource_type="model",
-                package_name="analytics",
-                name="orders",
-            ),
-        ),
-        sqlbuild_model_names=(),
-        sqlbuild_plan_model_names=(),
-        display_limit=None,
-        use_color=True,
-        expected_human_fragments=(
-            "dbt (2 selected resources)",
-            "Models (1)",
-            "Tests (1)",
-            "analytics.orders",
-            "analytics.unique_orders",
-        ),
-        expected_human_regex_fragments=(
-            r"\x1b\[92mModels \(1\)\x1b\[0m",
-            r"\x1b\[92mTests \(1\)\x1b\[0m",
-            r"\x1b\[38;5;208m\x1b\[1manalytics\.orders\x1b\[0m",
-        ),
-        expected_absent_fragments=(),
-    ),
-    DbtPlanHumanFormatterTestCase(
-        description="reuses SQLBuild plan formatter sections when plan output is present",
-        dbt_ls_nodes=(),
-        sqlbuild_model_names=("downstream_orders",),
-        sqlbuild_plan_model_names=("downstream_orders",),
-        display_limit=None,
-        use_color=False,
-        expected_human_fragments=(
-            "SQLBuild (1 selected)",
-            "command: sqb plan --select downstream_orders",
-            "Models (1 standard run)",
-            "downstream_orders    table",
-        ),
-        expected_human_regex_fragments=(),
-        expected_absent_fragments=(),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PLAN_TEST_CASES,
-    ids=[case.description for case in PLAN_TEST_CASES],
+    [
+        DbtPlanTestCase(
+            description="formats mixed dbt and SQLBuild work",
+            command="run",
+            dbt_command_argv=("dbt", "run", "--select", "tag:nightly"),
+            dbt_ls_unique_ids=("model.analytics.int_orders",),
+            sqlbuild_command_argvs=(
+                ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_orders"),
+            ),
+            selection_sqlbuild_model_names=("fact_orders", "mart_orders"),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=False,
+            expected_human_fragments=(
+                "Plan ready (3 selected resources)",
+                "dbt",
+                "command: dbt run --select tag:nightly",
+                "SQLBuild",
+                "fact_orders",
+                "mart_orders",
+            ),
+            expected_json_fragments=(
+                '"command": "run"',
+                '"selected_unique_ids": [',
+                '"model.analytics.int_orders"',
+                '"selected_models": [',
+                '"fact_orders"',
+            ),
+        ),
+        DbtPlanTestCase(
+            description="skips dbt for SQLBuild-only work",
+            command="run",
+            dbt_command_argv=("dbt", "run", "--select", "local_only"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(
+                ("sqb", "build", "--no-tests", "--no-audits", "--select", "local_only"),
+            ),
+            selection_sqlbuild_model_names=("local_only",),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=False,
+            expected_human_fragments=(
+                "Plan ready (1 selected resources)",
+                "skipped: no dbt work selected",
+                "local_only",
+            ),
+            expected_json_fragments=(
+                '"skip_reason": "no_dbt_work"',
+                '"selected_models": [',
+                '"local_only"',
+            ),
+        ),
+        DbtPlanTestCase(
+            description="skips SQLBuild for dbt-only work",
+            command="build",
+            dbt_command_argv=("dbt", "build", "--select", "state:modified"),
+            dbt_ls_unique_ids=("model.analytics.stg_orders",),
+            sqlbuild_command_argvs=(),
+            selection_sqlbuild_model_names=(),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=True,
+            expected_human_fragments=(
+                "Plan ready (1 selected resources)",
+                "command: dbt build --select state:modified",
+                "skipped: no SQLBuild work selected",
+            ),
+            expected_json_fragments=(
+                '"command": "build"',
+                '"skip_reason": "no_sqlbuild_work"',
+                '"model.analytics.stg_orders"',
+            ),
+        ),
+        DbtPlanTestCase(
+            description="counts required dbt upstreams for SQLBuild-owned selectors",
+            command="run",
+            dbt_command_argv=("dbt", "run", "--select", "model.analytics.int_orders"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(
+                ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_orders"),
+            ),
+            selection_sqlbuild_model_names=("fact_orders",),
+            selection_dbt_required_unique_ids=("model.analytics.int_orders",),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=False,
+            expected_human_fragments=(
+                "Plan ready (1 required dbt, 1 SQLBuild)",
+                "fact_orders",
+            ),
+            expected_json_fragments=(
+                '"required_unique_ids": [',
+                '"model.analytics.int_orders"',
+                '"selected_models": [',
+                '"fact_orders"',
+            ),
+        ),
+        DbtPlanTestCase(
+            description="formats no-work plan",
+            command="run",
+            dbt_command_argv=("dbt", "run", "--select", "missing"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(),
+            selection_sqlbuild_model_names=(),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=("No dbt or SQLBuild resources matched the selection.",),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=True,
+            expected_human_fragments=(
+                "Plan ready (0 selected resources)",
+                "skipped: no dbt work selected",
+                "skipped: no SQLBuild work selected",
+                "No dbt or SQLBuild resources matched the selection.",
+            ),
+            expected_json_fragments=(
+                '"selected_unique_ids": []',
+                '"selected_models": []',
+                '"skip_reason": "no_dbt_work"',
+                '"skip_reason": "no_sqlbuild_work"',
+            ),
+        ),
+        DbtPlanTestCase(
+            description="formats anchors and path normalizations",
+            command="run",
+            dbt_command_argv=("dbt", "run", "--select", "package:stripe+"),
+            dbt_ls_unique_ids=("model.stripe.stg_charges",),
+            sqlbuild_command_argvs=(
+                ("sqb", "build", "--no-tests", "--no-audits", "--select", "fact_charges"),
+            ),
+            selection_sqlbuild_model_names=("fact_charges",),
+            selection_dbt_required_unique_ids=("model.stripe.stg_charges",),
+            selection_dbt_anchor_terms=("package:stripe+",),
+            selection_dbt_anchor_unique_ids_by_term={
+                "package:stripe+": ("model.stripe.stg_charges",)
+            },
+            selection_path_translations=(("path:models\\marts", "path:models/marts"),),
+            warnings=(),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=False,
+            expected_human_fragments=(
+                "Path translations (1)",
+                "path:models\\marts -> path:models/marts",
+            ),
+            expected_json_fragments=(
+                '"required_unique_ids": [',
+                '"term": "package:stripe+"',
+                '"from": "path:models\\\\marts"',
+                '"to": "path:models/marts"',
+            ),
+        ),
+        DbtPlanTestCase(
+            description="formats warnings in human and JSON output",
+            command="plan",
+            dbt_command_argv=("dbt", "ls", "--select", "fact_orders"),
+            dbt_ls_unique_ids=(),
+            sqlbuild_command_argvs=(("sqb", "plan", "--select", "fact_orders"),),
+            selection_sqlbuild_model_names=("fact_orders",),
+            selection_dbt_required_unique_ids=(),
+            selection_dbt_anchor_terms=(),
+            selection_dbt_anchor_unique_ids_by_term={},
+            selection_path_translations=(),
+            warnings=("dbt options were ignored",),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=False,
+            expected_human_fragments=(
+                "Warnings (1)",
+                "- dbt options were ignored",
+            ),
+            expected_json_fragments=(
+                '"warnings": [',
+                '"dbt options were ignored"',
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_output(
     test_case: DbtPlanTestCase,
@@ -387,7 +309,7 @@ def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_
             expected_json_fragments=(),
         )
     ],
-    ids=["places dbt anchors before SQLBuild selection"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_precedes_sqlbuild(
     test_case: DbtPlanTestCase,
@@ -418,8 +340,84 @@ def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_prec
 
 @pytest.mark.parametrize(
     "test_case",
-    FORMATTER_TEST_CASES,
-    ids=[case.description for case in FORMATTER_TEST_CASES],
+    [
+        DbtPlanHumanFormatterTestCase(
+            description="caps dbt and SQLBuild resource sections with verbose guidance",
+            dbt_ls_nodes=tuple(
+                DbtLsNode(
+                    unique_id=f"model.analytics.model_{index}",
+                    resource_type="model",
+                    package_name="analytics",
+                    name=f"model_{index}",
+                )
+                for index in range(3)
+            ),
+            sqlbuild_model_names=("local_one", "local_two", "local_three"),
+            sqlbuild_plan_model_names=(),
+            display_limit=2,
+            use_color=False,
+            expected_human_fragments=(
+                "analytics.model_0",
+                "analytics.model_1",
+                "local_one",
+                "local_two",
+                "... and 1 more (use --verbose to show all)",
+            ),
+            expected_human_regex_fragments=(),
+            expected_absent_fragments=("analytics.model_2", "local_three          model"),
+        ),
+        DbtPlanHumanFormatterTestCase(
+            description="groups dbt resources with SQLBuild section styling and dbt names orange",
+            dbt_ls_nodes=(
+                DbtLsNode(
+                    unique_id="test.analytics.unique_orders.abc123",
+                    resource_type="test",
+                    package_name="analytics",
+                    name="unique_orders",
+                ),
+                DbtLsNode(
+                    unique_id="model.analytics.orders",
+                    resource_type="model",
+                    package_name="analytics",
+                    name="orders",
+                ),
+            ),
+            sqlbuild_model_names=(),
+            sqlbuild_plan_model_names=(),
+            display_limit=None,
+            use_color=True,
+            expected_human_fragments=(
+                "dbt (2 selected resources)",
+                "Models (1)",
+                "Tests (1)",
+                "analytics.orders",
+                "analytics.unique_orders",
+            ),
+            expected_human_regex_fragments=(
+                r"\x1b\[92mModels \(1\)\x1b\[0m",
+                r"\x1b\[92mTests \(1\)\x1b\[0m",
+                r"\x1b\[38;5;208m\x1b\[1manalytics\.orders\x1b\[0m",
+            ),
+            expected_absent_fragments=(),
+        ),
+        DbtPlanHumanFormatterTestCase(
+            description="reuses SQLBuild plan formatter sections when plan output is present",
+            dbt_ls_nodes=(),
+            sqlbuild_model_names=("downstream_orders",),
+            sqlbuild_plan_model_names=("downstream_orders",),
+            display_limit=None,
+            use_color=False,
+            expected_human_fragments=(
+                "SQLBuild (1 selected)",
+                "command: sqb plan --select downstream_orders",
+                "Models (1 standard run)",
+                "downstream_orders    table",
+            ),
+            expected_human_regex_fragments=(),
+            expected_absent_fragments=(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_interop_plan_when_formatting_human_output_then_uses_expected_sections(
     test_case: DbtPlanHumanFormatterTestCase,
@@ -499,7 +497,7 @@ def test_given_dbt_interop_plan_when_formatting_human_output_then_uses_expected_
             expected_absent_fragments=("analytics.seed_2", "analytics.test_2", "Seeds (3)"),
         )
     ],
-    ids=["current model plan shows pruned seeds and tests with cap"],
+    ids=lambda case: case.description,
 )
 def test_given_current_dbt_models_when_formatting_then_shows_pruned_non_model_work(
     test_case: DbtPlanHumanFormatterTestCase,
@@ -584,7 +582,7 @@ def test_given_current_dbt_models_when_formatting_then_shows_pruned_non_model_wo
             expected_absent_fragments=("Tests pruned", "Seeds pruned"),
         )
     ],
-    ids=["runnable model plan shows non-model dbt work in verbose"],
+    ids=lambda case: case.description,
 )
 def test_given_runnable_dbt_model_when_formatting_verbose_then_shows_non_model_work(
     test_case: DbtPlanHumanFormatterTestCase,
@@ -640,7 +638,7 @@ def test_given_runnable_dbt_model_when_formatting_verbose_then_shows_non_model_w
             expected_absent_fragments=("model_2 model_3 model_4",),
         )
     ],
-    ids=["caps displayed dbt command select terms"],
+    ids=lambda case: case.description,
 )
 def test_given_large_dbt_command_when_formatting_then_caps_displayed_select_terms(
     test_case: DbtPlanHumanFormatterTestCase,
@@ -705,7 +703,7 @@ def test_given_large_dbt_command_when_formatting_then_caps_displayed_select_term
             ),
         )
     ],
-    ids=["bare selection hides passive upstream current models in plan display"],
+    ids=lambda case: case.description,
 )
 def test_given_bare_selection_when_formatting_then_hides_passive_upstream_models(
     test_case: DbtPlanHumanFormatterTestCase,
@@ -783,7 +781,7 @@ def test_given_bare_selection_when_formatting_then_hides_passive_upstream_models
             expected_absent_fragments=(),
         )
     ],
-    ids=["model plan shows reasons and inspected dependency wording"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_model_plan_when_formatting_then_shows_reasons_and_dependency_context(
     test_case: DbtPlanHumanFormatterTestCase,

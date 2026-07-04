@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.compiler.node_source_watermarks.main.shared.helpers
             expected_unknown_reason="missing_upstream_watermark",
         )
     ],
-    ids=["round trips structured source and unknown entries"],
+    ids=lambda case: case.description,
 )
 def test_given_watermark_payload_when_encoded_and_decoded_then_preserves_structured_entries(
     test_case: WatermarkPayloadRoundTripTestCase,
@@ -85,7 +85,7 @@ def test_given_watermark_payload_when_encoded_and_decoded_then_preserves_structu
             expected_error_fragment="base64-encoded JSON",
         )
     ],
-    ids=["rejects non-base64 payloads"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_watermark_payload_when_decoding_then_raises_input_error(
     test_case: InvalidWatermarkPayloadTestCase,

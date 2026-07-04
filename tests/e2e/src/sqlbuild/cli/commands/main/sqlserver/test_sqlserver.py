@@ -90,7 +90,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_fingerprint_rows=(("model", "downstream"),),
         )
     ],
-    ids=["direct dependency baseline copies prod upstream on SQL Server"],
+    ids=lambda case: case.description,
 )
 def test_given_downstream_selection_when_sqlserver_upstream_missing_then_baselines_from_prod(
     tmp_path: Path,
@@ -114,7 +114,7 @@ def test_given_downstream_selection_when_sqlserver_upstream_missing_then_baselin
             ),
         )
     ],
-    ids=["dbt init generated project builds through SQL Server dbt profile"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlserver_dbt_profile_when_running_dbt_init_then_builds_profile_lifecycle(
     tmp_path: Path,
@@ -183,7 +183,7 @@ def test_given_sqlserver_dbt_profile_when_running_dbt_init_then_builds_profile_l
             ),
         )
     ],
-    ids=["standard node results persist and read on SQL Server"],
+    ids=lambda case: case.description,
 )
 def test_given_python_result_when_running_check_on_sqlserver_then_persists_node_results(
     tmp_path: Path,
@@ -265,7 +265,7 @@ def test_given_python_result_when_running_check_on_sqlserver_then_persists_node_
             expected_stdout_fragments=("Execution", "OK"),
         )
     ],
-    ids=["waffle shop full build succeeds on SQL Server"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_table_exists(
     tmp_path: Path,
@@ -311,7 +311,7 @@ def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_ta
             ),
         )
     ],
-    ids=["direct changes only build prunes unchanged SQL Server model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_building_changes_only_on_sqlserver_then_prunes_model(
     tmp_path: Path,
@@ -372,7 +372,7 @@ def test_given_built_direct_project_when_building_changes_only_on_sqlserver_then
             expected_seed_strategy="copy",
         )
     ],
-    ids=["virtual seeded incremental build uses copy on sqlserver"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_incremental_change_when_building_on_sqlserver_then_seeds_with_copy(
     tmp_path: Path,
@@ -504,7 +504,7 @@ def test_given_virtual_incremental_change_when_building_on_sqlserver_then_seeds_
             ),
         )
     ],
-    ids=["reconcile repair-view recreates sqlserver logical view"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_logical_view_when_repairing_on_sqlserver_then_view_is_recreated(
     tmp_path: Path,
@@ -573,7 +573,7 @@ def test_given_missing_logical_view_when_repairing_on_sqlserver_then_view_is_rec
             expected_stdout_fragments=("Attach", "model     orders", "result    attached"),
         )
     ],
-    ids=["reconcile attach rebinds sqlserver logical view"],
+    ids=lambda case: case.description,
 )
 def test_given_tracked_physical_relation_when_attaching_on_sqlserver_then_view_is_rebound(
     tmp_path: Path,
@@ -666,7 +666,7 @@ def test_given_tracked_physical_relation_when_attaching_on_sqlserver_then_view_i
             ),
         )
     ],
-    ids=["adopt and detach preserve sqlserver logical table"],
+    ids=lambda case: case.description,
 )
 def test_given_stateless_table_when_adopting_and_detaching_on_sqlserver_then_table_is_preserved(
     tmp_path: Path,
@@ -747,7 +747,7 @@ def test_given_stateless_table_when_adopting_and_detaching_on_sqlserver_then_tab
             expected_ref_count_after=0,
         )
     ],
-    ids=["janitor prunes sqlserver detached VDE refs and physical versions"],
+    ids=lambda case: case.description,
 )
 def test_given_detached_vde_when_running_janitor_on_sqlserver_then_refs_are_pruned(
     tmp_path: Path,
@@ -829,83 +829,80 @@ def test_given_detached_vde_when_running_janitor_on_sqlserver_then_refs_are_prun
         cleanup_sqlserver_schema(schema_name=f"{schema_name}__sqb_physical", config=config)
 
 
-SQLSERVER_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[SqlServerScenarioLocalReplayE2ETestCase] = [
-    SqlServerScenarioLocalReplayE2ETestCase(
-        description="captures SQL Server fixtures and replays transpilable SQL locally",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT\n"
-            "  customer_id,\n"
-            "  CAST(CAST(event_ts AS DATE) AS DATETIME2) AS event_day,\n"
-            "  SUM(CASE WHEN amount_cents >= 1000 THEN amount_cents ELSE 0 END)"
-            " AS large_amount_cents,\n"
-            "  COUNT(*) AS event_count\n"
-            'FROM __source("raw_events")\n'
-            "GROUP BY customer_id, CAST(CAST(event_ts AS DATE) AS DATETIME2)\n"
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, CAST('2026-01-01 08:15:00' AS DATETIME2)"
-            " AS event_ts, 1500 AS amount_cents\n"
-            "  UNION ALL\n"
-            "  SELECT 10 AS customer_id, CAST('2026-01-01 10:30:00' AS DATETIME2)"
-            " AS event_ts, 500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id,"
-            " CAST(CAST('2026-01-01 00:00:00' AS DATE) AS DATETIME2) AS event_day,"
-            " 1500 AS large_amount_cents, 2 AS event_count\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "transpilable_event_rollup",
-            "PASS",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-        expected_local_rows=((10, 1500, 2),),
-        local_rows_sql=(
-            "SELECT customer_id, large_amount_cents, event_count "
-            "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
-        ),
-    ),
-    SqlServerScenarioLocalReplayE2ETestCase(
-        description="reports SQL Server local transpilation failures as X607",
-        scenario_name="local_transpile_error",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT customer_id, amount_cents\n"
-            'FROM __source("raw_events")\n'
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "local_transpile_error",
-            "ERROR",
-            "error[X607]",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-        expected_return_code=1,
-        corrupt_capture_dialect=True,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SQLSERVER_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
-    ids=[case.description for case in SQLSERVER_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
+    [
+        SqlServerScenarioLocalReplayE2ETestCase(
+            description="captures SQL Server fixtures and replays transpilable SQL locally",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT\n"
+                "  customer_id,\n"
+                "  CAST(CAST(event_ts AS DATE) AS DATETIME2) AS event_day,\n"
+                "  SUM(CASE WHEN amount_cents >= 1000 THEN amount_cents ELSE 0 END)"
+                " AS large_amount_cents,\n"
+                "  COUNT(*) AS event_count\n"
+                'FROM __source("raw_events")\n'
+                "GROUP BY customer_id, CAST(CAST(event_ts AS DATE) AS DATETIME2)\n"
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, CAST('2026-01-01 08:15:00' AS DATETIME2)"
+                " AS event_ts, 1500 AS amount_cents\n"
+                "  UNION ALL\n"
+                "  SELECT 10 AS customer_id, CAST('2026-01-01 10:30:00' AS DATETIME2)"
+                " AS event_ts, 500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id,"
+                " CAST(CAST('2026-01-01 00:00:00' AS DATE) AS DATETIME2) AS event_day,"
+                " 1500 AS large_amount_cents, 2 AS event_count\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "transpilable_event_rollup",
+                "PASS",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            expected_local_rows=((10, 1500, 2),),
+            local_rows_sql=(
+                "SELECT customer_id, large_amount_cents, event_count "
+                "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
+            ),
+        ),
+        SqlServerScenarioLocalReplayE2ETestCase(
+            description="reports SQL Server local transpilation failures as X607",
+            scenario_name="local_transpile_error",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT customer_id, amount_cents\n"
+                'FROM __source("raw_events")\n'
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "local_transpile_error",
+                "ERROR",
+                "error[X607]",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            expected_return_code=1,
+            corrupt_capture_dialect=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sqlserver_scenario_capture_when_replaying_locally_then_transpilable_sql_passes(
     tmp_path: Path,
@@ -969,7 +966,7 @@ def test_given_sqlserver_scenario_capture_when_replaying_locally_then_transpilab
             expected_rows=(("7", "loaded-dev"),),
         )
     ],
-    ids=["source loader build writes and reads SQL Server rows"],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_project_when_building_on_sqlserver_then_model_reads_loaded_rows(
     tmp_path: Path,
@@ -1039,7 +1036,7 @@ def test_given_source_loader_project_when_building_on_sqlserver_then_model_reads
             expected_loader_rows=(("7", "loaded-dev"),),
         )
     ],
-    ids=["SQL Server loader writes dev while model reads prod deferred source"],
+    ids=lambda case: case.description,
 )
 def test_given_source_deferral_env_when_building_on_sqlserver_then_reads_prod_and_writes_dev(
     tmp_path: Path,
@@ -1141,7 +1138,7 @@ def test_given_source_deferral_env_when_building_on_sqlserver_then_reads_prod_an
             expected_event_count=4,
         )
     ],
-    ids=["loader focused waffle shop grows across repeated SQL Server builds"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_waffle_shop_when_building_on_sqlserver_then_dag_grows_models(
     tmp_path: Path,
@@ -1205,7 +1202,7 @@ def test_given_loader_waffle_shop_when_building_on_sqlserver_then_dag_grows_mode
             expected_loader_status=(("1", "loaded", "self_managed"),),
         )
     ],
-    ids=["source loader strategies apply expected rows on SQL Server"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_strategy_project_when_loading_twice_on_sqlserver_then_write_modes_apply(
     tmp_path: Path,
@@ -1296,7 +1293,7 @@ def test_given_loader_strategy_project_when_loading_twice_on_sqlserver_then_writ
             expected_rows=(("1", "loaded"), ("2", "loaded")),
         )
     ],
-    ids=["chained source loader runs on SQL Server"],
+    ids=lambda case: case.description,
 )
 def test_given_chained_loader_project_when_loading_on_sqlserver_then_runs_loader_dag(
     tmp_path: Path,
@@ -1375,115 +1372,110 @@ def test_given_chained_loader_project_when_loading_on_sqlserver_then_runs_loader
         cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 
 
-SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
-    SqlServerIntermediateDagStrategyE2ETestCase
-] = [
-    SqlServerIntermediateDagStrategyE2ETestCase(
-        description="SQL Server append intermediate accumulates rows across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
-            "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "    {'name': 'amount', 'type': 'INTEGER'},\n"
-            "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "])\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        next_seq = 1\n"
-            "    else:\n"
-            "        next_seq = ctx.current_cursor_value + 1\n"
-            "    return [\n"
-            "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("1", "100"), ("2", "200")),
-        expected_terminal_rows=(("1", "100"), ("2", "200")),
-    ),
-    SqlServerIntermediateDagStrategyE2ETestCase(
-        description="SQL Server merge intermediate updates and adds rows across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(\n"
-            "    write_strategy='merge',\n"
-            "    unique_key='event_id',\n"
-            "    cursor_column='load_seq',\n"
-            "    columns=[\n"
-            "        {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "        {'name': 'amount', 'type': 'INTEGER'},\n"
-            "        {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "    ],\n"
-            ")\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        return [\n"
-            "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
-            "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
-            "        ]\n"
-            "    return [\n"
-            "        {'event_id': 1, 'amount': 150, 'load_seq': 2},\n"
-            "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
-        expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
-    ),
-    SqlServerIntermediateDagStrategyE2ETestCase(
-        description="SQL Server delete insert intermediate replaces cursor window across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
-            "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "    {'name': 'amount', 'type': 'INTEGER'},\n"
-            "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "])\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        return [\n"
-            "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
-            "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
-            "        ]\n"
-            "    return [\n"
-            "        {'event_id': 2, 'amount': 250, 'load_seq': 1},\n"
-            "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("2", "250"), ("3", "300")),
-        expected_terminal_rows=(("2", "250"), ("3", "300")),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES,
-    ids=[case.description for case in SQLSERVER_INTERMEDIATE_DAG_STRATEGY_TEST_CASES],
+    [
+        SqlServerIntermediateDagStrategyE2ETestCase(
+            description="SQL Server append intermediate accumulates rows across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "    {'name': 'amount', 'type': 'INTEGER'},\n"
+                "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        next_seq = 1\n"
+                "    else:\n"
+                "        next_seq = ctx.current_cursor_value + 1\n"
+                "    return [\n"
+                "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("1", "100"), ("2", "200")),
+            expected_terminal_rows=(("1", "100"), ("2", "200")),
+        ),
+        SqlServerIntermediateDagStrategyE2ETestCase(
+            description="SQL Server merge intermediate updates and adds rows across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(\n"
+                "    write_strategy='merge',\n"
+                "    unique_key='event_id',\n"
+                "    cursor_column='load_seq',\n"
+                "    columns=[\n"
+                "        {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "        {'name': 'amount', 'type': 'INTEGER'},\n"
+                "        {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "    ],\n"
+                ")\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [\n"
+                "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
+                "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
+                "        ]\n"
+                "    return [\n"
+                "        {'event_id': 1, 'amount': 150, 'load_seq': 2},\n"
+                "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
+            expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
+        ),
+        SqlServerIntermediateDagStrategyE2ETestCase(
+            description="SQL Server delete insert intermediate replaces cursor window across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "    {'name': 'amount', 'type': 'INTEGER'},\n"
+                "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [\n"
+                "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
+                "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
+                "        ]\n"
+                "    return [\n"
+                "        {'event_id': 2, 'amount': 250, 'load_seq': 1},\n"
+                "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("2", "250"), ("3", "300")),
+            expected_terminal_rows=(("2", "250"), ("3", "300")),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_intermediate_strategy_project_when_loading_twice_on_sqlserver_then_strategy_applies(
     tmp_path: Path,
@@ -1583,7 +1575,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_sqlserver_the
             ),
         )
     ],
-    ids=["executes snapshot scd2 matrix on SQL Server"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_project_when_building_on_sqlserver_then_scd2_history_is_valid(
     tmp_path: Path,
@@ -1700,7 +1692,7 @@ def test_given_snapshot_project_when_building_on_sqlserver_then_scd2_history_is_
             ),
         )
     ],
-    ids=["applies existing-target snapshot changes on SQL Server"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_snapshot_targets_when_building_on_sqlserver_then_apply_sql_succeeds(
     tmp_path: Path,
