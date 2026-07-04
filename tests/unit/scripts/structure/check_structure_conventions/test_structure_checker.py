@@ -832,6 +832,41 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=(),
         ),
         CheckPathsTestCase(
+            description="reports oversized private functions in main modules",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/plan.py": (
+                    "def run_plan() -> int:\n"
+                    "    return _resolve()\n"
+                    "\n"
+                    "\n"
+                    "def _resolve() -> int:\n"
+                    + "\n".join(f"    value_{index} = {index}" for index in range(41))
+                    + "\n    return value_40\n"
+                ),
+            },
+            expected_violation_codes=("SC063", "SC065"),
+        ),
+        CheckPathsTestCase(
+            description="reports discarded phase call results in private main functions",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/plan.py": dedent(
+                    """
+                def run_plan() -> str:
+                    return _resolve()
+
+
+                def _resolve() -> str:
+                    build_phase()
+                    return "demo"
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=("SC066",),
+        ),
+        CheckPathsTestCase(
             description="reports discarded underscore-prefixed phase call results",
             repo_files=compliant_repo_files()
             | {

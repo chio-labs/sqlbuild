@@ -1036,14 +1036,17 @@ def check_models_module(file_path: Path, module: ast.Module) -> list[Violation]:
 
 
 def check_main_public_function_shape(file_path: Path, module: ast.Module) -> list[Violation]:
-    """Cap main/ public functions so they stay phase-shaped orchestrators."""
+    """Cap main/ top-level functions so they stay phase-shaped orchestrators."""
 
     if not _is_main_package_module(file_path):
         return []
 
     violations: list[Violation] = []
     function_node: ast.FunctionDef | ast.AsyncFunctionDef
-    for function_node in _public_top_level_function_nodes(module):
+    for function_node in _top_level_function_nodes(module):
+        function_label: str = (
+            "private function" if function_node.name.startswith("_") else "public function"
+        )
         statement_count: int = (
             sum(1 for node in ast.walk(function_node) if isinstance(node, ast.stmt)) - 1
         )
@@ -1054,7 +1057,7 @@ def check_main_public_function_shape(file_path: Path, module: ast.Module) -> lis
                     path=file_path,
                     line=function_node.lineno,
                     message=(
-                        f"public function '{function_node.name}' has {statement_count} "
+                        f"{function_label} '{function_node.name}' has {statement_count} "
                         "statements (main/ limit: 40). "
                         f"{_MAIN_PHASE_REMEDIATION_MESSAGE}"
                     ),
@@ -1069,7 +1072,7 @@ def check_main_public_function_shape(file_path: Path, module: ast.Module) -> lis
                     path=file_path,
                     line=function_node.lineno,
                     message=(
-                        f"public function '{function_node.name}' calls {distinct_calls} "
+                        f"{function_label} '{function_node.name}' calls {distinct_calls} "
                         "distinct functions (main/ limit: 20). "
                         f"{_MAIN_PHASE_REMEDIATION_MESSAGE}"
                     ),
@@ -1084,7 +1087,7 @@ def check_main_public_function_shape(file_path: Path, module: ast.Module) -> lis
                     path=file_path,
                     line=function_node.lineno,
                     message=(
-                        f"public function '{function_node.name}' juggles {local_count} "
+                        f"{function_label} '{function_node.name}' juggles {local_count} "
                         "local variables (main/ limit: 20). This usually means multiple "
                         "phases' intermediate state is interleaved; each extracted phase "
                         "should own its intermediates and return one result model."
@@ -1102,7 +1105,7 @@ def check_main_discarded_call_results(file_path: Path, module: ast.Module) -> li
 
     violations: list[Violation] = []
     function_node: ast.FunctionDef | ast.AsyncFunctionDef
-    for function_node in _public_top_level_function_nodes(module):
+    for function_node in _top_level_function_nodes(module):
         node: ast.AST
         for node in ast.walk(function_node):
             if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
@@ -2700,14 +2703,13 @@ def _is_main_package_module(file_path: Path) -> bool:
     )
 
 
-def _public_top_level_function_nodes(
+def _top_level_function_nodes(
     module: ast.Module,
 ) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...]:
     return tuple(
         node
         for node in _non_docstring_body(module)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and not node.name.startswith("_")
     )
 
 
