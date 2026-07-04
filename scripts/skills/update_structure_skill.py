@@ -108,8 +108,10 @@ Use this before changing Python files under `src/sqlbuild/` or `scripts/`, espec
 - Orchestrators may drive resources they own through method calls (connections, CLI
   reporters, local accumulators such as `results.append(...)`); phases themselves are
   functions and must hand results back as values, never by mutating shared objects.
-- `SC063`, `SC064`, and `SC065` cap main/ public function statements, distinct calls,
-  and locals. `SC066` rejects discarded phase function call results. `SC067` rejects
+- `SC063`, `SC064`, and `SC065` cap statements, distinct calls, and locals for every
+  top-level function in main/ modules, private helpers included; private functions in
+  main/ are small glue, so phase-sized logic belongs in `helpers/`. `SC066` rejects
+  discarded phase function call results in all main/ top-level functions. `SC067` rejects
   helpers mutating their parameters (`self`/`cls` exempt) unless a deliberate builder is
   marked with `# sc: allow-param-mutation`. `SC068` requires frozen dataclass result
   models in `models.py`.
