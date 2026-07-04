@@ -538,7 +538,6 @@ class DbtModelPlanningResult:
     source_freshness: StandardSourceFreshnessPlanningResult | None = None
     selected_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     changed_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
-    stale_out_of_selection_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     stale_out_of_selection_warning_messages: tuple[str, ...] = field(default_factory=tuple)
 
     @property
