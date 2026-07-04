@@ -9873,6 +9873,7 @@ sqb --project-dir <path> build [flags]
 | `--no-load` | Skip automatic source loading |
 | `--reload` | Reload managed sources (passes `is_reload=True` to loaders) |
 | `--include-stale-upstreams` | Expand selection to include stale upstream models needed for coherence |
+| `--manifest` | Generate `target/manifest.json` with plan-aware project metadata |
 | `--select`, `-s` | Select specific models |
 | `--exclude` | Exclude specific models |
 

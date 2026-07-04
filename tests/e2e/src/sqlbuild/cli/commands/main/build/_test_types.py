@@ -34,6 +34,7 @@ class ManifestArtifactGatingE2ETestCase:
     description: str
     expected_manifest_after_build: bool
     expected_manifest_after_compile_manifest: bool
+    expected_manifest_after_build_manifest: bool
 
 
 @dataclass(frozen=True)

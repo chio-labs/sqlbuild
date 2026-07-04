@@ -1515,6 +1515,7 @@ def test_given_build_auto_loads_source_when_json_output_then_includes_source_ass
         no_color=True,
         select=("stg_orders",),
         json_output_path=json_output_path,
+        manifest=True,
     )
 
     payload: dict[str, Any] = json.loads(json_output_path.read_text(encoding="utf-8"))
@@ -1687,6 +1688,7 @@ def test_given_build_skips_loader_when_manifest_is_written_then_marks_source_aut
         no_color=True,
         select=("stg_orders",),
         load_sources=False,
+        manifest=True,
     )
 
     manifest: dict[str, Any] = json.loads(
