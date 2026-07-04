@@ -64,199 +64,211 @@ TABLE_FRONTIER: WatermarkFrontierMember = WatermarkFrontierMember(
     root_key=ROOT_KEY, frontier_key=TABLE_KEY
 )
 
-TEST_CASES: list[NodeSourceWatermarkStalenessClassifierTestCase] = [
-    NodeSourceWatermarkStalenessClassifierTestCase(
-        description=(
-            "direct source frontier is fresh when selected root watermark matches current source"
-        ),
-        frontier_members=(DIRECT_FRONTIER,),
-        nodes=nodes_by_key(model_node("fact_orders", materialized=True), source_node("raw.events")),
-        source_identities_by_key={SOURCE_KEY: EVENTS},
-        required_source_identities_by_node={},
-        current_source_records={EVENTS: CURRENT_RECORD},
-        watermark_records={
-            ROOT_IDENTITY: watermark_record(ROOT_IDENTITY, sources=(CURRENT_ENTRY,))
-        },
-        expected_classifications=(
-            NodeSourceWatermarkStaleness(
-                root_key=ROOT_KEY,
-                frontier_key=SOURCE_KEY,
-                source_identity=EVENTS,
-                status=WatermarkStalenessStatus.FRESH,
-                watermark_entry=CURRENT_ENTRY,
-                current_record=CURRENT_RECORD,
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NodeSourceWatermarkStalenessClassifierTestCase(
+            description=(
+                "direct source frontier is fresh when selected root watermark matches current source"
             ),
-        ),
-    ),
-    NodeSourceWatermarkStalenessClassifierTestCase(
-        description="direct source frontier is stale when selected root watermark differs",
-        frontier_members=(DIRECT_FRONTIER,),
-        nodes=nodes_by_key(model_node("fact_orders", materialized=True), source_node("raw.events")),
-        source_identities_by_key={SOURCE_KEY: EVENTS},
-        required_source_identities_by_node={},
-        current_source_records={EVENTS: CURRENT_RECORD},
-        watermark_records={ROOT_IDENTITY: watermark_record(ROOT_IDENTITY, sources=(OLD_ENTRY,))},
-        expected_classifications=(
-            NodeSourceWatermarkStaleness(
-                root_key=ROOT_KEY,
-                frontier_key=SOURCE_KEY,
-                source_identity=EVENTS,
-                status=WatermarkStalenessStatus.STALE,
-                watermark_entry=OLD_ENTRY,
-                current_record=CURRENT_RECORD,
+            frontier_members=(DIRECT_FRONTIER,),
+            nodes=nodes_by_key(
+                model_node("fact_orders", materialized=True), source_node("raw.events")
             ),
-        ),
-    ),
-    NodeSourceWatermarkStalenessClassifierTestCase(
-        description="direct source frontier is unknown when selected root watermark is missing",
-        frontier_members=(DIRECT_FRONTIER,),
-        nodes=nodes_by_key(model_node("fact_orders", materialized=True), source_node("raw.events")),
-        source_identities_by_key={SOURCE_KEY: EVENTS},
-        required_source_identities_by_node={},
-        current_source_records={EVENTS: CURRENT_RECORD},
-        watermark_records={},
-        expected_classifications=(
-            NodeSourceWatermarkStaleness(
-                root_key=ROOT_KEY,
-                frontier_key=SOURCE_KEY,
-                source_identity=EVENTS,
-                status=WatermarkStalenessStatus.UNKNOWN,
-                reason="missing_frontier_watermark",
-                current_record=CURRENT_RECORD,
-            ),
-        ),
-    ),
-    NodeSourceWatermarkStalenessClassifierTestCase(
-        description="table frontier is fresh when table watermark matches current source",
-        frontier_members=(TABLE_FRONTIER,),
-        nodes=nodes_by_key(
-            model_node("fact_orders", materialized=True),
-            model_node("stg_orders", materialized=True),
-            source_node("raw.events"),
-        ),
-        source_identities_by_key={SOURCE_KEY: EVENTS},
-        required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
-        current_source_records={EVENTS: CURRENT_RECORD},
-        watermark_records={
-            TABLE_IDENTITY: watermark_record(TABLE_IDENTITY, sources=(CURRENT_ENTRY,))
-        },
-        expected_classifications=(
-            NodeSourceWatermarkStaleness(
-                root_key=ROOT_KEY,
-                frontier_key=TABLE_KEY,
-                source_identity=EVENTS,
-                status=WatermarkStalenessStatus.FRESH,
-                watermark_entry=CURRENT_ENTRY,
-                current_record=CURRENT_RECORD,
-            ),
-        ),
-    ),
-    NodeSourceWatermarkStalenessClassifierTestCase(
-        description="table frontier is stale when selected root watermark is behind table",
-        frontier_members=(TABLE_FRONTIER,),
-        nodes=nodes_by_key(
-            model_node("fact_orders", materialized=True),
-            model_node("stg_orders", materialized=True),
-            source_node("raw.events"),
-        ),
-        source_identities_by_key={SOURCE_KEY: EVENTS},
-        required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
-        current_source_records={EVENTS: CURRENT_RECORD},
-        watermark_records={
-            ROOT_IDENTITY: watermark_record(ROOT_IDENTITY, sources=(OLD_ENTRY,)),
-            TABLE_IDENTITY: watermark_record(TABLE_IDENTITY, sources=(CURRENT_ENTRY,)),
-        },
-        expected_classifications=(
-            NodeSourceWatermarkStaleness(
-                root_key=ROOT_KEY,
-                frontier_key=TABLE_KEY,
-                source_identity=EVENTS,
-                status=WatermarkStalenessStatus.STALE,
-                watermark_entry=OLD_ENTRY,
-                current_record=CURRENT_RECORD,
-            ),
-        ),
-    ),
-    NodeSourceWatermarkStalenessClassifierTestCase(
-        description="table frontier is stale when table watermark is behind current source",
-        frontier_members=(TABLE_FRONTIER,),
-        nodes=nodes_by_key(
-            model_node("fact_orders", materialized=True),
-            model_node("stg_orders", materialized=True),
-            source_node("raw.events"),
-        ),
-        source_identities_by_key={SOURCE_KEY: EVENTS},
-        required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
-        current_source_records={EVENTS: CURRENT_RECORD},
-        watermark_records={TABLE_IDENTITY: watermark_record(TABLE_IDENTITY, sources=(OLD_ENTRY,))},
-        expected_classifications=(
-            NodeSourceWatermarkStaleness(
-                root_key=ROOT_KEY,
-                frontier_key=TABLE_KEY,
-                source_identity=EVENTS,
-                status=WatermarkStalenessStatus.STALE,
-                watermark_entry=OLD_ENTRY,
-                current_record=CURRENT_RECORD,
-            ),
-        ),
-    ),
-    NodeSourceWatermarkStalenessClassifierTestCase(
-        description="table frontier preserves unknown source from table watermark payload",
-        frontier_members=(TABLE_FRONTIER,),
-        nodes=nodes_by_key(
-            model_node("fact_orders", materialized=True),
-            model_node("stg_orders", materialized=True),
-            source_node("raw.events"),
-        ),
-        source_identities_by_key={SOURCE_KEY: EVENTS},
-        required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
-        current_source_records={EVENTS: CURRENT_RECORD},
-        watermark_records={
-            TABLE_IDENTITY: watermark_record(
-                TABLE_IDENTITY,
-                unknown_sources=(
-                    unknown_source_entry(EVENTS, reason="missing_upstream_watermark"),
+            source_identities_by_key={SOURCE_KEY: EVENTS},
+            required_source_identities_by_node={},
+            current_source_records={EVENTS: CURRENT_RECORD},
+            watermark_records={
+                ROOT_IDENTITY: watermark_record(ROOT_IDENTITY, sources=(CURRENT_ENTRY,))
+            },
+            expected_classifications=(
+                NodeSourceWatermarkStaleness(
+                    root_key=ROOT_KEY,
+                    frontier_key=SOURCE_KEY,
+                    source_identity=EVENTS,
+                    status=WatermarkStalenessStatus.FRESH,
+                    watermark_entry=CURRENT_ENTRY,
+                    current_record=CURRENT_RECORD,
                 ),
-            )
-        },
-        expected_classifications=(
-            NodeSourceWatermarkStaleness(
-                root_key=ROOT_KEY,
-                frontier_key=TABLE_KEY,
-                source_identity=EVENTS,
-                status=WatermarkStalenessStatus.UNKNOWN,
-                reason="missing_upstream_watermark",
-                current_record=CURRENT_RECORD,
             ),
         ),
-    ),
-    NodeSourceWatermarkStalenessClassifierTestCase(
-        description="table frontier is unknown when table watermark record is missing",
-        frontier_members=(TABLE_FRONTIER,),
-        nodes=nodes_by_key(
-            model_node("fact_orders", materialized=True),
-            model_node("stg_orders", materialized=True),
-            source_node("raw.events"),
-        ),
-        source_identities_by_key={SOURCE_KEY: EVENTS},
-        required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
-        current_source_records={EVENTS: CURRENT_RECORD},
-        watermark_records={},
-        expected_classifications=(
-            NodeSourceWatermarkStaleness(
-                root_key=ROOT_KEY,
-                frontier_key=TABLE_KEY,
-                source_identity=EVENTS,
-                status=WatermarkStalenessStatus.UNKNOWN,
-                reason="missing_frontier_watermark",
-                current_record=CURRENT_RECORD,
+        NodeSourceWatermarkStalenessClassifierTestCase(
+            description="direct source frontier is stale when selected root watermark differs",
+            frontier_members=(DIRECT_FRONTIER,),
+            nodes=nodes_by_key(
+                model_node("fact_orders", materialized=True), source_node("raw.events")
+            ),
+            source_identities_by_key={SOURCE_KEY: EVENTS},
+            required_source_identities_by_node={},
+            current_source_records={EVENTS: CURRENT_RECORD},
+            watermark_records={
+                ROOT_IDENTITY: watermark_record(ROOT_IDENTITY, sources=(OLD_ENTRY,))
+            },
+            expected_classifications=(
+                NodeSourceWatermarkStaleness(
+                    root_key=ROOT_KEY,
+                    frontier_key=SOURCE_KEY,
+                    source_identity=EVENTS,
+                    status=WatermarkStalenessStatus.STALE,
+                    watermark_entry=OLD_ENTRY,
+                    current_record=CURRENT_RECORD,
+                ),
             ),
         ),
-    ),
-]
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+        NodeSourceWatermarkStalenessClassifierTestCase(
+            description="direct source frontier is unknown when selected root watermark is missing",
+            frontier_members=(DIRECT_FRONTIER,),
+            nodes=nodes_by_key(
+                model_node("fact_orders", materialized=True), source_node("raw.events")
+            ),
+            source_identities_by_key={SOURCE_KEY: EVENTS},
+            required_source_identities_by_node={},
+            current_source_records={EVENTS: CURRENT_RECORD},
+            watermark_records={},
+            expected_classifications=(
+                NodeSourceWatermarkStaleness(
+                    root_key=ROOT_KEY,
+                    frontier_key=SOURCE_KEY,
+                    source_identity=EVENTS,
+                    status=WatermarkStalenessStatus.UNKNOWN,
+                    reason="missing_frontier_watermark",
+                    current_record=CURRENT_RECORD,
+                ),
+            ),
+        ),
+        NodeSourceWatermarkStalenessClassifierTestCase(
+            description="table frontier is fresh when table watermark matches current source",
+            frontier_members=(TABLE_FRONTIER,),
+            nodes=nodes_by_key(
+                model_node("fact_orders", materialized=True),
+                model_node("stg_orders", materialized=True),
+                source_node("raw.events"),
+            ),
+            source_identities_by_key={SOURCE_KEY: EVENTS},
+            required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
+            current_source_records={EVENTS: CURRENT_RECORD},
+            watermark_records={
+                TABLE_IDENTITY: watermark_record(TABLE_IDENTITY, sources=(CURRENT_ENTRY,))
+            },
+            expected_classifications=(
+                NodeSourceWatermarkStaleness(
+                    root_key=ROOT_KEY,
+                    frontier_key=TABLE_KEY,
+                    source_identity=EVENTS,
+                    status=WatermarkStalenessStatus.FRESH,
+                    watermark_entry=CURRENT_ENTRY,
+                    current_record=CURRENT_RECORD,
+                ),
+            ),
+        ),
+        NodeSourceWatermarkStalenessClassifierTestCase(
+            description="table frontier is stale when selected root watermark is behind table",
+            frontier_members=(TABLE_FRONTIER,),
+            nodes=nodes_by_key(
+                model_node("fact_orders", materialized=True),
+                model_node("stg_orders", materialized=True),
+                source_node("raw.events"),
+            ),
+            source_identities_by_key={SOURCE_KEY: EVENTS},
+            required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
+            current_source_records={EVENTS: CURRENT_RECORD},
+            watermark_records={
+                ROOT_IDENTITY: watermark_record(ROOT_IDENTITY, sources=(OLD_ENTRY,)),
+                TABLE_IDENTITY: watermark_record(TABLE_IDENTITY, sources=(CURRENT_ENTRY,)),
+            },
+            expected_classifications=(
+                NodeSourceWatermarkStaleness(
+                    root_key=ROOT_KEY,
+                    frontier_key=TABLE_KEY,
+                    source_identity=EVENTS,
+                    status=WatermarkStalenessStatus.STALE,
+                    watermark_entry=OLD_ENTRY,
+                    current_record=CURRENT_RECORD,
+                ),
+            ),
+        ),
+        NodeSourceWatermarkStalenessClassifierTestCase(
+            description="table frontier is stale when table watermark is behind current source",
+            frontier_members=(TABLE_FRONTIER,),
+            nodes=nodes_by_key(
+                model_node("fact_orders", materialized=True),
+                model_node("stg_orders", materialized=True),
+                source_node("raw.events"),
+            ),
+            source_identities_by_key={SOURCE_KEY: EVENTS},
+            required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
+            current_source_records={EVENTS: CURRENT_RECORD},
+            watermark_records={
+                TABLE_IDENTITY: watermark_record(TABLE_IDENTITY, sources=(OLD_ENTRY,))
+            },
+            expected_classifications=(
+                NodeSourceWatermarkStaleness(
+                    root_key=ROOT_KEY,
+                    frontier_key=TABLE_KEY,
+                    source_identity=EVENTS,
+                    status=WatermarkStalenessStatus.STALE,
+                    watermark_entry=OLD_ENTRY,
+                    current_record=CURRENT_RECORD,
+                ),
+            ),
+        ),
+        NodeSourceWatermarkStalenessClassifierTestCase(
+            description="table frontier preserves unknown source from table watermark payload",
+            frontier_members=(TABLE_FRONTIER,),
+            nodes=nodes_by_key(
+                model_node("fact_orders", materialized=True),
+                model_node("stg_orders", materialized=True),
+                source_node("raw.events"),
+            ),
+            source_identities_by_key={SOURCE_KEY: EVENTS},
+            required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
+            current_source_records={EVENTS: CURRENT_RECORD},
+            watermark_records={
+                TABLE_IDENTITY: watermark_record(
+                    TABLE_IDENTITY,
+                    unknown_sources=(
+                        unknown_source_entry(EVENTS, reason="missing_upstream_watermark"),
+                    ),
+                )
+            },
+            expected_classifications=(
+                NodeSourceWatermarkStaleness(
+                    root_key=ROOT_KEY,
+                    frontier_key=TABLE_KEY,
+                    source_identity=EVENTS,
+                    status=WatermarkStalenessStatus.UNKNOWN,
+                    reason="missing_upstream_watermark",
+                    current_record=CURRENT_RECORD,
+                ),
+            ),
+        ),
+        NodeSourceWatermarkStalenessClassifierTestCase(
+            description="table frontier is unknown when table watermark record is missing",
+            frontier_members=(TABLE_FRONTIER,),
+            nodes=nodes_by_key(
+                model_node("fact_orders", materialized=True),
+                model_node("stg_orders", materialized=True),
+                source_node("raw.events"),
+            ),
+            source_identities_by_key={SOURCE_KEY: EVENTS},
+            required_source_identities_by_node={TABLE_IDENTITY: (EVENTS,)},
+            current_source_records={EVENTS: CURRENT_RECORD},
+            watermark_records={},
+            expected_classifications=(
+                NodeSourceWatermarkStaleness(
+                    root_key=ROOT_KEY,
+                    frontier_key=TABLE_KEY,
+                    source_identity=EVENTS,
+                    status=WatermarkStalenessStatus.UNKNOWN,
+                    reason="missing_frontier_watermark",
+                    current_record=CURRENT_RECORD,
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_frontier_watermarks_when_classifying_then_returns_fresh_stale_or_unknown(
     test_case: NodeSourceWatermarkStalenessClassifierTestCase,
 ) -> None:

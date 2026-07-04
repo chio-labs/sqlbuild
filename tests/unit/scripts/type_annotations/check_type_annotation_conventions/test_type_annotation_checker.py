@@ -18,34 +18,32 @@ from tests.unit.scripts.type_annotations.check_type_annotation_conventions._test
     CheckPathsTestCase,
 )
 
-TEST_CASES: list[CheckPathsTestCase] = [
-    CheckPathsTestCase(
-        description="reports no violations for a compliant repo slice",
-        repo_files=compliant_repo_files(),
-        expected_violation_codes=(),
-    ),
-    CheckPathsTestCase(
-        description="reports missing function parameter and return annotations",
-        repo_files=compliant_repo_files()
-        | {
-            "src/sqlbuild/example/main.py": dedent(
-                """
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CheckPathsTestCase(
+            description="reports no violations for a compliant repo slice",
+            repo_files=compliant_repo_files(),
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
+            description="reports missing function parameter and return annotations",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/main.py": dedent(
+                    """
                 def load_example(raw_name):
                     normalized_name: str = raw_name.strip()
                     return normalized_name
                 """
-            ).strip()
-            + "\n"
-        },
-        expected_violation_codes=("TA001", "TA002"),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+                ).strip()
+                + "\n"
+            },
+            expected_violation_codes=("TA001", "TA002"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_repo_slice_when_checking_type_annotations_then_it_reports_expected_codes(
     test_case: CheckPathsTestCase,
@@ -59,36 +57,33 @@ def test_given_repo_slice_when_checking_type_annotations_then_it_reports_expecte
     assert collect_violation_codes(tmp_path) == test_case.expected_violation_codes
 
 
-TYPE_ANNOTATION_CLI_TEST_CASES: list[CheckCliMainTestCase] = [
-    CheckCliMainTestCase(
-        description="returns zero when no violations are found",
-        repo_files=compliant_repo_files(),
-        cli_paths=("src", "tests"),
-        expected_exit_code=0,
-    ),
-    CheckCliMainTestCase(
-        description="returns one when violations are found",
-        repo_files=compliant_repo_files()
-        | {
-            "src/sqlbuild/example/main.py": dedent(
-                """
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CheckCliMainTestCase(
+            description="returns zero when no violations are found",
+            repo_files=compliant_repo_files(),
+            cli_paths=("src", "tests"),
+            expected_exit_code=0,
+        ),
+        CheckCliMainTestCase(
+            description="returns one when violations are found",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/main.py": dedent(
+                    """
                 def load_example(raw_name):
                     value = raw_name.strip()
                     return value
                 """
-            ).strip()
-            + "\n"
-        },
-        cli_paths=("src", "tests"),
-        expected_exit_code=1,
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TYPE_ANNOTATION_CLI_TEST_CASES,
-    ids=[case.description for case in TYPE_ANNOTATION_CLI_TEST_CASES],
+                ).strip()
+                + "\n"
+            },
+            cli_paths=("src", "tests"),
+            expected_exit_code=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_repo_slice_when_running_type_annotation_cli_then_it_returns_expected_exit_code(
     test_case: CheckCliMainTestCase,

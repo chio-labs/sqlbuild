@@ -496,510 +496,7 @@ def raw_orders(ctx):
     ),
 }
 
-BUILD_RUN_AUTO_LOAD_TEST_CASES: list[BuildRunAutoLoadTestCase] = [
-    BuildRunAutoLoadTestCase(
-        description="build auto-loads selected managed source before models",
-        command="build",
-        expected_stdout_fragments=(
-            "raw_orders",
-            "Sources to load (1)",
-            "raw_orders           table",
-            "Execution  sqb build  (concurrency: 1)",
-            "1/2  source",
-            "2/2  table",
-            "rows=1",
-        ),
-        expected_rows=((7, "loaded"),),
-    ),
-    BuildRunAutoLoadTestCase(
-        description="build no tests auto-loads selected managed source before models",
-        command="build",
-        expected_stdout_fragments=(
-            "raw_orders",
-            "Sources to load (1)",
-            "raw_orders           table",
-            "Execution  sqb build  (concurrency: 1)",
-            "1/2  source",
-            "2/2  table",
-            "rows=1",
-        ),
-        expected_rows=((7, "loaded"),),
-    ),
-]
-
-BUILD_RUN_AUTO_LOAD_FLAG_TEST_CASES: list[BuildRunAutoLoadFlagTestCase] = [
-    BuildRunAutoLoadFlagTestCase(
-        description="build no-load skips loader and uses existing source table",
-        command="build",
-        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
-        args=("--no-load", "--select", "stg_orders"),
-        setup_sql=(
-            "CREATE TABLE raw_orders (order_id INTEGER, status VARCHAR)",
-            "INSERT INTO raw_orders VALUES (7, 'existing')",
-        ),
-        expected_rows=((7, "existing"),),
-        expected_stdout_absent_fragments=("source", "rows=1"),
-    ),
-    BuildRunAutoLoadFlagTestCase(
-        description="build load forces loader when auto load is disabled",
-        command="build",
-        project_files=_BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES,
-        args=("--load", "--select", "stg_orders"),
-        setup_sql=(),
-        expected_rows=((7, "loaded"),),
-        expected_stdout_fragments=("1/2  source", "rows=1"),
-    ),
-    BuildRunAutoLoadFlagTestCase(
-        description="build auto load disabled skips loader by default",
-        command="build",
-        project_files=_BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES,
-        args=("--select", "stg_orders"),
-        setup_sql=(
-            "CREATE TABLE raw_orders (order_id INTEGER, status VARCHAR)",
-            "INSERT INTO raw_orders VALUES (7, 'existing')",
-        ),
-        expected_rows=((7, "existing"),),
-        expected_stdout_absent_fragments=("source", "rows=1"),
-    ),
-    BuildRunAutoLoadFlagTestCase(
-        description="build reload and full refresh reloads loaders and models",
-        command="build",
-        project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
-        args=("--reload", "--full-refresh", "--select", "stg_orders"),
-        setup_sql=(),
-        expected_rows=((7, "reload"),),
-        expected_stdout_fragments=("Sources to reload (1)", "1/2  source", "2/2  table"),
-    ),
-    BuildRunAutoLoadFlagTestCase(
-        description="build reload reloads loaders without full refreshing models",
-        command="build",
-        project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
-        args=("--reload", "--select", "stg_orders"),
-        setup_sql=(),
-        expected_rows=((7, "reload"),),
-        expected_stdout_fragments=(
-            "Plan ready (1 selected, 1 source to reload)",
-            "1/2  source",
-            "2/2  table",
-        ),
-        expected_stdout_absent_fragments=("Full refresh",),
-    ),
-    BuildRunAutoLoadFlagTestCase(
-        description="build reload reloads loaders without full refreshing models",
-        command="build",
-        project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
-        args=("--reload", "--select", "stg_orders"),
-        setup_sql=(),
-        expected_rows=((7, "reload"),),
-        expected_stdout_fragments=(
-            "Plan ready (1 selected, 1 source to reload)",
-            "1/2  source",
-            "2/2  table",
-        ),
-        expected_stdout_absent_fragments=("Full refresh",),
-    ),
-]
-
-BUILD_RUN_AUTO_LOAD_SELECTION_TEST_CASES: list[BuildRunAutoLoadSelectionTestCase] = [
-    BuildRunAutoLoadSelectionTestCase(
-        description="selected downstream model does not load source referenced only upstream",
-        args=("--select", "fact_orders"),
-        setup_sql=(
-            "CREATE TABLE stg_orders (order_id INTEGER, status VARCHAR)",
-            "INSERT INTO stg_orders VALUES (7, 'existing')",
-        ),
-        expected_rows=((7, "existing"),),
-        expected_stdout_absent_fragments=("source", "rows=1"),
-    ),
-    BuildRunAutoLoadSelectionTestCase(
-        description="upstream-expanded downstream model loads source referenced upstream",
-        args=("--select", "+fact_orders"),
-        setup_sql=(),
-        expected_rows=((7, "loaded"),),
-        expected_stdout_fragments=(
-            "Sources to load (1)",
-            "1/3  source",
-            "2/3  table",
-            "3/3  table",
-        ),
-    ),
-    BuildRunAutoLoadSelectionTestCase(
-        description="selected model loads only its direct source among multiple managed sources",
-        args=("--select", "stg_orders"),
-        setup_sql=(),
-        expected_rows=((7, "loaded"),),
-        expected_stdout_fragments=("Sources to load (1)", "raw_orders", "1/2  source"),
-        expected_stdout_absent_fragments=("raw_customers", "2/3  source"),
-        project_files=_BUILD_RUN_AUTO_LOAD_TWO_SOURCE_PROJECT_FILES,
-        result_table="stg_orders",
-    ),
-]
-
-PLAN_AUTO_LOAD_OUTPUT_TEST_CASES: list[PlanAutoLoadOutputTestCase] = [
-    PlanAutoLoadOutputTestCase(
-        description="plan shows source loaders by default",
-        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
-        load_sources=None,
-        expected_stdout_fragments=("Sources to load (1)", "raw_orders", "table"),
-    ),
-    PlanAutoLoadOutputTestCase(
-        description="plan no-load hides source loaders",
-        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
-        load_sources=False,
-        expected_stdout_fragments=("Plan ready (1 selected)", "stg_orders"),
-        expected_stdout_absent_fragments=("Sources to load",),
-    ),
-]
-
-PLAN_AUTO_LOAD_JSON_TEST_CASES: list[PlanAutoLoadJsonTestCase] = [
-    PlanAutoLoadJsonTestCase(
-        description="plan json includes source loads",
-        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
-        load_sources=None,
-        expected_source_loads=(
-            {
-                "name": "raw_orders",
-                "loader": "raw_orders",
-                "kind": "source",
-                "target": "raw_orders",
-                "is_reload": False,
-                "write_strategy": "table",
-            },
-        ),
-        expected_selected_count=1,
-        expected_source_load_count=1,
-    ),
-    PlanAutoLoadJsonTestCase(
-        description="plan json no-load has zero source load count",
-        project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
-        load_sources=False,
-        expected_source_loads=(),
-        expected_selected_count=1,
-        expected_source_load_count=0,
-    ),
-    PlanAutoLoadJsonTestCase(
-        description="plan json keeps source loads when source reads defer to prod",
-        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
-        load_sources=None,
-        expected_source_loads=(
-            {
-                "name": "raw_orders",
-                "loader": "raw_orders",
-                "kind": "source",
-                "target": "raw_orders",
-                "is_reload": False,
-                "write_strategy": "table",
-            },
-        ),
-        expected_selected_count=1,
-        expected_source_load_count=1,
-    ),
-]
-
-SOURCE_DEFERRAL_BUILD_TEST_CASES: list[SourceDeferralBuildTestCase] = [
-    SourceDeferralBuildTestCase(
-        description="build configured target defers managed source reads to prod",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
-        defer_sources_to=None,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (99, 'prod-existing')",
-        ),
-        expected_model_rows=((99, "prod-existing"),),
-        expected_loaded_source_rows=((7, "loaded"),),
-    ),
-    SourceDeferralBuildTestCase(
-        description="build cli override reads managed sources from active target",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
-        defer_sources_to="dev",
-        setup_sql=(),
-        expected_model_rows=((7, "loaded"),),
-        expected_loaded_source_rows=((7, "loaded"),),
-    ),
-    SourceDeferralBuildTestCase(
-        description="build cli override reads managed sources from active target",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
-        defer_sources_to="dev",
-        setup_sql=(),
-        expected_model_rows=((7, "loaded"),),
-        expected_loaded_source_rows=((7, "loaded"),),
-    ),
-    SourceDeferralBuildTestCase(
-        description="build configured target defers managed source reads to prod",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
-        defer_sources_to=None,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (100, 'prod-run')",
-        ),
-        expected_model_rows=((100, "prod-run"),),
-        expected_loaded_source_rows=((7, "loaded"),),
-    ),
-    SourceDeferralBuildTestCase(
-        description="local target override defers managed source reads to prod",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_LOCAL_OVERRIDE_PROJECT_FILES,
-        defer_sources_to=None,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (101, 'local-override-prod')",
-        ),
-        expected_model_rows=((101, "local-override-prod"),),
-        expected_loaded_source_rows=((7, "loaded"),),
-    ),
-    SourceDeferralBuildTestCase(
-        description="loader dag writes active env while model reads deferred source env",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_LOADER_DAG_PROJECT_FILES,
-        defer_sources_to=None,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (102, 'prod-dag')",
-        ),
-        expected_model_rows=((102, "prod-dag"),),
-        expected_loaded_source_rows=((7, "loaded-intermediate"),),
-    ),
-    SourceDeferralBuildTestCase(
-        description="expression managed source remains unchanged by source deferral",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_EXPRESSION_PROJECT_FILES,
-        defer_sources_to=None,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (103, 'prod-expression')",
-        ),
-        expected_model_rows=((22, "expression"),),
-        expected_loaded_source_rows=((7, "loaded"),),
-    ),
-]
-
-SOURCE_DEFERRAL_NO_ERROR_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
-    SourceDeferralNoErrorTestCase(
-        description="unmanaged source read does not require source deferral config",
-        project_files=_SOURCE_DEFERRAL_UNMANAGED_PROJECT_FILES,
-        setup_sql=(
-            "CREATE TABLE raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO raw_orders VALUES (12, 'unmanaged')",
-        ),
-        select=("stg_orders",),
-        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
-        expected_rows=((12, "unmanaged"),),
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="unselected managed source read does not require source deferral config",
-        project_files=_SOURCE_DEFERRAL_UNSELECTED_MANAGED_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA dev",
-            "CREATE TABLE dev.stg_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO dev.stg_orders VALUES (13, 'prebuilt')",
-        ),
-        select=("fact_orders",),
-        result_sql="SELECT order_id, status FROM dev.fact_orders ORDER BY order_id",
-        expected_rows=((13, "prebuilt"),),
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="no-load still reads managed source from deferred target",
-        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (14, 'prod-no-load')",
-        ),
-        select=("stg_orders",),
-        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
-        expected_rows=((14, "prod-no-load"),),
-        load_sources=False,
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="auto load disabled still reads managed source from deferred target",
-        project_files=_SOURCE_DEFERRAL_AUTO_LOAD_FALSE_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (15, 'prod-auto-disabled')",
-        ),
-        select=("stg_orders",),
-        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
-        expected_rows=((15, "prod-auto-disabled"),),
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="explicit source schema is preserved instead of deferred target schema",
-        project_files=_SOURCE_DEFERRAL_EXPLICIT_SCHEMA_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA external_raw",
-            "CREATE TABLE external_raw.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO external_raw.raw_orders VALUES (16, 'external-explicit')",
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (116, 'prod-ignored')",
-        ),
-        select=("stg_orders",),
-        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
-        expected_rows=((16, "external-explicit"),),
-        load_sources=False,
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="templated source deferral target schema resolves project vars",
-        project_files=_SOURCE_DEFERRAL_TEMPLATED_ENV_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA prod_raw",
-            "CREATE TABLE prod_raw.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod_raw.raw_orders VALUES (17, 'templated-prod')",
-        ),
-        select=("stg_orders",),
-        result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
-        expected_rows=((17, "templated-prod"),),
-        load_sources=False,
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="audit reads managed source from deferred target",
-        project_files=_SOURCE_DEFERRAL_AUDIT_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA dev",
-            "CREATE TABLE dev.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO dev.raw_orders VALUES (18, 'dev-would-fail')",
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (18, 'prod-audit')",
-        ),
-        select=(),
-        result_sql="SELECT 1",
-        expected_rows=((1,),),
-        command="audit",
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="sql test with source mock does not require source deferral",
-        project_files=_SOURCE_DEFERRAL_TEST_PROJECT_FILES,
-        setup_sql=(),
-        select=("stg_orders",),
-        result_sql="SELECT 1",
-        expected_rows=((1,),),
-        command="test",
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="scenario with source mock does not require source deferral",
-        project_files=_SOURCE_DEFERRAL_SCENARIO_PROJECT_FILES,
-        setup_sql=(),
-        select=("source_mock_pass",),
-        result_sql="SELECT 1",
-        expected_rows=((1,),),
-        command="scenario",
-    ),
-]
-
-SOURCE_DEFERRAL_PLAN_SUCCESS_TEST_CASES: list[SourceDeferralNoErrorTestCase] = [
-    SourceDeferralNoErrorTestCase(
-        description="plan configured target accepts deferred source reads",
-        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
-        setup_sql=(),
-        select=("stg_orders",),
-        result_sql="",
-        expected_rows=(),
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="plan cli override accepts active source target",
-        project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
-        setup_sql=(),
-        select=("stg_orders",),
-        result_sql="",
-        expected_rows=(),
-        defer_sources_to="dev",
-    ),
-    SourceDeferralNoErrorTestCase(
-        description="selected sql function managed source read uses configured deferral",
-        project_files=_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES,
-        setup_sql=(),
-        select=("order_statuses",),
-        result_sql="",
-        expected_rows=(),
-    ),
-]
-
-SOURCE_DEFERRAL_ARTIFACT_TEST_CASES: list[SourceDeferralArtifactTestCase] = [
-    SourceDeferralArtifactTestCase(
-        description=(
-            "build artifacts write deferred source relation into compiled and runtime model sql"
-        ),
-        command="build",
-        project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (19, 'artifact-prod')",
-        ),
-        select=("stg_orders",),
-        compiled_relative_paths=("target/compiled/models/stg_orders.sql",),
-        runtime_relative_paths=("target/run/models/stg_orders.sql",),
-        expected_sql_fragments=("prod.raw_orders",),
-        unexpected_sql_fragments=("dev.raw_orders",),
-    ),
-    SourceDeferralArtifactTestCase(
-        description="build artifacts write deferred source relation into compiled function sql",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_BUILD_WITH_FUNCTION_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (20, 'function-artifact')",
-        ),
-        select=("order_statuses",),
-        compiled_relative_paths=("target/compiled/functions/sql/order_statuses.sql",),
-        runtime_relative_paths=("target/run/functions/sql/order_statuses.sql",),
-        expected_sql_fragments=("prod.raw_orders",),
-        unexpected_sql_fragments=("dev.raw_orders",),
-    ),
-    SourceDeferralArtifactTestCase(
-        description="audit compiled artifact writes deferred source relation",
-        command="build",
-        project_files=_SOURCE_DEFERRAL_AUDIT_PROJECT_FILES,
-        setup_sql=(
-            "CREATE SCHEMA prod",
-            "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-            "INSERT INTO prod.raw_orders VALUES (21, 'prod-audit')",
-        ),
-        select=("stg_orders",),
-        compiled_relative_paths=("target/compiled/audits/generic/raw_orders/source_status.sql",),
-        runtime_relative_paths=(),
-        expected_sql_fragments=("prod.raw_orders",),
-        unexpected_sql_fragments=("dev.raw_orders",),
-    ),
-]
-
-SOURCE_DEFERRAL_ERROR_TEST_CASES: list[SourceDeferralErrorTestCase] = [
-    SourceDeferralErrorTestCase(
-        description="managed source read without source deferral config errors",
-        project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
-        expected_error_fragment="Missing source deferral config for target 'dev'",
-    ),
-    SourceDeferralErrorTestCase(
-        description="managed source read with unknown cli deferral target errors",
-        project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
-        defer_sources_to="missing_env",
-        expected_error_fragment="Unknown source deferral target 'missing_env'",
-    ),
-    SourceDeferralErrorTestCase(
-        description="selected sql function managed source read without deferral config errors",
-        project_files={
-            **_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES,
-            "sqlbuild_project.toml": _SOURCE_DEFERRAL_MISSING_PROJECT_FILES[
-                "sqlbuild_project.toml"
-            ],
-        },
-        select=("order_statuses",),
-        expected_error_fragment="Missing source deferral config for target 'dev'",
-    ),
-]
-
-LOAD_COMMAND_TEST_CASES: list[LoadCommandIntegrationTestCase] = [
+LOAD_COMMAND_CASE_FIXTURES: list[LoadCommandIntegrationTestCase] = [
     LoadCommandIntegrationTestCase(
         description="loads returned dict rows into a source table",
         project_files={
@@ -1157,137 +654,40 @@ def raw_orders(ctx):
     ),
 ]
 
-LOAD_SELECTION_ERROR_TEST_CASES: list[LoadCommandSelectionErrorTestCase] = [
-    LoadCommandSelectionErrorTestCase(
-        description="raises when selected source does not exist",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
-sources:
-  - name: raw_orders
-    managed: true
-    write_strategy: table
-""".strip()
-            + "\n",
-            "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
-        },
-        select=("missing_source",),
-        exclude=(),
-        expected_error_fragment=(
-            "selector 'missing_source' does not match any managed source or loader"
-        ),
-    ),
-    LoadCommandSelectionErrorTestCase(
-        description="raises when selected source is unmanaged",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
-sources:
-  - name: raw_customers
-    expression: SELECT 1 AS customer_id
-""".strip()
-            + "\n",
-        },
-        select=("raw_customers",),
-        exclude=(),
-        expected_error_fragment=(
-            "selector 'raw_customers' does not match any managed source or loader"
-        ),
-    ),
-    LoadCommandSelectionErrorTestCase(
-        description="raises when excluded source does not exist",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
-sources:
-  - name: raw_orders
-    managed: true
-    write_strategy: table
-""".strip()
-            + "\n",
-            "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
-        },
-        select=(),
-        exclude=("missing_source",),
-        expected_error_fragment=(
-            "selector 'missing_source' does not match any managed source or loader"
-        ),
-    ),
-    LoadCommandSelectionErrorTestCase(
-        description="raises when excluded source is unmanaged",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
-sources:
-  - name: raw_orders
-    managed: true
-    write_strategy: table
-  - name: raw_customers
-    expression: SELECT 1 AS customer_id
-""".strip()
-            + "\n",
-            "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
-        },
-        select=(),
-        exclude=("raw_customers",),
-        expected_error_fragment=(
-            "selector 'raw_customers' does not match any managed source or loader"
-        ),
-    ),
-]
-
-EMPTY_SELECTION_TEST_CASES: list[LoadCommandEmptySelectionTestCase] = [
-    LoadCommandEmptySelectionTestCase(
-        description="succeeds without connecting when project has no managed sources",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
-sources:
-  - name: raw_customers
-    expression: SELECT 1 AS customer_id
-""".strip()
-            + "\n",
-        },
-        select=(),
-        exclude=(),
-        expected_exit_code=0,
-        expected_stdout_fragment="No managed sources selected.",
-        expected_stdout_fragments=(
-            "Load ready (0 selected)",
-            "Completed successfully.",
-            "PASS=0  WARN=0  FAIL=0  SKIP=0  TOTAL=0",
-        ),
-    ),
-    LoadCommandEmptySelectionTestCase(
-        description="succeeds without connecting when all managed sources are excluded",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
-sources:
-  - name: raw_orders
-    managed: true
-    write_strategy: table
-""".strip()
-            + "\n",
-            "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
-        },
-        select=(),
-        exclude=("raw_orders",),
-        expected_exit_code=0,
-        expected_stdout_fragment="No managed sources selected.",
-        expected_stdout_fragments=(
-            "Load ready (0 selected)",
-            "Completed successfully.",
-            "PASS=0  WARN=0  FAIL=0  SKIP=0  TOTAL=0",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_RUN_AUTO_LOAD_TEST_CASES,
-    ids=[case.description for case in BUILD_RUN_AUTO_LOAD_TEST_CASES],
+    [
+        BuildRunAutoLoadTestCase(
+            description="build auto-loads selected managed source before models",
+            command="build",
+            expected_stdout_fragments=(
+                "raw_orders",
+                "Sources to load (1)",
+                "raw_orders           table",
+                "Execution  sqb build  (concurrency: 1)",
+                "1/2  source",
+                "2/2  table",
+                "rows=1",
+            ),
+            expected_rows=((7, "loaded"),),
+        ),
+        BuildRunAutoLoadTestCase(
+            description="build no tests auto-loads selected managed source before models",
+            command="build",
+            expected_stdout_fragments=(
+                "raw_orders",
+                "Sources to load (1)",
+                "raw_orders           table",
+                "Execution  sqb build  (concurrency: 1)",
+                "1/2  source",
+                "2/2  table",
+                "rows=1",
+            ),
+            expected_rows=((7, "loaded"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_selected_model_references_managed_source_when_build_or_run_then_auto_loads(
     test_case: BuildRunAutoLoadTestCase,
@@ -1332,7 +732,7 @@ def test_given_selected_model_references_managed_source_when_build_or_run_then_a
             ),
         )
     ],
-    ids=["build auto-loads self-managed source before model"],
+    ids=lambda case: case.description,
 )
 def test_given_self_managed_source_when_running_build_then_auto_loads_before_model(
     test_case: BuildRunAutoLoadFlagTestCase,
@@ -1361,8 +761,92 @@ def test_given_self_managed_source_when_running_build_then_auto_loads_before_mod
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_DEFERRAL_BUILD_TEST_CASES,
-    ids=[case.description for case in SOURCE_DEFERRAL_BUILD_TEST_CASES],
+    [
+        SourceDeferralBuildTestCase(
+            description="build configured target defers managed source reads to prod",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+            defer_sources_to=None,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (99, 'prod-existing')",
+            ),
+            expected_model_rows=((99, "prod-existing"),),
+            expected_loaded_source_rows=((7, "loaded"),),
+        ),
+        SourceDeferralBuildTestCase(
+            description="build cli override reads managed sources from active target",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+            defer_sources_to="dev",
+            setup_sql=(),
+            expected_model_rows=((7, "loaded"),),
+            expected_loaded_source_rows=((7, "loaded"),),
+        ),
+        SourceDeferralBuildTestCase(
+            description="build cli override reads managed sources from active target",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+            defer_sources_to="dev",
+            setup_sql=(),
+            expected_model_rows=((7, "loaded"),),
+            expected_loaded_source_rows=((7, "loaded"),),
+        ),
+        SourceDeferralBuildTestCase(
+            description="build configured target defers managed source reads to prod",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+            defer_sources_to=None,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (100, 'prod-run')",
+            ),
+            expected_model_rows=((100, "prod-run"),),
+            expected_loaded_source_rows=((7, "loaded"),),
+        ),
+        SourceDeferralBuildTestCase(
+            description="local target override defers managed source reads to prod",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_LOCAL_OVERRIDE_PROJECT_FILES,
+            defer_sources_to=None,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (101, 'local-override-prod')",
+            ),
+            expected_model_rows=((101, "local-override-prod"),),
+            expected_loaded_source_rows=((7, "loaded"),),
+        ),
+        SourceDeferralBuildTestCase(
+            description="loader dag writes active env while model reads deferred source env",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_LOADER_DAG_PROJECT_FILES,
+            defer_sources_to=None,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (102, 'prod-dag')",
+            ),
+            expected_model_rows=((102, "prod-dag"),),
+            expected_loaded_source_rows=((7, "loaded-intermediate"),),
+        ),
+        SourceDeferralBuildTestCase(
+            description="expression managed source remains unchanged by source deferral",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_EXPRESSION_PROJECT_FILES,
+            defer_sources_to=None,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (103, 'prod-expression')",
+            ),
+            expected_model_rows=((22, "expression"),),
+            expected_loaded_source_rows=((7, "loaded"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_managed_source_environment_when_building_or_running_then_reads_configured_source_env(
     test_case: SourceDeferralBuildTestCase,
@@ -1406,8 +890,34 @@ def test_given_managed_source_environment_when_building_or_running_then_reads_co
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_DEFERRAL_PLAN_SUCCESS_TEST_CASES,
-    ids=[case.description for case in SOURCE_DEFERRAL_PLAN_SUCCESS_TEST_CASES],
+    [
+        SourceDeferralNoErrorTestCase(
+            description="plan configured target accepts deferred source reads",
+            project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+            setup_sql=(),
+            select=("stg_orders",),
+            result_sql="",
+            expected_rows=(),
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="plan cli override accepts active source target",
+            project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+            setup_sql=(),
+            select=("stg_orders",),
+            result_sql="",
+            expected_rows=(),
+            defer_sources_to="dev",
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="selected sql function managed source read uses configured deferral",
+            project_files=_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES,
+            setup_sql=(),
+            select=("order_statuses",),
+            result_sql="",
+            expected_rows=(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_plan_source_deferral_override_when_planning_then_succeeds(
     test_case: SourceDeferralNoErrorTestCase,
@@ -1428,8 +938,120 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_DEFERRAL_NO_ERROR_TEST_CASES,
-    ids=[case.description for case in SOURCE_DEFERRAL_NO_ERROR_TEST_CASES],
+    [
+        SourceDeferralNoErrorTestCase(
+            description="unmanaged source read does not require source deferral config",
+            project_files=_SOURCE_DEFERRAL_UNMANAGED_PROJECT_FILES,
+            setup_sql=(
+                "CREATE TABLE raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO raw_orders VALUES (12, 'unmanaged')",
+            ),
+            select=("stg_orders",),
+            result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+            expected_rows=((12, "unmanaged"),),
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="unselected managed source read does not require source deferral config",
+            project_files=_SOURCE_DEFERRAL_UNSELECTED_MANAGED_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA dev",
+                "CREATE TABLE dev.stg_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO dev.stg_orders VALUES (13, 'prebuilt')",
+            ),
+            select=("fact_orders",),
+            result_sql="SELECT order_id, status FROM dev.fact_orders ORDER BY order_id",
+            expected_rows=((13, "prebuilt"),),
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="no-load still reads managed source from deferred target",
+            project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (14, 'prod-no-load')",
+            ),
+            select=("stg_orders",),
+            result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+            expected_rows=((14, "prod-no-load"),),
+            load_sources=False,
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="auto load disabled still reads managed source from deferred target",
+            project_files=_SOURCE_DEFERRAL_AUTO_LOAD_FALSE_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (15, 'prod-auto-disabled')",
+            ),
+            select=("stg_orders",),
+            result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+            expected_rows=((15, "prod-auto-disabled"),),
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="explicit source schema is preserved instead of deferred target schema",
+            project_files=_SOURCE_DEFERRAL_EXPLICIT_SCHEMA_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA external_raw",
+                "CREATE TABLE external_raw.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO external_raw.raw_orders VALUES (16, 'external-explicit')",
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (116, 'prod-ignored')",
+            ),
+            select=("stg_orders",),
+            result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+            expected_rows=((16, "external-explicit"),),
+            load_sources=False,
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="templated source deferral target schema resolves project vars",
+            project_files=_SOURCE_DEFERRAL_TEMPLATED_ENV_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA prod_raw",
+                "CREATE TABLE prod_raw.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod_raw.raw_orders VALUES (17, 'templated-prod')",
+            ),
+            select=("stg_orders",),
+            result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
+            expected_rows=((17, "templated-prod"),),
+            load_sources=False,
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="audit reads managed source from deferred target",
+            project_files=_SOURCE_DEFERRAL_AUDIT_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA dev",
+                "CREATE TABLE dev.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO dev.raw_orders VALUES (18, 'dev-would-fail')",
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (18, 'prod-audit')",
+            ),
+            select=(),
+            result_sql="SELECT 1",
+            expected_rows=((1,),),
+            command="audit",
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="sql test with source mock does not require source deferral",
+            project_files=_SOURCE_DEFERRAL_TEST_PROJECT_FILES,
+            setup_sql=(),
+            select=("stg_orders",),
+            result_sql="SELECT 1",
+            expected_rows=((1,),),
+            command="test",
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="scenario with source mock does not require source deferral",
+            project_files=_SOURCE_DEFERRAL_SCENARIO_PROJECT_FILES,
+            setup_sql=(),
+            select=("source_mock_pass",),
+            result_sql="SELECT 1",
+            expected_rows=((1,),),
+            command="scenario",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferral_not_required(
     test_case: SourceDeferralNoErrorTestCase,
@@ -1482,8 +1104,31 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_DEFERRAL_ERROR_TEST_CASES,
-    ids=[case.description for case in SOURCE_DEFERRAL_ERROR_TEST_CASES],
+    [
+        SourceDeferralErrorTestCase(
+            description="managed source read without source deferral config errors",
+            project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+            expected_error_fragment="Missing source deferral config for target 'dev'",
+        ),
+        SourceDeferralErrorTestCase(
+            description="managed source read with unknown cli deferral target errors",
+            project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+            defer_sources_to="missing_env",
+            expected_error_fragment="Unknown source deferral target 'missing_env'",
+        ),
+        SourceDeferralErrorTestCase(
+            description="selected sql function managed source read without deferral config errors",
+            project_files={
+                **_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES,
+                "sqlbuild_project.toml": _SOURCE_DEFERRAL_MISSING_PROJECT_FILES[
+                    "sqlbuild_project.toml"
+                ],
+            },
+            select=("order_statuses",),
+            expected_error_fragment="Missing source deferral config for target 'dev'",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_managed_source_without_source_deferral_when_planning_then_errors(
     test_case: SourceDeferralErrorTestCase,
@@ -1505,8 +1150,58 @@ def test_given_managed_source_without_source_deferral_when_planning_then_errors(
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_DEFERRAL_ARTIFACT_TEST_CASES,
-    ids=[case.description for case in SOURCE_DEFERRAL_ARTIFACT_TEST_CASES],
+    [
+        SourceDeferralArtifactTestCase(
+            description=(
+                "build artifacts write deferred source relation into compiled and runtime model sql"
+            ),
+            command="build",
+            project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (19, 'artifact-prod')",
+            ),
+            select=("stg_orders",),
+            compiled_relative_paths=("target/compiled/models/stg_orders.sql",),
+            runtime_relative_paths=("target/run/models/stg_orders.sql",),
+            expected_sql_fragments=("prod.raw_orders",),
+            unexpected_sql_fragments=("dev.raw_orders",),
+        ),
+        SourceDeferralArtifactTestCase(
+            description="build artifacts write deferred source relation into compiled function sql",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_BUILD_WITH_FUNCTION_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (20, 'function-artifact')",
+            ),
+            select=("order_statuses",),
+            compiled_relative_paths=("target/compiled/functions/sql/order_statuses.sql",),
+            runtime_relative_paths=("target/run/functions/sql/order_statuses.sql",),
+            expected_sql_fragments=("prod.raw_orders",),
+            unexpected_sql_fragments=("dev.raw_orders",),
+        ),
+        SourceDeferralArtifactTestCase(
+            description="audit compiled artifact writes deferred source relation",
+            command="build",
+            project_files=_SOURCE_DEFERRAL_AUDIT_PROJECT_FILES,
+            setup_sql=(
+                "CREATE SCHEMA prod",
+                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
+                "INSERT INTO prod.raw_orders VALUES (21, 'prod-audit')",
+            ),
+            select=("stg_orders",),
+            compiled_relative_paths=(
+                "target/compiled/audits/generic/raw_orders/source_status.sql",
+            ),
+            runtime_relative_paths=(),
+            expected_sql_fragments=("prod.raw_orders",),
+            unexpected_sql_fragments=("dev.raw_orders",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_relations(
     test_case: SourceDeferralArtifactTestCase,
@@ -1551,8 +1246,79 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
 
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_RUN_AUTO_LOAD_FLAG_TEST_CASES,
-    ids=[case.description for case in BUILD_RUN_AUTO_LOAD_FLAG_TEST_CASES],
+    [
+        BuildRunAutoLoadFlagTestCase(
+            description="build no-load skips loader and uses existing source table",
+            command="build",
+            project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+            args=("--no-load", "--select", "stg_orders"),
+            setup_sql=(
+                "CREATE TABLE raw_orders (order_id INTEGER, status VARCHAR)",
+                "INSERT INTO raw_orders VALUES (7, 'existing')",
+            ),
+            expected_rows=((7, "existing"),),
+            expected_stdout_absent_fragments=("source", "rows=1"),
+        ),
+        BuildRunAutoLoadFlagTestCase(
+            description="build load forces loader when auto load is disabled",
+            command="build",
+            project_files=_BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES,
+            args=("--load", "--select", "stg_orders"),
+            setup_sql=(),
+            expected_rows=((7, "loaded"),),
+            expected_stdout_fragments=("1/2  source", "rows=1"),
+        ),
+        BuildRunAutoLoadFlagTestCase(
+            description="build auto load disabled skips loader by default",
+            command="build",
+            project_files=_BUILD_RUN_AUTO_LOAD_CONFIG_FALSE_PROJECT_FILES,
+            args=("--select", "stg_orders"),
+            setup_sql=(
+                "CREATE TABLE raw_orders (order_id INTEGER, status VARCHAR)",
+                "INSERT INTO raw_orders VALUES (7, 'existing')",
+            ),
+            expected_rows=((7, "existing"),),
+            expected_stdout_absent_fragments=("source", "rows=1"),
+        ),
+        BuildRunAutoLoadFlagTestCase(
+            description="build reload and full refresh reloads loaders and models",
+            command="build",
+            project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
+            args=("--reload", "--full-refresh", "--select", "stg_orders"),
+            setup_sql=(),
+            expected_rows=((7, "reload"),),
+            expected_stdout_fragments=("Sources to reload (1)", "1/2  source", "2/2  table"),
+        ),
+        BuildRunAutoLoadFlagTestCase(
+            description="build reload reloads loaders without full refreshing models",
+            command="build",
+            project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
+            args=("--reload", "--select", "stg_orders"),
+            setup_sql=(),
+            expected_rows=((7, "reload"),),
+            expected_stdout_fragments=(
+                "Plan ready (1 selected, 1 source to reload)",
+                "1/2  source",
+                "2/2  table",
+            ),
+            expected_stdout_absent_fragments=("Full refresh",),
+        ),
+        BuildRunAutoLoadFlagTestCase(
+            description="build reload reloads loaders without full refreshing models",
+            command="build",
+            project_files=_BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES,
+            args=("--reload", "--select", "stg_orders"),
+            setup_sql=(),
+            expected_rows=((7, "reload"),),
+            expected_stdout_fragments=(
+                "Plan ready (1 selected, 1 source to reload)",
+                "1/2  source",
+                "2/2  table",
+            ),
+            expected_stdout_absent_fragments=("Full refresh",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_build_or_run_load_flags_when_running_then_applies_loader_control(
     test_case: BuildRunAutoLoadFlagTestCase,
@@ -1600,8 +1366,41 @@ def test_given_build_or_run_load_flags_when_running_then_applies_loader_control(
 
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_RUN_AUTO_LOAD_SELECTION_TEST_CASES,
-    ids=[case.description for case in BUILD_RUN_AUTO_LOAD_SELECTION_TEST_CASES],
+    [
+        BuildRunAutoLoadSelectionTestCase(
+            description="selected downstream model does not load source referenced only upstream",
+            args=("--select", "fact_orders"),
+            setup_sql=(
+                "CREATE TABLE stg_orders (order_id INTEGER, status VARCHAR)",
+                "INSERT INTO stg_orders VALUES (7, 'existing')",
+            ),
+            expected_rows=((7, "existing"),),
+            expected_stdout_absent_fragments=("source", "rows=1"),
+        ),
+        BuildRunAutoLoadSelectionTestCase(
+            description="upstream-expanded downstream model loads source referenced upstream",
+            args=("--select", "+fact_orders"),
+            setup_sql=(),
+            expected_rows=((7, "loaded"),),
+            expected_stdout_fragments=(
+                "Sources to load (1)",
+                "1/3  source",
+                "2/3  table",
+                "3/3  table",
+            ),
+        ),
+        BuildRunAutoLoadSelectionTestCase(
+            description="selected model loads only its direct source among multiple managed sources",
+            args=("--select", "stg_orders"),
+            setup_sql=(),
+            expected_rows=((7, "loaded"),),
+            expected_stdout_fragments=("Sources to load (1)", "raw_orders", "1/2  source"),
+            expected_stdout_absent_fragments=("raw_customers", "2/3  source"),
+            project_files=_BUILD_RUN_AUTO_LOAD_TWO_SOURCE_PROJECT_FILES,
+            result_table="stg_orders",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_downstream_selection_when_running_build_then_loads_only_direct_selected_sources(
     test_case: BuildRunAutoLoadSelectionTestCase,
@@ -1655,7 +1454,7 @@ def test_given_downstream_selection_when_running_build_then_loads_only_direct_se
             expected_model_exists=False,
         )
     ],
-    ids=["loader failure blocks downstream model execution"],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_fails_when_running_build_then_downstream_model_is_not_executed(
     test_case: BuildRunAutoLoadFailureTestCase,
@@ -1701,7 +1500,7 @@ def test_given_source_loader_fails_when_running_build_then_downstream_model_is_n
             },
         )
     ],
-    ids=["build json output includes source asset"],
+    ids=lambda case: case.description,
 )
 def test_given_build_auto_loads_source_when_json_output_then_includes_source_asset(
     test_case: BuildRunAutoLoadJsonTestCase,
@@ -1740,8 +1539,22 @@ def test_given_build_auto_loads_source_when_json_output_then_includes_source_ass
 
 @pytest.mark.parametrize(
     "test_case",
-    PLAN_AUTO_LOAD_OUTPUT_TEST_CASES,
-    ids=[case.description for case in PLAN_AUTO_LOAD_OUTPUT_TEST_CASES],
+    [
+        PlanAutoLoadOutputTestCase(
+            description="plan shows source loaders by default",
+            project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+            load_sources=None,
+            expected_stdout_fragments=("Sources to load (1)", "raw_orders", "table"),
+        ),
+        PlanAutoLoadOutputTestCase(
+            description="plan no-load hides source loaders",
+            project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+            load_sources=False,
+            expected_stdout_fragments=("Plan ready (1 selected)", "stg_orders"),
+            expected_stdout_absent_fragments=("Sources to load",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_plan_load_controls_when_running_plan_then_formats_source_load_section(
     test_case: PlanAutoLoadOutputTestCase,
@@ -1768,8 +1581,51 @@ def test_given_plan_load_controls_when_running_plan_then_formats_source_load_sec
 
 @pytest.mark.parametrize(
     "test_case",
-    PLAN_AUTO_LOAD_JSON_TEST_CASES,
-    ids=[case.description for case in PLAN_AUTO_LOAD_JSON_TEST_CASES],
+    [
+        PlanAutoLoadJsonTestCase(
+            description="plan json includes source loads",
+            project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+            load_sources=None,
+            expected_source_loads=(
+                {
+                    "name": "raw_orders",
+                    "loader": "raw_orders",
+                    "kind": "source",
+                    "target": "raw_orders",
+                    "is_reload": False,
+                    "write_strategy": "table",
+                },
+            ),
+            expected_selected_count=1,
+            expected_source_load_count=1,
+        ),
+        PlanAutoLoadJsonTestCase(
+            description="plan json no-load has zero source load count",
+            project_files=_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
+            load_sources=False,
+            expected_source_loads=(),
+            expected_selected_count=1,
+            expected_source_load_count=0,
+        ),
+        PlanAutoLoadJsonTestCase(
+            description="plan json keeps source loads when source reads defer to prod",
+            project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
+            load_sources=None,
+            expected_source_loads=(
+                {
+                    "name": "raw_orders",
+                    "loader": "raw_orders",
+                    "kind": "source",
+                    "target": "raw_orders",
+                    "is_reload": False,
+                    "write_strategy": "table",
+                },
+            ),
+            expected_selected_count=1,
+            expected_source_load_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_plan_json_output_when_source_auto_loads_then_includes_source_loads(
     test_case: PlanAutoLoadJsonTestCase,
@@ -1810,7 +1666,7 @@ def test_given_plan_json_output_when_source_auto_loads_then_includes_source_load
             expected_rows=((7, "existing"),),
         )
     ],
-    ids=["manifest marks source auto load false when loaders are skipped"],
+    ids=lambda case: case.description,
 )
 def test_given_build_skips_loader_when_manifest_is_written_then_marks_source_auto_load_false(
     test_case: BuildRunAutoLoadFlagTestCase,
@@ -1857,8 +1713,164 @@ def test_given_build_skips_loader_when_manifest_is_written_then_marks_source_aut
 
 @pytest.mark.parametrize(
     "test_case",
-    LOAD_COMMAND_TEST_CASES,
-    ids=[case.description for case in LOAD_COMMAND_TEST_CASES],
+    [
+        LoadCommandIntegrationTestCase(
+            description="loads returned dict rows into a source table",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
+                ),
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    ctx.log("loading raw orders")
+    return [
+        {"order_id": 1, "status": "placed"},
+        {"order_id": 2, "status": "shipped"},
+    ]
+""",
+            },
+            expected_exit_code=0,
+            expected_rows=((1, "placed"), (2, "shipped")),
+            expected_stdout_fragment="raw_orders",
+            expected_stdout_fragments=(
+                "Load ready (1 selected)",
+                "Sources (1)",
+                "Execution  sqb load  (concurrency: 1)",
+                "1/1  source    raw_orders",
+                "rows=2",
+                "Completed successfully.",
+                "PASS=1  WARN=0  FAIL=0  SKIP=0  TOTAL=1",
+            ),
+            expected_json_staging_relation="raw_orders__staging",
+            expected_json_rows_loaded=2,
+            expected_lifecycle_sql_fragments=(
+                "CREATE OR REPLACE TABLE raw_orders__staging",
+                "CREATE OR REPLACE TABLE raw_orders AS SELECT * FROM raw_orders__staging",
+                "DROP TABLE IF EXISTS raw_orders__staging",
+            ),
+        ),
+        LoadCommandIntegrationTestCase(
+            description="loads only selected managed source",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
+                ),
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+  - name: raw_events
+    managed: true
+    write_strategy: table
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    return [{"order_id": 3, "status": "selected"}]
+""",
+                "loaders/raw_events.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_events(ctx):
+    return [{"event_id": 99}]
+""",
+            },
+            expected_exit_code=0,
+            expected_rows=((3, "selected"),),
+            expected_stdout_fragment="raw_orders",
+            expected_stdout_absent_fragments=("raw_events",),
+            expected_json_staging_relation="raw_orders__staging",
+            expected_json_rows_loaded=1,
+            expected_lifecycle_sql_fragments=(
+                "CREATE OR REPLACE TABLE raw_orders__staging",
+                "CREATE OR REPLACE TABLE raw_orders AS SELECT * FROM raw_orders__staging",
+                "DROP TABLE IF EXISTS raw_orders__staging",
+            ),
+            select=("raw_orders",),
+        ),
+        LoadCommandIntegrationTestCase(
+            description="passes effective context values to loader",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\n'
+                    'adapter = "duckdb"\n'
+                    'default_target = "dev"\n\n'
+                    "[connection]\n"
+                    'database = "demo.duckdb"\n\n'
+                    "[vars]\n"
+                    'tier = "project"\n'
+                    'project_only = "yes"\n\n'
+                    "[targets.dev.vars]\n"
+                    'tier = "dev"\n'
+                ),
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    status = ":".join([
+        str(ctx.target),
+        str(ctx.vars["tier"]),
+        str(ctx.vars["project_only"]),
+        str(ctx.run_id != "demo"),
+    ])
+    return [{
+        "order_id": 4,
+        "status": status,
+    }]
+""",
+            },
+            expected_exit_code=0,
+            expected_rows=((4, "dev:cli:yes:True"),),
+            expected_stdout_fragment="raw_orders",
+            expected_json_staging_relation="raw_orders__staging",
+            expected_json_rows_loaded=1,
+            expected_lifecycle_sql_fragments=(
+                "CREATE OR REPLACE TABLE raw_orders__staging",
+                "CREATE OR REPLACE TABLE raw_orders AS SELECT * FROM raw_orders__staging",
+                "DROP TABLE IF EXISTS raw_orders__staging",
+            ),
+            cli_vars={"tier": "cli"},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_when_running_load_then_writes_source_table(
     test_case: LoadCommandIntegrationTestCase,
@@ -1911,8 +1923,164 @@ def test_given_source_loader_when_running_load_then_writes_source_table(
 
 @pytest.mark.parametrize(
     "test_case",
-    LOAD_COMMAND_TEST_CASES,
-    ids=[case.description for case in LOAD_COMMAND_TEST_CASES],
+    [
+        LoadCommandIntegrationTestCase(
+            description="loads returned dict rows into a source table",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
+                ),
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    ctx.log("loading raw orders")
+    return [
+        {"order_id": 1, "status": "placed"},
+        {"order_id": 2, "status": "shipped"},
+    ]
+""",
+            },
+            expected_exit_code=0,
+            expected_rows=((1, "placed"), (2, "shipped")),
+            expected_stdout_fragment="raw_orders",
+            expected_stdout_fragments=(
+                "Load ready (1 selected)",
+                "Sources (1)",
+                "Execution  sqb load  (concurrency: 1)",
+                "1/1  source    raw_orders",
+                "rows=2",
+                "Completed successfully.",
+                "PASS=1  WARN=0  FAIL=0  SKIP=0  TOTAL=1",
+            ),
+            expected_json_staging_relation="raw_orders__staging",
+            expected_json_rows_loaded=2,
+            expected_lifecycle_sql_fragments=(
+                "CREATE OR REPLACE TABLE raw_orders__staging",
+                "CREATE OR REPLACE TABLE raw_orders AS SELECT * FROM raw_orders__staging",
+                "DROP TABLE IF EXISTS raw_orders__staging",
+            ),
+        ),
+        LoadCommandIntegrationTestCase(
+            description="loads only selected managed source",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
+                ),
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+  - name: raw_events
+    managed: true
+    write_strategy: table
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    return [{"order_id": 3, "status": "selected"}]
+""",
+                "loaders/raw_events.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_events(ctx):
+    return [{"event_id": 99}]
+""",
+            },
+            expected_exit_code=0,
+            expected_rows=((3, "selected"),),
+            expected_stdout_fragment="raw_orders",
+            expected_stdout_absent_fragments=("raw_events",),
+            expected_json_staging_relation="raw_orders__staging",
+            expected_json_rows_loaded=1,
+            expected_lifecycle_sql_fragments=(
+                "CREATE OR REPLACE TABLE raw_orders__staging",
+                "CREATE OR REPLACE TABLE raw_orders AS SELECT * FROM raw_orders__staging",
+                "DROP TABLE IF EXISTS raw_orders__staging",
+            ),
+            select=("raw_orders",),
+        ),
+        LoadCommandIntegrationTestCase(
+            description="passes effective context values to loader",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\n'
+                    'adapter = "duckdb"\n'
+                    'default_target = "dev"\n\n'
+                    "[connection]\n"
+                    'database = "demo.duckdb"\n\n'
+                    "[vars]\n"
+                    'tier = "project"\n'
+                    'project_only = "yes"\n\n'
+                    "[targets.dev.vars]\n"
+                    'tier = "dev"\n'
+                ),
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_orders(ctx):
+    status = ":".join([
+        str(ctx.target),
+        str(ctx.vars["tier"]),
+        str(ctx.vars["project_only"]),
+        str(ctx.run_id != "demo"),
+    ])
+    return [{
+        "order_id": 4,
+        "status": status,
+    }]
+""",
+            },
+            expected_exit_code=0,
+            expected_rows=((4, "dev:cli:yes:True"),),
+            expected_stdout_fragment="raw_orders",
+            expected_json_staging_relation="raw_orders__staging",
+            expected_json_rows_loaded=1,
+            expected_lifecycle_sql_fragments=(
+                "CREATE OR REPLACE TABLE raw_orders__staging",
+                "CREATE OR REPLACE TABLE raw_orders AS SELECT * FROM raw_orders__staging",
+                "DROP TABLE IF EXISTS raw_orders__staging",
+            ),
+            cli_vars={"tier": "cli"},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
     test_case: LoadCommandIntegrationTestCase,
@@ -1949,7 +2117,7 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
     [
         LoadCommandLifecycleOrderTestCase(
             description="drops stale staging before creating new staging table",
-            project_files=LOAD_COMMAND_TEST_CASES[0].project_files,
+            project_files=LOAD_COMMAND_CASE_FIXTURES[0].project_files,
             expected_lifecycle_sql_order=(
                 "DROP TABLE IF EXISTS raw_orders__staging",
                 "CREATE OR REPLACE TABLE raw_orders__staging",
@@ -1958,7 +2126,7 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
             ),
         ),
     ],
-    ids=["drops stale staging before creating new staging table"],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_when_running_pipeline_then_drops_stale_staging_first(
     test_case: LoadCommandLifecycleOrderTestCase,
@@ -1998,7 +2166,7 @@ def test_given_source_loader_when_running_pipeline_then_drops_stale_staging_firs
     assert match_positions == sorted(match_positions)
 
 
-WRITE_STRATEGY_TEST_CASES: list[LoadCommandWriteStrategyTestCase] = [
+WRITE_STRATEGY_CASE_FIXTURES: list[LoadCommandWriteStrategyTestCase] = [
     LoadCommandWriteStrategyTestCase(
         description="append creates target then appends rows using current cursor value",
         project_files={
@@ -2239,67 +2407,7 @@ def raw_delete_insert_empty(ctx):
     ),
 ]
 
-WRITE_STRATEGY_LIFECYCLE_TEST_CASES: list[LoadCommandWriteStrategyLifecycleTestCase] = [
-    LoadCommandWriteStrategyLifecycleTestCase(
-        description="append creates target first then inserts on rerun",
-        project_files=WRITE_STRATEGY_TEST_CASES[0].project_files,
-        expected_first_run_fragments=(
-            "CREATE OR REPLACE TABLE raw_append_events AS SELECT * FROM raw_append_events__staging",
-        ),
-        expected_second_run_fragments=(
-            'INSERT INTO raw_append_events ("event_id", "cursor_seen") '
-            "SELECT * FROM raw_append_events__staging",
-        ),
-        absent_second_run_fragments=(
-            "CREATE OR REPLACE TABLE raw_append_events AS SELECT * FROM raw_append_events__staging",
-        ),
-    ),
-    LoadCommandWriteStrategyLifecycleTestCase(
-        description="merge creates target first then merges on rerun",
-        project_files=WRITE_STRATEGY_TEST_CASES[1].project_files,
-        expected_first_run_fragments=(
-            "CREATE OR REPLACE TABLE raw_merge_customers AS SELECT * FROM "
-            "raw_merge_customers__staging",
-        ),
-        expected_second_run_fragments=("MERGE INTO raw_merge_customers",),
-        absent_second_run_fragments=(
-            "CREATE OR REPLACE TABLE raw_merge_customers AS SELECT * FROM "
-            "raw_merge_customers__staging",
-        ),
-    ),
-    LoadCommandWriteStrategyLifecycleTestCase(
-        description="merge composite key uses every key in merge condition",
-        project_files=WRITE_STRATEGY_TEST_CASES[2].project_files,
-        expected_first_run_fragments=(
-            "CREATE OR REPLACE TABLE raw_merge_composite AS SELECT * FROM "
-            "raw_merge_composite__staging",
-        ),
-        expected_second_run_fragments=(
-            "MERGE INTO raw_merge_composite",
-            '__target."entity_id" = __source."entity_id"',
-            '__target."source" = __source."source"',
-        ),
-    ),
-    LoadCommandWriteStrategyLifecycleTestCase(
-        description="delete insert creates target first then deletes cursor range on rerun",
-        project_files=WRITE_STRATEGY_TEST_CASES[3].project_files,
-        expected_first_run_fragments=(
-            "CREATE OR REPLACE TABLE raw_delete_insert_events AS SELECT * FROM "
-            "raw_delete_insert_events__staging",
-        ),
-        expected_second_run_fragments=(
-            'SELECT MIN("event_id"), MAX("event_id") FROM raw_delete_insert_events__staging',
-            "DELETE FROM raw_delete_insert_events WHERE \"event_id\" >= '2' AND \"event_id\" < '4'",
-            "INSERT INTO raw_delete_insert_events SELECT * FROM raw_delete_insert_events__staging",
-        ),
-        absent_second_run_fragments=(
-            "CREATE OR REPLACE TABLE raw_delete_insert_events AS SELECT * FROM "
-            "raw_delete_insert_events__staging",
-        ),
-    ),
-]
-
-CURSOR_NONE_TEST_CASES: list[LoadCommandCursorNoneTestCase] = [
+CURSOR_NONE_CASE_FIXTURES: list[LoadCommandCursorNoneTestCase] = [
     LoadCommandCursorNoneTestCase(
         description="current cursor value is none when no cursor column is configured",
         project_files={
@@ -2394,44 +2502,6 @@ def raw_missing_cursor_target(ctx):
     ),
 ]
 
-CURSOR_LIFECYCLE_TEST_CASES: list[LoadCommandLifecycleSqlTestCase] = [
-    LoadCommandLifecycleSqlTestCase(
-        description="records cursor max query only when target exists",
-        project_files=WRITE_STRATEGY_TEST_CASES[0].project_files,
-        run_count=2,
-        expected_lifecycle_sql_fragments=('SELECT MAX("event_id") FROM raw_append_events',),
-    ),
-    LoadCommandLifecycleSqlTestCase(
-        description="does not query cursor when source has no cursor column",
-        project_files=CURSOR_NONE_TEST_CASES[0].project_files,
-        run_count=2,
-        absent_lifecycle_sql_fragments=("SELECT MAX(",),
-    ),
-]
-
-ADAPTER_CALL_TEST_CASES: list[LoadCommandAdapterCallTestCase] = [
-    LoadCommandAdapterCallTestCase(
-        description="append rerun calls adapter append with staging select",
-        project_files=WRITE_STRATEGY_TEST_CASES[0].project_files,
-        method_name="append",
-        expected_sql="SELECT * FROM raw_append_events__staging",
-    ),
-    LoadCommandAdapterCallTestCase(
-        description="merge rerun calls adapter merge with staging select and unique key",
-        project_files=WRITE_STRATEGY_TEST_CASES[1].project_files,
-        method_name="merge",
-        expected_sql="SELECT * FROM raw_merge_customers__staging",
-        expected_unique_key=("customer_id",),
-    ),
-    LoadCommandAdapterCallTestCase(
-        description="delete insert rerun calls adapter delete insert cursor with staging select",
-        project_files=WRITE_STRATEGY_TEST_CASES[3].project_files,
-        method_name="delete_insert_cursor",
-        expected_sql="SELECT * FROM raw_delete_insert_events__staging",
-        expected_unique_key=("event_id", "2", "4"),
-    ),
-]
-
 RELOAD_CONTEXT_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": _PROJECT_FILE,
     "sources/raw.yml": """
@@ -2452,21 +2522,6 @@ def raw_reload_context(ctx):
     return [{"is_reload": ctx.is_reload}]
 """,
 }
-
-RELOAD_CONTEXT_TEST_CASES: list[LoadCommandReloadContextTestCase] = [
-    LoadCommandReloadContextTestCase(
-        description="passes false reload context by default",
-        project_files=RELOAD_CONTEXT_PROJECT_FILES,
-        reload=False,
-        expected_rows=((False,),),
-    ),
-    LoadCommandReloadContextTestCase(
-        description="passes true reload context when reload flag is used",
-        project_files=RELOAD_CONTEXT_PROJECT_FILES,
-        reload=True,
-        expected_rows=((True,),),
-    ),
-]
 
 CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": _PROJECT_FILE,
@@ -2500,31 +2555,250 @@ def raw_cursor_overrides(ctx):
 """,
 }
 
-CURSOR_OVERRIDE_CONTEXT_TEST_CASES: list[LoadCommandCursorOverrideContextTestCase] = [
-    LoadCommandCursorOverrideContextTestCase(
-        description="passes no cursor override context by default",
-        project_files=CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES,
-        cursor_overrides=None,
-        expected_rows=((None, None, None, None),),
-    ),
-    LoadCommandCursorOverrideContextTestCase(
-        description="passes typed cursor override context values",
-        project_files=CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES,
-        cursor_overrides=CursorOverrides(
-            start_ts="2026-01-01T01:02:03",
-            end_ts="2026-01-02T04:05:06",
-            start_int="10",
-            end_int="20",
-        ),
-        expected_rows=(("2026-01-01T01:02:03", "2026-01-02T04:05:06", "10", "20"),),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    WRITE_STRATEGY_TEST_CASES,
-    ids=[case.description for case in WRITE_STRATEGY_TEST_CASES],
+    [
+        LoadCommandWriteStrategyTestCase(
+            description="append creates target then appends rows using current cursor value",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_append_events
+    managed: true
+    write_strategy: append
+    cursor_column: event_id
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: cursor_seen
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_append_events(ctx):
+    if ctx.current_cursor_value is None:
+        return [{"event_id": 1, "cursor_seen": "none"}]
+    next_id = int(ctx.current_cursor_value) + 1
+    return [{"event_id": next_id, "cursor_seen": str(ctx.current_cursor_value)}]
+""",
+            },
+            select_sql="SELECT event_id, cursor_seen FROM raw_append_events ORDER BY event_id",
+            expected_rows=((1, "none"), (2, "1")),
+        ),
+        LoadCommandWriteStrategyTestCase(
+            description="merge updates existing rows and inserts new rows using cursor value",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_merge_customers
+    managed: true
+    write_strategy: merge
+    unique_key: customer_id
+    cursor_column: updated_at
+    columns:
+      - name: customer_id
+        type: INTEGER
+      - name: name
+        type: VARCHAR
+      - name: updated_at
+        type: INTEGER
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_merge_customers(ctx):
+    if ctx.current_cursor_value is None:
+        return [
+            {"customer_id": 1, "name": "old", "updated_at": 1},
+            {"customer_id": 2, "name": "kept", "updated_at": 1},
+        ]
+    return [
+        {"customer_id": 1, "name": f"updated:{ctx.current_cursor_value}", "updated_at": 2},
+        {"customer_id": 3, "name": "new", "updated_at": 2},
+    ]
+""",
+            },
+            select_sql=(
+                "SELECT customer_id, name, updated_at FROM raw_merge_customers ORDER BY customer_id"
+            ),
+            expected_rows=((1, "updated:1", 2), (2, "kept", 1), (3, "new", 2)),
+        ),
+        LoadCommandWriteStrategyTestCase(
+            description="merge supports composite unique keys",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_merge_composite
+    managed: true
+    write_strategy: merge
+    unique_key: [entity_id, source]
+    cursor_column: version
+    columns:
+      - name: entity_id
+        type: INTEGER
+      - name: source
+        type: VARCHAR
+      - name: value
+        type: VARCHAR
+      - name: version
+        type: INTEGER
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_merge_composite(ctx):
+    if ctx.current_cursor_value is None:
+        return [{"entity_id": 1, "source": "api", "value": "old", "version": 1}]
+    return [
+        {"entity_id": 1, "source": "api", "value": "new", "version": 2},
+        {"entity_id": 1, "source": "feed", "value": "inserted", "version": 2},
+    ]
+""",
+            },
+            select_sql=(
+                "SELECT entity_id, source, value, version FROM raw_merge_composite ORDER BY source"
+            ),
+            expected_rows=((1, "api", "new", 2), (1, "feed", "inserted", 2)),
+        ),
+        LoadCommandWriteStrategyTestCase(
+            description="delete insert replaces loaded cursor range and preserves outside rows",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_delete_insert_events
+    managed: true
+    write_strategy: delete_insert
+    cursor_column: event_id
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_delete_insert_events(ctx):
+    if ctx.current_cursor_value is None:
+        return [
+            {"event_id": 1, "status": "old-outside-low"},
+            {"event_id": 2, "status": "old-range"},
+            {"event_id": 3, "status": "old-range"},
+            {"event_id": 5, "status": "old-outside-high"},
+        ]
+    return [
+        {"event_id": 2, "status": "new-range"},
+        {"event_id": 3, "status": "new-range"},
+    ]
+""",
+            },
+            select_sql=(
+                "SELECT event_id, status FROM raw_delete_insert_events ORDER BY event_id, status"
+            ),
+            expected_rows=(
+                (1, "old-outside-low"),
+                (2, "new-range"),
+                (3, "new-range"),
+                (5, "old-outside-high"),
+            ),
+        ),
+        LoadCommandWriteStrategyTestCase(
+            description="delete insert supports timestamp cursor ranges",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_delete_insert_ts
+    managed: true
+    write_strategy: delete_insert
+    cursor_column: event_at
+    columns:
+      - name: event_at
+        type: TIMESTAMP
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from datetime import datetime
+
+from sqlbuild.loaders import loader
+
+@loader
+def raw_delete_insert_ts(ctx):
+    if ctx.current_cursor_value is None:
+        return [
+            {"event_at": datetime(2026, 1, 1, 0, 0, 0), "status": "outside-low"},
+            {"event_at": datetime(2026, 1, 1, 1, 0, 0), "status": "old-range"},
+            {"event_at": datetime(2026, 1, 1, 2, 0, 0), "status": "old-range"},
+            {"event_at": datetime(2026, 1, 1, 3, 0, 0), "status": "outside-high"},
+        ]
+    return [
+        {"event_at": datetime(2026, 1, 1, 1, 0, 0), "status": "new-range"},
+        {"event_at": datetime(2026, 1, 1, 2, 0, 0), "status": "new-range"},
+    ]
+""",
+            },
+            select_sql=(
+                "SELECT strftime(event_at, '%Y-%m-%d %H:%M:%S'), status "
+                "FROM raw_delete_insert_ts ORDER BY event_at, status"
+            ),
+            expected_rows=(
+                ("2026-01-01 00:00:00", "outside-low"),
+                ("2026-01-01 01:00:00", "new-range"),
+                ("2026-01-01 02:00:00", "new-range"),
+                ("2026-01-01 03:00:00", "outside-high"),
+            ),
+        ),
+        LoadCommandWriteStrategyTestCase(
+            description="delete insert empty rerun leaves existing target unchanged",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_delete_insert_empty
+    managed: true
+    write_strategy: delete_insert
+    cursor_column: event_id
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_delete_insert_empty(ctx):
+    if ctx.current_cursor_value is None:
+        return [
+            {"event_id": 1, "status": "existing"},
+            {"event_id": 2, "status": "existing"},
+        ]
+    return []
+""",
+            },
+            select_sql="SELECT event_id, status FROM raw_delete_insert_empty ORDER BY event_id",
+            expected_rows=((1, "existing"), (2, "existing")),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_write_strategy_when_running_load_twice_then_writes_expected_rows(
     test_case: LoadCommandWriteStrategyTestCase,
@@ -2549,8 +2823,66 @@ def test_given_source_loader_write_strategy_when_running_load_twice_then_writes_
 
 @pytest.mark.parametrize(
     "test_case",
-    WRITE_STRATEGY_LIFECYCLE_TEST_CASES,
-    ids=[case.description for case in WRITE_STRATEGY_LIFECYCLE_TEST_CASES],
+    [
+        LoadCommandWriteStrategyLifecycleTestCase(
+            description="append creates target first then inserts on rerun",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[0].project_files,
+            expected_first_run_fragments=(
+                "CREATE OR REPLACE TABLE raw_append_events AS SELECT * FROM raw_append_events__staging",
+            ),
+            expected_second_run_fragments=(
+                'INSERT INTO raw_append_events ("event_id", "cursor_seen") '
+                "SELECT * FROM raw_append_events__staging",
+            ),
+            absent_second_run_fragments=(
+                "CREATE OR REPLACE TABLE raw_append_events AS SELECT * FROM raw_append_events__staging",
+            ),
+        ),
+        LoadCommandWriteStrategyLifecycleTestCase(
+            description="merge creates target first then merges on rerun",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[1].project_files,
+            expected_first_run_fragments=(
+                "CREATE OR REPLACE TABLE raw_merge_customers AS SELECT * FROM "
+                "raw_merge_customers__staging",
+            ),
+            expected_second_run_fragments=("MERGE INTO raw_merge_customers",),
+            absent_second_run_fragments=(
+                "CREATE OR REPLACE TABLE raw_merge_customers AS SELECT * FROM "
+                "raw_merge_customers__staging",
+            ),
+        ),
+        LoadCommandWriteStrategyLifecycleTestCase(
+            description="merge composite key uses every key in merge condition",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[2].project_files,
+            expected_first_run_fragments=(
+                "CREATE OR REPLACE TABLE raw_merge_composite AS SELECT * FROM "
+                "raw_merge_composite__staging",
+            ),
+            expected_second_run_fragments=(
+                "MERGE INTO raw_merge_composite",
+                '__target."entity_id" = __source."entity_id"',
+                '__target."source" = __source."source"',
+            ),
+        ),
+        LoadCommandWriteStrategyLifecycleTestCase(
+            description="delete insert creates target first then deletes cursor range on rerun",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[3].project_files,
+            expected_first_run_fragments=(
+                "CREATE OR REPLACE TABLE raw_delete_insert_events AS SELECT * FROM "
+                "raw_delete_insert_events__staging",
+            ),
+            expected_second_run_fragments=(
+                'SELECT MIN("event_id"), MAX("event_id") FROM raw_delete_insert_events__staging',
+                "DELETE FROM raw_delete_insert_events WHERE \"event_id\" >= '2' AND \"event_id\" < '4'",
+                "INSERT INTO raw_delete_insert_events SELECT * FROM raw_delete_insert_events__staging",
+            ),
+            absent_second_run_fragments=(
+                "CREATE OR REPLACE TABLE raw_delete_insert_events AS SELECT * FROM "
+                "raw_delete_insert_events__staging",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expected_dml(
     test_case: LoadCommandWriteStrategyLifecycleTestCase,
@@ -2605,8 +2937,29 @@ def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expe
 
 @pytest.mark.parametrize(
     "test_case",
-    ADAPTER_CALL_TEST_CASES,
-    ids=[case.description for case in ADAPTER_CALL_TEST_CASES],
+    [
+        LoadCommandAdapterCallTestCase(
+            description="append rerun calls adapter append with staging select",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[0].project_files,
+            method_name="append",
+            expected_sql="SELECT * FROM raw_append_events__staging",
+        ),
+        LoadCommandAdapterCallTestCase(
+            description="merge rerun calls adapter merge with staging select and unique key",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[1].project_files,
+            method_name="merge",
+            expected_sql="SELECT * FROM raw_merge_customers__staging",
+            expected_unique_key=("customer_id",),
+        ),
+        LoadCommandAdapterCallTestCase(
+            description="delete insert rerun calls adapter delete insert cursor with staging select",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[3].project_files,
+            method_name="delete_insert_cursor",
+            expected_sql="SELECT * FROM raw_delete_insert_events__staging",
+            expected_unique_key=("event_id", "2", "4"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_adapter_method(
     test_case: LoadCommandAdapterCallTestCase,
@@ -2684,8 +3037,101 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
 
 @pytest.mark.parametrize(
     "test_case",
-    CURSOR_NONE_TEST_CASES,
-    ids=[case.description for case in CURSOR_NONE_TEST_CASES],
+    [
+        LoadCommandCursorNoneTestCase(
+            description="current cursor value is none when no cursor column is configured",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_no_cursor
+    managed: true
+    write_strategy: append
+    columns:
+      - name: run_number
+        type: INTEGER
+      - name: cursor_seen
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+run_count = 0
+
+@loader
+def raw_no_cursor(ctx):
+    global run_count
+    run_count += 1
+    return [{"run_number": run_count, "cursor_seen": str(ctx.current_cursor_value)}]
+""",
+            },
+            select_sql="SELECT run_number, cursor_seen FROM raw_no_cursor ORDER BY run_number",
+            expected_rows=((1, "None"), (1, "None")),
+        ),
+        LoadCommandCursorNoneTestCase(
+            description="current cursor value is none when existing target is empty",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_empty_cursor
+    managed: true
+    write_strategy: append
+    cursor_column: event_id
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: cursor_seen
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_empty_cursor(ctx):
+    return [{"event_id": 1, "cursor_seen": str(ctx.current_cursor_value)}]
+""",
+            },
+            select_sql="SELECT event_id, cursor_seen FROM raw_empty_cursor ORDER BY event_id",
+            expected_rows=((1, "None"),),
+            run_count=1,
+            setup_sql=("CREATE TABLE raw_empty_cursor(event_id INTEGER, cursor_seen VARCHAR)",),
+        ),
+        LoadCommandCursorNoneTestCase(
+            description="current cursor value is none when target does not exist",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_missing_cursor_target
+    managed: true
+    write_strategy: append
+    cursor_column: event_id
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: cursor_seen
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "loaders/raw.py": """
+from sqlbuild.loaders import loader
+
+@loader
+def raw_missing_cursor_target(ctx):
+    return [{"event_id": 1, "cursor_seen": str(ctx.current_cursor_value)}]
+""",
+            },
+            select_sql=(
+                "SELECT event_id, cursor_seen FROM raw_missing_cursor_target ORDER BY event_id"
+            ),
+            expected_rows=((1, "None"),),
+            run_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_loader_cursor_context_has_no_value_when_running_load_then_passes_none(
     test_case: LoadCommandCursorNoneTestCase,
@@ -2717,8 +3163,21 @@ def test_given_loader_cursor_context_has_no_value_when_running_load_then_passes_
 
 @pytest.mark.parametrize(
     "test_case",
-    CURSOR_LIFECYCLE_TEST_CASES,
-    ids=[case.description for case in CURSOR_LIFECYCLE_TEST_CASES],
+    [
+        LoadCommandLifecycleSqlTestCase(
+            description="records cursor max query only when target exists",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[0].project_files,
+            run_count=2,
+            expected_lifecycle_sql_fragments=('SELECT MAX("event_id") FROM raw_append_events',),
+        ),
+        LoadCommandLifecycleSqlTestCase(
+            description="does not query cursor when source has no cursor column",
+            project_files=CURSOR_NONE_CASE_FIXTURES[0].project_files,
+            run_count=2,
+            absent_lifecycle_sql_fragments=("SELECT MAX(",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_loader_cursor_configuration_when_running_pipeline_then_records_expected_cursor_sql(
     test_case: LoadCommandLifecycleSqlTestCase,
@@ -2758,8 +3217,21 @@ def test_given_loader_cursor_configuration_when_running_pipeline_then_records_ex
 
 @pytest.mark.parametrize(
     "test_case",
-    RELOAD_CONTEXT_TEST_CASES,
-    ids=[case.description for case in RELOAD_CONTEXT_TEST_CASES],
+    [
+        LoadCommandReloadContextTestCase(
+            description="passes false reload context by default",
+            project_files=RELOAD_CONTEXT_PROJECT_FILES,
+            reload=False,
+            expected_rows=((False,),),
+        ),
+        LoadCommandReloadContextTestCase(
+            description="passes true reload context when reload flag is used",
+            project_files=RELOAD_CONTEXT_PROJECT_FILES,
+            reload=True,
+            expected_rows=((True,),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_reload_flag_when_running_load_then_passes_reload_context_to_loader(
     test_case: LoadCommandReloadContextTestCase,
@@ -2787,8 +3259,26 @@ def test_given_reload_flag_when_running_load_then_passes_reload_context_to_loade
 
 @pytest.mark.parametrize(
     "test_case",
-    CURSOR_OVERRIDE_CONTEXT_TEST_CASES,
-    ids=[case.description for case in CURSOR_OVERRIDE_CONTEXT_TEST_CASES],
+    [
+        LoadCommandCursorOverrideContextTestCase(
+            description="passes no cursor override context by default",
+            project_files=CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES,
+            cursor_overrides=None,
+            expected_rows=((None, None, None, None),),
+        ),
+        LoadCommandCursorOverrideContextTestCase(
+            description="passes typed cursor override context values",
+            project_files=CURSOR_OVERRIDE_CONTEXT_PROJECT_FILES,
+            cursor_overrides=CursorOverrides(
+                start_ts="2026-01-01T01:02:03",
+                end_ts="2026-01-02T04:05:06",
+                start_int="10",
+                end_int="20",
+            ),
+            expected_rows=(("2026-01-01T01:02:03", "2026-01-02T04:05:06", "10", "20"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_cursor_override_flags_when_running_load_then_passes_typed_context_to_loader(
     test_case: LoadCommandCursorOverrideContextTestCase,
@@ -2881,7 +3371,7 @@ def raw_c(ctx):
             expected_json_asset_order=("raw_a", "raw_b", "raw_c"),
         ),
     ],
-    ids=["uses bounded concurrent connections and preserves result order"],
+    ids=lambda case: case.description,
 )
 def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurrent_connections(
     test_case: LoadCommandConcurrencyTestCase,
@@ -2984,7 +3474,7 @@ def raw_join(ctx):
             expected_json_asset_order=("fetch_a", "fetch_b", "raw_join"),
         )
     ],
-    ids=["runs independent loader branches concurrently before dependent source"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_dag_when_running_pipeline_then_independent_branches_overlap(
     test_case: LoadCommandConcurrencyTestCase,
@@ -3110,7 +3600,7 @@ def raw_inferred(ctx):
             },
         ),
     ],
-    ids=["loads generator rows with declared missing and inferred extra columns"],
+    ids=lambda case: case.description,
 )
 def test_given_generator_loader_with_inferred_columns_when_running_load_then_writes_schema_and_data(
     test_case: LoadCommandInferredColumnsTestCase,
@@ -3173,7 +3663,7 @@ def raw_multi_yield(ctx):
             expected_rows=((1, "first"), (2, "second")),
         ),
     ],
-    ids=["loads every row yielded by a generator loader"],
+    ids=lambda case: case.description,
 )
 def test_given_generator_loader_yields_multiple_rows_when_running_load_then_writes_all_rows(
     test_case: LoadCommandMultipleYieldTestCase,
@@ -3237,7 +3727,7 @@ def raw_batched_yield(ctx):
             ),
         ),
     ],
-    ids=["loads generator rows in batches and preserves late extra columns"],
+    ids=lambda case: case.description,
 )
 def test_given_generator_loader_uses_batch_size_when_running_pipeline_then_appends_batches(
     test_case: LoadCommandBatchedYieldTestCase,
@@ -3286,12 +3776,14 @@ def test_given_generator_loader_uses_batch_size_when_running_pipeline_then_appen
     )
 
 
-BATCHED_ROWS_TEST_CASES: list[LoadCommandBatchedRowsTestCase] = [
-    LoadCommandBatchedRowsTestCase(
-        description="loads missing known columns as null in later batches",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandBatchedRowsTestCase(
+            description="loads missing known columns as null in later batches",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_missing_known
     managed: true
@@ -3303,8 +3795,8 @@ sources:
       - name: status
         type: VARCHAR
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3312,18 +3804,18 @@ def raw_missing_known(ctx):
     yield {"id": 1, "status": "first"}
     yield {"id": 2}
 """,
-        },
-        select_sql="SELECT id, status FROM raw_missing_known ORDER BY id",
-        table_name="raw_missing_known",
-        expected_rows=((1, "first"), (2, None)),
-        expected_column_types={"id": "INTEGER", "status": "VARCHAR"},
-        expected_rows_loaded=2,
-    ),
-    LoadCommandBatchedRowsTestCase(
-        description="loads empty generator into declared table through batched path",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+            },
+            select_sql="SELECT id, status FROM raw_missing_known ORDER BY id",
+            table_name="raw_missing_known",
+            expected_rows=((1, "first"), (2, None)),
+            expected_column_types={"id": "INTEGER", "status": "VARCHAR"},
+            expected_rows_loaded=2,
+        ),
+        LoadCommandBatchedRowsTestCase(
+            description="loads empty generator into declared table through batched path",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_empty_generator
     managed: true
@@ -3335,8 +3827,8 @@ sources:
       - name: status
         type: VARCHAR
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3344,18 +3836,18 @@ def raw_empty_generator(ctx):
     if False:
         yield {"id": 1, "status": "unreachable"}
 """,
-        },
-        select_sql="SELECT COUNT(*) FROM raw_empty_generator",
-        table_name="raw_empty_generator",
-        expected_rows=((0,),),
-        expected_column_types={"id": "INTEGER", "status": "VARCHAR"},
-        expected_rows_loaded=0,
-    ),
-    LoadCommandBatchedRowsTestCase(
-        description="loads late all null column when typed value arrives later",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+            },
+            select_sql="SELECT COUNT(*) FROM raw_empty_generator",
+            table_name="raw_empty_generator",
+            expected_rows=((0,),),
+            expected_column_types={"id": "INTEGER", "status": "VARCHAR"},
+            expected_rows_loaded=0,
+        ),
+        LoadCommandBatchedRowsTestCase(
+            description="loads late all null column when typed value arrives later",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_late_null
     managed: true
@@ -3365,8 +3857,8 @@ sources:
       - name: id
         type: INTEGER
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3374,18 +3866,18 @@ def raw_late_null(ctx):
     yield {"id": 1, "late_note": None}
     yield {"id": 2, "late_note": "filled"}
 """,
-        },
-        select_sql="SELECT id, late_note FROM raw_late_null ORDER BY id",
-        table_name="raw_late_null",
-        expected_rows=((1, None), (2, "filled")),
-        expected_column_types={"id": "INTEGER", "late_note": "VARCHAR"},
-        expected_rows_loaded=2,
-    ),
-    LoadCommandBatchedRowsTestCase(
-        description="loads multi-row batches before appending final partial batch",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+            },
+            select_sql="SELECT id, late_note FROM raw_late_null ORDER BY id",
+            table_name="raw_late_null",
+            expected_rows=((1, None), (2, "filled")),
+            expected_column_types={"id": "INTEGER", "late_note": "VARCHAR"},
+            expected_rows_loaded=2,
+        ),
+        LoadCommandBatchedRowsTestCase(
+            description="loads multi-row batches before appending final partial batch",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_batch_size_two
     managed: true
@@ -3395,8 +3887,8 @@ sources:
       - name: id
         type: INTEGER
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3405,19 +3897,19 @@ def raw_batch_size_two(ctx):
     yield {"id": 2}
     yield {"id": 3}
 """,
-        },
-        select_sql="SELECT id FROM raw_batch_size_two ORDER BY id",
-        table_name="raw_batch_size_two",
-        expected_rows=((1,), (2,), (3,)),
-        expected_column_types={"id": "INTEGER"},
-        expected_rows_loaded=3,
-        expected_lifecycle_sql_fragments=("INSERT INTO raw_batch_size_two__staging",),
-    ),
-    LoadCommandBatchedRowsTestCase(
-        description="uses default batch size when source does not declare one",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+            },
+            select_sql="SELECT id FROM raw_batch_size_two ORDER BY id",
+            table_name="raw_batch_size_two",
+            expected_rows=((1,), (2,), (3,)),
+            expected_column_types={"id": "INTEGER"},
+            expected_rows_loaded=3,
+            expected_lifecycle_sql_fragments=("INSERT INTO raw_batch_size_two__staging",),
+        ),
+        LoadCommandBatchedRowsTestCase(
+            description="uses default batch size when source does not declare one",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_default_batch
     managed: true
@@ -3426,8 +3918,8 @@ sources:
       - name: id
         type: INTEGER
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3436,21 +3928,16 @@ def raw_default_batch(ctx):
     yield {"id": 2}
     yield {"id": 3}
 """,
-        },
-        select_sql="SELECT id FROM raw_default_batch ORDER BY id",
-        table_name="raw_default_batch",
-        expected_rows=((1,), (2,), (3,)),
-        expected_column_types={"id": "INTEGER"},
-        expected_rows_loaded=3,
-        absent_lifecycle_sql_fragments=("INSERT INTO raw_default_batch__staging",),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    BATCHED_ROWS_TEST_CASES,
-    ids=[case.description for case in BATCHED_ROWS_TEST_CASES],
+            },
+            select_sql="SELECT id FROM raw_default_batch ORDER BY id",
+            table_name="raw_default_batch",
+            expected_rows=((1,), (2,), (3,)),
+            expected_column_types={"id": "INTEGER"},
+            expected_rows_loaded=3,
+            absent_lifecycle_sql_fragments=("INSERT INTO raw_default_batch__staging",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_batched_loader_variants_when_running_pipeline_then_writes_expected_rows(
     test_case: LoadCommandBatchedRowsTestCase,
@@ -3533,7 +4020,7 @@ def raw_many_rows(ctx):
             expected_json_rows_loaded=1001,
         ),
     ],
-    ids=["formats large load row counts with commas in human output"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_writes_many_rows_when_running_load_then_formats_human_row_count(
     test_case: LoadCommandIntegrationTestCase,
@@ -3590,7 +4077,7 @@ def raw_empty(ctx):
             expected_column_types={"id": "INTEGER", "status": "VARCHAR"},
         ),
     ],
-    ids=["loads empty returned rows into declared empty table"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_returns_empty_rows_when_running_load_then_writes_empty_declared_table(
     test_case: LoadCommandEmptyRowsTestCase,
@@ -3648,7 +4135,7 @@ def raw_self_managed(ctx):
             run_count=1,
         ),
     ],
-    ids=["self managed loader can return nothing without write strategy"],
+    ids=lambda case: case.description,
 )
 def test_given_self_managed_loader_when_running_load_then_uses_loader_written_table(
     test_case: LoadCommandWriteStrategyTestCase,
@@ -3671,19 +4158,21 @@ def test_given_self_managed_loader_when_running_load_then_uses_loader_written_ta
     assert rows == test_case.expected_rows
 
 
-FAILURE_TEST_CASES: list[LoadCommandFailureTestCase] = [
-    LoadCommandFailureTestCase(
-        description="fails clearly when returned rows contain conflicting inferred types",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandFailureTestCase(
+            description="fails clearly when returned rows contain conflicting inferred types",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_conflict
     managed: true
     write_strategy: table
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3693,62 +4182,57 @@ def raw_conflict(ctx):
         {"id": "two"},
     ]
 """,
-        },
-        expected_exit_code=1,
-        expected_stdout_fragment="conflicting types for column 'id'",
-    ),
-    LoadCommandFailureTestCase(
-        description="fails when loader returns rows without write strategy",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+            },
+            expected_exit_code=1,
+            expected_stdout_fragment="conflicting types for column 'id'",
+        ),
+        LoadCommandFailureTestCase(
+            description="fails when loader returns rows without write strategy",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_missing_strategy
     managed: true
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_missing_strategy(ctx):
     return [{"id": 1}]
 """,
-        },
-        expected_exit_code=1,
-        expected_stdout_fragment="returned rows but source has no write_strategy",
-    ),
-    LoadCommandFailureTestCase(
-        description="fails when loader returns nothing with write strategy",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+            },
+            expected_exit_code=1,
+            expected_stdout_fragment="returned rows but source has no write_strategy",
+        ),
+        LoadCommandFailureTestCase(
+            description="fails when loader returns nothing with write strategy",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_unexpected_none
     managed: true
     write_strategy: table
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_unexpected_none(ctx):
     return None
 """,
-        },
-        expected_exit_code=1,
-        expected_stdout_fragment=(
-            "defines write_strategy but loader 'raw_unexpected_none' returned no rows"
+            },
+            expected_exit_code=1,
+            expected_stdout_fragment=(
+                "defines write_strategy but loader 'raw_unexpected_none' returned no rows"
+            ),
         ),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    FAILURE_TEST_CASES,
-    ids=[case.description for case in FAILURE_TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_loader_returns_conflicting_types_when_running_load_then_fails_clearly(
     test_case: LoadCommandFailureTestCase,
@@ -3765,20 +4249,22 @@ def test_given_loader_returns_conflicting_types_when_running_load_then_fails_cle
     assert test_case.expected_stdout_fragment in captured.out
 
 
-FAILURE_CLEANUP_TEST_CASES: list[LoadCommandFailureCleanupTestCase] = [
-    LoadCommandFailureCleanupTestCase(
-        description="drops staging and preserves target when a later loader batch fails",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadCommandFailureCleanupTestCase(
+            description="drops staging and preserves target when a later loader batch fails",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_batched_conflict
     managed: true
     write_strategy: table
     load_batch_size: 1
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3786,29 +4272,29 @@ def raw_batched_conflict(ctx):
     yield {"id": 1}
     yield {"id": "two"}
 """,
-        },
-        staging_table_name="raw_batched_conflict__staging",
-        expected_staging_exists=False,
-        setup_sql=(
-            "CREATE TABLE raw_batched_conflict (id INTEGER)",
-            "INSERT INTO raw_batched_conflict VALUES (99)",
+            },
+            staging_table_name="raw_batched_conflict__staging",
+            expected_staging_exists=False,
+            setup_sql=(
+                "CREATE TABLE raw_batched_conflict (id INTEGER)",
+                "INSERT INTO raw_batched_conflict VALUES (99)",
+            ),
+            target_select_sql="SELECT id FROM raw_batched_conflict ORDER BY id",
+            expected_target_rows=((99,),),
         ),
-        target_select_sql="SELECT id FROM raw_batched_conflict ORDER BY id",
-        expected_target_rows=((99,),),
-    ),
-    LoadCommandFailureCleanupTestCase(
-        description="drops staging when a later loader batch returns non dict row",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+        LoadCommandFailureCleanupTestCase(
+            description="drops staging when a later loader batch returns non dict row",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_batched_non_dict
     managed: true
     write_strategy: table
     load_batch_size: 1
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3816,15 +4302,15 @@ def raw_batched_non_dict(ctx):
     yield {"id": 1}
     yield ("id", 2)
 """,
-        },
-        staging_table_name="raw_batched_non_dict__staging",
-        expected_staging_exists=False,
-    ),
-    LoadCommandFailureCleanupTestCase(
-        description="leaves append target unchanged when a later loader batch fails",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+            },
+            staging_table_name="raw_batched_non_dict__staging",
+            expected_staging_exists=False,
+        ),
+        LoadCommandFailureCleanupTestCase(
+            description="leaves append target unchanged when a later loader batch fails",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_append_failure
     managed: true
@@ -3834,8 +4320,8 @@ sources:
       - name: id
         type: INTEGER
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3843,21 +4329,21 @@ def raw_append_failure(ctx):
     yield {"id": 1}
     yield {"id": "two"}
 """,
-        },
-        staging_table_name="raw_append_failure__staging",
-        expected_staging_exists=False,
-        setup_sql=(
-            "CREATE TABLE raw_append_failure (id INTEGER)",
-            "INSERT INTO raw_append_failure VALUES (99)",
+            },
+            staging_table_name="raw_append_failure__staging",
+            expected_staging_exists=False,
+            setup_sql=(
+                "CREATE TABLE raw_append_failure (id INTEGER)",
+                "INSERT INTO raw_append_failure VALUES (99)",
+            ),
+            target_select_sql="SELECT id FROM raw_append_failure ORDER BY id",
+            expected_target_rows=((99,),),
         ),
-        target_select_sql="SELECT id FROM raw_append_failure ORDER BY id",
-        expected_target_rows=((99,),),
-    ),
-    LoadCommandFailureCleanupTestCase(
-        description="leaves merge target unchanged when a later loader batch fails",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+        LoadCommandFailureCleanupTestCase(
+            description="leaves merge target unchanged when a later loader batch fails",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_merge_failure
     managed: true
@@ -3870,8 +4356,8 @@ sources:
       - name: status
         type: VARCHAR
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3879,21 +4365,21 @@ def raw_merge_failure(ctx):
     yield {"id": 1, "status": "new"}
     yield {"id": "two", "status": "bad"}
 """,
-        },
-        staging_table_name="raw_merge_failure__staging",
-        expected_staging_exists=False,
-        setup_sql=(
-            "CREATE TABLE raw_merge_failure (id INTEGER, status VARCHAR)",
-            "INSERT INTO raw_merge_failure VALUES (99, 'existing')",
+            },
+            staging_table_name="raw_merge_failure__staging",
+            expected_staging_exists=False,
+            setup_sql=(
+                "CREATE TABLE raw_merge_failure (id INTEGER, status VARCHAR)",
+                "INSERT INTO raw_merge_failure VALUES (99, 'existing')",
+            ),
+            target_select_sql="SELECT id, status FROM raw_merge_failure ORDER BY id",
+            expected_target_rows=((99, "existing"),),
         ),
-        target_select_sql="SELECT id, status FROM raw_merge_failure ORDER BY id",
-        expected_target_rows=((99, "existing"),),
-    ),
-    LoadCommandFailureCleanupTestCase(
-        description="leaves delete insert target unchanged when a later loader batch fails",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "sources/raw.yml": """
+        LoadCommandFailureCleanupTestCase(
+            description="leaves delete insert target unchanged when a later loader batch fails",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
 sources:
   - name: raw_delete_insert_failure
     managed: true
@@ -3906,8 +4392,8 @@ sources:
       - name: status
         type: VARCHAR
 """.strip()
-            + "\n",
-            "loaders/raw.py": """
+                + "\n",
+                "loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3915,23 +4401,18 @@ def raw_delete_insert_failure(ctx):
     yield {"id": 1, "status": "new"}
     yield {"id": "two", "status": "bad"}
 """,
-        },
-        staging_table_name="raw_delete_insert_failure__staging",
-        expected_staging_exists=False,
-        setup_sql=(
-            "CREATE TABLE raw_delete_insert_failure (id INTEGER, status VARCHAR)",
-            "INSERT INTO raw_delete_insert_failure VALUES (99, 'existing')",
+            },
+            staging_table_name="raw_delete_insert_failure__staging",
+            expected_staging_exists=False,
+            setup_sql=(
+                "CREATE TABLE raw_delete_insert_failure (id INTEGER, status VARCHAR)",
+                "INSERT INTO raw_delete_insert_failure VALUES (99, 'existing')",
+            ),
+            target_select_sql="SELECT id, status FROM raw_delete_insert_failure ORDER BY id",
+            expected_target_rows=((99, "existing"),),
         ),
-        target_select_sql="SELECT id, status FROM raw_delete_insert_failure ORDER BY id",
-        expected_target_rows=((99, "existing"),),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    FAILURE_CLEANUP_TEST_CASES,
-    ids=[case.description for case in FAILURE_CLEANUP_TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_later_loader_batch_fails_when_running_load_then_drops_staging(
     test_case: LoadCommandFailureCleanupTestCase,
@@ -3983,8 +4464,85 @@ def test_given_later_loader_batch_fails_when_running_load_then_drops_staging(
 
 @pytest.mark.parametrize(
     "test_case",
-    LOAD_SELECTION_ERROR_TEST_CASES,
-    ids=[case.description for case in LOAD_SELECTION_ERROR_TEST_CASES],
+    [
+        LoadCommandSelectionErrorTestCase(
+            description="raises when selected source does not exist",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+            },
+            select=("missing_source",),
+            exclude=(),
+            expected_error_fragment=(
+                "selector 'missing_source' does not match any managed source or loader"
+            ),
+        ),
+        LoadCommandSelectionErrorTestCase(
+            description="raises when selected source is unmanaged",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_customers
+    expression: SELECT 1 AS customer_id
+""".strip()
+                + "\n",
+            },
+            select=("raw_customers",),
+            exclude=(),
+            expected_error_fragment=(
+                "selector 'raw_customers' does not match any managed source or loader"
+            ),
+        ),
+        LoadCommandSelectionErrorTestCase(
+            description="raises when excluded source does not exist",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+            },
+            select=(),
+            exclude=("missing_source",),
+            expected_error_fragment=(
+                "selector 'missing_source' does not match any managed source or loader"
+            ),
+        ),
+        LoadCommandSelectionErrorTestCase(
+            description="raises when excluded source is unmanaged",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+  - name: raw_customers
+    expression: SELECT 1 AS customer_id
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+            },
+            select=(),
+            exclude=("raw_customers",),
+            expected_error_fragment=(
+                "selector 'raw_customers' does not match any managed source or loader"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_load_selectors_when_running_load_then_it_raises_clear_error(
     test_case: LoadCommandSelectionErrorTestCase,
@@ -4006,8 +4564,53 @@ def test_given_invalid_load_selectors_when_running_load_then_it_raises_clear_err
 
 @pytest.mark.parametrize(
     "test_case",
-    EMPTY_SELECTION_TEST_CASES,
-    ids=[case.description for case in EMPTY_SELECTION_TEST_CASES],
+    [
+        LoadCommandEmptySelectionTestCase(
+            description="succeeds without connecting when project has no managed sources",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_customers
+    expression: SELECT 1 AS customer_id
+""".strip()
+                + "\n",
+            },
+            select=(),
+            exclude=(),
+            expected_exit_code=0,
+            expected_stdout_fragment="No managed sources selected.",
+            expected_stdout_fragments=(
+                "Load ready (0 selected)",
+                "Completed successfully.",
+                "PASS=0  WARN=0  FAIL=0  SKIP=0  TOTAL=0",
+            ),
+        ),
+        LoadCommandEmptySelectionTestCase(
+            description="succeeds without connecting when all managed sources are excluded",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_FILE,
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+""".strip()
+                + "\n",
+                "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+            },
+            select=(),
+            exclude=("raw_orders",),
+            expected_exit_code=0,
+            expected_stdout_fragment="No managed sources selected.",
+            expected_stdout_fragments=(
+                "Load ready (0 selected)",
+                "Completed successfully.",
+                "PASS=0  WARN=0  FAIL=0  SKIP=0  TOTAL=0",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_no_selected_managed_sources_when_running_load_then_it_does_not_connect(
     test_case: LoadCommandEmptySelectionTestCase,

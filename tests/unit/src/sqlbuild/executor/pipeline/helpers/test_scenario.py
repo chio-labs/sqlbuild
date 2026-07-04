@@ -33,64 +33,6 @@ from tests.unit.src.sqlbuild.executor.pipeline.helpers.helpers import (
     local_snapshot_loader_for_test_case,
 )
 
-SCENARIO_LOCAL_PIPELINE_TEST_CASES: tuple[ScenarioLocalPipelineTestCase, ...] = (
-    ScenarioLocalPipelineTestCase(
-        description="missing snapshot skips by default",
-        snapshot_state="missing",
-        strict=False,
-        load_error_message=None,
-        expected_local_status="SKIP",
-        expected_status="skipped",
-        expected_retained=False,
-        expected_duckdb_exists=False,
-        expected_error_code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
-    ),
-    ScenarioLocalPipelineTestCase(
-        description="missing snapshot errors in strict mode",
-        snapshot_state="missing",
-        strict=True,
-        load_error_message=None,
-        expected_local_status="ERROR",
-        expected_status="failed",
-        expected_retained=False,
-        expected_duckdb_exists=False,
-        expected_error_code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
-    ),
-    ScenarioLocalPipelineTestCase(
-        description="stale snapshot skips by default",
-        snapshot_state="stale",
-        strict=False,
-        load_error_message=None,
-        expected_local_status="SKIP",
-        expected_status="skipped",
-        expected_retained=False,
-        expected_duckdb_exists=False,
-        expected_error_code=SCENARIO_LOCAL_SNAPSHOT_STALE,
-    ),
-    ScenarioLocalPipelineTestCase(
-        description="fresh snapshot pass keeps DuckDB by default",
-        snapshot_state="fresh",
-        strict=False,
-        load_error_message=None,
-        expected_local_status="PASS",
-        expected_status="success",
-        expected_retained=True,
-        expected_duckdb_exists=True,
-        expected_error_code=None,
-    ),
-    ScenarioLocalPipelineTestCase(
-        description="load error retains DuckDB",
-        snapshot_state="fresh",
-        strict=False,
-        load_error_message="bad jsonl",
-        expected_local_status="ERROR",
-        expected_status="failed",
-        expected_retained=True,
-        expected_duckdb_exists=True,
-        expected_error_code=SCENARIO_LOCAL_JSONL_INVALID,
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -107,7 +49,7 @@ SCENARIO_LOCAL_PIPELINE_TEST_CASES: tuple[ScenarioLocalPipelineTestCase, ...] = 
             expected_error_fragment="scenario planning failed",
         ),
     ],
-    ids=["continues after one scenario planning failure"],
+    ids=lambda case: case.description,
 )
 def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orchestrates_batch(
     monkeypatch: pytest.MonkeyPatch,
@@ -175,8 +117,64 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_LOCAL_PIPELINE_TEST_CASES,
-    ids=[case.description for case in SCENARIO_LOCAL_PIPELINE_TEST_CASES],
+    (
+        ScenarioLocalPipelineTestCase(
+            description="missing snapshot skips by default",
+            snapshot_state="missing",
+            strict=False,
+            load_error_message=None,
+            expected_local_status="SKIP",
+            expected_status="skipped",
+            expected_retained=False,
+            expected_duckdb_exists=False,
+            expected_error_code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
+        ),
+        ScenarioLocalPipelineTestCase(
+            description="missing snapshot errors in strict mode",
+            snapshot_state="missing",
+            strict=True,
+            load_error_message=None,
+            expected_local_status="ERROR",
+            expected_status="failed",
+            expected_retained=False,
+            expected_duckdb_exists=False,
+            expected_error_code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
+        ),
+        ScenarioLocalPipelineTestCase(
+            description="stale snapshot skips by default",
+            snapshot_state="stale",
+            strict=False,
+            load_error_message=None,
+            expected_local_status="SKIP",
+            expected_status="skipped",
+            expected_retained=False,
+            expected_duckdb_exists=False,
+            expected_error_code=SCENARIO_LOCAL_SNAPSHOT_STALE,
+        ),
+        ScenarioLocalPipelineTestCase(
+            description="fresh snapshot pass keeps DuckDB by default",
+            snapshot_state="fresh",
+            strict=False,
+            load_error_message=None,
+            expected_local_status="PASS",
+            expected_status="success",
+            expected_retained=True,
+            expected_duckdb_exists=True,
+            expected_error_code=None,
+        ),
+        ScenarioLocalPipelineTestCase(
+            description="load error retains DuckDB",
+            snapshot_state="fresh",
+            strict=False,
+            load_error_message="bad jsonl",
+            expected_local_status="ERROR",
+            expected_status="failed",
+            expected_retained=True,
+            expected_duckdb_exists=True,
+            expected_error_code=SCENARIO_LOCAL_JSONL_INVALID,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_selected_scenarios_when_running_local_scenario_pipeline_then_loads_or_skips(
     monkeypatch: pytest.MonkeyPatch,
@@ -240,30 +238,6 @@ def test_given_selected_scenarios_when_running_local_scenario_pipeline_then_load
     assert result.error_code == test_case.expected_error_code
 
 
-SCENARIO_FAILURE_HELP_TEST_CASES: tuple[ScenarioFailureHelpTestCase, ...] = (
-    ScenarioFailureHelpTestCase(
-        description="coded user error keeps no bug help when help is absent",
-        code="S504",
-        explicit_help=None,
-        expected_help=None,
-    ),
-    ScenarioFailureHelpTestCase(
-        description="coded user error preserves explicit help",
-        code="S504",
-        explicit_help="Rename the source.",
-        expected_help="Rename the source.",
-    ),
-    ScenarioFailureHelpTestCase(
-        description="uncoded error keeps the internal bug help",
-        code=None,
-        explicit_help=None,
-        expected_help=(
-            "This is likely a SQLBuild bug. Please file an issue with the scenario name."
-        ),
-    ),
-)
-
-
 class _CodedScenarioError(Exception):
     def __init__(self, *, code: str, message: str, help: str | None = None) -> None:
         super().__init__(message)
@@ -274,8 +248,29 @@ class _CodedScenarioError(Exception):
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_FAILURE_HELP_TEST_CASES,
-    ids=[case.description for case in SCENARIO_FAILURE_HELP_TEST_CASES],
+    (
+        ScenarioFailureHelpTestCase(
+            description="coded user error keeps no bug help when help is absent",
+            code="S504",
+            explicit_help=None,
+            expected_help=None,
+        ),
+        ScenarioFailureHelpTestCase(
+            description="coded user error preserves explicit help",
+            code="S504",
+            explicit_help="Rename the source.",
+            expected_help="Rename the source.",
+        ),
+        ScenarioFailureHelpTestCase(
+            description="uncoded error keeps the internal bug help",
+            code=None,
+            explicit_help=None,
+            expected_help=(
+                "This is likely a SQLBuild bug. Please file an issue with the scenario name."
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_scenario_exception_when_resolving_help_then_avoids_bug_help_for_user_errors(
     test_case: ScenarioFailureHelpTestCase,

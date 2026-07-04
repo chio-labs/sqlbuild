@@ -33,7 +33,7 @@ class WideIdentifierPlannerTestAdapter(PlannerTestAdapter):
             ),
         )
     ],
-    ids=["uses adapter identifier limit for scenario artifact names"],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_identifier_limit_when_building_cli_scenario_plan_then_uses_adapter_limit(
     test_case: ScenarioCliPlanIdentifierLimitTestCase,

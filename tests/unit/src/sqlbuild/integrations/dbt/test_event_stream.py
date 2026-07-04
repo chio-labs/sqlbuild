@@ -20,118 +20,116 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtSilentStatusRefreshTestCase,
 )
 
-DBT_RESULT_PARSE_TEST_CASES: list[DbtEventParseTestCase] = [
-    DbtEventParseTestCase(
-        description="parses dbt model result with node relation metadata",
-        event={
-            "data": {
-                "description": "sql table model main.base_orders",
-                "execution_time": 0.11,
-                "index": 1,
-                "total": 2,
-                "status": "OK",
-                "node_info": {
-                    "materialized": "table",
-                    "node_checksum": "abc123",
-                    "node_name": "base_orders",
-                    "node_relation": {
-                        "database": "analytics",
-                        "schema": "main",
-                        "relation_name": '"analytics"."main"."base_orders"',
-                    },
-                    "node_status": "success",
-                    "resource_type": "model",
-                    "unique_id": "model.demo.base_orders",
-                },
-            },
-            "info": {"level": "info", "name": "LogModelResult", "msg": "OK"},
-        },
-        expected_unique_id="model.demo.base_orders",
-        expected_resource_type="model",
-        expected_node_name="base_orders",
-        expected_status="OK",
-        expected_database="analytics",
-        expected_schema="main",
-        expected_node_checksum="abc123",
-        expected_total=2,
-    ),
-    DbtEventParseTestCase(
-        description="parses dbt test result total from num_models",
-        event={
-            "data": {
-                "execution_time": 0.03,
-                "index": 3,
-                "num_models": 8,
-                "num_failures": 0,
-                "status": "pass",
-                "node_info": {
-                    "node_name": "not_null_stg_orders_order_id",
-                    "node_status": "pass",
-                    "resource_type": "test",
-                    "unique_id": "test.demo.not_null_stg_orders_order_id",
-                },
-            },
-            "info": {"level": "info", "name": "LogTestResult", "msg": "PASS"},
-        },
-        expected_unique_id="test.demo.not_null_stg_orders_order_id",
-        expected_resource_type="test",
-        expected_node_name="not_null_stg_orders_order_id",
-        expected_status="pass",
-        expected_total=8,
-    ),
-    DbtEventParseTestCase(
-        description="prefers node finished run result status over adapter response",
-        event={
-            "data": {
-                "execution_time": 0.14,
-                "index": 1,
-                "total": 1,
-                "status": "SELECT 1",
-                "run_result": {"status": "success"},
-                "node_info": {
-                    "node_name": "dbt_orders",
-                    "resource_type": "model",
-                    "unique_id": "model.analytics.dbt_orders",
-                },
-            },
-            "info": {"level": "info", "name": "NodeFinished", "msg": "SELECT 1"},
-        },
-        expected_unique_id="model.analytics.dbt_orders",
-        expected_resource_type="model",
-        expected_node_name="dbt_orders",
-        expected_status="success",
-        expected_total=1,
-    ),
-    DbtEventParseTestCase(
-        description="uses node status when result event status is adapter response",
-        event={
-            "data": {
-                "execution_time": 0.14,
-                "index": 1,
-                "total": 1,
-                "status": "SELECT 1",
-                "node_info": {
-                    "node_name": "dbt_orders",
-                    "node_status": "success",
-                    "resource_type": "model",
-                    "unique_id": "model.analytics.dbt_orders",
-                },
-            },
-            "info": {"level": "info", "name": "LogModelResult", "msg": "SELECT 1"},
-        },
-        expected_unique_id="model.analytics.dbt_orders",
-        expected_resource_type="model",
-        expected_node_name="dbt_orders",
-        expected_status="success",
-        expected_total=1,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_RESULT_PARSE_TEST_CASES,
-    ids=[case.description for case in DBT_RESULT_PARSE_TEST_CASES],
+    [
+        DbtEventParseTestCase(
+            description="parses dbt model result with node relation metadata",
+            event={
+                "data": {
+                    "description": "sql table model main.base_orders",
+                    "execution_time": 0.11,
+                    "index": 1,
+                    "total": 2,
+                    "status": "OK",
+                    "node_info": {
+                        "materialized": "table",
+                        "node_checksum": "abc123",
+                        "node_name": "base_orders",
+                        "node_relation": {
+                            "database": "analytics",
+                            "schema": "main",
+                            "relation_name": '"analytics"."main"."base_orders"',
+                        },
+                        "node_status": "success",
+                        "resource_type": "model",
+                        "unique_id": "model.demo.base_orders",
+                    },
+                },
+                "info": {"level": "info", "name": "LogModelResult", "msg": "OK"},
+            },
+            expected_unique_id="model.demo.base_orders",
+            expected_resource_type="model",
+            expected_node_name="base_orders",
+            expected_status="OK",
+            expected_database="analytics",
+            expected_schema="main",
+            expected_node_checksum="abc123",
+            expected_total=2,
+        ),
+        DbtEventParseTestCase(
+            description="parses dbt test result total from num_models",
+            event={
+                "data": {
+                    "execution_time": 0.03,
+                    "index": 3,
+                    "num_models": 8,
+                    "num_failures": 0,
+                    "status": "pass",
+                    "node_info": {
+                        "node_name": "not_null_stg_orders_order_id",
+                        "node_status": "pass",
+                        "resource_type": "test",
+                        "unique_id": "test.demo.not_null_stg_orders_order_id",
+                    },
+                },
+                "info": {"level": "info", "name": "LogTestResult", "msg": "PASS"},
+            },
+            expected_unique_id="test.demo.not_null_stg_orders_order_id",
+            expected_resource_type="test",
+            expected_node_name="not_null_stg_orders_order_id",
+            expected_status="pass",
+            expected_total=8,
+        ),
+        DbtEventParseTestCase(
+            description="prefers node finished run result status over adapter response",
+            event={
+                "data": {
+                    "execution_time": 0.14,
+                    "index": 1,
+                    "total": 1,
+                    "status": "SELECT 1",
+                    "run_result": {"status": "success"},
+                    "node_info": {
+                        "node_name": "dbt_orders",
+                        "resource_type": "model",
+                        "unique_id": "model.analytics.dbt_orders",
+                    },
+                },
+                "info": {"level": "info", "name": "NodeFinished", "msg": "SELECT 1"},
+            },
+            expected_unique_id="model.analytics.dbt_orders",
+            expected_resource_type="model",
+            expected_node_name="dbt_orders",
+            expected_status="success",
+            expected_total=1,
+        ),
+        DbtEventParseTestCase(
+            description="uses node status when result event status is adapter response",
+            event={
+                "data": {
+                    "execution_time": 0.14,
+                    "index": 1,
+                    "total": 1,
+                    "status": "SELECT 1",
+                    "node_info": {
+                        "node_name": "dbt_orders",
+                        "node_status": "success",
+                        "resource_type": "model",
+                        "unique_id": "model.analytics.dbt_orders",
+                    },
+                },
+                "info": {"level": "info", "name": "LogModelResult", "msg": "SELECT 1"},
+            },
+            expected_unique_id="model.analytics.dbt_orders",
+            expected_resource_type="model",
+            expected_node_name="dbt_orders",
+            expected_status="success",
+            expected_total=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_result_event_when_parsing_then_returns_node_execution_result(
     test_case: DbtEventParseTestCase,
@@ -179,7 +177,7 @@ def test_given_dbt_result_event_when_parsing_then_returns_node_execution_result(
             expected_message_count=1,
         )
     ],
-    ids=["attaches buffered error message to node result"],
+    ids=lambda case: case.description,
 )
 def test_given_buffered_node_message_when_parsing_result_then_attaches_message(
     test_case: DbtEventParseTestCase,
@@ -227,7 +225,7 @@ def test_given_buffered_node_message_when_parsing_result_then_attaches_message(
             expected_status="error",
         )
     ],
-    ids=["parses node-scoped run result error message"],
+    ids=lambda case: case.description,
 )
 def test_given_node_scoped_error_event_when_parsing_then_returns_node_message(
     test_case: DbtEventParseTestCase,
@@ -254,7 +252,7 @@ def test_given_node_scoped_error_event_when_parsing_then_returns_node_message(
             expected_status="",
         )
     ],
-    ids=["ignores non-json and invocation-level json lines"],
+    ids=lambda case: case.description,
 )
 def test_given_non_result_event_when_parsing_then_returns_none(
     test_case: DbtEventParseTestCase,
@@ -271,95 +269,92 @@ def test_given_non_result_event_when_parsing_then_returns_none(
     assert test_case.expected_status == ""
 
 
-DBT_EVENT_STREAM_TEST_CASES: list[DbtEventStreamTestCase] = [
-    DbtEventStreamTestCase(
-        description="streams node results to callback",
-        stdout_lines=(
-            '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"OK",'
-            '"node_info":{"node_name":"base_orders","resource_type":"model",'
-            '"unique_id":"model.demo.base_orders"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-        ),
-        expected_unique_ids=("model.demo.base_orders",),
-    ),
-    DbtEventStreamTestCase(
-        description="dedupes fusion LogModelResult and NodeFinished for one node",
-        stdout_lines=(
-            '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"success",'
-            '"node_info":{"node_name":"dbt_orders","resource_type":"model",'
-            '"node_status":"success","unique_id":"model.analytics.dbt_orders"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-            '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"SELECT 1",'
-            '"run_result":{"status":"success"},'
-            '"node_info":{"node_name":"dbt_orders","resource_type":"model",'
-            '"unique_id":"model.analytics.dbt_orders"}},'
-            '"info":{"level":"info","name":"NodeFinished","msg":"SELECT 1"}}\n',
-        ),
-        expected_unique_ids=("model.analytics.dbt_orders",),
-    ),
-    DbtEventStreamTestCase(
-        description="records distinct nodes once each across mixed result events",
-        stdout_lines=(
-            '{"data":{"execution_time":0.1,"index":1,"total":2,"status":"success",'
-            '"node_info":{"node_name":"stg_orders","resource_type":"model",'
-            '"node_status":"success","unique_id":"model.analytics.stg_orders"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-            '{"data":{"execution_time":0.2,"index":2,"total":2,"status":"success",'
-            '"run_result":{"status":"success"},'
-            '"node_info":{"node_name":"fact_orders","resource_type":"model",'
-            '"unique_id":"model.analytics.fact_orders"}},'
-            '"info":{"level":"info","name":"NodeFinished","msg":"OK"}}\n',
-        ),
-        expected_unique_ids=(
-            "model.analytics.stg_orders",
-            "model.analytics.fact_orders",
-        ),
-    ),
-    DbtEventStreamTestCase(
-        description="renders node started progress before final result",
-        stdout_lines=(
-            '{"data":{"node_info":{"node_name":"bias__stg_hkjc",'
-            '"resource_type":"model","unique_id":"model.analytics.bias__stg_hkjc"}},'
-            '"info":{"level":"info","name":"NodeStarted","msg":"START"}}\n',
-            '{"data":{"execution_time":20.4,"index":1,"total":1,"status":"success",'
-            '"node_info":{"node_name":"bias__stg_hkjc","resource_type":"model",'
-            '"node_status":"success","unique_id":"model.analytics.bias__stg_hkjc"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-        ),
-        expected_unique_ids=("model.analytics.bias__stg_hkjc",),
-        expected_output_fragments=(
-            "Running dbt model bias__stg_hkjc...",
-            "model     bias__stg_hkjc                 START",
-            "model     bias__stg_hkjc                 OK     20.40s",
-        ),
-        expected_rendered_rows=2,
-    ),
-    DbtEventStreamTestCase(
-        description="renders log start line progress before final result",
-        stdout_lines=(
-            '{"data":{"node_info":{"node_name":"bias__stg_hkjc",'
-            '"resource_type":"model","unique_id":"model.analytics.bias__stg_hkjc"}},'
-            '"info":{"level":"info","name":"LogStartLine","msg":"START"}}\n',
-            '{"data":{"execution_time":20.4,"index":1,"total":1,"status":"success",'
-            '"node_info":{"node_name":"bias__stg_hkjc","resource_type":"model",'
-            '"node_status":"success","unique_id":"model.analytics.bias__stg_hkjc"}},'
-            '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
-        ),
-        expected_unique_ids=("model.analytics.bias__stg_hkjc",),
-        expected_output_fragments=(
-            "Running dbt model bias__stg_hkjc...",
-            "model     bias__stg_hkjc                 START",
-            "model     bias__stg_hkjc                 OK     20.40s",
-        ),
-        expected_rendered_rows=2,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DBT_EVENT_STREAM_TEST_CASES,
-    ids=[case.description for case in DBT_EVENT_STREAM_TEST_CASES],
+    [
+        DbtEventStreamTestCase(
+            description="streams node results to callback",
+            stdout_lines=(
+                '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"OK",'
+                '"node_info":{"node_name":"base_orders","resource_type":"model",'
+                '"unique_id":"model.demo.base_orders"}},'
+                '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+            ),
+            expected_unique_ids=("model.demo.base_orders",),
+        ),
+        DbtEventStreamTestCase(
+            description="dedupes fusion LogModelResult and NodeFinished for one node",
+            stdout_lines=(
+                '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"success",'
+                '"node_info":{"node_name":"dbt_orders","resource_type":"model",'
+                '"node_status":"success","unique_id":"model.analytics.dbt_orders"}},'
+                '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+                '{"data":{"execution_time":0.1,"index":1,"total":1,"status":"SELECT 1",'
+                '"run_result":{"status":"success"},'
+                '"node_info":{"node_name":"dbt_orders","resource_type":"model",'
+                '"unique_id":"model.analytics.dbt_orders"}},'
+                '"info":{"level":"info","name":"NodeFinished","msg":"SELECT 1"}}\n',
+            ),
+            expected_unique_ids=("model.analytics.dbt_orders",),
+        ),
+        DbtEventStreamTestCase(
+            description="records distinct nodes once each across mixed result events",
+            stdout_lines=(
+                '{"data":{"execution_time":0.1,"index":1,"total":2,"status":"success",'
+                '"node_info":{"node_name":"stg_orders","resource_type":"model",'
+                '"node_status":"success","unique_id":"model.analytics.stg_orders"}},'
+                '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+                '{"data":{"execution_time":0.2,"index":2,"total":2,"status":"success",'
+                '"run_result":{"status":"success"},'
+                '"node_info":{"node_name":"fact_orders","resource_type":"model",'
+                '"unique_id":"model.analytics.fact_orders"}},'
+                '"info":{"level":"info","name":"NodeFinished","msg":"OK"}}\n',
+            ),
+            expected_unique_ids=(
+                "model.analytics.stg_orders",
+                "model.analytics.fact_orders",
+            ),
+        ),
+        DbtEventStreamTestCase(
+            description="renders node started progress before final result",
+            stdout_lines=(
+                '{"data":{"node_info":{"node_name":"bias__stg_hkjc",'
+                '"resource_type":"model","unique_id":"model.analytics.bias__stg_hkjc"}},'
+                '"info":{"level":"info","name":"NodeStarted","msg":"START"}}\n',
+                '{"data":{"execution_time":20.4,"index":1,"total":1,"status":"success",'
+                '"node_info":{"node_name":"bias__stg_hkjc","resource_type":"model",'
+                '"node_status":"success","unique_id":"model.analytics.bias__stg_hkjc"}},'
+                '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+            ),
+            expected_unique_ids=("model.analytics.bias__stg_hkjc",),
+            expected_output_fragments=(
+                "Running dbt model bias__stg_hkjc...",
+                "model     bias__stg_hkjc                 START",
+                "model     bias__stg_hkjc                 OK     20.40s",
+            ),
+            expected_rendered_rows=2,
+        ),
+        DbtEventStreamTestCase(
+            description="renders log start line progress before final result",
+            stdout_lines=(
+                '{"data":{"node_info":{"node_name":"bias__stg_hkjc",'
+                '"resource_type":"model","unique_id":"model.analytics.bias__stg_hkjc"}},'
+                '"info":{"level":"info","name":"LogStartLine","msg":"START"}}\n',
+                '{"data":{"execution_time":20.4,"index":1,"total":1,"status":"success",'
+                '"node_info":{"node_name":"bias__stg_hkjc","resource_type":"model",'
+                '"node_status":"success","unique_id":"model.analytics.bias__stg_hkjc"}},'
+                '"info":{"level":"info","name":"LogModelResult","msg":"OK"}}\n',
+            ),
+            expected_unique_ids=("model.analytics.bias__stg_hkjc",),
+            expected_output_fragments=(
+                "Running dbt model bias__stg_hkjc...",
+                "model     bias__stg_hkjc                 START",
+                "model     bias__stg_hkjc                 OK     20.40s",
+            ),
+            expected_rendered_rows=2,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     test_case: DbtEventStreamTestCase,
@@ -413,7 +408,7 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
             expected_refreshed_status="running 1 dbt node: slow_model 1s",
         )
     ],
-    ids=["active node elapsed refreshes without dbt events"],
+    ids=lambda case: case.description,
 )
 def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_updates(
     test_case: DbtSilentStatusRefreshTestCase,
@@ -513,7 +508,7 @@ def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_upd
             expected_status="Running dbt model base_orders...",
         )
     ],
-    ids=["parses node started event into progress message"],
+    ids=lambda case: case.description,
 )
 def test_given_node_started_event_when_parsing_then_returns_progress_message(
     test_case: DbtEventParseTestCase,
@@ -547,7 +542,7 @@ def test_given_node_started_event_when_parsing_then_returns_progress_message(
             expected_total=7,
         )
     ],
-    ids=["parses node started event into start result"],
+    ids=lambda case: case.description,
 )
 def test_given_node_started_event_when_parsing_then_returns_start_result(
     test_case: DbtEventParseTestCase,

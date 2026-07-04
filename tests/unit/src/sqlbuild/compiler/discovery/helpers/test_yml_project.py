@@ -18,717 +18,13 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers.helpers import (
     write_project_config_test_files,
 )
 
-LOCAL_CONFIG_TEST_CASES: list[LoadLocalConfigTestCase] = [
-    LoadLocalConfigTestCase(
-        description="defaults cleanly when local file is missing",
-        repo_files={},
-        expected_target=None,
-        expected_adapter=None,
-        expected_connection={},
-        expected_sql_analysis=True,
-        expected_sql_validation=True,
-        expected_max_concurrency=1,
-        expected_setting_overrides=frozenset(),
-        expected_vars={},
-    ),
-    LoadLocalConfigTestCase(
-        description="loads environment connection settings and vars from local config",
-        repo_files={
-            "sqlbuild_local.toml": """
-target = "dev"
-adapter = "snowflake"
 
-[connection]
-database = "local.duckdb"
-
-[settings]
-sql_analysis = false
-sql_validation = false
-concurrency = 4
-auto_load_sources = false
-force = true
-
-[vars]
-user = "kevin"
-
-[dbt]
-target = "pat"
-defer_clone_from = false
-
-[dbt.vars]
-shared = "local"
-threads = 2
-
-[scenario.local_type_overrides.snowflake]
-"NUMBER(*,0)" = "BIGINT"
-OBJECT = "JSON"
-
-[scenario.snapshot_limits]
-max_rows_per_relation = 12
-max_total_rows = 34
-max_bytes_per_relation = 56
-max_total_bytes = 78
-""".strip()
-        },
-        expected_target="dev",
-        expected_adapter="snowflake",
-        expected_connection={"database": "local.duckdb"},
-        expected_sql_analysis=False,
-        expected_sql_validation=False,
-        expected_max_concurrency=4,
-        expected_auto_load_sources=False,
-        expected_setting_overrides=frozenset(
-            {"sql_analysis", "sql_validation", "concurrency", "auto_load_sources", "force"}
-        ),
-        expected_vars={"user": "kevin"},
-        expected_dbt_target="pat",
-        expected_dbt_vars={"shared": "local", "threads": 2},
-        expected_dbt_defer_clone_from=False,
-        expected_force=True,
-        expected_scenario_local_type_overrides={
-            "snowflake": {
-                "NUMBER(*,0)": "BIGINT",
-                "OBJECT": "JSON",
-            }
-        },
-        expected_snapshot_limits={
-            "max_rows_per_relation": 12,
-            "max_total_rows": 34,
-            "max_bytes_per_relation": 56,
-            "max_total_bytes": 78,
-        },
-    ),
-    LoadLocalConfigTestCase(
-        description="loads legacy local max concurrency as canonical concurrency override",
-        repo_files={
-            "sqlbuild_local.toml": """
-[settings]
-max_concurrency = 4
-""".strip()
-        },
-        expected_target=None,
-        expected_adapter=None,
-        expected_connection={},
-        expected_sql_analysis=True,
-        expected_sql_validation=True,
-        expected_max_concurrency=4,
-        expected_setting_overrides=frozenset({"concurrency"}),
-        expected_vars={},
-    ),
-    LoadLocalConfigTestCase(
-        description="does not expose unsupported project level overrides",
-        repo_files={
-            "sqlbuild_local.toml": """
-default_target = "prod"
-
-[defaults]
-materialized = "table"
-
-[janitor]
-enabled = true
-
-[connection]
-database = "local.duckdb"
-""".strip()
-        },
-        expected_target=None,
-        expected_adapter=None,
-        expected_connection={"database": "local.duckdb"},
-        expected_sql_analysis=True,
-        expected_sql_validation=True,
-        expected_max_concurrency=1,
-        expected_setting_overrides=frozenset(),
-        expected_vars={},
-        expected_missing_attributes=(
-            "default_target",
-            "defaults",
-            "janitor",
-        ),
-    ),
-    LoadLocalConfigTestCase(
-        description="loads local target overrides",
-        repo_files={
-            "sqlbuild_local.toml": """
-target = "dev"
-
-[targets.dev]
-database = "local_db"
-schema = "local_schema"
-defer_sources_to = "prod"
-defer_clone_from = "prod"
-reuse_from = "prod"
-force = false
-reuse_hard_copy = true
-
-[targets.dev.connection]
-warehouse = "local_wh"
-
-[targets.dev.vars]
-user = "local_user"
-
-[targets.dev.clone]
-allow_as_clone_origin = true
-allow_as_clone_destination = false
-""".strip()
-        },
-        expected_target="dev",
-        expected_adapter=None,
-        expected_connection={},
-        expected_sql_analysis=True,
-        expected_sql_validation=True,
-        expected_max_concurrency=1,
-        expected_setting_overrides=frozenset(),
-        expected_vars={},
-        expected_targets={
-            "dev": {
-                "connection": {"warehouse": "local_wh"},
-                "vars": {"user": "local_user"},
-                "database": "local_db",
-                "schema": "local_schema",
-                "defer_sources_to": "prod",
-                "defer_clone_from": "prod",
-                "reuse_from": "prod",
-                "force": False,
-                "reuse_hard_copy": True,
-                "allow_as_clone_origin": True,
-                "allow_as_clone_destination": False,
-            }
-        },
-    ),
-]
-
-PROJECT_CONFIG_ERROR_TEST_CASES: list[LoadProjectConfigErrorTestCase] = [
-    LoadProjectConfigErrorTestCase(
-        description="raises when virtual environments setting is not a boolean",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[settings]
-virtual_environments = "yes"
-""".strip(),
-        expected_error_fragment="Expected 'virtual_environments' to be a boolean when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when settings sql_analysis is not a boolean",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[settings]
-sql_analysis = 123
-""".strip(),
-        expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when target reuse_from is not a string",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets.dev]
-reuse_from = 123
-""".strip(),
-        expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when target reuse_hard_copy is not a boolean",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets.dev]
-reuse_hard_copy = "yes"
-""".strip(),
-        expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when legacy dbt reuse_from table is used",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.reuse_from]
-git_ref = "prod"
-generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
-""".strip(),
-        expected_error_fragment=r"\[dbt.reuse_from\] was renamed to \[dbt.production_ref\]",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt production_ref omits git_ref",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.production_ref]
-generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
-""".strip(),
-        expected_error_fragment="must define non-empty string 'git_ref'",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt production_ref omits schema macro override",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.production_ref]
-git_ref = "prod"
-""".strip(),
-        expected_error_fragment="must define non-empty string 'generate_schema_name_override'",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt production_ref schema macro override is absolute",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.production_ref]
-git_ref = "prod"
-generate_schema_name_override = "/tmp/prod_generate_schema_name.sql"
-""".strip(),
-        expected_error_fragment="must be a relative path under dbt/macros/",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt production_ref schema macro override escapes project",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.production_ref]
-git_ref = "prod"
-generate_schema_name_override = "dbt/macros/../prod_generate_schema_name.sql"
-""".strip(),
-        expected_error_fragment="must be a relative path under dbt/macros/",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt production_ref schema macro override is outside dbt macros",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.production_ref]
-git_ref = "prod"
-generate_schema_name_override = "macros/prod_generate_schema_name.sql"
-""".strip(),
-        expected_error_fragment="must be under dbt/macros/",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt production_ref contains target field",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.production_ref]
-git_ref = "prod"
-target = "prod"
-generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
-""".strip(),
-        expected_error_fragment=r"dbt.production_ref contains unknown key\(s\): target",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt production_ref schema macro override file is missing",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.production_ref]
-git_ref = "prod"
-generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
-refresh = false
-git_timeout_seconds = 12
-""".strip(),
-        expected_error_fragment="generate_schema_name_override file not found",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when settings concurrency is not an integer",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[settings]
-concurrency = "nope"
-""".strip(),
-        expected_error_fragment="Expected 'concurrency' to be an integer when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when canonical and legacy concurrency settings are both provided",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[settings]
-concurrency = 4
-max_concurrency = 8
-""".strip(),
-        expected_error_fragment=(
-            "settings cannot define both 'concurrency' and legacy 'max_concurrency'"
-        ),
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when defaults batch_size has unsupported type",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[defaults.batch_size]
-amount = 1
-""".strip(),
-        expected_error_fragment="Expected 'batch_size' to be a string or integer when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when defaults contract is unknown",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[defaults]
-contract = "strict"
-""".strip(),
-        expected_error_fragment="Expected 'contract' to be one of",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when snapshot current state full refresh policy is unknown",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[snapshots]
-current_state_full_refresh = "force"
-""".strip(),
-        expected_error_fragment="Expected 'current_state_full_refresh' to be one of",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when snapshot historical full refresh policy is not string",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[snapshots]
-historical_full_refresh = true
-""".strip(),
-        expected_error_fragment="Expected 'historical_full_refresh' to be a string",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when snapshot schema change policy is unknown",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[snapshots]
-schema_change = "sync_all_columns"
-""".strip(),
-        expected_error_fragment="Expected 'schema_change' to be one of",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when path defaults child value is not a mapping",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[path_defaults]
-staging = "view"
-""".strip(),
-        expected_error_fragment="path_defaults",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when project vars contain non string value",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[vars]
-user = 123
-""".strip(),
-        expected_error_fragment="expected string value for 'user'",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when connection is not a mapping",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-connection = "bad"
-""".strip(),
-        expected_error_fragment="Expected 'connection' to be a mapping when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when environments is not a mapping",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-targets = []
-""".strip(),
-        expected_error_fragment="targets must be a mapping",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when one environment entry is not a mapping",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets]
-dev = "here"
-""".strip(),
-        expected_error_fragment="targets.dev must be a mapping",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when environment clone config is not a mapping",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets.dev]
-clone = "nope"
-""".strip(),
-        expected_error_fragment="targets.dev.clone must be a mapping",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when environment vars contain non string value",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets.dev.vars]
-user = false
-""".strip(),
-        expected_error_fragment="expected string value for 'user'",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when environment connection is not a mapping",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets.dev]
-connection = "no"
-""".strip(),
-        expected_error_fragment="Expected 'connection' to be a mapping when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when environment clone allow_as_clone_origin is not a boolean",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets.dev.clone]
-allow_as_clone_origin = 123
-""".strip(),
-        expected_error_fragment="Expected 'allow_as_clone_origin' to be a boolean when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when defaults tags is a string instead of list",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[defaults]
-tags = "nightly"
-""".strip(),
-        expected_error_fragment="defaults.tags",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when path_defaults tags is a string instead of list",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[path_defaults."models/staging"]
-tags = "staging"
-""".strip(),
-        expected_error_fragment="path_defaults.*tags must be a list",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when path_defaults tags contains non-string entry",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[path_defaults."models/staging"]
-tags = [123]
-""".strip(),
-        expected_error_fragment="path_defaults.*tags.*must be strings",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when path defaults key has leading slash",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[path_defaults."/staging"]
-schema = "staging"
-""".strip(),
-        expected_error_fragment="without a leading slash",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when path defaults key has empty path segment",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[path_defaults."staging//nested"]
-schema = "staging"
-""".strip(),
-        expected_error_fragment="empty path segments",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when path defaults uses redundant models prefix",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[path_defaults."models/staging"]
-schema = "staging"
-""".strip(),
-        expected_error_fragment="uses redundant 'models/' prefix",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when tracked-only janitor is enabled without query tracking",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[settings]
-query_change_tracking = false
-
-[janitor]
-enabled = true
-""".strip(),
-        expected_error_fragment="janitor.delete_tracked_only requires",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when janitor max checkpoints is less than one",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[janitor]
-max_checkpoints = 0
-""".strip(),
-        expected_error_fragment="janitor.max_checkpoints must be >= 1",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when janitor direct state history versions is negative",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[janitor]
-direct_state_history_versions = -1
-""".strip(),
-        expected_error_fragment="janitor.direct_state_history_versions must be >= 0",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when project settings contain unknown key",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[settings]
-threads = 4
-""".strip(),
-        expected_error_fragment=r"settings contains unknown key\(s\): threads",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when scenario snapshot limit is not an integer",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[scenario.snapshot_limits]
-max_rows_per_relation = "many"
-""".strip(),
-        expected_error_fragment="Expected 'max_rows_per_relation' to be an integer when provided",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when scenario snapshot limit is negative",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[scenario.snapshot_limits]
-max_total_bytes = -1
-""".strip(),
-        expected_error_fragment="scenario.snapshot_limits values must be >= 0",
-    ),
-    LoadProjectConfigErrorTestCase(
-        description="raises when dbt config contains unknown key",
-        project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt]
-project_dir = "../dbt"
-threads = 8
-""".strip(),
-        expected_error_fragment=r"dbt contains unknown key\(s\): threads",
-    ),
-]
-
-LOCAL_CONFIG_ERROR_TEST_CASES: list[LoadLocalConfigErrorTestCase] = [
-    LoadLocalConfigErrorTestCase(
-        description="raises when local target is not a non empty string",
-        local_file_contents="target = 123\n",
-        expected_error_fragment="Expected 'target' to be a non-empty string when provided",
-    ),
-    LoadLocalConfigErrorTestCase(
-        description="raises when local vars contain non string value",
-        local_file_contents="""
-[vars]
-user = 123
-""".strip(),
-        expected_error_fragment="expected string value for 'user'",
-    ),
-    LoadLocalConfigErrorTestCase(
-        description="raises when local connection is not a mapping",
-        local_file_contents='connection = "local.duckdb"\n',
-        expected_error_fragment="Expected 'connection' to be a mapping when provided",
-    ),
-    LoadLocalConfigErrorTestCase(
-        description="raises when local settings sql_analysis is not a boolean",
-        local_file_contents="""
-[settings]
-sql_analysis = "no thanks"
-""".strip(),
-        expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
-    ),
-    LoadLocalConfigErrorTestCase(
-        description="raises when local target reuse_from is not a string",
-        local_file_contents="""
-[targets.dev]
-reuse_from = 123
-""".strip(),
-        expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
-    ),
-    LoadLocalConfigErrorTestCase(
-        description="raises when local target reuse_hard_copy is not a boolean",
-        local_file_contents="""
-[targets.dev]
-reuse_hard_copy = "yes"
-""".strip(),
-        expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
-    ),
-    LoadLocalConfigErrorTestCase(
-        description="raises when local settings concurrency is not an integer",
-        local_file_contents="""
-[settings]
-concurrency = "many"
-""".strip(),
-        expected_error_fragment="Expected 'concurrency' to be an integer when provided",
-    ),
-    LoadLocalConfigErrorTestCase(
-        description="raises when local settings contain unknown key",
-        local_file_contents="""
-[settings]
-extra_concurrency = 8
-""".strip(),
-        expected_error_fragment=r"settings contains unknown key\(s\): extra_concurrency",
-    ),
-]
-
-
-PROJECT_CONFIG_TEST_CASES: list[LoadProjectConfigTestCase] = [
-    LoadProjectConfigTestCase(
-        description="defaults environment mode to direct when omitted",
-        project_file_contents="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectConfigTestCase(
+            description="defaults environment mode to direct when omitted",
+            project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -736,42 +32,42 @@ default_target = "dev"
 [targets.dev]
 schema = "dev"
 """.strip(),
-        expected_name="demo",
-        expected_adapter="duckdb",
-        expected_default_target="dev",
-        expected_connection={},
-        expected_sql_analysis=True,
-        expected_max_concurrency=1,
-        expected_materialized=None,
-        expected_row_diff_exclude_columns=(),
-        expected_row_diff_tolerances={},
-        expected_contract=None,
-        expected_path_defaults={},
-        expected_vars={},
-        expected_targets={
-            "dev": {
-                "connection": {},
-                "vars": {},
-                "database": None,
-                "schema": "dev",
-                "defer_sources_to": None,
-                "defer_clone_from": None,
-                "reuse_from": None,
-                "force": None,
-                "reuse_hard_copy": False,
-                "allow_as_clone_origin": False,
-                "allow_as_clone_destination": False,
-            }
-        },
-        expected_janitor_enabled=False,
-        expected_retention_days=30,
-        expected_janitor_max_checkpoints=20,
-        expected_janitor_delete_tracked_only=True,
-        expected_janitor_exclude_patterns=(),
-    ),
-    LoadProjectConfigTestCase(
-        description="loads expected fields from project config",
-        project_file_contents="""
+            expected_name="demo",
+            expected_adapter="duckdb",
+            expected_default_target="dev",
+            expected_connection={},
+            expected_sql_analysis=True,
+            expected_max_concurrency=1,
+            expected_materialized=None,
+            expected_row_diff_exclude_columns=(),
+            expected_row_diff_tolerances={},
+            expected_contract=None,
+            expected_path_defaults={},
+            expected_vars={},
+            expected_targets={
+                "dev": {
+                    "connection": {},
+                    "vars": {},
+                    "database": None,
+                    "schema": "dev",
+                    "defer_sources_to": None,
+                    "defer_clone_from": None,
+                    "reuse_from": None,
+                    "force": None,
+                    "reuse_hard_copy": False,
+                    "allow_as_clone_origin": False,
+                    "allow_as_clone_destination": False,
+                }
+            },
+            expected_janitor_enabled=False,
+            expected_retention_days=30,
+            expected_janitor_max_checkpoints=20,
+            expected_janitor_delete_tracked_only=True,
+            expected_janitor_exclude_patterns=(),
+        ),
+        LoadProjectConfigTestCase(
+            description="loads expected fields from project config",
+            project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -868,86 +164,81 @@ generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
 refresh = false
 git_timeout_seconds = 12
 """.strip(),
-        expected_name="demo",
-        expected_adapter="duckdb",
-        expected_virtual_environments=True,
-        expected_default_target="dev",
-        expected_connection={"path": "data.db"},
-        expected_sql_analysis=False,
-        expected_max_concurrency=8,
-        expected_auto_load_sources=False,
-        expected_force=True,
-        expected_materialized="table",
-        expected_row_diff_exclude_columns=("loaded_at",),
-        expected_row_diff_tolerances={
-            "by_type": {
-                "float": {"relative": 0.0001, "absolute": 0.000001},
+            expected_name="demo",
+            expected_adapter="duckdb",
+            expected_virtual_environments=True,
+            expected_default_target="dev",
+            expected_connection={"path": "data.db"},
+            expected_sql_analysis=False,
+            expected_max_concurrency=8,
+            expected_auto_load_sources=False,
+            expected_force=True,
+            expected_materialized="table",
+            expected_row_diff_exclude_columns=("loaded_at",),
+            expected_row_diff_tolerances={
+                "by_type": {
+                    "float": {"relative": 0.0001, "absolute": 0.000001},
+                },
+                "by_column": {
+                    "revenue": {"absolute": 0.01},
+                },
             },
-            "by_column": {
-                "revenue": {"absolute": 0.01},
+            expected_contract="enforced",
+            expected_path_defaults={"staging": {"schema": "staging"}},
+            expected_vars={"user": "kevin"},
+            expected_targets={
+                "dev": {
+                    "connection": {"warehouse": "dev_wh"},
+                    "vars": {"schema_prefix": "dev"},
+                    "database": None,
+                    "schema": "dev_${user}",
+                    "defer_sources_to": "prod",
+                    "defer_clone_from": "prod",
+                    "reuse_from": "prod",
+                    "force": True,
+                    "reuse_hard_copy": True,
+                    "allow_as_clone_origin": True,
+                    "allow_as_clone_destination": True,
+                }
             },
-        },
-        expected_contract="enforced",
-        expected_path_defaults={"staging": {"schema": "staging"}},
-        expected_vars={"user": "kevin"},
-        expected_targets={
-            "dev": {
-                "connection": {"warehouse": "dev_wh"},
-                "vars": {"schema_prefix": "dev"},
-                "database": None,
-                "schema": "dev_${user}",
-                "defer_sources_to": "prod",
-                "defer_clone_from": "prod",
-                "reuse_from": "prod",
-                "force": True,
-                "reuse_hard_copy": True,
-                "allow_as_clone_origin": True,
-                "allow_as_clone_destination": True,
-            }
-        },
-        expected_janitor_enabled=True,
-        expected_retention_days=14,
-        expected_janitor_max_checkpoints=3,
-        expected_janitor_delete_tracked_only=False,
-        expected_janitor_exclude_patterns=("partition_*",),
-        expected_janitor_direct_state_history_versions=5,
-        expected_current_state_full_refresh="require_confirmation",
-        expected_historical_full_refresh="allow",
-        expected_snapshot_schema_change="deny",
-        expected_wildcard_check_schema_change="append_new_columns",
-        expected_scenario_local_type_overrides={
-            "snowflake": {
-                "NUMBER(*,0)": "BIGINT",
-                "OBJECT": "JSON",
+            expected_janitor_enabled=True,
+            expected_retention_days=14,
+            expected_janitor_max_checkpoints=3,
+            expected_janitor_delete_tracked_only=False,
+            expected_janitor_exclude_patterns=("partition_*",),
+            expected_janitor_direct_state_history_versions=5,
+            expected_current_state_full_refresh="require_confirmation",
+            expected_historical_full_refresh="allow",
+            expected_snapshot_schema_change="deny",
+            expected_wildcard_check_schema_change="append_new_columns",
+            expected_scenario_local_type_overrides={
+                "snowflake": {
+                    "NUMBER(*,0)": "BIGINT",
+                    "OBJECT": "JSON",
+                },
+                "bigquery": {"BIGNUMERIC(*,*)": "DECIMAL({1}, {2})"},
             },
-            "bigquery": {"BIGNUMERIC(*,*)": "DECIMAL({1}, {2})"},
-        },
-        expected_snapshot_limits={
-            "max_rows_per_relation": 100,
-            "max_total_rows": 200,
-            "max_bytes_per_relation": 300,
-            "max_total_bytes": 400,
-        },
-        expected_dbt_project_dir="../dbt",
-        expected_dbt_profiles_dir="../profiles",
-        expected_dbt_target="prod",
-        expected_dbt_target_path="target/dbt",
-        expected_dbt_vars={"country": "US", "limit": 100, "enabled": True},
-        expected_dbt_defer_clone_from=True,
-        expected_dbt_production_ref_git_ref="prod",
-        expected_dbt_production_ref_generate_schema_name_override=(
-            "dbt/macros/prod_generate_schema_name.sql"
+            expected_snapshot_limits={
+                "max_rows_per_relation": 100,
+                "max_total_rows": 200,
+                "max_bytes_per_relation": 300,
+                "max_total_bytes": 400,
+            },
+            expected_dbt_project_dir="../dbt",
+            expected_dbt_profiles_dir="../profiles",
+            expected_dbt_target="prod",
+            expected_dbt_target_path="target/dbt",
+            expected_dbt_vars={"country": "US", "limit": 100, "enabled": True},
+            expected_dbt_defer_clone_from=True,
+            expected_dbt_production_ref_git_ref="prod",
+            expected_dbt_production_ref_generate_schema_name_override=(
+                "dbt/macros/prod_generate_schema_name.sql"
+            ),
+            expected_dbt_production_ref_refresh=False,
+            expected_dbt_production_ref_git_timeout_seconds=12,
         ),
-        expected_dbt_production_ref_refresh=False,
-        expected_dbt_production_ref_git_timeout_seconds=12,
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    PROJECT_CONFIG_TEST_CASES,
-    ids=[case.description for case in PROJECT_CONFIG_TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_project_config_file_when_loading_project_config_then_it_returns_expected_fields(
     test_case: LoadProjectConfigTestCase,
@@ -1033,8 +324,185 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
 
 @pytest.mark.parametrize(
     "test_case",
-    LOCAL_CONFIG_TEST_CASES,
-    ids=[case.description for case in LOCAL_CONFIG_TEST_CASES],
+    [
+        LoadLocalConfigTestCase(
+            description="defaults cleanly when local file is missing",
+            repo_files={},
+            expected_target=None,
+            expected_adapter=None,
+            expected_connection={},
+            expected_sql_analysis=True,
+            expected_sql_validation=True,
+            expected_max_concurrency=1,
+            expected_setting_overrides=frozenset(),
+            expected_vars={},
+        ),
+        LoadLocalConfigTestCase(
+            description="loads environment connection settings and vars from local config",
+            repo_files={
+                "sqlbuild_local.toml": """
+target = "dev"
+adapter = "snowflake"
+
+[connection]
+database = "local.duckdb"
+
+[settings]
+sql_analysis = false
+sql_validation = false
+concurrency = 4
+auto_load_sources = false
+force = true
+
+[vars]
+user = "kevin"
+
+[dbt]
+target = "pat"
+defer_clone_from = false
+
+[dbt.vars]
+shared = "local"
+threads = 2
+
+[scenario.local_type_overrides.snowflake]
+"NUMBER(*,0)" = "BIGINT"
+OBJECT = "JSON"
+
+[scenario.snapshot_limits]
+max_rows_per_relation = 12
+max_total_rows = 34
+max_bytes_per_relation = 56
+max_total_bytes = 78
+""".strip()
+            },
+            expected_target="dev",
+            expected_adapter="snowflake",
+            expected_connection={"database": "local.duckdb"},
+            expected_sql_analysis=False,
+            expected_sql_validation=False,
+            expected_max_concurrency=4,
+            expected_auto_load_sources=False,
+            expected_setting_overrides=frozenset(
+                {"sql_analysis", "sql_validation", "concurrency", "auto_load_sources", "force"}
+            ),
+            expected_vars={"user": "kevin"},
+            expected_dbt_target="pat",
+            expected_dbt_vars={"shared": "local", "threads": 2},
+            expected_dbt_defer_clone_from=False,
+            expected_force=True,
+            expected_scenario_local_type_overrides={
+                "snowflake": {
+                    "NUMBER(*,0)": "BIGINT",
+                    "OBJECT": "JSON",
+                }
+            },
+            expected_snapshot_limits={
+                "max_rows_per_relation": 12,
+                "max_total_rows": 34,
+                "max_bytes_per_relation": 56,
+                "max_total_bytes": 78,
+            },
+        ),
+        LoadLocalConfigTestCase(
+            description="loads legacy local max concurrency as canonical concurrency override",
+            repo_files={
+                "sqlbuild_local.toml": """
+[settings]
+max_concurrency = 4
+""".strip()
+            },
+            expected_target=None,
+            expected_adapter=None,
+            expected_connection={},
+            expected_sql_analysis=True,
+            expected_sql_validation=True,
+            expected_max_concurrency=4,
+            expected_setting_overrides=frozenset({"concurrency"}),
+            expected_vars={},
+        ),
+        LoadLocalConfigTestCase(
+            description="does not expose unsupported project level overrides",
+            repo_files={
+                "sqlbuild_local.toml": """
+default_target = "prod"
+
+[defaults]
+materialized = "table"
+
+[janitor]
+enabled = true
+
+[connection]
+database = "local.duckdb"
+""".strip()
+            },
+            expected_target=None,
+            expected_adapter=None,
+            expected_connection={"database": "local.duckdb"},
+            expected_sql_analysis=True,
+            expected_sql_validation=True,
+            expected_max_concurrency=1,
+            expected_setting_overrides=frozenset(),
+            expected_vars={},
+            expected_missing_attributes=(
+                "default_target",
+                "defaults",
+                "janitor",
+            ),
+        ),
+        LoadLocalConfigTestCase(
+            description="loads local target overrides",
+            repo_files={
+                "sqlbuild_local.toml": """
+target = "dev"
+
+[targets.dev]
+database = "local_db"
+schema = "local_schema"
+defer_sources_to = "prod"
+defer_clone_from = "prod"
+reuse_from = "prod"
+force = false
+reuse_hard_copy = true
+
+[targets.dev.connection]
+warehouse = "local_wh"
+
+[targets.dev.vars]
+user = "local_user"
+
+[targets.dev.clone]
+allow_as_clone_origin = true
+allow_as_clone_destination = false
+""".strip()
+            },
+            expected_target="dev",
+            expected_adapter=None,
+            expected_connection={},
+            expected_sql_analysis=True,
+            expected_sql_validation=True,
+            expected_max_concurrency=1,
+            expected_setting_overrides=frozenset(),
+            expected_vars={},
+            expected_targets={
+                "dev": {
+                    "connection": {"warehouse": "local_wh"},
+                    "vars": {"user": "local_user"},
+                    "database": "local_db",
+                    "schema": "local_schema",
+                    "defer_sources_to": "prod",
+                    "defer_clone_from": "prod",
+                    "reuse_from": "prod",
+                    "force": False,
+                    "reuse_hard_copy": True,
+                    "allow_as_clone_origin": True,
+                    "allow_as_clone_destination": False,
+                }
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_local_config_state_when_loading_local_config_then_it_returns_expected_fields(
     test_case: LoadLocalConfigTestCase,
@@ -1092,8 +560,472 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
 
 @pytest.mark.parametrize(
     "test_case",
-    PROJECT_CONFIG_ERROR_TEST_CASES,
-    ids=[case.description for case in PROJECT_CONFIG_ERROR_TEST_CASES],
+    [
+        LoadProjectConfigErrorTestCase(
+            description="raises when virtual environments setting is not a boolean",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+virtual_environments = "yes"
+""".strip(),
+            expected_error_fragment="Expected 'virtual_environments' to be a boolean when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when settings sql_analysis is not a boolean",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sql_analysis = 123
+""".strip(),
+            expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when target reuse_from is not a string",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev]
+reuse_from = 123
+""".strip(),
+            expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when target reuse_hard_copy is not a boolean",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev]
+reuse_hard_copy = "yes"
+""".strip(),
+            expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when legacy dbt reuse_from table is used",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.reuse_from]
+git_ref = "prod"
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+""".strip(),
+            expected_error_fragment=r"\[dbt.reuse_from\] was renamed to \[dbt.production_ref\]",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when dbt production_ref omits git_ref",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+""".strip(),
+            expected_error_fragment="must define non-empty string 'git_ref'",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when dbt production_ref omits schema macro override",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
+git_ref = "prod"
+""".strip(),
+            expected_error_fragment="must define non-empty string 'generate_schema_name_override'",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when dbt production_ref schema macro override is absolute",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
+git_ref = "prod"
+generate_schema_name_override = "/tmp/prod_generate_schema_name.sql"
+""".strip(),
+            expected_error_fragment="must be a relative path under dbt/macros/",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when dbt production_ref schema macro override escapes project",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
+git_ref = "prod"
+generate_schema_name_override = "dbt/macros/../prod_generate_schema_name.sql"
+""".strip(),
+            expected_error_fragment="must be a relative path under dbt/macros/",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when dbt production_ref schema macro override is outside dbt macros",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
+git_ref = "prod"
+generate_schema_name_override = "macros/prod_generate_schema_name.sql"
+""".strip(),
+            expected_error_fragment="must be under dbt/macros/",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when dbt production_ref contains target field",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
+git_ref = "prod"
+target = "prod"
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+""".strip(),
+            expected_error_fragment=r"dbt.production_ref contains unknown key\(s\): target",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when dbt production_ref schema macro override file is missing",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt.production_ref]
+git_ref = "prod"
+generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
+refresh = false
+git_timeout_seconds = 12
+""".strip(),
+            expected_error_fragment="generate_schema_name_override file not found",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when settings concurrency is not an integer",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+concurrency = "nope"
+""".strip(),
+            expected_error_fragment="Expected 'concurrency' to be an integer when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when canonical and legacy concurrency settings are both provided",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+concurrency = 4
+max_concurrency = 8
+""".strip(),
+            expected_error_fragment=(
+                "settings cannot define both 'concurrency' and legacy 'max_concurrency'"
+            ),
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when defaults batch_size has unsupported type",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[defaults.batch_size]
+amount = 1
+""".strip(),
+            expected_error_fragment="Expected 'batch_size' to be a string or integer when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when defaults contract is unknown",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[defaults]
+contract = "strict"
+""".strip(),
+            expected_error_fragment="Expected 'contract' to be one of",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when snapshot current state full refresh policy is unknown",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[snapshots]
+current_state_full_refresh = "force"
+""".strip(),
+            expected_error_fragment="Expected 'current_state_full_refresh' to be one of",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when snapshot historical full refresh policy is not string",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[snapshots]
+historical_full_refresh = true
+""".strip(),
+            expected_error_fragment="Expected 'historical_full_refresh' to be a string",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when snapshot schema change policy is unknown",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[snapshots]
+schema_change = "sync_all_columns"
+""".strip(),
+            expected_error_fragment="Expected 'schema_change' to be one of",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when path defaults child value is not a mapping",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults]
+staging = "view"
+""".strip(),
+            expected_error_fragment="path_defaults",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when project vars contain non string value",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[vars]
+user = 123
+""".strip(),
+            expected_error_fragment="expected string value for 'user'",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when connection is not a mapping",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+connection = "bad"
+""".strip(),
+            expected_error_fragment="Expected 'connection' to be a mapping when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when environments is not a mapping",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+targets = []
+""".strip(),
+            expected_error_fragment="targets must be a mapping",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when one environment entry is not a mapping",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets]
+dev = "here"
+""".strip(),
+            expected_error_fragment="targets.dev must be a mapping",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when environment clone config is not a mapping",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev]
+clone = "nope"
+""".strip(),
+            expected_error_fragment="targets.dev.clone must be a mapping",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when environment vars contain non string value",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev.vars]
+user = false
+""".strip(),
+            expected_error_fragment="expected string value for 'user'",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when environment connection is not a mapping",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev]
+connection = "no"
+""".strip(),
+            expected_error_fragment="Expected 'connection' to be a mapping when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when environment clone allow_as_clone_origin is not a boolean",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev.clone]
+allow_as_clone_origin = 123
+""".strip(),
+            expected_error_fragment="Expected 'allow_as_clone_origin' to be a boolean when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when defaults tags is a string instead of list",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[defaults]
+tags = "nightly"
+""".strip(),
+            expected_error_fragment="defaults.tags",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when path_defaults tags is a string instead of list",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."models/staging"]
+tags = "staging"
+""".strip(),
+            expected_error_fragment="path_defaults.*tags must be a list",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when path_defaults tags contains non-string entry",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."models/staging"]
+tags = [123]
+""".strip(),
+            expected_error_fragment="path_defaults.*tags.*must be strings",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when path defaults key has leading slash",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."/staging"]
+schema = "staging"
+""".strip(),
+            expected_error_fragment="without a leading slash",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when path defaults key has empty path segment",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."staging//nested"]
+schema = "staging"
+""".strip(),
+            expected_error_fragment="empty path segments",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when path defaults uses redundant models prefix",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."models/staging"]
+schema = "staging"
+""".strip(),
+            expected_error_fragment="uses redundant 'models/' prefix",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when tracked-only janitor is enabled without query tracking",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+query_change_tracking = false
+
+[janitor]
+enabled = true
+""".strip(),
+            expected_error_fragment="janitor.delete_tracked_only requires",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when janitor max checkpoints is less than one",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[janitor]
+max_checkpoints = 0
+""".strip(),
+            expected_error_fragment="janitor.max_checkpoints must be >= 1",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when janitor direct state history versions is negative",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[janitor]
+direct_state_history_versions = -1
+""".strip(),
+            expected_error_fragment="janitor.direct_state_history_versions must be >= 0",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when project settings contain unknown key",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+threads = 4
+""".strip(),
+            expected_error_fragment=r"settings contains unknown key\(s\): threads",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when scenario snapshot limit is not an integer",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[scenario.snapshot_limits]
+max_rows_per_relation = "many"
+""".strip(),
+            expected_error_fragment="Expected 'max_rows_per_relation' to be an integer when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when scenario snapshot limit is negative",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[scenario.snapshot_limits]
+max_total_bytes = -1
+""".strip(),
+            expected_error_fragment="scenario.snapshot_limits values must be >= 0",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when dbt config contains unknown key",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt]
+project_dir = "../dbt"
+threads = 8
+""".strip(),
+            expected_error_fragment=r"dbt contains unknown key\(s\): threads",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_project_config_file_when_loading_project_config_then_it_raises_clear_errors(
     test_case: LoadProjectConfigErrorTestCase,
@@ -1115,7 +1047,7 @@ def test_given_invalid_project_config_file_when_loading_project_config_then_it_r
             expected_error_fragment="Project config not found",
         ),
     ],
-    ids=["raises clear error when project config is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_project_config_file_when_loading_project_config_then_it_raises_clear_error(
     test_case: LoadProjectConfigErrorTestCase,
@@ -1134,7 +1066,7 @@ def test_given_missing_project_config_file_when_loading_project_config_then_it_r
             expected_error_fragment="sqlbuild_project.yml is no longer supported",
         )
     ],
-    ids=["raises clear error when legacy project config is present"],
+    ids=lambda case: case.description,
 )
 def test_given_legacy_project_config_file_when_loading_project_config_then_it_raises_clear_error(
     test_case: LoadProjectConfigErrorTestCase,
@@ -1149,8 +1081,67 @@ def test_given_legacy_project_config_file_when_loading_project_config_then_it_ra
 
 @pytest.mark.parametrize(
     "test_case",
-    LOCAL_CONFIG_ERROR_TEST_CASES,
-    ids=[case.description for case in LOCAL_CONFIG_ERROR_TEST_CASES],
+    [
+        LoadLocalConfigErrorTestCase(
+            description="raises when local target is not a non empty string",
+            local_file_contents="target = 123\n",
+            expected_error_fragment="Expected 'target' to be a non-empty string when provided",
+        ),
+        LoadLocalConfigErrorTestCase(
+            description="raises when local vars contain non string value",
+            local_file_contents="""
+[vars]
+user = 123
+""".strip(),
+            expected_error_fragment="expected string value for 'user'",
+        ),
+        LoadLocalConfigErrorTestCase(
+            description="raises when local connection is not a mapping",
+            local_file_contents='connection = "local.duckdb"\n',
+            expected_error_fragment="Expected 'connection' to be a mapping when provided",
+        ),
+        LoadLocalConfigErrorTestCase(
+            description="raises when local settings sql_analysis is not a boolean",
+            local_file_contents="""
+[settings]
+sql_analysis = "no thanks"
+""".strip(),
+            expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
+        ),
+        LoadLocalConfigErrorTestCase(
+            description="raises when local target reuse_from is not a string",
+            local_file_contents="""
+[targets.dev]
+reuse_from = 123
+""".strip(),
+            expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
+        ),
+        LoadLocalConfigErrorTestCase(
+            description="raises when local target reuse_hard_copy is not a boolean",
+            local_file_contents="""
+[targets.dev]
+reuse_hard_copy = "yes"
+""".strip(),
+            expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
+        ),
+        LoadLocalConfigErrorTestCase(
+            description="raises when local settings concurrency is not an integer",
+            local_file_contents="""
+[settings]
+concurrency = "many"
+""".strip(),
+            expected_error_fragment="Expected 'concurrency' to be an integer when provided",
+        ),
+        LoadLocalConfigErrorTestCase(
+            description="raises when local settings contain unknown key",
+            local_file_contents="""
+[settings]
+extra_concurrency = 8
+""".strip(),
+            expected_error_fragment=r"settings contains unknown key\(s\): extra_concurrency",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_local_config_file_when_loading_local_config_then_it_raises_clear_errors(
     test_case: LoadLocalConfigErrorTestCase,
@@ -1172,7 +1163,7 @@ def test_given_invalid_local_config_file_when_loading_local_config_then_it_raise
             expected_error_fragment="sqlbuild_local.yml is no longer supported",
         )
     ],
-    ids=["raises clear error when legacy local config is present"],
+    ids=lambda case: case.description,
 )
 def test_given_legacy_local_config_file_when_loading_local_config_then_it_raises_clear_error(
     test_case: LoadLocalConfigErrorTestCase,

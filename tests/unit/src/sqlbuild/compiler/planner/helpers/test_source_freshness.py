@@ -26,7 +26,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
             expected_observed_data_version="2",
         )
     ],
-    ids=["planner source freshness observes effective source read map"],
+    ids=lambda case: case.description,
 )
 def test_given_source_deferral_context_when_building_source_freshness_then_uses_read_map(
     test_case: PlannerSourceFreshnessReadMapTestCase,

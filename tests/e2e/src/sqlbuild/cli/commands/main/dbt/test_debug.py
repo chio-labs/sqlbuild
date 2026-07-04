@@ -14,34 +14,32 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
-DEBUG_CLI_TEST_CASES: list[DbtDebugCliTestCase] = [
-    DbtDebugCliTestCase(
-        description="runs dbt and SQLBuild diagnostics",
-        command=("dbt", "debug"),
-        expected_stdout_fragments=(
-            "All checks passed!",
-            "SQLBuild Diagnostics",
-            "connection test: [OK connected]",
-            "query test: [OK SELECT 1]",
-        ),
-    ),
-    DbtDebugCliTestCase(
-        description="skips SQLBuild connection when requested",
-        command=("dbt", "debug", "--no-connection"),
-        expected_stdout_fragments=(
-            "All checks passed!",
-            "SQLBuild Diagnostics",
-            "connection test: [SKIP skipped by --no-connection]",
-            "query test: [SKIP connection skipped]",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DEBUG_CLI_TEST_CASES,
-    ids=[case.description for case in DEBUG_CLI_TEST_CASES],
+    [
+        DbtDebugCliTestCase(
+            description="runs dbt and SQLBuild diagnostics",
+            command=("dbt", "debug"),
+            expected_stdout_fragments=(
+                "All checks passed!",
+                "SQLBuild Diagnostics",
+                "connection test: [OK connected]",
+                "query test: [OK SELECT 1]",
+            ),
+        ),
+        DbtDebugCliTestCase(
+            description="skips SQLBuild connection when requested",
+            command=("dbt", "debug", "--no-connection"),
+            expected_stdout_fragments=(
+                "All checks passed!",
+                "SQLBuild Diagnostics",
+                "connection test: [SKIP skipped by --no-connection]",
+                "query test: [SKIP connection skipped]",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_debug_when_running_then_outputs_dbt_and_sqlbuild_diagnostics(
     tmp_path: Path,

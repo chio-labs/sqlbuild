@@ -10,28 +10,26 @@ from tests.integration.src.sqlbuild.integrations.dbt._test_types import RealDbtR
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
-REAL_DBT_LS_TEST_CASES: list[RealDbtRunnerTestCase] = [
-    RealDbtRunnerTestCase(
-        description="lists all project models",
-        select=(),
-        exclude=(),
-        resource_types=("model",),
-        expected_unique_ids=("model.analytics.fact_orders", "model.analytics.stg_orders"),
-    ),
-    RealDbtRunnerTestCase(
-        description="honors tag selector and exclude",
-        select=("tag:nightly",),
-        exclude=("fact_orders",),
-        resource_types=("model",),
-        expected_unique_ids=("model.analytics.stg_orders",),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    REAL_DBT_LS_TEST_CASES,
-    ids=[case.description for case in REAL_DBT_LS_TEST_CASES],
+    [
+        RealDbtRunnerTestCase(
+            description="lists all project models",
+            select=(),
+            exclude=(),
+            resource_types=("model",),
+            expected_unique_ids=("model.analytics.fact_orders", "model.analytics.stg_orders"),
+        ),
+        RealDbtRunnerTestCase(
+            description="honors tag selector and exclude",
+            select=("tag:nightly",),
+            exclude=("fact_orders",),
+            resource_types=("model",),
+            expected_unique_ids=("model.analytics.stg_orders",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_real_dbt_project_when_running_ls_then_returns_manifest_unique_ids(
     test_case: RealDbtRunnerTestCase,

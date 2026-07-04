@@ -20,40 +20,38 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     RunIdGenerationTestCase,
 )
 
-RUNTIME_CONFIG_TEST_CASES: list[BuildEffectiveRuntimeConfigTestCase] = [
-    BuildEffectiveRuntimeConfigTestCase(
-        description="uses default target and var precedence",
-        selected_target=None,
-        cli_vars={"shared": "cli", "cli_only": "cli"},
-        expected_target_name="dev",
-        expected_vars={
-            "shared": "cli",
-            "project_only": "project",
-            "environment_only": "dev",
-            "local_only": "local",
-            "local_environment_only": "local_dev",
-            "cli_only": "cli",
-        },
-    ),
-    BuildEffectiveRuntimeConfigTestCase(
-        description="selected target overrides local target",
-        selected_target="prod",
-        cli_vars=None,
-        expected_target_name="prod",
-        expected_vars={
-            "shared": "local",
-            "project_only": "project",
-            "environment_only": "prod",
-            "local_only": "local",
-        },
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    RUNTIME_CONFIG_TEST_CASES,
-    ids=[case.description for case in RUNTIME_CONFIG_TEST_CASES],
+    [
+        BuildEffectiveRuntimeConfigTestCase(
+            description="uses default target and var precedence",
+            selected_target=None,
+            cli_vars={"shared": "cli", "cli_only": "cli"},
+            expected_target_name="dev",
+            expected_vars={
+                "shared": "cli",
+                "project_only": "project",
+                "environment_only": "dev",
+                "local_only": "local",
+                "local_environment_only": "local_dev",
+                "cli_only": "cli",
+            },
+        ),
+        BuildEffectiveRuntimeConfigTestCase(
+            description="selected target overrides local target",
+            selected_target="prod",
+            cli_vars=None,
+            expected_target_name="prod",
+            expected_vars={
+                "shared": "local",
+                "project_only": "project",
+                "environment_only": "prod",
+                "local_only": "local",
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_runtime_config_inputs_when_building_effective_runtime_then_returns_expected_values(
     test_case: BuildEffectiveRuntimeConfigTestCase,
@@ -108,7 +106,7 @@ def test_given_runtime_config_inputs_when_building_effective_runtime_then_return
             expected_reuse_hard_copy=True,
         )
     ],
-    ids=["exposes resolved target reuse metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_runtime_config_inputs_when_building_effective_target_then_exposes_reuse_metadata(
     test_case: BuildEffectiveTargetConfigTestCase,
@@ -149,7 +147,7 @@ def test_given_runtime_config_inputs_when_building_effective_target_then_exposes
             expected_pattern=r"\d{8}T\d{6}Z_[0-9a-f]{12}",
         )
     ],
-    ids=["generated run ids use twelve hex suffixes and are unique"],
+    ids=lambda case: case.description,
 )
 def test_given_generated_run_ids_when_resolving_then_uses_expected_shape_and_unique_suffixes(
     test_case: RunIdGenerationTestCase,

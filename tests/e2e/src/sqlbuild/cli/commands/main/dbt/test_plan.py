@@ -27,71 +27,69 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
-PLAN_CLI_TEST_CASES: list[DbtPlanCliTestCase] = [
-    DbtPlanCliTestCase(
-        description="reports SQLBuild-only selected work and dbt skip",
-        command=("dbt", "plan", "--json", "--select", "local_only"),
-        expected_selected_models=("local_only",),
-        expected_dbt_skipped=True,
-        expected_sqlbuild_skipped=False,
-    ),
-    DbtPlanCliTestCase(
-        description="reports dbt trailing plus anchors and downstream SQLBuild work",
-        command=("dbt", "plan", "--json", "--select", "fact_orders+"),
-        expected_selected_models=("downstream_orders", "event_time_orders", "mart_orders"),
-        expected_dbt_skipped=False,
-        expected_sqlbuild_skipped=False,
-        expected_anchor_terms=("fact_orders+",),
-    ),
-    DbtPlanCliTestCase(
-        description="routes explicit model path for SQLBuild model paths",
-        command=("dbt", "plan", "--json", "--select", "path:models/marts"),
-        expected_selected_models=(
-            "deprecated_orders",
-            "downstream_orders",
-            "event_time_orders",
-            "mart_orders",
-        ),
-        expected_dbt_skipped=False,
-        expected_sqlbuild_skipped=False,
-        expected_path_translations=(),
-    ),
-    DbtPlanCliTestCase(
-        description="reports mixed dbt and SQLBuild tag matches",
-        command=("dbt", "plan", "--json", "--select", "tag:nightly"),
-        expected_selected_models=("downstream_orders",),
-        expected_dbt_skipped=False,
-        expected_sqlbuild_skipped=False,
-    ),
-    DbtPlanCliTestCase(
-        description="reports SQLBuild-only tag matches with dbt skipped",
-        command=("dbt", "plan", "--json", "--select", "tag:sqb_only"),
-        expected_selected_models=("deprecated_orders", "local_only"),
-        expected_dbt_skipped=True,
-        expected_sqlbuild_skipped=False,
-    ),
-    DbtPlanCliTestCase(
-        description="reports SQLBuild tag excludes",
-        command=(
-            "dbt",
-            "plan",
-            "--json",
-            "--select",
-            "tag:sqb_only",
-            "--exclude",
-            "tag:deprecated",
-        ),
-        expected_selected_models=("local_only",),
-        expected_dbt_skipped=True,
-        expected_sqlbuild_skipped=False,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PLAN_CLI_TEST_CASES,
-    ids=[case.description for case in PLAN_CLI_TEST_CASES],
+    [
+        DbtPlanCliTestCase(
+            description="reports SQLBuild-only selected work and dbt skip",
+            command=("dbt", "plan", "--json", "--select", "local_only"),
+            expected_selected_models=("local_only",),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=False,
+        ),
+        DbtPlanCliTestCase(
+            description="reports dbt trailing plus anchors and downstream SQLBuild work",
+            command=("dbt", "plan", "--json", "--select", "fact_orders+"),
+            expected_selected_models=("downstream_orders", "event_time_orders", "mart_orders"),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=False,
+            expected_anchor_terms=("fact_orders+",),
+        ),
+        DbtPlanCliTestCase(
+            description="routes explicit model path for SQLBuild model paths",
+            command=("dbt", "plan", "--json", "--select", "path:models/marts"),
+            expected_selected_models=(
+                "deprecated_orders",
+                "downstream_orders",
+                "event_time_orders",
+                "mart_orders",
+            ),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=False,
+            expected_path_translations=(),
+        ),
+        DbtPlanCliTestCase(
+            description="reports mixed dbt and SQLBuild tag matches",
+            command=("dbt", "plan", "--json", "--select", "tag:nightly"),
+            expected_selected_models=("downstream_orders",),
+            expected_dbt_skipped=False,
+            expected_sqlbuild_skipped=False,
+        ),
+        DbtPlanCliTestCase(
+            description="reports SQLBuild-only tag matches with dbt skipped",
+            command=("dbt", "plan", "--json", "--select", "tag:sqb_only"),
+            expected_selected_models=("deprecated_orders", "local_only"),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=False,
+        ),
+        DbtPlanCliTestCase(
+            description="reports SQLBuild tag excludes",
+            command=(
+                "dbt",
+                "plan",
+                "--json",
+                "--select",
+                "tag:sqb_only",
+                "--exclude",
+                "tag:deprecated",
+            ),
+            expected_selected_models=("local_only",),
+            expected_dbt_skipped=True,
+            expected_sqlbuild_skipped=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_interop_project_when_running_plan_json_then_outputs_expected_plan(
     test_case: DbtPlanCliTestCase,
@@ -143,7 +141,7 @@ def test_given_dbt_interop_project_when_running_plan_json_then_outputs_expected_
             expected_selected_models=("downstream_orders",),
         )
     ],
-    ids=["resolves dbt config paths from relative SQLBuild project dir"],
+    ids=lambda case: case.description,
 )
 def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_config_paths(
     test_case: DbtPlanRelativeProjectDirTestCase,
@@ -188,7 +186,7 @@ def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_conf
             ),
         )
     ],
-    ids=["outputs grouped dbt and SQLBuild plan sections"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_interop_project_when_running_human_plan_then_outputs_grouped_sections(
     test_case: DbtPlanHumanCliTestCase,
@@ -219,7 +217,7 @@ def test_given_dbt_interop_project_when_running_human_plan_then_outputs_grouped_
             ),
         )
     ],
-    ids=["renders missing dbt project config with coded error"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_dbt_project_config_when_running_plan_then_renders_coded_error(
     test_case: DbtPlanErrorCliTestCase,

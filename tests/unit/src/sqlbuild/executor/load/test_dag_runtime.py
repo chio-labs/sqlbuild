@@ -20,23 +20,6 @@ from tests.unit.src.sqlbuild.executor.load._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
 
-LOAD_DAG_WORKER_FAILURE_TEST_CASES: list[LoadDagWorkerFailureTestCase] = [
-    LoadDagWorkerFailureTestCase(
-        description="publishes failed completion when ready source execution raises",
-        source_name="raw_orders",
-        loader_name="missing_loader",
-        expected_status=ExecutionStatus.FAILED,
-        expected_error_fragment="missing_loader",
-    ),
-    LoadDagWorkerFailureTestCase(
-        description="returns connection when ready source execution raises",
-        source_name="raw_customers",
-        loader_name="missing_customer_loader",
-        expected_status=ExecutionStatus.FAILED,
-        expected_error_fragment="missing_customer_loader",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -52,7 +35,7 @@ LOAD_DAG_WORKER_FAILURE_TEST_CASES: list[LoadDagWorkerFailureTestCase] = [
             expected_callback_sources=("fetch_orders",),
         )
     ],
-    ids=["unlocks loader downstream source after upstream success completion"],
+    ids=lambda case: case.description,
 )
 def test_given_load_dag_state_when_completing_source_then_uses_generic_scheduler(
     test_case: LoadDagStateSchedulingTestCase,
@@ -95,8 +78,23 @@ def test_given_load_dag_state_when_completing_source_then_uses_generic_scheduler
 
 @pytest.mark.parametrize(
     "test_case",
-    LOAD_DAG_WORKER_FAILURE_TEST_CASES,
-    ids=[case.description for case in LOAD_DAG_WORKER_FAILURE_TEST_CASES],
+    [
+        LoadDagWorkerFailureTestCase(
+            description="publishes failed completion when ready source execution raises",
+            source_name="raw_orders",
+            loader_name="missing_loader",
+            expected_status=ExecutionStatus.FAILED,
+            expected_error_fragment="missing_loader",
+        ),
+        LoadDagWorkerFailureTestCase(
+            description="returns connection when ready source execution raises",
+            source_name="raw_customers",
+            loader_name="missing_customer_loader",
+            expected_status=ExecutionStatus.FAILED,
+            expected_error_fragment="missing_customer_loader",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_ready_source_execution_raises_when_worker_runs_then_publishes_failed_completion(
     test_case: LoadDagWorkerFailureTestCase,

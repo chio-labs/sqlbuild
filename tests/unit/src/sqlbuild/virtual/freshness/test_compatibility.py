@@ -21,7 +21,7 @@ from tests.unit.src.sqlbuild.virtual.freshness._test_types import (
             expected_same_object=True,
         )
     ],
-    ids=["virtual observation model aliases shared model"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_observation_model_import_when_resolving_then_aliases_shared_model(
     test_case: VirtualSourceFreshnessCompatibilityTestCase,

@@ -109,12 +109,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=[
-        (
-            "default inclusive append cursor rerun duplicates boundary row "
-            "and captures late same-timestamp row"
-        )
-    ],
+    ids=lambda case: case.description,
 )
 def test_given_append_cursor_project_when_rerunning_build_then_boundary_behavior_matches_expected(
     test_case: AppendCursorBuildE2ETestCase,
@@ -239,7 +234,7 @@ def test_given_append_cursor_project_when_rerunning_build_then_boundary_behavior
             ),
         )
     ],
-    ids=["build honors timestamp cursor start override"],
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_cursor_start_override_when_building_then_lower_bound_is_applied(
     test_case: TimestampCursorBuildOverrideE2ETestCase,

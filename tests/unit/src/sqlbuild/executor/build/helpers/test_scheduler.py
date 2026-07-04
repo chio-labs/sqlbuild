@@ -48,45 +48,27 @@ from tests.unit.src.sqlbuild.executor.build.helpers.helpers import (
     read_node_source_watermark_records,
 )
 
-BUILD_SCHEDULER_SOURCE_LOAD_TEST_CASES: list[BuildSchedulerSourceLoadTestCase] = [
-    BuildSchedulerSourceLoadTestCase(
-        description="failed managed source blocks downstream model",
-        source_status=ExecutionStatus.FAILED,
-        expected_load_status=ExecutionStatus.FAILED,
-        expected_model_status=ExecutionStatus.SKIPPED,
-        expected_execution_order=("raw_orders",),
-    ),
-    BuildSchedulerSourceLoadTestCase(
-        description="successful managed source runs before downstream model",
-        source_status=ExecutionStatus.SUCCESS,
-        expected_load_status=ExecutionStatus.SUCCESS,
-        expected_model_status=ExecutionStatus.SUCCESS,
-        expected_execution_order=("raw_orders", "stg_orders"),
-        expected_model_rows=((1, "loaded"),),
-    ),
-]
-
-BUILD_SCHEDULER_MODEL_HOOK_TEST_CASES: list[BuildSchedulerModelHookTestCase] = [
-    BuildSchedulerModelHookTestCase(
-        description="hook runs before model materialization",
-        hook_raises=False,
-        expected_model_status=ExecutionStatus.SUCCESS,
-        expected_events=("start:hook_model", "hook:hook_model"),
-        expected_model_rows=((1,),),
-    ),
-    BuildSchedulerModelHookTestCase(
-        description="hook failure marks model failed",
-        hook_raises=True,
-        expected_model_status=ExecutionStatus.FAILED,
-        expected_events=("start:hook_model", "hook:hook_model"),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_SCHEDULER_SOURCE_LOAD_TEST_CASES,
-    ids=[case.description for case in BUILD_SCHEDULER_SOURCE_LOAD_TEST_CASES],
+    [
+        BuildSchedulerSourceLoadTestCase(
+            description="failed managed source blocks downstream model",
+            source_status=ExecutionStatus.FAILED,
+            expected_load_status=ExecutionStatus.FAILED,
+            expected_model_status=ExecutionStatus.SKIPPED,
+            expected_execution_order=("raw_orders",),
+        ),
+        BuildSchedulerSourceLoadTestCase(
+            description="successful managed source runs before downstream model",
+            source_status=ExecutionStatus.SUCCESS,
+            expected_load_status=ExecutionStatus.SUCCESS,
+            expected_model_status=ExecutionStatus.SUCCESS,
+            expected_execution_order=("raw_orders", "stg_orders"),
+            expected_model_rows=((1, "loaded"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_managed_source_node_when_build_runs_then_records_loader_and_blocks_downstream(
     test_case: BuildSchedulerSourceLoadTestCase,
@@ -160,8 +142,22 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
 
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_SCHEDULER_MODEL_HOOK_TEST_CASES,
-    ids=[case.description for case in BUILD_SCHEDULER_MODEL_HOOK_TEST_CASES],
+    [
+        BuildSchedulerModelHookTestCase(
+            description="hook runs before model materialization",
+            hook_raises=False,
+            expected_model_status=ExecutionStatus.SUCCESS,
+            expected_events=("start:hook_model", "hook:hook_model"),
+            expected_model_rows=((1,),),
+        ),
+        BuildSchedulerModelHookTestCase(
+            description="hook failure marks model failed",
+            hook_raises=True,
+            expected_model_status=ExecutionStatus.FAILED,
+            expected_events=("start:hook_model", "hook:hook_model"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_model(
     test_case: BuildSchedulerModelHookTestCase,
@@ -226,7 +222,7 @@ def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_
             expected_rows=((CompiledResourceType.MODEL.value, "stg_orders", "run-1"),),
         )
     ],
-    ids=["successful model writes node source watermark"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_when_model_succeeds_then_writes_node_source_watermark(
     test_case: BuildSchedulerNodeSourceWatermarkTestCase,
@@ -299,7 +295,7 @@ def test_given_source_freshness_when_model_succeeds_then_writes_node_source_wate
             expected_source_kinds_by_node={"b": ("direct",), "a": ("inherited",)},
         )
     ],
-    ids=["same run upstream table watermark is inherited downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_table_runs_before_downstream_when_build_succeeds_then_inherits_watermark(
     test_case: BuildSchedulerNodeSourceWatermarkPayloadTestCase,
@@ -371,7 +367,7 @@ def test_given_upstream_table_runs_before_downstream_when_build_succeeds_then_in
             expected_source_kinds_by_node={"a": ("direct",)},
         )
     ],
-    ids=["downstream table reaches source frontier through view"],
+    ids=lambda case: case.description,
 )
 def test_given_downstream_depends_on_view_over_source_when_built_then_records_direct_watermark(
     test_case: BuildSchedulerNodeSourceWatermarkPayloadTestCase,
@@ -448,7 +444,7 @@ def test_given_downstream_depends_on_view_over_source_when_built_then_records_di
             expected_source_kinds_by_node={"a": ("inherited",)},
         )
     ],
-    ids=["downstream table reaches materialized frontier through view"],
+    ids=lambda case: case.description,
 )
 def test_given_downstream_depends_on_view_over_table_when_built_then_inherits_table_watermark(
     test_case: BuildSchedulerNodeSourceWatermarkPayloadTestCase,
@@ -559,7 +555,7 @@ def test_given_downstream_depends_on_view_over_table_when_built_then_inherits_ta
             expected_source_kinds_by_node={"a": ("inherited",)},
         )
     ],
-    ids=["downstream-only build inherits persisted upstream watermark"],
+    ids=lambda case: case.description,
 )
 def test_given_only_downstream_runs_when_upstream_watermark_exists_then_inherits_persisted_value(
     test_case: BuildSchedulerNodeSourceWatermarkPayloadTestCase,
@@ -663,7 +659,7 @@ def test_given_only_downstream_runs_when_upstream_watermark_exists_then_inherits
             expected_unknown_reasons_by_node={"a": ("missing_upstream_watermark",)},
         )
     ],
-    ids=["missing upstream watermark records unknown source"],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_table_without_watermark_when_downstream_runs_then_records_unknown(
     test_case: BuildSchedulerNodeSourceWatermarkPayloadTestCase,
@@ -731,41 +727,38 @@ def test_given_upstream_table_without_watermark_when_downstream_runs_then_record
     } == test_case.expected_unknown_reasons_by_node
 
 
-MERGED_UPSTREAM_WATERMARK_TEST_CASES: list[BuildSchedulerMergedUpstreamWatermarkTestCase] = [
-    BuildSchedulerMergedUpstreamWatermarkTestCase(
-        description="both upstream frontier tables have current source watermark",
-        b_data_hash="current-source-version",
-        b_data_version="2026-06-30T12:00:00",
-        c_data_hash="current-source-version",
-        c_data_version="2026-06-30T12:00:00",
-        expected_source_hashes_by_node={"a": ("current-source-version",)},
-        expected_source_kinds_by_node={"a": ("inherited",)},
-    ),
-    BuildSchedulerMergedUpstreamWatermarkTestCase(
-        description="both upstream frontier tables have stale source watermark",
-        b_data_hash="old-source-version",
-        b_data_version="2026-06-30T11:00:00",
-        c_data_hash="old-source-version",
-        c_data_version="2026-06-30T11:00:00",
-        expected_source_hashes_by_node={"a": ("old-source-version",)},
-        expected_source_kinds_by_node={"a": ("inherited",)},
-    ),
-    BuildSchedulerMergedUpstreamWatermarkTestCase(
-        description="one upstream frontier table stale and one current keeps stale watermark",
-        b_data_hash="old-source-version",
-        b_data_version="2026-06-30T11:00:00",
-        c_data_hash="current-source-version",
-        c_data_version="2026-06-30T12:00:00",
-        expected_source_hashes_by_node={"a": ("old-source-version",)},
-        expected_source_kinds_by_node={"a": ("inherited",)},
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    MERGED_UPSTREAM_WATERMARK_TEST_CASES,
-    ids=[case.description for case in MERGED_UPSTREAM_WATERMARK_TEST_CASES],
+    [
+        BuildSchedulerMergedUpstreamWatermarkTestCase(
+            description="both upstream frontier tables have current source watermark",
+            b_data_hash="current-source-version",
+            b_data_version="2026-06-30T12:00:00",
+            c_data_hash="current-source-version",
+            c_data_version="2026-06-30T12:00:00",
+            expected_source_hashes_by_node={"a": ("current-source-version",)},
+            expected_source_kinds_by_node={"a": ("inherited",)},
+        ),
+        BuildSchedulerMergedUpstreamWatermarkTestCase(
+            description="both upstream frontier tables have stale source watermark",
+            b_data_hash="old-source-version",
+            b_data_version="2026-06-30T11:00:00",
+            c_data_hash="old-source-version",
+            c_data_version="2026-06-30T11:00:00",
+            expected_source_hashes_by_node={"a": ("old-source-version",)},
+            expected_source_kinds_by_node={"a": ("inherited",)},
+        ),
+        BuildSchedulerMergedUpstreamWatermarkTestCase(
+            description="one upstream frontier table stale and one current keeps stale watermark",
+            b_data_hash="old-source-version",
+            b_data_version="2026-06-30T11:00:00",
+            c_data_hash="current-source-version",
+            c_data_version="2026-06-30T12:00:00",
+            expected_source_hashes_by_node={"a": ("old-source-version",)},
+            expected_source_kinds_by_node={"a": ("inherited",)},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_downstream_depends_on_two_frontier_tables_when_built_then_merges_oldest_watermark(
     test_case: BuildSchedulerMergedUpstreamWatermarkTestCase,
@@ -900,7 +893,7 @@ def test_given_downstream_depends_on_two_frontier_tables_when_built_then_merges_
             expected_execution_order=("upstream_model",),
         )
     ],
-    ids=["pre-hook skip blocks downstream model"],
+    ids=lambda case: case.description,
 )
 def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_skipped(
     test_case: BuildSchedulerPreHookSkipTestCase,
@@ -988,7 +981,7 @@ def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_ski
             expected_execution_order=("upstream_model",),
         )
     ],
-    ids=["planned source freshness skip blocks downstream model"],
+    ids=lambda case: case.description,
 )
 def test_given_model_plan_action_skip_when_build_runs_then_downstream_model_is_skipped(
     test_case: BuildSchedulerPlannedSkipTestCase,

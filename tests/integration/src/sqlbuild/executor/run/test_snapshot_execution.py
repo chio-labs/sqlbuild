@@ -54,7 +54,7 @@ class ZeroCopyDuckDbAdapter(DuckDbAdapter):
             expected_seed_exists=False,
         )
     ],
-    ids=["snapshot seed reuse promotes seed and catches up"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_seed_reuse_when_running_snapshot_then_promotes_seed_and_catches_up(
     test_case: SnapshotReuseExecutionTestCase,
@@ -145,7 +145,7 @@ def test_given_snapshot_seed_reuse_when_running_snapshot_then_promotes_seed_and_
             expected_target_exists=False,
         )
     ],
-    ids=["snapshot seed reuse rejects fingerprint mismatch"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_seed_reuse_fingerprint_mismatch_when_running_snapshot_then_fails(
     test_case: SnapshotReuseFailureExecutionTestCase,
@@ -227,7 +227,7 @@ def test_given_snapshot_seed_reuse_fingerprint_mismatch_when_running_snapshot_th
             ),
         )
     ],
-    ids=["cheap snapshot seed reuse materializes from origin"],
+    ids=lambda case: case.description,
 )
 def test_given_cheap_snapshot_seed_reuse_when_running_snapshot_then_materializes_from_origin(
     test_case: SnapshotReuseVariantExecutionTestCase,
@@ -312,7 +312,7 @@ def test_given_cheap_snapshot_seed_reuse_when_running_snapshot_then_materializes
             ),
         )
     ],
-    ids=["existing snapshot destination is replaced by promoted seed then catches up"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_snapshot_destination_when_running_seed_reuse_then_promotes_seed(
     test_case: SnapshotReuseVariantExecutionTestCase,
@@ -397,7 +397,7 @@ def test_given_existing_snapshot_destination_when_running_seed_reuse_then_promot
             expected_target_exists=True,
         )
     ],
-    ids=["fingerprint mismatch leaves existing snapshot destination unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_snapshot_destination_when_seed_reuse_fails_then_destination_is_unchanged(
     test_case: SnapshotReuseFailureExecutionTestCase,
@@ -490,7 +490,7 @@ def test_given_existing_snapshot_destination_when_seed_reuse_fails_then_destinat
             expected_rows=((1, "basic", False), (1, "pro", True)),
         )
     ],
-    ids=["check snapshot seed reuse tracks checked column change"],
+    ids=lambda case: case.description,
 )
 def test_given_check_snapshot_seed_reuse_when_running_snapshot_then_tracks_checked_change(
     test_case: SnapshotReuseVariantExecutionTestCase,
@@ -568,7 +568,7 @@ def test_given_check_snapshot_seed_reuse_when_running_snapshot_then_tracks_check
             expected_audit_count=1,
         )
     ],
-    ids=["snapshot seed reuse still runs hooks audits and contracts"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_seed_reuse_with_hooks_audits_and_contract_when_running_then_succeeds(
     test_case: SnapshotReuseVariantExecutionTestCase,
@@ -673,7 +673,7 @@ def test_given_snapshot_seed_reuse_with_hooks_audits_and_contract_when_running_t
             expected_rows=((1, "gold"),),
         )
     ],
-    ids=["snapshot seed reuse appends new source column during normal snapshot flow"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_seed_reuse_with_schema_change_when_running_then_appends_column(
     test_case: SnapshotReuseVariantExecutionTestCase,
@@ -750,7 +750,7 @@ def test_given_snapshot_seed_reuse_with_schema_change_when_running_then_appends_
             expected_audit_count=1,
         )
     ],
-    ids=["snapshot seed reuse executes audits despite accepted origin proof"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_seed_reuse_with_origin_audit_proof_when_running_then_audit_still_executes(
     test_case: SnapshotReuseVariantExecutionTestCase,
@@ -839,7 +839,7 @@ def test_given_snapshot_seed_reuse_with_origin_audit_proof_when_running_then_aud
             expected_rows=((1, "basic"),),
         )
     ],
-    ids=["database-qualified snapshot reuse origin materializes destination"],
+    ids=lambda case: case.description,
 )
 def test_given_database_qualified_snapshot_reuse_origin_when_running_then_materializes_destination(
     test_case: SnapshotReuseVariantExecutionTestCase,

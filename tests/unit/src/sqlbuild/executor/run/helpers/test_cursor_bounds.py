@@ -17,34 +17,32 @@ from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.run.helpers.helpers import FakeCursorAdapter
 
-TEST_CASES: list[RuntimeCursorStartTestCase] = [
-    RuntimeCursorStartTestCase(
-        description="runtime timestamp bounds clamp to configured floor",
-        target_max=None,
-        upstream_min=datetime(2024, 1, 1, tzinfo=UTC),
-        upstream_max=datetime(2024, 2, 1, tzinfo=UTC),
-        cursor_type=CursorType.TIMESTAMP,
-        cursor_start="2024-01-15T00:00:00+00:00",
-        expected_start="2024-01-15T00:00:00+00:00",
-        expected_end="2024-02-01T00:00:01+00:00",
-    ),
-    RuntimeCursorStartTestCase(
-        description="runtime integer bounds clamp to configured floor",
-        target_max=None,
-        upstream_min=50,
-        upstream_max=200,
-        cursor_type=CursorType.INTEGER,
-        cursor_start="100",
-        expected_start="100",
-        expected_end="201",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        RuntimeCursorStartTestCase(
+            description="runtime timestamp bounds clamp to configured floor",
+            target_max=None,
+            upstream_min=datetime(2024, 1, 1, tzinfo=UTC),
+            upstream_max=datetime(2024, 2, 1, tzinfo=UTC),
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_start="2024-01-15T00:00:00+00:00",
+            expected_start="2024-01-15T00:00:00+00:00",
+            expected_end="2024-02-01T00:00:01+00:00",
+        ),
+        RuntimeCursorStartTestCase(
+            description="runtime integer bounds clamp to configured floor",
+            target_max=None,
+            upstream_min=50,
+            upstream_max=200,
+            cursor_type=CursorType.INTEGER,
+            cursor_start="100",
+            expected_start="100",
+            expected_end="201",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_runtime_cursor_start_when_resolving_bounds_then_applies_lower_floor(
     test_case: RuntimeCursorStartTestCase,
@@ -94,7 +92,7 @@ def test_given_runtime_cursor_start_when_resolving_bounds_then_applies_lower_flo
             expected_end="201",
         )
     ],
-    ids=["existing target relation seeds start from target max"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_target_relation_when_resolving_bounds_then_starts_from_target_max(
     test_case: RuntimeTargetMaxTestCase,
@@ -140,7 +138,7 @@ def test_given_existing_target_relation_when_resolving_bounds_then_starts_from_t
             expected_error_type=duckdb.CatalogException,
         )
     ],
-    ids=["target max query failure propagates instead of widening the window"],
+    ids=lambda case: case.description,
 )
 def test_given_target_max_query_failure_when_resolving_bounds_then_propagates_error(
     test_case: RuntimeTargetProbeFailureTestCase,

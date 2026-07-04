@@ -18,557 +18,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
 )
 from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import build_handlers
 
-ERROR_RENDERING_TEST_CASES: list[MainErrorRenderingTestCase] = [
-    MainErrorRenderingTestCase(
-        description="renders discovery errors without a traceback",
-        argv=["--project-dir", "/tmp/demo", "compile"],
-        error_type=ProjectConfigError,
-        error_factory=lambda project_dir: ProjectConfigError(
-            f"{project_dir / 'sqlbuild_project.toml'} must define non-empty string 'name'"
-        ),
-        expected_stderr_fragment=(
-            "error[D001]: /tmp/demo/sqlbuild_project.toml must define non-empty string 'name'"
-        ),
-        expected_exit_code=1,
-    ),
-    MainErrorRenderingTestCase(
-        description="renders cli user errors without a traceback",
-        argv=["--project-dir", "/tmp/demo", "compile"],
-        error_type=CliUserError,
-        error_factory=lambda project_dir: CliUserError("bad command usage", code="C999"),
-        expected_stderr_fragment="error[C999]: bad command usage",
-        expected_exit_code=1,
-    ),
-    MainErrorRenderingTestCase(
-        description="renders compile input errors with a code",
-        argv=["--project-dir", "/tmp/demo", "compile"],
-        error_type=CompileInputError,
-        error_factory=lambda project_dir: CompileInputError("model config is invalid"),
-        expected_stderr_fragment="error[P001]: model config is invalid",
-        expected_exit_code=1,
-    ),
-    MainErrorRenderingTestCase(
-        description="renders plain value errors without a traceback",
-        argv=["--project-dir", "/tmp/demo", "compile"],
-        error_type=ValueError,
-        error_factory=lambda project_dir: ValueError("invalid compile request"),
-        expected_stderr_fragment="error[E001]: invalid compile request",
-        expected_exit_code=1,
-    ),
-    MainErrorRenderingTestCase(
-        description="renders query user errors without a traceback",
-        argv=["query", "SELECT 1"],
-        error_type=CliUserError,
-        error_factory=lambda project_dir: CliUserError(
-            "query requires SQL",
-            code="C102",
-            help="pass SQL as the query argument",
-        ),
-        expected_stderr_fragment=(
-            "error[C102]: query requires SQL\n  = help: pass SQL as the query argument"
-        ),
-        expected_exit_code=1,
-    ),
-    MainErrorRenderingTestCase(
-        description="renders load timestamp cursor override validation errors",
-        argv=["load", "--start-cursor-ts", "not-a-timestamp"],
-        error_type=ValueError,
-        error_factory=lambda project_dir: ValueError("unused"),
-        expected_stderr_fragment=(
-            "error[S000]: --start-cursor-ts value 'not-a-timestamp' is not a valid ISO timestamp"
-        ),
-        expected_exit_code=1,
-    ),
-    MainErrorRenderingTestCase(
-        description="renders load integer cursor override validation errors",
-        argv=["load", "--start-cursor-int", "3.14"],
-        error_type=ValueError,
-        error_factory=lambda project_dir: ValueError("unused"),
-        expected_stderr_fragment=(
-            "error[S000]: --start-cursor-int value '3.14' is not a whole number"
-        ),
-        expected_exit_code=1,
-    ),
-]
-
-EXECUTION_JSON_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="dispatches build json flag",
-        argv=["build", "--json"],
-        expected_exit_code=0,
-        expected_json=True,
-    ),
-    MainTestCase(
-        description="dispatches test json flag",
-        argv=["test", "--json"],
-        expected_exit_code=0,
-        expected_json=True,
-    ),
-    MainTestCase(
-        description="dispatches audit json flag",
-        argv=["audit", "--json"],
-        expected_exit_code=0,
-        expected_json=True,
-    ),
-    MainTestCase(
-        description="dispatches seed json flag",
-        argv=["seed", "--json"],
-        expected_exit_code=0,
-        expected_json=True,
-    ),
-    MainTestCase(
-        description="dispatches load json flag",
-        argv=["load", "--json"],
-        expected_exit_code=0,
-        expected_json=True,
-    ),
-    MainTestCase(
-        description="dispatches scenario test json flag",
-        argv=["scenario", "test", "daily", "--json"],
-        expected_exit_code=0,
-        expected_json=True,
-    ),
-    MainTestCase(
-        description="dispatches build json output path",
-        argv=["build", "--json-output", "target/execution.json"],
-        expected_exit_code=0,
-        expected_json_output_path=Path("target/execution.json"),
-    ),
-    MainTestCase(
-        description="dispatches scenario test json output path",
-        argv=["scenario", "test", "daily", "--json-output", "target/scenario.json"],
-        expected_exit_code=0,
-        expected_json_output_path=Path("target/scenario.json"),
-    ),
-]
-
-FRESHNESS_JSON_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="passes freshness json flag",
-        argv=["freshness", "--json"],
-        expected_exit_code=8,
-        expected_json=True,
-    ),
-    MainTestCase(
-        description="passes freshness json output path",
-        argv=["freshness", "--json-output", "target/freshness.json"],
-        expected_exit_code=8,
-        expected_json_output_path=Path("target/freshness.json"),
-    ),
-]
-
-COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="returns parser error for command local debug",
-        argv=["build", "--debug"],
-        expected_exit_code=2,
-    ),
-    MainTestCase(
-        description="returns parser error for command local no color",
-        argv=["plan", "--no-color"],
-        expected_exit_code=2,
-    ),
-    MainTestCase(
-        description="returns parser error for removed top level run command",
-        argv=["run"],
-        expected_exit_code=2,
-    ),
-]
-
-SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="rejects no sql validation flag on scenario test",
-        argv=["scenario", "test", "order_totals_pass", "--no-sql-validation"],
-        expected_exit_code=2,
-    ),
-    MainTestCase(
-        description="rejects no sql validation flag on scenario capture",
-        argv=["scenario", "capture", "order_totals_pass", "--no-sql-validation"],
-        expected_exit_code=2,
-    ),
-]
-
-STATE_DISPATCH_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="dispatches state rollback command through injected handler",
-        argv=[
-            "--project-dir",
-            "/tmp/demo",
-            "--no-color",
-            "state",
-            "rollback",
-            "--backup-id",
-            "b1",
-        ],
-        expected_exit_code=11,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_no_color=True,
-        expected_state_command="rollback",
-        expected_state_backup_id="b1",
-    ),
-    MainTestCase(
-        description="dispatches state reset approval through injected handler",
-        argv=["state", "reset", "--auto-approve"],
-        expected_exit_code=12,
-        expected_state_command="reset",
-        expected_auto_approve=True,
-    ),
-    MainTestCase(
-        description="dispatches state checkpoints list through injected handler",
-        argv=["state", "checkpoints", "list", "--virtual-env", "dev"],
-        expected_exit_code=13,
-        expected_state_command="checkpoints",
-        expected_state_checkpoint_command="list",
-        expected_virtual_env="dev",
-    ),
-    MainTestCase(
-        description="dispatches state checkpoints show through injected handler",
-        argv=["state", "checkpoints", "show", "chk_1"],
-        expected_exit_code=14,
-        expected_state_command="checkpoints",
-        expected_state_checkpoint_command="show",
-        expected_state_checkpoint_id="chk_1",
-    ),
-    MainTestCase(
-        description="dispatches state checkpoints diff through injected handler",
-        argv=["state", "checkpoints", "diff", "chk_2", "--virtual-env", "dev"],
-        expected_exit_code=15,
-        expected_state_command="checkpoints",
-        expected_state_checkpoint_command="diff",
-        expected_state_checkpoint_id="chk_2",
-        expected_virtual_env="dev",
-    ),
-]
-
-COMPILE_DISPATCH_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="passes no sql validation flag to compile handler",
-        argv=["compile", "--no-sql-validation"],
-        expected_exit_code=3,
-        expected_project_dir=None,
-        expected_no_sql_validation=True,
-    ),
-    MainTestCase(
-        description="passes manifest flag to compile handler",
-        argv=["compile", "--manifest"],
-        expected_exit_code=3,
-        expected_project_dir=None,
-        expected_manifest=True,
-    ),
-    MainTestCase(
-        description="passes dag flag to compile handler",
-        argv=["compile", "--dag"],
-        expected_exit_code=3,
-        expected_project_dir=None,
-        expected_dag="",
-    ),
-    MainTestCase(
-        description="passes dag artifact path to compile handler",
-        argv=["compile", "--dag", "target/custom_dag.json"],
-        expected_exit_code=3,
-        expected_project_dir=None,
-        expected_dag="target/custom_dag.json",
-    ),
-    MainTestCase(
-        description="passes rich lineage mode to compile handler",
-        argv=["compile", "--lineage-mode", "rich"],
-        expected_exit_code=3,
-        expected_compile_lineage_mode=CompileLineageMode.RICH,
-    ),
-    MainTestCase(
-        description="passes none lineage mode to compile handler",
-        argv=["compile", "--lineage-mode", "none"],
-        expected_exit_code=3,
-        expected_compile_lineage_mode=CompileLineageMode.NONE,
-    ),
-    MainTestCase(
-        description="passes sqlbuild vars to compile handler",
-        argv=[
-            "compile",
-            "--vars",
-            '{"schema":"analytics","limit":10,"enabled":true,"optional":null,'
-            '"grants":{"role":"analyst"},"roles":["reporter"]}',
-        ],
-        expected_exit_code=3,
-        expected_vars={
-            "schema": "analytics",
-            "limit": 10,
-            "enabled": True,
-            "optional": None,
-            "grants": {"role": "analyst"},
-            "roles": ["reporter"],
-        },
-    ),
-]
-
-DAG_DISPATCH_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="passes dag json and no sql validation flags to handler",
-        argv=["dag", "--json", "--no-sql-validation"],
-        expected_exit_code=3,
-        expected_no_sql_validation=True,
-    ),
-    MainTestCase(
-        description="passes sqlbuild vars to dag handler",
-        argv=["dag", "--vars", '{"schema":"analytics"}'],
-        expected_exit_code=3,
-        expected_vars={"schema": "analytics"},
-    ),
-]
-
-DBT_EXECUTION_DISPATCH_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="dispatches dbt run and preserves dbt args",
-        argv=[
-            "--project-dir",
-            "/tmp/demo",
-            "dbt",
-            "run",
-            "--select",
-            "tag:nightly",
-            "--start-cursor-int",
-            "10",
-        ],
-        expected_exit_code=17,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=("--select", "tag:nightly", "--start-cursor-int", "10"),
-    ),
-    MainTestCase(
-        description="dispatches dbt build and preserves dbt args",
-        argv=[
-            "--project-dir",
-            "/tmp/demo",
-            "dbt",
-            "build",
-            "--select",
-            "tag:nightly",
-        ],
-        expected_exit_code=19,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=("--select", "tag:nightly"),
-    ),
-    MainTestCase(
-        description="dispatches dbt build with sqb project dir alias",
-        argv=[
-            "--sqb-project-dir",
-            "/tmp/demo",
-            "dbt",
-            "build",
-            "--project-dir",
-            "dbt_project",
-        ],
-        expected_exit_code=19,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=("--project-dir", "dbt_project"),
-    ),
-    MainTestCase(
-        description="dispatches dbt plan with sqb project dir alias and dbt flags",
-        argv=[
-            "--sqb-project-dir",
-            "/tmp/demo",
-            "dbt",
-            "plan",
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-            "--target",
-            "dev",
-            "--select",
-            "dbt_orders",
-        ],
-        expected_exit_code=16,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=(
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-            "--target",
-            "dev",
-            "--select",
-            "dbt_orders",
-        ),
-    ),
-    MainTestCase(
-        description="dispatches dbt test and preserves dbt args",
-        argv=[
-            "--project-dir",
-            "/tmp/demo",
-            "dbt",
-            "test",
-            "--select",
-            "test_type:data",
-            "--indirect-selection",
-            "eager",
-        ],
-        expected_exit_code=23,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=("--select", "test_type:data", "--indirect-selection", "eager"),
-    ),
-    MainTestCase(
-        description="dispatches dbt debug and preserves dbt args",
-        argv=[
-            "--project-dir",
-            "/tmp/demo",
-            "dbt",
-            "debug",
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-            "--no-connection",
-        ],
-        expected_exit_code=29,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=(
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-            "--no-connection",
-        ),
-    ),
-    MainTestCase(
-        description="dispatches dbt debug with sqb project dir alias",
-        argv=[
-            "--sqb-project-dir",
-            "/tmp/demo",
-            "dbt",
-            "debug",
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-        ],
-        expected_exit_code=29,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=(
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-        ),
-    ),
-    MainTestCase(
-        description="dispatches dbt lineage and preserves dbt args",
-        argv=[
-            "--project-dir",
-            "/tmp/demo",
-            "dbt",
-            "lineage",
-            "downstream_orders",
-            "--format",
-            "json",
-            "--project-dir",
-            "dbt_project",
-        ],
-        expected_exit_code=31,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=(
-            "downstream_orders",
-            "--format",
-            "json",
-            "--project-dir",
-            "dbt_project",
-        ),
-    ),
-    MainTestCase(
-        description="dispatches dbt diff and preserves dbt args",
-        argv=[
-            "--project-dir",
-            "/tmp/demo",
-            "dbt",
-            "diff",
-            "--select",
-            "dbt_orders",
-            "--full",
-            "--target",
-            "prod",
-        ],
-        expected_exit_code=41,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=("--select", "dbt_orders", "--full", "--target", "prod"),
-    ),
-    MainTestCase(
-        description="dispatches dbt diff with sqb project dir alias",
-        argv=[
-            "--sqb-project-dir",
-            "/tmp/demo",
-            "dbt",
-            "diff",
-            "--select",
-            "dbt_orders",
-            "--schema-only",
-        ],
-        expected_exit_code=41,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=("--select", "dbt_orders", "--schema-only"),
-    ),
-    MainTestCase(
-        description="dispatches dbt clone and preserves dbt args",
-        argv=[
-            "--project-dir",
-            "/tmp/demo",
-            "dbt",
-            "clone",
-            "--select",
-            "dbt_orders",
-            "--hard-copy",
-            "--target",
-            "dev",
-        ],
-        expected_exit_code=43,
-        expected_project_dir=Path("/tmp/demo"),
-        expected_dbt_args=("--select", "dbt_orders", "--hard-copy", "--target", "dev"),
-    ),
-]
-
-DBT_INIT_DISPATCH_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="dispatches dbt init options including production git ref",
-        argv=[
-            "--project-dir",
-            "/tmp/workspace",
-            "dbt",
-            "init",
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-            "--profile",
-            "analytics_profile",
-            "--target",
-            "dev",
-            "--sqb-output-dir",
-            "sqlbuild_project",
-            "--dry-run",
-            "--overwrite",
-            "--skip-dbt-debug",
-            "--prod-git-ref",
-            "prod",
-        ],
-        expected_exit_code=37,
-        expected_project_dir=Path("/tmp/workspace"),
-        expected_dbt_init_project_dir="dbt_project",
-        expected_dbt_init_profiles_dir="profiles",
-        expected_dbt_init_profile_name="analytics_profile",
-        expected_dbt_init_target_name="dev",
-        expected_dbt_init_sqb_output_dir="sqlbuild_project",
-        expected_dbt_init_dry_run=True,
-        expected_dbt_init_overwrite=True,
-        expected_dbt_init_skip_dbt_debug=True,
-        expected_dbt_init_production_git_ref="prod",
-    ),
-    MainTestCase(
-        description="dispatches minimal dbt init with default optional flags",
-        argv=["dbt", "init", "--project-dir", "dbt_project"],
-        expected_exit_code=38,
-        expected_project_dir=Path.cwd(),
-        expected_dbt_init_project_dir="dbt_project",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -579,7 +28,7 @@ DBT_INIT_DISPATCH_TEST_CASES: list[MainTestCase] = [
             expected_exit_code=0,
         )
     ],
-    ids=["returns zero for root help"],
+    ids=lambda case: case.description,
 )
 def test_given_root_help_arguments_when_running_main_then_it_returns_expected_exit_code(
     test_case: MainTestCase,
@@ -598,7 +47,7 @@ def test_given_root_help_arguments_when_running_main_then_it_returns_expected_ex
             expected_exit_code=7,
         )
     ],
-    ids=["dispatches compile command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_compile_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -646,7 +95,7 @@ def test_given_compile_command_arguments_when_running_with_dependencies_then_it_
             ),
         )
     ],
-    ids=["dispatches dbt plan and preserves dbt args"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -681,7 +130,7 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
             expected_exit_code=41,
         )
     ],
-    ids=["dbt command does not create diagnostics target before auto-init"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_not_create_target(
     test_case: MainTestCase,
@@ -707,8 +156,214 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_EXECUTION_DISPATCH_TEST_CASES,
-    ids=[case.description for case in DBT_EXECUTION_DISPATCH_TEST_CASES],
+    [
+        MainTestCase(
+            description="dispatches dbt run and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "run",
+                "--select",
+                "tag:nightly",
+                "--start-cursor-int",
+                "10",
+            ],
+            expected_exit_code=17,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--select", "tag:nightly", "--start-cursor-int", "10"),
+        ),
+        MainTestCase(
+            description="dispatches dbt build and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "build",
+                "--select",
+                "tag:nightly",
+            ],
+            expected_exit_code=19,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--select", "tag:nightly"),
+        ),
+        MainTestCase(
+            description="dispatches dbt build with sqb project dir alias",
+            argv=[
+                "--sqb-project-dir",
+                "/tmp/demo",
+                "dbt",
+                "build",
+                "--project-dir",
+                "dbt_project",
+            ],
+            expected_exit_code=19,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--project-dir", "dbt_project"),
+        ),
+        MainTestCase(
+            description="dispatches dbt plan with sqb project dir alias and dbt flags",
+            argv=[
+                "--sqb-project-dir",
+                "/tmp/demo",
+                "dbt",
+                "plan",
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+                "--target",
+                "dev",
+                "--select",
+                "dbt_orders",
+            ],
+            expected_exit_code=16,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=(
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+                "--target",
+                "dev",
+                "--select",
+                "dbt_orders",
+            ),
+        ),
+        MainTestCase(
+            description="dispatches dbt test and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "test",
+                "--select",
+                "test_type:data",
+                "--indirect-selection",
+                "eager",
+            ],
+            expected_exit_code=23,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--select", "test_type:data", "--indirect-selection", "eager"),
+        ),
+        MainTestCase(
+            description="dispatches dbt debug and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "debug",
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+                "--no-connection",
+            ],
+            expected_exit_code=29,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=(
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+                "--no-connection",
+            ),
+        ),
+        MainTestCase(
+            description="dispatches dbt debug with sqb project dir alias",
+            argv=[
+                "--sqb-project-dir",
+                "/tmp/demo",
+                "dbt",
+                "debug",
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+            ],
+            expected_exit_code=29,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=(
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+            ),
+        ),
+        MainTestCase(
+            description="dispatches dbt lineage and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "lineage",
+                "downstream_orders",
+                "--format",
+                "json",
+                "--project-dir",
+                "dbt_project",
+            ],
+            expected_exit_code=31,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=(
+                "downstream_orders",
+                "--format",
+                "json",
+                "--project-dir",
+                "dbt_project",
+            ),
+        ),
+        MainTestCase(
+            description="dispatches dbt diff and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "diff",
+                "--select",
+                "dbt_orders",
+                "--full",
+                "--target",
+                "prod",
+            ],
+            expected_exit_code=41,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--select", "dbt_orders", "--full", "--target", "prod"),
+        ),
+        MainTestCase(
+            description="dispatches dbt diff with sqb project dir alias",
+            argv=[
+                "--sqb-project-dir",
+                "/tmp/demo",
+                "dbt",
+                "diff",
+                "--select",
+                "dbt_orders",
+                "--schema-only",
+            ],
+            expected_exit_code=41,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--select", "dbt_orders", "--schema-only"),
+        ),
+        MainTestCase(
+            description="dispatches dbt clone and preserves dbt args",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "dbt",
+                "clone",
+                "--select",
+                "dbt_orders",
+                "--hard-copy",
+                "--target",
+                "dev",
+            ],
+            expected_exit_code=43,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_dbt_args=("--select", "dbt_orders", "--hard-copy", "--target", "dev"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -745,8 +400,51 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_INIT_DISPATCH_TEST_CASES,
-    ids=[case.description for case in DBT_INIT_DISPATCH_TEST_CASES],
+    [
+        MainTestCase(
+            description="dispatches dbt init options including production git ref",
+            argv=[
+                "--project-dir",
+                "/tmp/workspace",
+                "dbt",
+                "init",
+                "--project-dir",
+                "dbt_project",
+                "--profiles-dir",
+                "profiles",
+                "--profile",
+                "analytics_profile",
+                "--target",
+                "dev",
+                "--sqb-output-dir",
+                "sqlbuild_project",
+                "--dry-run",
+                "--overwrite",
+                "--skip-dbt-debug",
+                "--prod-git-ref",
+                "prod",
+            ],
+            expected_exit_code=37,
+            expected_project_dir=Path("/tmp/workspace"),
+            expected_dbt_init_project_dir="dbt_project",
+            expected_dbt_init_profiles_dir="profiles",
+            expected_dbt_init_profile_name="analytics_profile",
+            expected_dbt_init_target_name="dev",
+            expected_dbt_init_sqb_output_dir="sqlbuild_project",
+            expected_dbt_init_dry_run=True,
+            expected_dbt_init_overwrite=True,
+            expected_dbt_init_skip_dbt_debug=True,
+            expected_dbt_init_production_git_ref="prod",
+        ),
+        MainTestCase(
+            description="dispatches minimal dbt init with default optional flags",
+            argv=["dbt", "init", "--project-dir", "dbt_project"],
+            expected_exit_code=38,
+            expected_project_dir=Path.cwd(),
+            expected_dbt_init_project_dir="dbt_project",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_init_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -825,7 +523,7 @@ def test_given_dbt_init_arguments_when_running_with_dependencies_then_it_dispatc
             expected_exit_code=1,
         )
     ],
-    ids=["rejects dbt without subcommand"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_without_subcommand_when_running_with_dependencies_then_it_returns_cli_error(
     test_case: MainTestCase,
@@ -862,7 +560,7 @@ def test_given_dbt_without_subcommand_when_running_with_dependencies_then_it_ret
             expected_exit_code=8,
         )
     ],
-    ids=["dispatches clone command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_clone_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -942,7 +640,7 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
             expected_exit_code=6,
         )
     ],
-    ids=["dispatches diff command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -1050,7 +748,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
             expected_exit_code=7,
         )
     ],
-    ids=["dispatches promote command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_promote_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -1131,7 +829,7 @@ def test_given_promote_command_arguments_when_running_with_dependencies_then_it_
             expected_exit_code=7,
         )
     ],
-    ids=["dispatches rollback command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_rollback_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -1216,7 +914,7 @@ def test_given_rollback_command_arguments_when_running_with_dependencies_then_it
             expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
         )
     ],
-    ids=["dispatches scenario test with multiple selectors"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispatches_selectors(
     test_case: MainTestCase,
@@ -1316,8 +1014,57 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
 
 @pytest.mark.parametrize(
     "test_case",
-    EXECUTION_JSON_TEST_CASES,
-    ids=[case.description for case in EXECUTION_JSON_TEST_CASES],
+    [
+        MainTestCase(
+            description="dispatches build json flag",
+            argv=["build", "--json"],
+            expected_exit_code=0,
+            expected_json=True,
+        ),
+        MainTestCase(
+            description="dispatches test json flag",
+            argv=["test", "--json"],
+            expected_exit_code=0,
+            expected_json=True,
+        ),
+        MainTestCase(
+            description="dispatches audit json flag",
+            argv=["audit", "--json"],
+            expected_exit_code=0,
+            expected_json=True,
+        ),
+        MainTestCase(
+            description="dispatches seed json flag",
+            argv=["seed", "--json"],
+            expected_exit_code=0,
+            expected_json=True,
+        ),
+        MainTestCase(
+            description="dispatches load json flag",
+            argv=["load", "--json"],
+            expected_exit_code=0,
+            expected_json=True,
+        ),
+        MainTestCase(
+            description="dispatches scenario test json flag",
+            argv=["scenario", "test", "daily", "--json"],
+            expected_exit_code=0,
+            expected_json=True,
+        ),
+        MainTestCase(
+            description="dispatches build json output path",
+            argv=["build", "--json-output", "target/execution.json"],
+            expected_exit_code=0,
+            expected_json_output_path=Path("target/execution.json"),
+        ),
+        MainTestCase(
+            description="dispatches scenario test json output path",
+            argv=["scenario", "test", "daily", "--json-output", "target/scenario.json"],
+            expected_exit_code=0,
+            expected_json_output_path=Path("target/scenario.json"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_execution_command_json_flag_when_running_then_dispatches_json_output(
     test_case: MainTestCase,
@@ -1375,7 +1122,7 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
             expected_virtual_env="dev",
         )
     ],
-    ids=["passes freshness flags to handler"],
+    ids=lambda case: case.description,
 )
 def test_given_freshness_arguments_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
@@ -1445,8 +1192,21 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
 
 @pytest.mark.parametrize(
     "test_case",
-    FRESHNESS_JSON_TEST_CASES,
-    ids=[case.description for case in FRESHNESS_JSON_TEST_CASES],
+    [
+        MainTestCase(
+            description="passes freshness json flag",
+            argv=["freshness", "--json"],
+            expected_exit_code=8,
+            expected_json=True,
+        ),
+        MainTestCase(
+            description="passes freshness json output path",
+            argv=["freshness", "--json-output", "target/freshness.json"],
+            expected_exit_code=8,
+            expected_json_output_path=Path("target/freshness.json"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_freshness_json_arguments_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
@@ -1515,7 +1275,7 @@ def test_given_freshness_json_arguments_when_running_then_dispatches_expected_ar
             expected_reload=True,
         )
     ],
-    ids=["passes load selectors reload flag and cursor overrides to handler"],
+    ids=lambda case: case.description,
 )
 def test_given_load_flags_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
@@ -1572,7 +1332,7 @@ def test_given_load_flags_when_running_then_dispatches_expected_arguments(
             expected_exit_code=1,
         )
     ],
-    ids=["rejects local scenario retain flag"],
+    ids=lambda case: case.description,
 )
 def test_given_local_scenario_test_with_retain_when_running_then_returns_cli_error(
     test_case: MainTestCase,
@@ -1594,8 +1354,19 @@ def test_given_local_scenario_test_with_retain_when_running_then_returns_cli_err
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES,
-    ids=[case.description for case in SCENARIO_NO_SQL_VALIDATION_FLAG_ERROR_TEST_CASES],
+    [
+        MainTestCase(
+            description="rejects no sql validation flag on scenario test",
+            argv=["scenario", "test", "order_totals_pass", "--no-sql-validation"],
+            expected_exit_code=2,
+        ),
+        MainTestCase(
+            description="rejects no sql validation flag on scenario capture",
+            argv=["scenario", "capture", "order_totals_pass", "--no-sql-validation"],
+            expected_exit_code=2,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_command_when_no_sql_validation_flag_passed_then_parser_rejects_it(
     test_case: MainTestCase,
@@ -1632,7 +1403,7 @@ def test_given_scenario_command_when_no_sql_validation_flag_passed_then_parser_r
             expected_scenario_selectors=("order_totals_pass", "tests/scenarios/nested"),
         )
     ],
-    ids=["dispatches scenario capture with multiple selectors"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_capture_arguments_when_running_with_dependencies_then_dispatches_selectors(
     test_case: MainTestCase,
@@ -1722,7 +1493,7 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
             expected_exit_code=4,
         )
     ],
-    ids=["dispatches query command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_query_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -1759,7 +1530,7 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
             expected_no_color=True,
         )
     ],
-    ids=["dispatches debug command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_debug_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -1807,7 +1578,7 @@ def test_given_debug_command_arguments_when_running_with_dependencies_then_it_di
             expected_column_lineage_mode=ColumnLineageMode.FAST,
         )
     ],
-    ids=["dispatches lineage command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -1891,7 +1662,7 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
             expected_exit_code=6,
         )
     ],
-    ids=["passes verbose flag to diff handler"],
+    ids=lambda case: case.description,
 )
 def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_flag(
     test_case: MainTestCase,
@@ -1949,7 +1720,7 @@ def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_fl
             expected_exit_code=6,
         )
     ],
-    ids=["passes diff example caps to handler"],
+    ids=lambda case: case.description,
 )
 def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
     test_case: MainTestCase,
@@ -2007,7 +1778,7 @@ def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
             expected_direct_state_history_versions=5,
         )
     ],
-    ids=["dispatches janitor command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -2045,8 +1816,58 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 
 @pytest.mark.parametrize(
     "test_case",
-    STATE_DISPATCH_TEST_CASES,
-    ids=[case.description for case in STATE_DISPATCH_TEST_CASES],
+    [
+        MainTestCase(
+            description="dispatches state rollback command through injected handler",
+            argv=[
+                "--project-dir",
+                "/tmp/demo",
+                "--no-color",
+                "state",
+                "rollback",
+                "--backup-id",
+                "b1",
+            ],
+            expected_exit_code=11,
+            expected_project_dir=Path("/tmp/demo"),
+            expected_no_color=True,
+            expected_state_command="rollback",
+            expected_state_backup_id="b1",
+        ),
+        MainTestCase(
+            description="dispatches state reset approval through injected handler",
+            argv=["state", "reset", "--auto-approve"],
+            expected_exit_code=12,
+            expected_state_command="reset",
+            expected_auto_approve=True,
+        ),
+        MainTestCase(
+            description="dispatches state checkpoints list through injected handler",
+            argv=["state", "checkpoints", "list", "--virtual-env", "dev"],
+            expected_exit_code=13,
+            expected_state_command="checkpoints",
+            expected_state_checkpoint_command="list",
+            expected_virtual_env="dev",
+        ),
+        MainTestCase(
+            description="dispatches state checkpoints show through injected handler",
+            argv=["state", "checkpoints", "show", "chk_1"],
+            expected_exit_code=14,
+            expected_state_command="checkpoints",
+            expected_state_checkpoint_command="show",
+            expected_state_checkpoint_id="chk_1",
+        ),
+        MainTestCase(
+            description="dispatches state checkpoints diff through injected handler",
+            argv=["state", "checkpoints", "diff", "chk_2", "--virtual-env", "dev"],
+            expected_exit_code=15,
+            expected_state_command="checkpoints",
+            expected_state_checkpoint_command="diff",
+            expected_state_checkpoint_id="chk_2",
+            expected_virtual_env="dev",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_state_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -2123,7 +1944,7 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
             expected_playground_template="dagster",
         )
     ],
-    ids=["dispatches playground command through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_playground_command_when_running_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -2169,7 +1990,7 @@ def test_given_playground_command_when_running_then_it_dispatches_handler(
             expected_skills_force=True,
         )
     ],
-    ids=["dispatches skills update through injected handler"],
+    ids=lambda case: case.description,
 )
 def test_given_skills_update_command_when_running_then_it_dispatches_handler(
     test_case: MainTestCase,
@@ -2203,8 +2024,67 @@ def test_given_skills_update_command_when_running_then_it_dispatches_handler(
 
 @pytest.mark.parametrize(
     "test_case",
-    COMPILE_DISPATCH_TEST_CASES,
-    ids=[case.description for case in COMPILE_DISPATCH_TEST_CASES],
+    [
+        MainTestCase(
+            description="passes no sql validation flag to compile handler",
+            argv=["compile", "--no-sql-validation"],
+            expected_exit_code=3,
+            expected_project_dir=None,
+            expected_no_sql_validation=True,
+        ),
+        MainTestCase(
+            description="passes manifest flag to compile handler",
+            argv=["compile", "--manifest"],
+            expected_exit_code=3,
+            expected_project_dir=None,
+            expected_manifest=True,
+        ),
+        MainTestCase(
+            description="passes dag flag to compile handler",
+            argv=["compile", "--dag"],
+            expected_exit_code=3,
+            expected_project_dir=None,
+            expected_dag="",
+        ),
+        MainTestCase(
+            description="passes dag artifact path to compile handler",
+            argv=["compile", "--dag", "target/custom_dag.json"],
+            expected_exit_code=3,
+            expected_project_dir=None,
+            expected_dag="target/custom_dag.json",
+        ),
+        MainTestCase(
+            description="passes rich lineage mode to compile handler",
+            argv=["compile", "--lineage-mode", "rich"],
+            expected_exit_code=3,
+            expected_compile_lineage_mode=CompileLineageMode.RICH,
+        ),
+        MainTestCase(
+            description="passes none lineage mode to compile handler",
+            argv=["compile", "--lineage-mode", "none"],
+            expected_exit_code=3,
+            expected_compile_lineage_mode=CompileLineageMode.NONE,
+        ),
+        MainTestCase(
+            description="passes sqlbuild vars to compile handler",
+            argv=[
+                "compile",
+                "--vars",
+                '{"schema":"analytics","limit":10,"enabled":true,"optional":null,'
+                '"grants":{"role":"analyst"},"roles":["reporter"]}',
+            ],
+            expected_exit_code=3,
+            expected_vars={
+                "schema": "analytics",
+                "limit": 10,
+                "enabled": True,
+                "optional": None,
+                "grants": {"role": "analyst"},
+                "roles": ["reporter"],
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
@@ -2290,8 +2170,21 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
 
 @pytest.mark.parametrize(
     "test_case",
-    DAG_DISPATCH_TEST_CASES,
-    ids=[case.description for case in DAG_DISPATCH_TEST_CASES],
+    [
+        MainTestCase(
+            description="passes dag json and no sql validation flags to handler",
+            argv=["dag", "--json", "--no-sql-validation"],
+            expected_exit_code=3,
+            expected_no_sql_validation=True,
+        ),
+        MainTestCase(
+            description="passes sqlbuild vars to dag handler",
+            argv=["dag", "--vars", '{"schema":"analytics"}'],
+            expected_exit_code=3,
+            expected_vars={"schema": "analytics"},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dag_command_arguments_when_running_then_dispatches_expected_handler(
     test_case: MainTestCase,
@@ -2323,68 +2216,65 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
     ]
 
 
-BUILD_EXECUTION_FLAG_TEST_CASES: list[MainTestCase] = [
-    MainTestCase(
-        description="passes global debug and no color plus full refresh to build handler",
-        argv=[
-            "--debug",
-            "--no-color",
-            "build",
-            "--full-refresh",
-            "--allow-snapshot-full-refresh",
-            "--allow-snapshot-schema-change",
-        ],
-        expected_exit_code=5,
-        expected_full_refresh=True,
-        expected_allow_snapshot_full_refresh=True,
-        expected_allow_snapshot_schema_change=True,
-        expected_no_color=True,
-        expected_debug=True,
-    ),
-    MainTestCase(
-        description="passes no load to build handler",
-        argv=["build", "--no-load"],
-        expected_exit_code=5,
-        expected_load_sources=False,
-    ),
-    MainTestCase(
-        description="passes load to build handler",
-        argv=["build", "--load"],
-        expected_exit_code=5,
-        expected_load_sources=True,
-    ),
-    MainTestCase(
-        description="passes reload to build handler",
-        argv=["build", "--reload"],
-        expected_exit_code=5,
-        expected_reload=True,
-    ),
-    MainTestCase(
-        description="passes no tests to build handler",
-        argv=["build", "--no-tests"],
-        expected_exit_code=5,
-        expected_run_tests=False,
-    ),
-    MainTestCase(
-        description="passes no audits to build handler",
-        argv=["build", "--no-audits"],
-        expected_exit_code=5,
-        expected_run_audits=False,
-    ),
-    MainTestCase(
-        description="passes no tests and no audits to build handler",
-        argv=["build", "--no-tests", "--no-audits"],
-        expected_exit_code=5,
-        expected_run_tests=False,
-        expected_run_audits=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_EXECUTION_FLAG_TEST_CASES,
-    ids=[case.description for case in BUILD_EXECUTION_FLAG_TEST_CASES],
+    [
+        MainTestCase(
+            description="passes global debug and no color plus full refresh to build handler",
+            argv=[
+                "--debug",
+                "--no-color",
+                "build",
+                "--full-refresh",
+                "--allow-snapshot-full-refresh",
+                "--allow-snapshot-schema-change",
+            ],
+            expected_exit_code=5,
+            expected_full_refresh=True,
+            expected_allow_snapshot_full_refresh=True,
+            expected_allow_snapshot_schema_change=True,
+            expected_no_color=True,
+            expected_debug=True,
+        ),
+        MainTestCase(
+            description="passes no load to build handler",
+            argv=["build", "--no-load"],
+            expected_exit_code=5,
+            expected_load_sources=False,
+        ),
+        MainTestCase(
+            description="passes load to build handler",
+            argv=["build", "--load"],
+            expected_exit_code=5,
+            expected_load_sources=True,
+        ),
+        MainTestCase(
+            description="passes reload to build handler",
+            argv=["build", "--reload"],
+            expected_exit_code=5,
+            expected_reload=True,
+        ),
+        MainTestCase(
+            description="passes no tests to build handler",
+            argv=["build", "--no-tests"],
+            expected_exit_code=5,
+            expected_run_tests=False,
+        ),
+        MainTestCase(
+            description="passes no audits to build handler",
+            argv=["build", "--no-audits"],
+            expected_exit_code=5,
+            expected_run_audits=False,
+        ),
+        MainTestCase(
+            description="passes no tests and no audits to build handler",
+            argv=["build", "--no-tests", "--no-audits"],
+            expected_exit_code=5,
+            expected_run_tests=False,
+            expected_run_audits=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
@@ -2491,7 +2381,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             expected_select=("orders",),
         )
     ],
-    ids=["passes global no color to plan handler"],
+    ids=lambda case: case.description,
 )
 def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
@@ -2586,7 +2476,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             expected_load_sources=False,
         )
     ],
-    ids=["passes no load to plan handler"],
+    ids=lambda case: case.description,
 )
 def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
     test_case: MainTestCase,
@@ -2654,7 +2544,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
             expected_select=("orders", "customers", "payments"),
         )
     ],
-    ids=["passes selectors from select file to plan handler"],
+    ids=lambda case: case.description,
 )
 def test_given_select_file_when_running_then_dispatches_file_selectors(
     test_case: MainTestCase,
@@ -2731,7 +2621,7 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
             expected_scenario_selectors=("orders", "customers", "payments"),
         )
     ],
-    ids=["passes scenario selectors from select file to capture handler"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_select_file_when_running_then_dispatches_file_selectors(
     test_case: MainTestCase,
@@ -2781,8 +2671,24 @@ def test_given_scenario_select_file_when_running_then_dispatches_file_selectors(
 
 @pytest.mark.parametrize(
     "test_case",
-    COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES,
-    ids=[case.description for case in COMMAND_LOCAL_GLOBAL_FLAG_ERROR_TEST_CASES],
+    [
+        MainTestCase(
+            description="returns parser error for command local debug",
+            argv=["build", "--debug"],
+            expected_exit_code=2,
+        ),
+        MainTestCase(
+            description="returns parser error for command local no color",
+            argv=["plan", "--no-color"],
+            expected_exit_code=2,
+        ),
+        MainTestCase(
+            description="returns parser error for removed top level run command",
+            argv=["run"],
+            expected_exit_code=2,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_command_local_global_flags_when_running_main_then_it_returns_parser_error(
     test_case: MainTestCase,
@@ -2805,7 +2711,7 @@ def test_given_command_local_global_flags_when_running_main_then_it_returns_pars
             expected_exit_code=2,
         )
     ],
-    ids=["colorizes parser error prefix when color is supported"],
+    ids=lambda case: case.description,
 )
 def test_given_parser_error_and_color_support_when_running_main_then_it_colorizes_error_prefix(
     test_case: MainTestCase,
@@ -2831,7 +2737,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
             expected_exit_code=2,
         )
     ],
-    ids=["leaves parser error plain when no color is requested"],
+    ids=lambda case: case.description,
 )
 def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain_error_prefix(
     test_case: MainTestCase,
@@ -2851,8 +2757,79 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
 
 @pytest.mark.parametrize(
     "test_case",
-    ERROR_RENDERING_TEST_CASES,
-    ids=[case.description for case in ERROR_RENDERING_TEST_CASES],
+    [
+        MainErrorRenderingTestCase(
+            description="renders discovery errors without a traceback",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            error_type=ProjectConfigError,
+            error_factory=lambda project_dir: ProjectConfigError(
+                f"{project_dir / 'sqlbuild_project.toml'} must define non-empty string 'name'"
+            ),
+            expected_stderr_fragment=(
+                "error[D001]: /tmp/demo/sqlbuild_project.toml must define non-empty string 'name'"
+            ),
+            expected_exit_code=1,
+        ),
+        MainErrorRenderingTestCase(
+            description="renders cli user errors without a traceback",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            error_type=CliUserError,
+            error_factory=lambda project_dir: CliUserError("bad command usage", code="C999"),
+            expected_stderr_fragment="error[C999]: bad command usage",
+            expected_exit_code=1,
+        ),
+        MainErrorRenderingTestCase(
+            description="renders compile input errors with a code",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            error_type=CompileInputError,
+            error_factory=lambda project_dir: CompileInputError("model config is invalid"),
+            expected_stderr_fragment="error[P001]: model config is invalid",
+            expected_exit_code=1,
+        ),
+        MainErrorRenderingTestCase(
+            description="renders plain value errors without a traceback",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            error_type=ValueError,
+            error_factory=lambda project_dir: ValueError("invalid compile request"),
+            expected_stderr_fragment="error[E001]: invalid compile request",
+            expected_exit_code=1,
+        ),
+        MainErrorRenderingTestCase(
+            description="renders query user errors without a traceback",
+            argv=["query", "SELECT 1"],
+            error_type=CliUserError,
+            error_factory=lambda project_dir: CliUserError(
+                "query requires SQL",
+                code="C102",
+                help="pass SQL as the query argument",
+            ),
+            expected_stderr_fragment=(
+                "error[C102]: query requires SQL\n  = help: pass SQL as the query argument"
+            ),
+            expected_exit_code=1,
+        ),
+        MainErrorRenderingTestCase(
+            description="renders load timestamp cursor override validation errors",
+            argv=["load", "--start-cursor-ts", "not-a-timestamp"],
+            error_type=ValueError,
+            error_factory=lambda project_dir: ValueError("unused"),
+            expected_stderr_fragment=(
+                "error[S000]: --start-cursor-ts value 'not-a-timestamp' is not a valid ISO timestamp"
+            ),
+            expected_exit_code=1,
+        ),
+        MainErrorRenderingTestCase(
+            description="renders load integer cursor override validation errors",
+            argv=["load", "--start-cursor-int", "3.14"],
+            error_type=ValueError,
+            error_factory=lambda project_dir: ValueError("unused"),
+            expected_stderr_fragment=(
+                "error[S000]: --start-cursor-int value '3.14' is not a whole number"
+            ),
+            expected_exit_code=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_returns_one(
     test_case: MainErrorRenderingTestCase,
@@ -2930,7 +2907,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
             expected_exit_code=1,
         )
     ],
-    ids=["colorizes expected cli error prefix and help label"],
+    ids=lambda case: case.description,
 )
 def test_given_expected_cli_error_and_color_support_when_running_main_then_it_colorizes_stderr(
     test_case: MainErrorRenderingTestCase,

@@ -24,28 +24,26 @@ from tests.unit.src.sqlbuild.virtual.state.helpers.helpers import (
 
 NOW: datetime = datetime(2026, 5, 27, 12, 0, 0, tzinfo=UTC)
 
-DETACHED_RETENTION_TEST_CASES: tuple[DetachedRetentionHelperTestCase, ...] = (
-    DetachedRetentionHelperTestCase(
-        description="retention zero cleans detached refs immediately and retains active refs",
-        retention_days=0,
-        expected_cleanup_target_names=("old_detached", "new_detached", "unknown_age"),
-        expected_cleanup_relation_names=("orders__v_new", "orders__v_old"),
-        expected_retained_relation_names=("orders__v_active",),
-    ),
-    DetachedRetentionHelperTestCase(
-        description="positive retention cleans only detached environments older than retention",
-        retention_days=7,
-        expected_cleanup_target_names=("old_detached",),
-        expected_cleanup_relation_names=("orders__v_old",),
-        expected_retained_relation_names=("orders__v_active", "orders__v_new"),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DETACHED_RETENTION_TEST_CASES,
-    ids=[case.description for case in DETACHED_RETENTION_TEST_CASES],
+    (
+        DetachedRetentionHelperTestCase(
+            description="retention zero cleans detached refs immediately and retains active refs",
+            retention_days=0,
+            expected_cleanup_target_names=("old_detached", "new_detached", "unknown_age"),
+            expected_cleanup_relation_names=("orders__v_new", "orders__v_old"),
+            expected_retained_relation_names=("orders__v_active",),
+        ),
+        DetachedRetentionHelperTestCase(
+            description="positive retention cleans only detached environments older than retention",
+            retention_days=7,
+            expected_cleanup_target_names=("old_detached",),
+            expected_cleanup_relation_names=("orders__v_old",),
+            expected_retained_relation_names=("orders__v_active", "orders__v_new"),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_virtual_environments_when_inspecting_detached_retention_then_classifies_refs(
     test_case: DetachedRetentionHelperTestCase,

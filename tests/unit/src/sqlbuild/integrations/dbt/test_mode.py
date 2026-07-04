@@ -20,7 +20,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtModeGuardTes
             expected_help_fragment=None,
         )
     ],
-    ids=["allows dbt interop in standard mode"],
+    ids=lambda case: case.description,
 )
 def test_given_standard_project_mode_when_enforcing_dbt_interop_support_then_allows_execution(
     test_case: DbtModeGuardTestCase,
@@ -50,7 +50,7 @@ def test_given_standard_project_mode_when_enforcing_dbt_interop_support_then_all
             expected_help_fragment="Disable virtual_environments",
         )
     ],
-    ids=["blocks dbt interop in virtual mode"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_project_mode_when_enforcing_dbt_interop_support_then_raises_error(
     test_case: DbtModeGuardTestCase,

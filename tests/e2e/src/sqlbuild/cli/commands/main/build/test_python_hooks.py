@@ -24,51 +24,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     table_exists,
 )
 
-PRE_HOOK_FAILURE_BUILD_TEST_CASES: tuple[PythonHookFailureBuildE2ETestCase, ...] = (
-    PythonHookFailureBuildE2ETestCase(
-        description="pre hook failure shows failing Python hook row",
-        model_sql=dedent(
-            """
-            MODEL (
-              materialized table,
-              pre_hooks [python("fail_hook", message: "intentional pre failure")]
-            );
-
-            SELECT 1 AS id
-            """
-        ).strip()
-        + "\n",
-        expected_exit_code=1,
-        expected_output_fragments=(
-            "pre_hook  python  fail_hook",
-            'pre_hooks[0] python("fail_hook") failed: intentional pre failure',
-        ),
-        expected_present_tables=(),
-        expected_absent_tables=("orders",),
-    ),
-    PythonHookFailureBuildE2ETestCase(
-        description="pre hook failure shows failing SQL hook row",
-        model_sql=dedent(
-            """
-            MODEL (
-              materialized table,
-              pre_hooks [sql("SELECT * FROM missing_hook_table")]
-            );
-
-            SELECT 1 AS id
-            """
-        ).strip()
-        + "\n",
-        expected_exit_code=1,
-        expected_output_fragments=(
-            "pre_hook  sql     SELECT * FROM missing_hook_table",
-            "missing_hook_table",
-        ),
-        expected_present_tables=(),
-        expected_absent_tables=("orders",),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -85,7 +40,7 @@ PRE_HOOK_FAILURE_BUILD_TEST_CASES: tuple[PythonHookFailureBuildE2ETestCase, ...]
             expected_absent_tables=("upstream_orders", "downstream_orders"),
         )
     ],
-    ids=["pre hook skip skips model and downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_python_pre_hook_returns_skip_when_building_then_model_and_downstream_skip(
     test_case: PythonHookSkipBuildE2ETestCase,
@@ -169,7 +124,7 @@ def test_given_python_pre_hook_returns_skip_when_building_then_model_and_downstr
             expected_rows=((1,),),
         )
     ],
-    ids=["post hook skip keeps model relation and skips downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_python_post_hook_skip_when_building_then_keeps_relation_and_skips_downstream(
     test_case: PythonHookSkipBuildE2ETestCase,
@@ -256,7 +211,7 @@ def test_given_python_post_hook_skip_when_building_then_keeps_relation_and_skips
             ),
         )
     ],
-    ids=["build executes Python pre and post hooks"],
+    ids=lambda case: case.description,
 )
 def test_given_project_with_python_hooks_when_building_then_hooks_execute(
     test_case: PythonHooksBuildE2ETestCase,
@@ -404,7 +359,7 @@ def test_given_project_with_python_hooks_when_building_then_hooks_execute(
             ),
         )
     ],
-    ids=["build executes Python hooks across materialization kinds"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializations_run_hooks(
     test_case: PythonHooksLifecycleMatrixBuildE2ETestCase,
@@ -652,7 +607,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
             expected_absent_tables=("downstream_orders",),
         )
     ],
-    ids=["post hook failure blocks downstream model"],
+    ids=lambda case: case.description,
 )
 def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_blocked(
     test_case: PythonHookFailureBuildE2ETestCase,
@@ -722,8 +677,51 @@ def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_b
 
 @pytest.mark.parametrize(
     "test_case",
-    PRE_HOOK_FAILURE_BUILD_TEST_CASES,
-    ids=[case.description for case in PRE_HOOK_FAILURE_BUILD_TEST_CASES],
+    (
+        PythonHookFailureBuildE2ETestCase(
+            description="pre hook failure shows failing Python hook row",
+            model_sql=dedent(
+                """
+            MODEL (
+              materialized table,
+              pre_hooks [python("fail_hook", message: "intentional pre failure")]
+            );
+
+            SELECT 1 AS id
+            """
+            ).strip()
+            + "\n",
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "pre_hook  python  fail_hook",
+                'pre_hooks[0] python("fail_hook") failed: intentional pre failure',
+            ),
+            expected_present_tables=(),
+            expected_absent_tables=("orders",),
+        ),
+        PythonHookFailureBuildE2ETestCase(
+            description="pre hook failure shows failing SQL hook row",
+            model_sql=dedent(
+                """
+            MODEL (
+              materialized table,
+              pre_hooks [sql("SELECT * FROM missing_hook_table")]
+            );
+
+            SELECT 1 AS id
+            """
+            ).strip()
+            + "\n",
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "pre_hook  sql     SELECT * FROM missing_hook_table",
+                "missing_hook_table",
+            ),
+            expected_present_tables=(),
+            expected_absent_tables=("orders",),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_pre_hook_failure_when_building_then_cli_shows_failing_hook_row(
     test_case: PythonHookFailureBuildE2ETestCase,
@@ -788,7 +786,7 @@ def test_given_pre_hook_failure_when_building_then_cli_shows_failing_hook_row(
             ),
         )
     ],
-    ids=["long Python hook name is truncated at display cap"],
+    ids=lambda case: case.description,
 )
 def test_given_long_python_hook_name_when_building_then_cli_truncates_label_at_cap(
     test_case: LongPythonHookNameBuildE2ETestCase,
@@ -848,7 +846,7 @@ def test_given_long_python_hook_name_when_building_then_cli_truncates_label_at_c
             expected_hook_log_rows=(("customer_snapshot", "post_hooks"),),
         )
     ],
-    ids=["snapshot build executes Python pre and post hooks"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_with_python_hooks_when_building_then_hooks_execute(
     test_case: SnapshotPythonHooksBuildE2ETestCase,

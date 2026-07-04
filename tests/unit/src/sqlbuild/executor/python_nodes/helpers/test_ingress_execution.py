@@ -36,7 +36,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
             expected_call_order=("prepare_ingress_orders", "load_ingress_orders"),
         )
     ],
-    ids=["runs task before dependent loader"],
+    ids=lambda case: case.description,
 )
 def test_given_ingress_task_to_loader_when_executing_then_runs_in_lifecycle_order(
     test_case: PythonIngressLoaderExecutorTestCase,

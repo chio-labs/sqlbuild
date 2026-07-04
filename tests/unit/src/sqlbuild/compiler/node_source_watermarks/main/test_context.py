@@ -63,125 +63,127 @@ MODEL_C: NodeSourceWatermarkIdentity = NodeSourceWatermarkIdentity(
     node_name="c",
 )
 
-TEST_CASES: list[NodeSourceWatermarkPayloadBuildTestCase] = [
-    NodeSourceWatermarkPayloadBuildTestCase(
-        description="records direct current source freshness as direct watermark",
-        required_source_identities=(EVENTS,),
-        direct_source_records={
-            EVENTS: source_record(EVENTS, data_version="2026-06-29T15:37:00", data_hash="evt-2")
-        },
-        inherited_payloads=(),
-        expected_complete=True,
-        expected_source_hashes=("evt-2",),
-        expected_source_kinds=("direct",),
-        expected_unknown_reasons=(),
-    ),
-    NodeSourceWatermarkPayloadBuildTestCase(
-        description="marks inherited upstream source watermarks as inherited",
-        required_source_identities=(EVENTS,),
-        direct_source_records={},
-        inherited_payloads=(
-            NodeSourceWatermarkPayload(
-                version=1,
-                complete=True,
-                sources=(
-                    source_entry(
-                        EVENTS,
-                        data_version="2026-06-29T15:00:00",
-                        data_hash="evt-1",
-                    ),
-                ),
-            ),
-        ),
-        expected_complete=True,
-        expected_source_hashes=("evt-1",),
-        expected_source_kinds=("inherited",),
-        expected_unknown_reasons=(),
-    ),
-    NodeSourceWatermarkPayloadBuildTestCase(
-        description="marks required source missing from direct and inherited facts as unknown",
-        required_source_identities=(EVENTS, PAYMENTS),
-        direct_source_records={
-            EVENTS: source_record(EVENTS, data_version="2026-06-29T15:37:00", data_hash="evt-2")
-        },
-        inherited_payloads=(),
-        expected_complete=False,
-        expected_source_hashes=("evt-2",),
-        expected_source_kinds=("direct",),
-        expected_unknown_reasons=("missing_upstream_watermark",),
-    ),
-    NodeSourceWatermarkPayloadBuildTestCase(
-        description="keeps oldest timestamp version across multiple inherited inputs",
-        required_source_identities=(EVENTS,),
-        direct_source_records={},
-        inherited_payloads=(
-            NodeSourceWatermarkPayload(
-                version=1,
-                complete=True,
-                sources=(
-                    source_entry(
-                        EVENTS,
-                        data_version="2026-06-29T15:40:00",
-                        data_hash="evt-2",
-                    ),
-                ),
-            ),
-            NodeSourceWatermarkPayload(
-                version=1,
-                complete=True,
-                sources=(
-                    source_entry(
-                        EVENTS,
-                        data_version="2026-06-29T15:00:00",
-                        data_hash="evt-1",
-                    ),
-                ),
-            ),
-        ),
-        expected_complete=True,
-        expected_source_hashes=("evt-1",),
-        expected_source_kinds=("inherited",),
-        expected_unknown_reasons=(),
-    ),
-    NodeSourceWatermarkPayloadBuildTestCase(
-        description="marks mixed non-orderable versions as unknown",
-        required_source_identities=(EVENTS,),
-        direct_source_records={},
-        inherited_payloads=(
-            NodeSourceWatermarkPayload(
-                version=1,
-                complete=True,
-                sources=(
-                    source_entry(
-                        EVENTS,
-                        value_kind="string",
-                        data_version="snapshot-a",
-                        data_hash="hash-a",
-                    ),
-                ),
-            ),
-            NodeSourceWatermarkPayload(
-                version=1,
-                complete=True,
-                sources=(
-                    source_entry(
-                        EVENTS,
-                        value_kind="string",
-                        data_version="snapshot-b",
-                        data_hash="hash-b",
-                    ),
-                ),
-            ),
-        ),
-        expected_complete=False,
-        expected_source_hashes=(),
-        expected_source_kinds=(),
-        expected_unknown_reasons=("mixed_non_orderable_watermark",),
-    ),
-]
 
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NodeSourceWatermarkPayloadBuildTestCase(
+            description="records direct current source freshness as direct watermark",
+            required_source_identities=(EVENTS,),
+            direct_source_records={
+                EVENTS: source_record(EVENTS, data_version="2026-06-29T15:37:00", data_hash="evt-2")
+            },
+            inherited_payloads=(),
+            expected_complete=True,
+            expected_source_hashes=("evt-2",),
+            expected_source_kinds=("direct",),
+            expected_unknown_reasons=(),
+        ),
+        NodeSourceWatermarkPayloadBuildTestCase(
+            description="marks inherited upstream source watermarks as inherited",
+            required_source_identities=(EVENTS,),
+            direct_source_records={},
+            inherited_payloads=(
+                NodeSourceWatermarkPayload(
+                    version=1,
+                    complete=True,
+                    sources=(
+                        source_entry(
+                            EVENTS,
+                            data_version="2026-06-29T15:00:00",
+                            data_hash="evt-1",
+                        ),
+                    ),
+                ),
+            ),
+            expected_complete=True,
+            expected_source_hashes=("evt-1",),
+            expected_source_kinds=("inherited",),
+            expected_unknown_reasons=(),
+        ),
+        NodeSourceWatermarkPayloadBuildTestCase(
+            description="marks required source missing from direct and inherited facts as unknown",
+            required_source_identities=(EVENTS, PAYMENTS),
+            direct_source_records={
+                EVENTS: source_record(EVENTS, data_version="2026-06-29T15:37:00", data_hash="evt-2")
+            },
+            inherited_payloads=(),
+            expected_complete=False,
+            expected_source_hashes=("evt-2",),
+            expected_source_kinds=("direct",),
+            expected_unknown_reasons=("missing_upstream_watermark",),
+        ),
+        NodeSourceWatermarkPayloadBuildTestCase(
+            description="keeps oldest timestamp version across multiple inherited inputs",
+            required_source_identities=(EVENTS,),
+            direct_source_records={},
+            inherited_payloads=(
+                NodeSourceWatermarkPayload(
+                    version=1,
+                    complete=True,
+                    sources=(
+                        source_entry(
+                            EVENTS,
+                            data_version="2026-06-29T15:40:00",
+                            data_hash="evt-2",
+                        ),
+                    ),
+                ),
+                NodeSourceWatermarkPayload(
+                    version=1,
+                    complete=True,
+                    sources=(
+                        source_entry(
+                            EVENTS,
+                            data_version="2026-06-29T15:00:00",
+                            data_hash="evt-1",
+                        ),
+                    ),
+                ),
+            ),
+            expected_complete=True,
+            expected_source_hashes=("evt-1",),
+            expected_source_kinds=("inherited",),
+            expected_unknown_reasons=(),
+        ),
+        NodeSourceWatermarkPayloadBuildTestCase(
+            description="marks mixed non-orderable versions as unknown",
+            required_source_identities=(EVENTS,),
+            direct_source_records={},
+            inherited_payloads=(
+                NodeSourceWatermarkPayload(
+                    version=1,
+                    complete=True,
+                    sources=(
+                        source_entry(
+                            EVENTS,
+                            value_kind="string",
+                            data_version="snapshot-a",
+                            data_hash="hash-a",
+                        ),
+                    ),
+                ),
+                NodeSourceWatermarkPayload(
+                    version=1,
+                    complete=True,
+                    sources=(
+                        source_entry(
+                            EVENTS,
+                            value_kind="string",
+                            data_version="snapshot-b",
+                            data_hash="hash-b",
+                        ),
+                    ),
+                ),
+            ),
+            expected_complete=False,
+            expected_source_hashes=(),
+            expected_source_kinds=(),
+            expected_unknown_reasons=("mixed_non_orderable_watermark",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_watermark_facts_when_building_payload_then_merges_conservatively(
     test_case: NodeSourceWatermarkPayloadBuildTestCase,
 ) -> None:
@@ -205,47 +207,44 @@ def test_given_watermark_facts_when_building_payload_then_merges_conservatively(
     )
 
 
-CONTEXT_TEST_CASES: list[NodeSourceWatermarkExecutionContextTestCase] = [
-    NodeSourceWatermarkExecutionContextTestCase(
-        description="buffers direct source watermark record and updates cache",
-        node_identity=MODEL_A,
-        source_identities_by_node={MODEL_A: (EVENTS,)},
-        direct_source_identities_by_node={MODEL_A: (EVENTS,)},
-        upstream_node_identities_by_node={},
-        expected_record_written=True,
-        expected_complete=True,
-        expected_source_hashes=("evt-2",),
-        expected_unknown_reasons=(),
-    ),
-    NodeSourceWatermarkExecutionContextTestCase(
-        description="inherits same run upstream payload from context cache",
-        node_identity=MODEL_B,
-        source_identities_by_node={MODEL_A: (EVENTS,), MODEL_B: (EVENTS,)},
-        direct_source_identities_by_node={MODEL_A: (EVENTS,)},
-        upstream_node_identities_by_node={MODEL_B: (MODEL_A,)},
-        expected_record_written=True,
-        expected_complete=True,
-        expected_source_hashes=("evt-2",),
-        expected_unknown_reasons=(),
-    ),
-    NodeSourceWatermarkExecutionContextTestCase(
-        description="does not record nodes without source ancestry",
-        node_identity=MODEL_C,
-        source_identities_by_node={},
-        direct_source_identities_by_node={},
-        upstream_node_identities_by_node={},
-        expected_record_written=False,
-        expected_complete=None,
-        expected_source_hashes=(),
-        expected_unknown_reasons=(),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    CONTEXT_TEST_CASES,
-    ids=[case.description for case in CONTEXT_TEST_CASES],
+    [
+        NodeSourceWatermarkExecutionContextTestCase(
+            description="buffers direct source watermark record and updates cache",
+            node_identity=MODEL_A,
+            source_identities_by_node={MODEL_A: (EVENTS,)},
+            direct_source_identities_by_node={MODEL_A: (EVENTS,)},
+            upstream_node_identities_by_node={},
+            expected_record_written=True,
+            expected_complete=True,
+            expected_source_hashes=("evt-2",),
+            expected_unknown_reasons=(),
+        ),
+        NodeSourceWatermarkExecutionContextTestCase(
+            description="inherits same run upstream payload from context cache",
+            node_identity=MODEL_B,
+            source_identities_by_node={MODEL_A: (EVENTS,), MODEL_B: (EVENTS,)},
+            direct_source_identities_by_node={MODEL_A: (EVENTS,)},
+            upstream_node_identities_by_node={MODEL_B: (MODEL_A,)},
+            expected_record_written=True,
+            expected_complete=True,
+            expected_source_hashes=("evt-2",),
+            expected_unknown_reasons=(),
+        ),
+        NodeSourceWatermarkExecutionContextTestCase(
+            description="does not record nodes without source ancestry",
+            node_identity=MODEL_C,
+            source_identities_by_node={},
+            direct_source_identities_by_node={},
+            upstream_node_identities_by_node={},
+            expected_record_written=False,
+            expected_complete=None,
+            expected_source_hashes=(),
+            expected_unknown_reasons=(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_execution_context_when_node_succeeds_then_buffers_record_and_updates_cache(
     test_case: NodeSourceWatermarkExecutionContextTestCase,

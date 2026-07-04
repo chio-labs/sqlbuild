@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
             ),
         )
     ],
-    ids=["materializes fixture SQL into scenario target table"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_fixture_plan_when_executing_then_creates_scenario_table(
     test_case: ExecuteScenarioFixtureTestCase,
@@ -71,7 +71,7 @@ def test_given_scenario_fixture_plan_when_executing_then_creates_scenario_table(
             expected_error_fragment="failed target __sqb_51b385aebe20__source__raw__orders",
         )
     ],
-    ids=["returns failed result with fixture context on create failure"],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_failure_when_executing_fixture_then_returns_failed_result(
     test_case: ExecuteScenarioFixtureTestCase,
@@ -104,7 +104,7 @@ def test_given_adapter_failure_when_executing_fixture_then_returns_failed_result
             expected_executed_target_count=1,
         )
     ],
-    ids=["stops fixture execution after first failure"],
+    ids=lambda case: case.description,
 )
 def test_given_fixture_failure_when_executing_fixtures_then_stops_before_next_fixture(
     test_case: ExecuteScenarioFixturesTestCase,

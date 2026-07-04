@@ -49,7 +49,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb.snapshot_helpers import (
             ),
         )
     ],
-    ids=["duckdb snapshot adapter methods execute valid SQL for each snapshot shape"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates_history(
     test_case: SnapshotAdapterMethodsTestCase,
@@ -310,7 +310,7 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
             expected_rows_after_failure=((1, "basic", "2024-01-01 00:00:00", None),),
         )
     ],
-    ids=["snapshot transaction rolls back when insert fails after close"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_insert_failure_when_transaction_rolls_back_then_history_is_unchanged(
     test_case: SnapshotTransactionRollbackTestCase,

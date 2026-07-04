@@ -16,140 +16,35 @@ from tests.unit.src.sqlbuild.adapter.shared._test_types import (
     TypeNormalizationTestCase,
 )
 
-TYPE_NORMALIZATION_TEST_CASES: list[TypeNormalizationTestCase] = [
-    TypeNormalizationTestCase(
-        description="normalizes snowflake number precision and scale",
-        dialect="snowflake",
-        raw_type="NUMBER(38,0)",
-        expected_type=NormalizedType(
-            normalized_name="DECIMAL(38,0)",
-            family=TypeFamily.DECIMAL,
-            precision=38,
-            scale=0,
-        ),
-    ),
-    TypeNormalizationTestCase(
-        description="normalizes bigquery int64 to integer family",
-        dialect="bigquery",
-        raw_type="INT64",
-        expected_type=NormalizedType(normalized_name="INT64", family=TypeFamily.INTEGER),
-    ),
-    TypeNormalizationTestCase(
-        description="normalizes bigquery string to normalized string family",
-        dialect="bigquery",
-        raw_type="STRING",
-        expected_type=NormalizedType(normalized_name="STRING", family=TypeFamily.STRING),
-    ),
-]
-
-FALLBACK_TYPE_NORMALIZATION_TEST_CASES: list[TypeNormalizationTestCase] = [
-    TypeNormalizationTestCase(
-        description="fallback normalizes bigquery integer alias",
-        dialect="bigquery",
-        raw_type="INTEGER",
-        expected_type=NormalizedType(normalized_name="INT64", family=TypeFamily.INTEGER),
-    ),
-    TypeNormalizationTestCase(
-        description="fallback preserves decimal precision and scale",
-        dialect="snowflake",
-        raw_type="NUMBER(10,2)",
-        expected_type=NormalizedType(
-            normalized_name="NUMBER(10,2)",
-            family=TypeFamily.DECIMAL,
-            precision=10,
-            scale=2,
-        ),
-    ),
-]
-
-TYPE_EQUALITY_TEST_CASES: list[TypeEqualityTestCase] = [
-    TypeEqualityTestCase(
-        description="treats bigquery integer aliases as equal",
-        dialect="bigquery",
-        left_type="INT64",
-        right_type="INTEGER",
-        expected_equal=True,
-    ),
-    TypeEqualityTestCase(
-        description="treats bigquery boolean aliases as equal",
-        dialect="bigquery",
-        left_type="BOOL",
-        right_type="BOOLEAN",
-        expected_equal=True,
-    ),
-    TypeEqualityTestCase(
-        description="keeps snowflake varying string lengths distinct",
-        dialect="snowflake",
-        left_type="VARCHAR(16777216)",
-        right_type="TEXT",
-        expected_equal=False,
-    ),
-    TypeEqualityTestCase(
-        description="treats snowflake timestamp alias as timestamp_ntz",
-        dialect="snowflake",
-        left_type="TIMESTAMP",
-        right_type="TIMESTAMP_NTZ",
-        expected_equal=True,
-    ),
-    TypeEqualityTestCase(
-        description="keeps snowflake timestamp time zone variants distinct",
-        dialect="snowflake",
-        left_type="TIMESTAMP_NTZ",
-        right_type="TIMESTAMP_TZ",
-        expected_equal=False,
-    ),
-]
-
-FALLBACK_TYPE_EQUALITY_TEST_CASES: list[TypeEqualityTestCase] = [
-    TypeEqualityTestCase(
-        description="fallback treats bigquery string aliases as equal",
-        dialect="bigquery",
-        left_type="STRING",
-        right_type="TEXT",
-        expected_equal=True,
-    ),
-    TypeEqualityTestCase(
-        description="fallback keeps decimal scale differences distinct",
-        dialect="snowflake",
-        left_type="NUMBER(10,2)",
-        right_type="NUMBER(10,3)",
-        expected_equal=False,
-    ),
-    TypeEqualityTestCase(
-        description="fallback treats snowflake timestamp alias as timestamp_ntz",
-        dialect="snowflake",
-        left_type="TIMESTAMP",
-        right_type="TIMESTAMP_NTZ",
-        expected_equal=True,
-    ),
-]
-
-NUMERIC_FAMILY_TEST_CASES: list[NumericFamilyTestCase] = [
-    NumericFamilyTestCase(
-        description="classifies bigquery integer alias as integer family",
-        dialect="bigquery",
-        raw_type="INTEGER",
-        expected_family="integer",
-    ),
-    NumericFamilyTestCase(
-        description="classifies snowflake number as decimal family",
-        dialect="snowflake",
-        raw_type="NUMBER(10,2)",
-        expected_family="decimal",
-    ),
-    NumericFamilyTestCase(
-        description="does not classify string as numeric",
-        dialect="bigquery",
-        raw_type="STRING",
-        expected_family=None,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TYPE_NORMALIZATION_TEST_CASES,
-    ids=[case.description for case in TYPE_NORMALIZATION_TEST_CASES],
+    [
+        TypeNormalizationTestCase(
+            description="normalizes snowflake number precision and scale",
+            dialect="snowflake",
+            raw_type="NUMBER(38,0)",
+            expected_type=NormalizedType(
+                normalized_name="DECIMAL(38,0)",
+                family=TypeFamily.DECIMAL,
+                precision=38,
+                scale=0,
+            ),
+        ),
+        TypeNormalizationTestCase(
+            description="normalizes bigquery int64 to integer family",
+            dialect="bigquery",
+            raw_type="INT64",
+            expected_type=NormalizedType(normalized_name="INT64", family=TypeFamily.INTEGER),
+        ),
+        TypeNormalizationTestCase(
+            description="normalizes bigquery string to normalized string family",
+            dialect="bigquery",
+            raw_type="STRING",
+            expected_type=NormalizedType(normalized_name="STRING", family=TypeFamily.STRING),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_type_string_when_normalizing_then_it_returns_expected_shape(
     test_case: TypeNormalizationTestCase,
@@ -161,8 +56,26 @@ def test_given_type_string_when_normalizing_then_it_returns_expected_shape(
 
 @pytest.mark.parametrize(
     "test_case",
-    FALLBACK_TYPE_NORMALIZATION_TEST_CASES,
-    ids=[case.description for case in FALLBACK_TYPE_NORMALIZATION_TEST_CASES],
+    [
+        TypeNormalizationTestCase(
+            description="fallback normalizes bigquery integer alias",
+            dialect="bigquery",
+            raw_type="INTEGER",
+            expected_type=NormalizedType(normalized_name="INT64", family=TypeFamily.INTEGER),
+        ),
+        TypeNormalizationTestCase(
+            description="fallback preserves decimal precision and scale",
+            dialect="snowflake",
+            raw_type="NUMBER(10,2)",
+            expected_type=NormalizedType(
+                normalized_name="NUMBER(10,2)",
+                family=TypeFamily.DECIMAL,
+                precision=10,
+                scale=2,
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_type_string_when_normalizing_without_polyglot_then_it_returns_expected_shape(
     test_case: TypeNormalizationTestCase,
@@ -177,8 +90,44 @@ def test_given_type_string_when_normalizing_without_polyglot_then_it_returns_exp
 
 @pytest.mark.parametrize(
     "test_case",
-    TYPE_EQUALITY_TEST_CASES,
-    ids=[case.description for case in TYPE_EQUALITY_TEST_CASES],
+    [
+        TypeEqualityTestCase(
+            description="treats bigquery integer aliases as equal",
+            dialect="bigquery",
+            left_type="INT64",
+            right_type="INTEGER",
+            expected_equal=True,
+        ),
+        TypeEqualityTestCase(
+            description="treats bigquery boolean aliases as equal",
+            dialect="bigquery",
+            left_type="BOOL",
+            right_type="BOOLEAN",
+            expected_equal=True,
+        ),
+        TypeEqualityTestCase(
+            description="keeps snowflake varying string lengths distinct",
+            dialect="snowflake",
+            left_type="VARCHAR(16777216)",
+            right_type="TEXT",
+            expected_equal=False,
+        ),
+        TypeEqualityTestCase(
+            description="treats snowflake timestamp alias as timestamp_ntz",
+            dialect="snowflake",
+            left_type="TIMESTAMP",
+            right_type="TIMESTAMP_NTZ",
+            expected_equal=True,
+        ),
+        TypeEqualityTestCase(
+            description="keeps snowflake timestamp time zone variants distinct",
+            dialect="snowflake",
+            left_type="TIMESTAMP_NTZ",
+            right_type="TIMESTAMP_TZ",
+            expected_equal=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_type_strings_when_comparing_then_it_returns_expected_equality(
     test_case: TypeEqualityTestCase,
@@ -194,8 +143,30 @@ def test_given_type_strings_when_comparing_then_it_returns_expected_equality(
 
 @pytest.mark.parametrize(
     "test_case",
-    FALLBACK_TYPE_EQUALITY_TEST_CASES,
-    ids=[case.description for case in FALLBACK_TYPE_EQUALITY_TEST_CASES],
+    [
+        TypeEqualityTestCase(
+            description="fallback treats bigquery string aliases as equal",
+            dialect="bigquery",
+            left_type="STRING",
+            right_type="TEXT",
+            expected_equal=True,
+        ),
+        TypeEqualityTestCase(
+            description="fallback keeps decimal scale differences distinct",
+            dialect="snowflake",
+            left_type="NUMBER(10,2)",
+            right_type="NUMBER(10,3)",
+            expected_equal=False,
+        ),
+        TypeEqualityTestCase(
+            description="fallback treats snowflake timestamp alias as timestamp_ntz",
+            dialect="snowflake",
+            left_type="TIMESTAMP",
+            right_type="TIMESTAMP_NTZ",
+            expected_equal=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_type_strings_when_comparing_without_polyglot_then_it_returns_expected_equality(
     test_case: TypeEqualityTestCase,
@@ -214,8 +185,27 @@ def test_given_type_strings_when_comparing_without_polyglot_then_it_returns_expe
 
 @pytest.mark.parametrize(
     "test_case",
-    NUMERIC_FAMILY_TEST_CASES,
-    ids=[case.description for case in NUMERIC_FAMILY_TEST_CASES],
+    [
+        NumericFamilyTestCase(
+            description="classifies bigquery integer alias as integer family",
+            dialect="bigquery",
+            raw_type="INTEGER",
+            expected_family="integer",
+        ),
+        NumericFamilyTestCase(
+            description="classifies snowflake number as decimal family",
+            dialect="snowflake",
+            raw_type="NUMBER(10,2)",
+            expected_family="decimal",
+        ),
+        NumericFamilyTestCase(
+            description="does not classify string as numeric",
+            dialect="bigquery",
+            raw_type="STRING",
+            expected_family=None,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_type_string_when_resolving_numeric_family_then_it_returns_expected_family(
     test_case: NumericFamilyTestCase,
@@ -238,7 +228,7 @@ def test_given_type_string_when_resolving_numeric_family_then_it_returns_expecte
             expected_family="float",
         )
     ],
-    ids=["fallback classifies float64 as float family"],
+    ids=lambda case: case.description,
 )
 def test_given_type_string_without_polyglot_when_resolving_numeric_family_then_it_returns_expected(
     test_case: NumericFamilyTestCase,

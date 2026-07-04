@@ -26,33 +26,6 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_source_load_nodes_project,
 )
 
-LOADER_DAG_EXPANSION_TEST_CASES: tuple[LoaderDagExpansionTestCase, ...] = (
-    LoaderDagExpansionTestCase(
-        description="direct terminal source preserves upstream intermediate references only",
-        selected_names=frozenset({"raw_orders"}),
-        execute_dependency_names=frozenset(),
-        expected_selected_names=frozenset({"raw_orders"}),
-        expected_upstream_names={
-            "raw_orders": ("fetch_orders",),
-            "fetch_orders": (),
-        },
-        expected_intermediate_source_names=(),
-        expected_intermediate_loader_flags=(),
-    ),
-    LoaderDagExpansionTestCase(
-        description="expanded terminal source selects upstream intermediate loaders",
-        selected_names=frozenset({"raw_orders"}),
-        execute_dependency_names=frozenset({"raw_orders"}),
-        expected_selected_names=frozenset({"fetch_orders", "raw_orders"}),
-        expected_upstream_names={
-            "raw_orders": ("fetch_orders",),
-            "fetch_orders": (),
-        },
-        expected_intermediate_source_names=("fetch_orders",),
-        expected_intermediate_loader_flags=(True,),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -86,7 +59,7 @@ LOADER_DAG_EXPANSION_TEST_CASES: tuple[LoaderDagExpansionTestCase, ...] = (
             ),
         )
     ],
-    ids=["builds terminal and intermediate source-load entries"],
+    ids=lambda case: case.description,
 )
 def test_given_selected_source_load_keys_when_building_entries_then_returns_ordered_load_nodes(
     test_case: SourceLoadNodesTestCase,
@@ -116,8 +89,33 @@ def test_given_selected_source_load_keys_when_building_entries_then_returns_orde
 
 @pytest.mark.parametrize(
     "test_case",
-    LOADER_DAG_EXPANSION_TEST_CASES,
-    ids=[case.description for case in LOADER_DAG_EXPANSION_TEST_CASES],
+    (
+        LoaderDagExpansionTestCase(
+            description="direct terminal source preserves upstream intermediate references only",
+            selected_names=frozenset({"raw_orders"}),
+            execute_dependency_names=frozenset(),
+            expected_selected_names=frozenset({"raw_orders"}),
+            expected_upstream_names={
+                "raw_orders": ("fetch_orders",),
+                "fetch_orders": (),
+            },
+            expected_intermediate_source_names=(),
+            expected_intermediate_loader_flags=(),
+        ),
+        LoaderDagExpansionTestCase(
+            description="expanded terminal source selects upstream intermediate loaders",
+            selected_names=frozenset({"raw_orders"}),
+            execute_dependency_names=frozenset({"raw_orders"}),
+            expected_selected_names=frozenset({"fetch_orders", "raw_orders"}),
+            expected_upstream_names={
+                "raw_orders": ("fetch_orders",),
+                "fetch_orders": (),
+            },
+            expected_intermediate_source_names=("fetch_orders",),
+            expected_intermediate_loader_flags=(True,),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_terminal_source_when_expanding_loader_deps_then_adds_intermediate_source(
     test_case: LoaderDagExpansionTestCase,

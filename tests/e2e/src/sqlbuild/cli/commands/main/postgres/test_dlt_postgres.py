@@ -36,7 +36,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_model_rows=((2, 20), (3, 30)),
         )
     ],
-    ids=["loads sqlite dlt source into postgres raw schema"],
+    ids=lambda case: case.description,
 )
 def test_given_dlt_source_when_loading_to_postgres_then_table_is_materialized_and_queryable(
     tmp_path: Path,

@@ -83,7 +83,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres.helpers impor
             expected_backup_actions=(StateMigrationAction.INIT.value,),
         )
     ],
-    ids=["initializes backs up rolls back and resets state tables"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_are_managed(
     test_case: PostgresStateBackendLifecycleTestCase,
@@ -164,7 +164,7 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
             expected_issue_count=23,
         )
     ],
-    ids=["reports invalid manually-created state schema"],
+    ids=lambda case: case.description,
 )
 def test_given_broken_postgres_state_tables_when_validating_then_reports_schema_issues(
     test_case: PostgresStateBackendValidationTestCase,
@@ -197,7 +197,7 @@ def test_given_broken_postgres_state_tables_when_validating_then_reports_schema_
             expected_message_fragment="No state backup is available",
         )
     ],
-    ids=["blocks rollback when no backup exists"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_without_backup_when_rolling_back_then_blocks_cleanly(
     test_case: PostgresStateBackendErrorTestCase,
@@ -226,7 +226,7 @@ def test_given_postgres_state_without_backup_when_rolling_back_then_blocks_clean
             expected_message_fragment="Cannot backup invalid state schema",
         )
     ],
-    ids=["blocks backup when state schema is invalid"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_postgres_state_schema_when_creating_backup_then_blocks_cleanly(
     test_case: PostgresStateBackendErrorTestCase,
@@ -263,7 +263,7 @@ def test_given_invalid_postgres_state_schema_when_creating_backup_then_blocks_cl
             ),
         )
     ],
-    ids=["rolls back to explicitly selected backup"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backups_when_rolling_back_explicit_id_then_restores_backup(
     test_case: PostgresStateBackendExplicitRollbackTestCase,
@@ -330,7 +330,7 @@ def test_given_postgres_state_backups_when_rolling_back_explicit_id_then_restore
             ),
         )
     ],
-    ids=["initializes all phase two state tables"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_initializing_then_creates_all_state_tables(
     test_case: PostgresStateBackendTableCreationTestCase,
@@ -369,7 +369,7 @@ def test_given_postgres_state_backend_when_initializing_then_creates_all_state_t
             expected_issue_kind=StateSchemaValidationIssueKind.MISSING_INDEX.value,
         )
     ],
-    ids=["reports missing node results latest index"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_required_index_is_missing_then_validation_reports_it(
     test_case: PostgresStateBackendIndexValidationTestCase,
@@ -410,7 +410,7 @@ def test_given_postgres_state_backend_when_required_index_is_missing_then_valida
             expected_issue_kind=StateSchemaValidationIssueKind.MISSING_COLUMN.value,
         )
     ],
-    ids=["reports missing node results payload column"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_node_results_column_missing_then_validation_reports_it(
     test_case: PostgresStateBackendColumnValidationTestCase,
@@ -456,7 +456,7 @@ def test_given_postgres_state_backend_when_node_results_column_missing_then_vali
             expected_replaced_relation_name="fact_orders__v_abc123_replaced",
         )
     ],
-    ids=["persists model physical relation and virtual environment refs"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_upserting_core_records_then_round_trips_state(
     test_case: PostgresStateBackendCoreRecordsTestCase,
@@ -645,7 +645,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
             expected_source_names_after_replace=("raw.orders",),
         )
     ],
-    ids=["persists and replaces source freshness observations"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips_records(
     test_case: PostgresStateBackendSourceFreshnessTestCase,
@@ -763,7 +763,7 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
             expected_ref_count_after_replace=0,
         )
     ],
-    ids=["persists seed versions and replaces seed refs"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_records(
     test_case: PostgresStateBackendSeedRefTestCase,
@@ -930,7 +930,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
             expected_pruned_count=1,
         )
     ],
-    ids=["persists python node versions and separate VDE refs"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_upserting_python_node_identity_then_round_trips_refs(
     test_case: PostgresStateBackendPythonNodeIdentityTestCase,
@@ -1087,7 +1087,7 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
             expected_rollback_row_count=5,
         )
     ],
-    ids=["stores and reads VDE node result history by environment"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and_status(
     test_case: PostgresStateBackendNodeResultTestCase,
@@ -1287,7 +1287,7 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
             expected_message_fragment="must match replacement virtual_environment_name",
         )
     ],
-    ids=["blocks mismatched source freshness virtual environment"],
+    ids=lambda case: case.description,
 )
 def test_given_mismatched_postgres_source_freshness_record_when_replacing_then_blocks_cleanly(
     test_case: PostgresStateBackendErrorTestCase,
@@ -1329,7 +1329,7 @@ def test_given_mismatched_postgres_source_freshness_record_when_replacing_then_b
             expected_message_fragment="Duplicate source freshness record",
         )
     ],
-    ids=["blocks duplicate source freshness records"],
+    ids=lambda case: case.description,
 )
 def test_given_duplicate_postgres_source_freshness_records_when_replacing_then_blocks_cleanly(
     test_case: PostgresStateBackendErrorTestCase,
@@ -1385,7 +1385,7 @@ def test_given_duplicate_postgres_source_freshness_records_when_replacing_then_b
             expected_active_lock_count=1,
         )
     ],
-    ids=["acquires blocks releases and replaces expired locks"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_managing_locks_then_enforces_active_owner(
     test_case: PostgresStateBackendLockTestCase,
@@ -1475,7 +1475,7 @@ def test_given_postgres_state_backend_when_managing_locks_then_enforces_active_o
             expected_ref_count=1,
         )
     ],
-    ids=["rolls back VDE ref replacement when duplicate rows violate unique index"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_rolls_back(
     test_case: PostgresStateBackendTransactionRollbackTestCase,
@@ -1546,7 +1546,7 @@ def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_ro
             expected_replaced_relation_name="fact_orders__v_abc123_replaced",
         )
     ],
-    ids=["preserves created_at across current-state replacements"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_upserting_same_identity_then_created_at_is_preserved(
     test_case: PostgresStateBackendCoreRecordsTestCase,
@@ -1619,7 +1619,7 @@ def test_given_postgres_state_backend_when_upserting_same_identity_then_created_
             expected_replaced_relation_name="fact_orders__v_abc123_replaced",
         )
     ],
-    ids=["preserves created_at for physical relations and virtual environments"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created_at(
     test_case: PostgresStateBackendCoreRecordsTestCase,
@@ -1727,7 +1727,7 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
             expected_virtual_environment_name="dev",
         )
     ],
-    ids=["records operation and reconcile events"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_recording_operation_events_then_they_round_trip(
     test_case: PostgresStateBackendOperationEventTestCase,
@@ -1809,7 +1809,7 @@ def test_given_postgres_state_backend_when_recording_operation_events_then_they_
             expected_active_lock_count=1,
         )
     ],
-    ids=["allows only one winner across two Postgres connections"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_state_backend_when_two_connections_acquire_same_lock_then_only_one_succeeds(
     test_case: PostgresStateBackendConcurrentLockTestCase,

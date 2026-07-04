@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.state._test_types import (
             "  cp_2  unknown\n",
         )
     ],
-    ids=["preserves no-color checkpoint list output"],
+    ids=lambda case: case.description,
 )
 def test_given_checkpoints_when_formatting_list_without_color_then_preserves_output(
     test_case: CheckpointOutputTestCase,
@@ -71,7 +71,7 @@ def test_given_checkpoints_when_formatting_list_without_color_then_preserves_out
             "  seed_a                   seed_hash_a\n",
         )
     ],
-    ids=["preserves no-color checkpoint show output"],
+    ids=lambda case: case.description,
 )
 def test_given_checkpoint_model_refs_when_formatting_show_without_color_then_preserves_output(
     test_case: CheckpointOutputTestCase,
@@ -121,7 +121,7 @@ def test_given_checkpoint_model_refs_when_formatting_show_without_color_then_pre
             "  seed_checkpoint_only     <missing> -> checkpoint_only_seed_hash\n",
         )
     ],
-    ids=["preserves no-color checkpoint diff output"],
+    ids=lambda case: case.description,
 )
 def test_given_checkpoint_model_refs_when_formatting_diff_without_color_then_preserves_output(
     test_case: CheckpointOutputTestCase,
@@ -194,7 +194,7 @@ def test_given_checkpoint_model_refs_when_formatting_diff_without_color_then_pre
             ),
         )
     ],
-    ids=["uses semantic checkpoint colors"],
+    ids=lambda case: case.description,
 )
 def test_given_checkpoint_model_refs_when_formatting_with_color_then_uses_semantic_colors(
     test_case: CheckpointColorOutputTestCase,

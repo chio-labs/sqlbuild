@@ -26,121 +26,119 @@ from tests.unit.src.sqlbuild.compiler.lineage.helpers import (
     make_compiled_seed,
 )
 
-ANALYZER_TEST_CASES: list[ColumnLineageAnalyzerTestCase] = [
-    ColumnLineageAnalyzerTestCase(
-        description="infers standard model column passthrough",
-        model_name="orders_out",
-        query_sql='SELECT order_id FROM __ref("orders")',
-        inferred_columns=("order_id",),
-        upstream_model_columns={"orders": ("order_id",)},
-        upstream_seed_columns={},
-        expected_column="order_id",
-        expected_upstream_columns=("model:orders.order_id",),
-        expected_transform_kind=ColumnTransformKind.DIRECT,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="infers aliased model column passthrough",
-        model_name="orders_out",
-        query_sql='SELECT id AS order_id FROM __ref("orders")',
-        inferred_columns=("order_id",),
-        upstream_model_columns={"orders": ("id",)},
-        upstream_seed_columns={},
-        expected_column="order_id",
-        expected_upstream_columns=("model:orders.id",),
-        expected_transform_kind=ColumnTransformKind.DIRECT,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="classifies casts",
-        model_name="payments_out",
-        query_sql='SELECT CAST(amount AS DECIMAL(10, 2)) AS amount_decimal FROM __ref("payments")',
-        inferred_columns=("amount_decimal",),
-        upstream_model_columns={"payments": ("amount",)},
-        upstream_seed_columns={},
-        expected_column="amount_decimal",
-        expected_upstream_columns=("model:payments.amount",),
-        expected_transform_kind=ColumnTransformKind.CAST,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="infers multi-column arithmetic expression",
-        model_name="orders_out",
-        query_sql='SELECT quantity * price_cents AS total_cents FROM __ref("orders")',
-        inferred_columns=("total_cents",),
-        upstream_model_columns={"orders": ("quantity", "price_cents")},
-        upstream_seed_columns={},
-        expected_column="total_cents",
-        expected_upstream_columns=("model:orders.price_cents", "model:orders.quantity"),
-        expected_transform_kind=ColumnTransformKind.EXPRESSION,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="infers join expression across model and seed",
-        model_name="orders_out",
-        query_sql=(
-            'SELECT o.quantity * w.price_cents AS total_cents FROM __ref("orders") o '
-            'JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id'
-        ),
-        inferred_columns=("total_cents",),
-        upstream_model_columns={"orders": ("quantity", "waffle_type_id")},
-        upstream_seed_columns={"waffle_types": ("price_cents", "waffle_type_id")},
-        expected_column="total_cents",
-        expected_upstream_columns=("model:orders.quantity", "seed:waffle_types.price_cents"),
-        expected_transform_kind=ColumnTransformKind.EXPRESSION,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="classifies aggregations",
-        model_name="payments_out",
-        query_sql=(
-            'SELECT customer_id, SUM(amount_cents) AS revenue_cents FROM __ref("payments") '
-            "GROUP BY customer_id"
-        ),
-        inferred_columns=("customer_id", "revenue_cents"),
-        upstream_model_columns={"payments": ("customer_id", "amount_cents")},
-        upstream_seed_columns={},
-        expected_column="revenue_cents",
-        expected_upstream_columns=("model:payments.amount_cents",),
-        expected_transform_kind=ColumnTransformKind.AGGREGATION,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="collapses CTE upstream dependency",
-        model_name="payments_out",
-        query_sql=(
-            'WITH x AS (SELECT amount_cents FROM __ref("payments")) SELECT amount_cents FROM x'
-        ),
-        inferred_columns=("amount_cents",),
-        upstream_model_columns={"payments": ("amount_cents",)},
-        upstream_seed_columns={},
-        expected_column="amount_cents",
-        expected_upstream_columns=("model:payments.amount_cents",),
-        expected_transform_kind=ColumnTransformKind.DIRECT,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="infers both branches of a union",
-        model_name="unioned",
-        query_sql='SELECT id FROM __ref("a") UNION ALL SELECT id FROM __ref("b")',
-        inferred_columns=("id",),
-        upstream_model_columns={"a": ("id",), "b": ("id",)},
-        upstream_seed_columns={},
-        expected_column="id",
-        expected_upstream_columns=("model:a.id", "model:b.id"),
-        expected_transform_kind=ColumnTransformKind.DIRECT,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="classifies constants with no upstream columns",
-        model_name="constants",
-        query_sql="SELECT 1 AS one",
-        inferred_columns=("one",),
-        upstream_model_columns={},
-        upstream_seed_columns={},
-        expected_column="one",
-        expected_upstream_columns=(),
-        expected_transform_kind=ColumnTransformKind.CONSTANT,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    ANALYZER_TEST_CASES,
-    ids=[case.description for case in ANALYZER_TEST_CASES],
+    [
+        ColumnLineageAnalyzerTestCase(
+            description="infers standard model column passthrough",
+            model_name="orders_out",
+            query_sql='SELECT order_id FROM __ref("orders")',
+            inferred_columns=("order_id",),
+            upstream_model_columns={"orders": ("order_id",)},
+            upstream_seed_columns={},
+            expected_column="order_id",
+            expected_upstream_columns=("model:orders.order_id",),
+            expected_transform_kind=ColumnTransformKind.DIRECT,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="infers aliased model column passthrough",
+            model_name="orders_out",
+            query_sql='SELECT id AS order_id FROM __ref("orders")',
+            inferred_columns=("order_id",),
+            upstream_model_columns={"orders": ("id",)},
+            upstream_seed_columns={},
+            expected_column="order_id",
+            expected_upstream_columns=("model:orders.id",),
+            expected_transform_kind=ColumnTransformKind.DIRECT,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="classifies casts",
+            model_name="payments_out",
+            query_sql='SELECT CAST(amount AS DECIMAL(10, 2)) AS amount_decimal FROM __ref("payments")',
+            inferred_columns=("amount_decimal",),
+            upstream_model_columns={"payments": ("amount",)},
+            upstream_seed_columns={},
+            expected_column="amount_decimal",
+            expected_upstream_columns=("model:payments.amount",),
+            expected_transform_kind=ColumnTransformKind.CAST,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="infers multi-column arithmetic expression",
+            model_name="orders_out",
+            query_sql='SELECT quantity * price_cents AS total_cents FROM __ref("orders")',
+            inferred_columns=("total_cents",),
+            upstream_model_columns={"orders": ("quantity", "price_cents")},
+            upstream_seed_columns={},
+            expected_column="total_cents",
+            expected_upstream_columns=("model:orders.price_cents", "model:orders.quantity"),
+            expected_transform_kind=ColumnTransformKind.EXPRESSION,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="infers join expression across model and seed",
+            model_name="orders_out",
+            query_sql=(
+                'SELECT o.quantity * w.price_cents AS total_cents FROM __ref("orders") o '
+                'JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id'
+            ),
+            inferred_columns=("total_cents",),
+            upstream_model_columns={"orders": ("quantity", "waffle_type_id")},
+            upstream_seed_columns={"waffle_types": ("price_cents", "waffle_type_id")},
+            expected_column="total_cents",
+            expected_upstream_columns=("model:orders.quantity", "seed:waffle_types.price_cents"),
+            expected_transform_kind=ColumnTransformKind.EXPRESSION,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="classifies aggregations",
+            model_name="payments_out",
+            query_sql=(
+                'SELECT customer_id, SUM(amount_cents) AS revenue_cents FROM __ref("payments") '
+                "GROUP BY customer_id"
+            ),
+            inferred_columns=("customer_id", "revenue_cents"),
+            upstream_model_columns={"payments": ("customer_id", "amount_cents")},
+            upstream_seed_columns={},
+            expected_column="revenue_cents",
+            expected_upstream_columns=("model:payments.amount_cents",),
+            expected_transform_kind=ColumnTransformKind.AGGREGATION,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="collapses CTE upstream dependency",
+            model_name="payments_out",
+            query_sql=(
+                'WITH x AS (SELECT amount_cents FROM __ref("payments")) SELECT amount_cents FROM x'
+            ),
+            inferred_columns=("amount_cents",),
+            upstream_model_columns={"payments": ("amount_cents",)},
+            upstream_seed_columns={},
+            expected_column="amount_cents",
+            expected_upstream_columns=("model:payments.amount_cents",),
+            expected_transform_kind=ColumnTransformKind.DIRECT,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="infers both branches of a union",
+            model_name="unioned",
+            query_sql='SELECT id FROM __ref("a") UNION ALL SELECT id FROM __ref("b")',
+            inferred_columns=("id",),
+            upstream_model_columns={"a": ("id",), "b": ("id",)},
+            upstream_seed_columns={},
+            expected_column="id",
+            expected_upstream_columns=("model:a.id", "model:b.id"),
+            expected_transform_kind=ColumnTransformKind.DIRECT,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="classifies constants with no upstream columns",
+            model_name="constants",
+            query_sql="SELECT 1 AS one",
+            inferred_columns=("one",),
+            upstream_model_columns={},
+            upstream_seed_columns={},
+            expected_column="one",
+            expected_upstream_columns=(),
+            expected_transform_kind=ColumnTransformKind.CONSTANT,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_compiled_project_when_building_column_lineage_then_infers_expected_column(
     test_case: ColumnLineageAnalyzerTestCase,
@@ -187,97 +185,94 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
         assert expected_scope_name in {node.scope_name for node in column_lineage.nodes}
 
 
-FAST_ANALYZER_TEST_CASES: tuple[ColumnLineageAnalyzerTestCase, ...] = (
-    ColumnLineageAnalyzerTestCase(
-        description="fast infers standard model column passthrough",
-        model_name="orders_out",
-        query_sql='SELECT order_id FROM __ref("orders")',
-        inferred_columns=("order_id",),
-        upstream_model_columns={"orders": ("order_id",)},
-        upstream_seed_columns={},
-        expected_column="order_id",
-        expected_upstream_columns=("model:orders.order_id",),
-        expected_transform_kind=ColumnTransformKind.DIRECT,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="fast infers aliased model column passthrough",
-        model_name="orders_out",
-        query_sql='SELECT id AS order_id FROM __ref("orders")',
-        inferred_columns=("order_id",),
-        upstream_model_columns={"orders": ("id",)},
-        upstream_seed_columns={},
-        expected_column="order_id",
-        expected_upstream_columns=("model:orders.id",),
-        expected_transform_kind=ColumnTransformKind.DIRECT,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="fast classifies casts",
-        model_name="payments_out",
-        query_sql='SELECT CAST(amount AS DECIMAL(10, 2)) AS amount_decimal FROM __ref("payments")',
-        inferred_columns=("amount_decimal",),
-        upstream_model_columns={"payments": ("amount",)},
-        upstream_seed_columns={},
-        expected_column="amount_decimal",
-        expected_upstream_columns=("model:payments.amount",),
-        expected_transform_kind=ColumnTransformKind.CAST,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="fast infers multi-column arithmetic expression",
-        model_name="orders_out",
-        query_sql='SELECT quantity * price_cents AS total_cents FROM __ref("orders")',
-        inferred_columns=("total_cents",),
-        upstream_model_columns={"orders": ("quantity", "price_cents")},
-        upstream_seed_columns={},
-        expected_column="total_cents",
-        expected_upstream_columns=("model:orders.price_cents", "model:orders.quantity"),
-        expected_transform_kind=ColumnTransformKind.EXPRESSION,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="fast infers join expression across model and seed",
-        model_name="orders_out",
-        query_sql=(
-            'SELECT o.quantity * w.price_cents AS total_cents FROM __ref("orders") o '
-            'JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id'
-        ),
-        inferred_columns=("total_cents",),
-        upstream_model_columns={"orders": ("quantity", "waffle_type_id")},
-        upstream_seed_columns={"waffle_types": ("price_cents", "waffle_type_id")},
-        expected_column="total_cents",
-        expected_upstream_columns=("model:orders.quantity", "seed:waffle_types.price_cents"),
-        expected_transform_kind=ColumnTransformKind.EXPRESSION,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="fast classifies aggregations",
-        model_name="payments_out",
-        query_sql=(
-            'SELECT customer_id, SUM(amount_cents) AS revenue_cents FROM __ref("payments") '
-            "GROUP BY customer_id"
-        ),
-        inferred_columns=("customer_id", "revenue_cents"),
-        upstream_model_columns={"payments": ("customer_id", "amount_cents")},
-        upstream_seed_columns={},
-        expected_column="revenue_cents",
-        expected_upstream_columns=("model:payments.amount_cents",),
-        expected_transform_kind=ColumnTransformKind.AGGREGATION,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="fast classifies constants with no upstream columns",
-        model_name="constants",
-        query_sql="SELECT 1 AS one",
-        inferred_columns=("one",),
-        upstream_model_columns={},
-        upstream_seed_columns={},
-        expected_column="one",
-        expected_upstream_columns=(),
-        expected_transform_kind=ColumnTransformKind.CONSTANT,
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    FAST_ANALYZER_TEST_CASES,
-    ids=[case.description for case in FAST_ANALYZER_TEST_CASES],
+    (
+        ColumnLineageAnalyzerTestCase(
+            description="fast infers standard model column passthrough",
+            model_name="orders_out",
+            query_sql='SELECT order_id FROM __ref("orders")',
+            inferred_columns=("order_id",),
+            upstream_model_columns={"orders": ("order_id",)},
+            upstream_seed_columns={},
+            expected_column="order_id",
+            expected_upstream_columns=("model:orders.order_id",),
+            expected_transform_kind=ColumnTransformKind.DIRECT,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="fast infers aliased model column passthrough",
+            model_name="orders_out",
+            query_sql='SELECT id AS order_id FROM __ref("orders")',
+            inferred_columns=("order_id",),
+            upstream_model_columns={"orders": ("id",)},
+            upstream_seed_columns={},
+            expected_column="order_id",
+            expected_upstream_columns=("model:orders.id",),
+            expected_transform_kind=ColumnTransformKind.DIRECT,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="fast classifies casts",
+            model_name="payments_out",
+            query_sql='SELECT CAST(amount AS DECIMAL(10, 2)) AS amount_decimal FROM __ref("payments")',
+            inferred_columns=("amount_decimal",),
+            upstream_model_columns={"payments": ("amount",)},
+            upstream_seed_columns={},
+            expected_column="amount_decimal",
+            expected_upstream_columns=("model:payments.amount",),
+            expected_transform_kind=ColumnTransformKind.CAST,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="fast infers multi-column arithmetic expression",
+            model_name="orders_out",
+            query_sql='SELECT quantity * price_cents AS total_cents FROM __ref("orders")',
+            inferred_columns=("total_cents",),
+            upstream_model_columns={"orders": ("quantity", "price_cents")},
+            upstream_seed_columns={},
+            expected_column="total_cents",
+            expected_upstream_columns=("model:orders.price_cents", "model:orders.quantity"),
+            expected_transform_kind=ColumnTransformKind.EXPRESSION,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="fast infers join expression across model and seed",
+            model_name="orders_out",
+            query_sql=(
+                'SELECT o.quantity * w.price_cents AS total_cents FROM __ref("orders") o '
+                'JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id'
+            ),
+            inferred_columns=("total_cents",),
+            upstream_model_columns={"orders": ("quantity", "waffle_type_id")},
+            upstream_seed_columns={"waffle_types": ("price_cents", "waffle_type_id")},
+            expected_column="total_cents",
+            expected_upstream_columns=("model:orders.quantity", "seed:waffle_types.price_cents"),
+            expected_transform_kind=ColumnTransformKind.EXPRESSION,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="fast classifies aggregations",
+            model_name="payments_out",
+            query_sql=(
+                'SELECT customer_id, SUM(amount_cents) AS revenue_cents FROM __ref("payments") '
+                "GROUP BY customer_id"
+            ),
+            inferred_columns=("customer_id", "revenue_cents"),
+            upstream_model_columns={"payments": ("customer_id", "amount_cents")},
+            upstream_seed_columns={},
+            expected_column="revenue_cents",
+            expected_upstream_columns=("model:payments.amount_cents",),
+            expected_transform_kind=ColumnTransformKind.AGGREGATION,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="fast classifies constants with no upstream columns",
+            model_name="constants",
+            query_sql="SELECT 1 AS one",
+            inferred_columns=("one",),
+            upstream_model_columns={},
+            upstream_seed_columns={},
+            expected_column="one",
+            expected_upstream_columns=(),
+            expected_transform_kind=ColumnTransformKind.CONSTANT,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_compiled_project_when_building_fast_column_lineage_then_infers_expected_column(
     test_case: ColumnLineageAnalyzerTestCase,
@@ -340,7 +335,7 @@ def test_given_compiled_project_when_building_fast_column_lineage_then_infers_ex
             expected_transform_kind=ColumnTransformKind.STAR,
         )
     ],
-    ids=["expands select star from known upstream schema with medium confidence"],
+    ids=lambda case: case.description,
 )
 def test_given_select_star_when_building_column_lineage_then_expands_known_schema_columns(
     test_case: ColumnLineageAnalyzerTestCase,
@@ -382,7 +377,7 @@ def test_given_select_star_when_building_column_lineage_then_expands_known_schem
             expected_downstream_trace=("a.id->b.id", "b.id->c.id"),
         )
     ],
-    ids=["traces upstream and downstream through linear project graph"],
+    ids=lambda case: case.description,
 )
 def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_edges(
     test_case: ProjectLineageGraphTestCase,
@@ -434,63 +429,60 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
     assert downstream_trace == test_case.expected_downstream_trace
 
 
-RICH_CTE_REGRESSION_TEST_CASES: tuple[ColumnLineageAnalyzerTestCase, ...] = (
-    ColumnLineageAnalyzerTestCase(
-        description="resolves aggregated column sourced through a CTE",
-        model_name="int_order_payments",
-        query_sql=(
-            'WITH payments AS (SELECT * FROM __ref("stg_payments")) '
-            "SELECT COALESCE(SUM(payments.amount_cents), 0) AS order_amount_cents "
-            "FROM payments GROUP BY payments.order_id"
-        ),
-        inferred_columns=("order_amount_cents",),
-        upstream_model_columns={"stg_payments": ("order_id", "amount_cents")},
-        upstream_seed_columns={},
-        expected_column="order_amount_cents",
-        expected_upstream_columns=("model:stg_payments.amount_cents",),
-        expected_transform_kind=ColumnTransformKind.AGGREGATION,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="resolves passthrough column sourced through a select-star CTE",
-        model_name="int_orders",
-        query_sql=(
-            'WITH orders AS (SELECT * FROM __ref("stg_orders")) '
-            "SELECT orders.customer_id FROM orders"
-        ),
-        inferred_columns=("customer_id",),
-        upstream_model_columns={"stg_orders": ("order_id", "customer_id")},
-        upstream_seed_columns={},
-        expected_column="customer_id",
-        expected_upstream_columns=("model:stg_orders.customer_id",),
-        expected_transform_kind=ColumnTransformKind.DIRECT,
-    ),
-    ColumnLineageAnalyzerTestCase(
-        description="resolves aggregated column through CTE join with table aliases",
-        model_name="daily_revenue",
-        query_sql=(
-            'WITH orders AS (SELECT * FROM __ref("stg_orders")), '
-            'payments AS (SELECT * FROM __ref("stg_payments")) '
-            "SELECT SUM(p.amount_cents) AS total_revenue_cents "
-            "FROM orders o JOIN payments p ON p.order_id = o.order_id "
-            "GROUP BY o.customer_id"
-        ),
-        inferred_columns=("total_revenue_cents",),
-        upstream_model_columns={
-            "stg_orders": ("order_id", "customer_id"),
-            "stg_payments": ("order_id", "amount_cents"),
-        },
-        upstream_seed_columns={},
-        expected_column="total_revenue_cents",
-        expected_upstream_columns=("model:stg_payments.amount_cents",),
-        expected_transform_kind=ColumnTransformKind.AGGREGATION,
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RICH_CTE_REGRESSION_TEST_CASES,
-    ids=[case.description for case in RICH_CTE_REGRESSION_TEST_CASES],
+    (
+        ColumnLineageAnalyzerTestCase(
+            description="resolves aggregated column sourced through a CTE",
+            model_name="int_order_payments",
+            query_sql=(
+                'WITH payments AS (SELECT * FROM __ref("stg_payments")) '
+                "SELECT COALESCE(SUM(payments.amount_cents), 0) AS order_amount_cents "
+                "FROM payments GROUP BY payments.order_id"
+            ),
+            inferred_columns=("order_amount_cents",),
+            upstream_model_columns={"stg_payments": ("order_id", "amount_cents")},
+            upstream_seed_columns={},
+            expected_column="order_amount_cents",
+            expected_upstream_columns=("model:stg_payments.amount_cents",),
+            expected_transform_kind=ColumnTransformKind.AGGREGATION,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="resolves passthrough column sourced through a select-star CTE",
+            model_name="int_orders",
+            query_sql=(
+                'WITH orders AS (SELECT * FROM __ref("stg_orders")) '
+                "SELECT orders.customer_id FROM orders"
+            ),
+            inferred_columns=("customer_id",),
+            upstream_model_columns={"stg_orders": ("order_id", "customer_id")},
+            upstream_seed_columns={},
+            expected_column="customer_id",
+            expected_upstream_columns=("model:stg_orders.customer_id",),
+            expected_transform_kind=ColumnTransformKind.DIRECT,
+        ),
+        ColumnLineageAnalyzerTestCase(
+            description="resolves aggregated column through CTE join with table aliases",
+            model_name="daily_revenue",
+            query_sql=(
+                'WITH orders AS (SELECT * FROM __ref("stg_orders")), '
+                'payments AS (SELECT * FROM __ref("stg_payments")) '
+                "SELECT SUM(p.amount_cents) AS total_revenue_cents "
+                "FROM orders o JOIN payments p ON p.order_id = o.order_id "
+                "GROUP BY o.customer_id"
+            ),
+            inferred_columns=("total_revenue_cents",),
+            upstream_model_columns={
+                "stg_orders": ("order_id", "customer_id"),
+                "stg_payments": ("order_id", "amount_cents"),
+            },
+            upstream_seed_columns={},
+            expected_column="total_revenue_cents",
+            expected_upstream_columns=("model:stg_payments.amount_cents",),
+            expected_transform_kind=ColumnTransformKind.AGGREGATION,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolves_upstream(
     test_case: ColumnLineageAnalyzerTestCase,
@@ -551,7 +543,7 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
             expected_transform_kind=ColumnTransformKind.DIRECT,
         )
     ],
-    ids=["normalizes postgres dialect for Polyglot rich lineage"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_polyglot_name(
     test_case: ColumnLineageAnalyzerTestCase,
@@ -603,7 +595,7 @@ def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_poly
             expected_result_is_none=True,
         )
     ],
-    ids=["returns no lineage when SQL analysis is disabled"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_no_lineage(
     test_case: SqlAnalysisDisabledLineageTestCase,

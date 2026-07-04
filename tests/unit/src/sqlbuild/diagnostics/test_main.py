@@ -31,7 +31,7 @@ from tests.unit.src.sqlbuild.diagnostics._test_types import (
             expected_absent_console_fragments=("file-only diagnostic",),
         )
     ],
-    ids=["writes debug firehose SQL to log file without console output"],
+    ids=lambda case: case.description,
 )
 def test_given_diagnostics_without_debug_when_logging_then_writes_file_only(
     test_case: DiagnosticsLogTestCase,
@@ -69,7 +69,7 @@ def test_given_diagnostics_without_debug_when_logging_then_writes_file_only(
             expected_console_fragments=("[debug] unit console diagnostic",),
         )
     ],
-    ids=["mirrors debug diagnostics to stderr"],
+    ids=lambda case: case.description,
 )
 def test_given_diagnostics_with_debug_when_logging_then_mirrors_to_stderr(
     test_case: DiagnosticsLogTestCase,
@@ -110,7 +110,7 @@ def test_given_diagnostics_with_debug_when_logging_then_mirrors_to_stderr(
             expected_absent_console_fragments=("\\n  1 AS id",),
         )
     ],
-    ids=["formats multiline SQL as blocks in file and stderr"],
+    ids=lambda case: case.description,
 )
 def test_given_multiline_sql_when_debug_logging_then_formats_readable_outputs(
     test_case: DiagnosticsLogTestCase,
@@ -157,7 +157,7 @@ def test_given_multiline_sql_when_debug_logging_then_formats_readable_outputs(
             ),
         )
     ],
-    ids=["renders inline contextual transaction SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_contextual_transaction_sql_when_debug_logging_then_console_renders_inline(
     test_case: DiagnosticsContextualSqlTestCase,

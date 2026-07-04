@@ -7,57 +7,55 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.diff._test_types import (
     RenderVirtualDiffHeaderTestCase,
 )
 
-TEST_CASES: list[RenderVirtualDiffHeaderTestCase] = [
-    RenderVirtualDiffHeaderTestCase(
-        description="renders compact no color layout with unchanged ref count",
-        selected_names=("dim_customers", "fact_orders", "stg_orders"),
-        skipped_names=("dim_customers",),
-        from_stale=("fact_orders", "stg_orders"),
-        to_stale=(),
-        from_working=True,
-        to_working=False,
-        allow_partial_diff=True,
-        verbose=False,
-        expected_fragments=(
-            "Virtual diff  dev -> pr",
-            "selected models         3",
-            "compared models         2",
-            "unchanged refs skipped  1",
-            "working VDEs            yes (partial allowed)",
-        ),
-        expected_color_fragments=(
-            "\033[32m\033[1mVirtual diff\033[0m",
-            "\033[34m\033[1mdev\033[0m -> \033[34m\033[1mpr\033[0m",
-            "selected models         \033[34m\033[1m3\033[0m",
-            "unchanged refs skipped  \033[2m1\033[0m",
-            "working VDEs            \033[33m\033[1myes\033[0m\033[2m (partial allowed)\033[0m",
-        ),
-        unexpected_fragments=("not current with workspace",),
-    ),
-    RenderVirtualDiffHeaderTestCase(
-        description="verbose renders workspace staleness details",
-        selected_names=("dim_customers", "fact_orders", "stg_orders"),
-        skipped_names=(),
-        from_stale=("fact_orders",),
-        to_stale=("stg_orders",),
-        from_working=False,
-        to_working=False,
-        allow_partial_diff=False,
-        verbose=True,
-        expected_fragments=(
-            "compared models         3",
-            "working VDEs            no",
-            "dev not current with workspace: fact_orders",
-            "pr not current with workspace: stg_orders",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        RenderVirtualDiffHeaderTestCase(
+            description="renders compact no color layout with unchanged ref count",
+            selected_names=("dim_customers", "fact_orders", "stg_orders"),
+            skipped_names=("dim_customers",),
+            from_stale=("fact_orders", "stg_orders"),
+            to_stale=(),
+            from_working=True,
+            to_working=False,
+            allow_partial_diff=True,
+            verbose=False,
+            expected_fragments=(
+                "Virtual diff  dev -> pr",
+                "selected models         3",
+                "compared models         2",
+                "unchanged refs skipped  1",
+                "working VDEs            yes (partial allowed)",
+            ),
+            expected_color_fragments=(
+                "\033[32m\033[1mVirtual diff\033[0m",
+                "\033[34m\033[1mdev\033[0m -> \033[34m\033[1mpr\033[0m",
+                "selected models         \033[34m\033[1m3\033[0m",
+                "unchanged refs skipped  \033[2m1\033[0m",
+                "working VDEs            \033[33m\033[1myes\033[0m\033[2m (partial allowed)\033[0m",
+            ),
+            unexpected_fragments=("not current with workspace",),
+        ),
+        RenderVirtualDiffHeaderTestCase(
+            description="verbose renders workspace staleness details",
+            selected_names=("dim_customers", "fact_orders", "stg_orders"),
+            skipped_names=(),
+            from_stale=("fact_orders",),
+            to_stale=("stg_orders",),
+            from_working=False,
+            to_working=False,
+            allow_partial_diff=False,
+            verbose=True,
+            expected_fragments=(
+                "compared models         3",
+                "working VDEs            no",
+                "dev not current with workspace: fact_orders",
+                "pr not current with workspace: stg_orders",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_diff_metadata_when_formatting_header_then_expected_details_render(
     test_case: RenderVirtualDiffHeaderTestCase,

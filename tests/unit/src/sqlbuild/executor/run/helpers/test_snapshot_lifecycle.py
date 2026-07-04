@@ -34,55 +34,6 @@ from tests.unit.src.sqlbuild.executor.run.helpers.helpers import (
     insert_snapshot_hook_log,
 )
 
-COMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES: list[SnapshotSchemaChangeTestCase] = [
-    SnapshotSchemaChangeTestCase(
-        description="snowflake timestamp alias is not a snapshot type change",
-        target_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP"),),
-        delta_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_NTZ"),),
-        expected_valid=True,
-    ),
-    SnapshotSchemaChangeTestCase(
-        description="snowflake narrower varchar delta is not a snapshot type change",
-        target_columns=(ColumnInfo(name="plan", type="VARCHAR(5)"),),
-        delta_columns=(ColumnInfo(name="plan", type="VARCHAR(3)"),),
-        expected_valid=True,
-    ),
-]
-
-INCOMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES: list[SnapshotSchemaChangeTestCase] = [
-    SnapshotSchemaChangeTestCase(
-        description="snowflake timestamp time zone variant remains a type change",
-        target_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_NTZ"),),
-        delta_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_TZ"),),
-        expected_valid=False,
-        expected_error_fragment="type changes: updated_at",
-    ),
-    SnapshotSchemaChangeTestCase(
-        description="snowflake wider varchar delta remains a type change",
-        target_columns=(ColumnInfo(name="plan", type="VARCHAR(3)"),),
-        delta_columns=(ColumnInfo(name="plan", type="VARCHAR(5)"),),
-        expected_valid=False,
-        expected_error_fragment="type changes: plan",
-    ),
-]
-
-SNAPSHOT_HOOK_FAILURE_TEST_CASES: list[SnapshotHookFailureTestCase] = [
-    SnapshotHookFailureTestCase(
-        description="python pre hook failure",
-        pre_hooks=(PythonHookEntry(name="fail_hook", kwargs={"message": "snapshot pre failed"}),),
-        post_hooks=None,
-        expected_phase=ExecutionPhase.PRE_HOOK,
-        expected_error_fragment='pre_hooks[0] python("fail_hook") failed: snapshot pre failed',
-    ),
-    SnapshotHookFailureTestCase(
-        description="python post hook failure",
-        pre_hooks=None,
-        post_hooks=(PythonHookEntry(name="fail_hook", kwargs={"message": "snapshot post failed"}),),
-        expected_phase=ExecutionPhase.POST_HOOK,
-        expected_error_fragment='post_hooks[0] python("fail_hook") failed: snapshot post failed',
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -118,7 +69,7 @@ SNAPSHOT_HOOK_FAILURE_TEST_CASES: list[SnapshotHookFailureTestCase] = [
             ),
         )
     ],
-    ids=["snapshot runs SQL and Python hooks and cleans delta"],
+    ids=lambda case: case.description,
 )
 def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effects(
     test_case: SnapshotLifecycleTestCase,
@@ -182,8 +133,27 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
 
 @pytest.mark.parametrize(
     "test_case",
-    SNAPSHOT_HOOK_FAILURE_TEST_CASES,
-    ids=[case.description for case in SNAPSHOT_HOOK_FAILURE_TEST_CASES],
+    [
+        SnapshotHookFailureTestCase(
+            description="python pre hook failure",
+            pre_hooks=(
+                PythonHookEntry(name="fail_hook", kwargs={"message": "snapshot pre failed"}),
+            ),
+            post_hooks=None,
+            expected_phase=ExecutionPhase.PRE_HOOK,
+            expected_error_fragment='pre_hooks[0] python("fail_hook") failed: snapshot pre failed',
+        ),
+        SnapshotHookFailureTestCase(
+            description="python post hook failure",
+            pre_hooks=None,
+            post_hooks=(
+                PythonHookEntry(name="fail_hook", kwargs={"message": "snapshot post failed"}),
+            ),
+            expected_phase=ExecutionPhase.POST_HOOK,
+            expected_error_fragment='post_hooks[0] python("fail_hook") failed: snapshot post failed',
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_snapshot_hook_failure_when_executing_then_reports_hook_phase(
     test_case: SnapshotHookFailureTestCase,
@@ -225,8 +195,21 @@ def test_given_python_snapshot_hook_failure_when_executing_then_reports_hook_pha
 
 @pytest.mark.parametrize(
     "test_case",
-    COMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES,
-    ids=[case.description for case in COMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES],
+    [
+        SnapshotSchemaChangeTestCase(
+            description="snowflake timestamp alias is not a snapshot type change",
+            target_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP"),),
+            delta_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_NTZ"),),
+            expected_valid=True,
+        ),
+        SnapshotSchemaChangeTestCase(
+            description="snowflake narrower varchar delta is not a snapshot type change",
+            target_columns=(ColumnInfo(name="plan", type="VARCHAR(5)"),),
+            delta_columns=(ColumnInfo(name="plan", type="VARCHAR(3)"),),
+            expected_valid=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_schema_change_when_checking_compatible_snowflake_types_then_it_is_valid(
     test_case: SnapshotSchemaChangeTestCase,
@@ -251,8 +234,23 @@ def test_given_snapshot_schema_change_when_checking_compatible_snowflake_types_t
 
 @pytest.mark.parametrize(
     "test_case",
-    INCOMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES,
-    ids=[case.description for case in INCOMPATIBLE_SNOWFLAKE_SNAPSHOT_SCHEMA_CHANGE_TEST_CASES],
+    [
+        SnapshotSchemaChangeTestCase(
+            description="snowflake timestamp time zone variant remains a type change",
+            target_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_NTZ"),),
+            delta_columns=(ColumnInfo(name="updated_at", type="TIMESTAMP_TZ"),),
+            expected_valid=False,
+            expected_error_fragment="type changes: updated_at",
+        ),
+        SnapshotSchemaChangeTestCase(
+            description="snowflake wider varchar delta remains a type change",
+            target_columns=(ColumnInfo(name="plan", type="VARCHAR(3)"),),
+            delta_columns=(ColumnInfo(name="plan", type="VARCHAR(5)"),),
+            expected_valid=False,
+            expected_error_fragment="type changes: plan",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_schema_change_when_checking_incompatible_snowflake_types_then_it_raises(
     test_case: SnapshotSchemaChangeTestCase,
@@ -287,7 +285,7 @@ def test_given_snapshot_schema_change_when_checking_incompatible_snowflake_types
             expected_error_fragment="runtime contract has extra columns: plan",
         )
     ],
-    ids=["snapshot delta has extra runtime column"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_contract_violation_when_executing_then_fails_before_target_update(
     test_case: SnapshotRuntimeContractErrorTestCase,

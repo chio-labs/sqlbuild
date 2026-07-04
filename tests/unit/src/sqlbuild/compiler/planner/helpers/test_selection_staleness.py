@@ -77,177 +77,37 @@ SOURCE_ROOT_KEY: CompiledObjectKey = CompiledObjectKey(
     name="root_source",
 )
 
-TEST_CASES: list[SelectionStalenessWarningTestCase] = [
-    SelectionStalenessWarningTestCase(
-        description="changed seed outside selection warns",
-        upstream_key=SEED_KEY,
-        execution_selected_keys=frozenset(),
-        expected_warning_fragments=("selected model 'c' will build on", "- orders_seed"),
-    ),
-    SelectionStalenessWarningTestCase(
-        description="changed seed in selected closure does not warn",
-        upstream_key=SEED_KEY,
-        execution_selected_keys=frozenset({MODEL_KEY, SEED_KEY}),
-        expected_warning_fragments=(),
-    ),
-    SelectionStalenessWarningTestCase(
-        description="changed source outside selection warns",
-        upstream_key=SOURCE_KEY,
-        execution_selected_keys=frozenset(),
-        expected_warning_fragments=("selected model 'c' will build on", "- raw_orders"),
-    ),
-    SelectionStalenessWarningTestCase(
-        description="changed source in selected closure does not warn",
-        upstream_key=SOURCE_KEY,
-        execution_selected_keys=frozenset({MODEL_KEY, SOURCE_KEY}),
-        expected_warning_fragments=(),
-    ),
-]
 
-GRAPH_TEST_CASES: list[SelectionStalenessGraphWarningTestCase] = [
-    SelectionStalenessGraphWarningTestCase(
-        description="multi-hop seed root warns for stale intermediate and seed",
-        upstream_deps={
-            MODEL_KEY: (MODEL_B_KEY,),
-            MODEL_B_KEY: (SEED_ROOT_KEY,),
-        },
-        selected_keys=frozenset({MODEL_KEY}),
-        execution_selected_keys=frozenset(),
-        changed_model_names=frozenset(),
-        changed_seed_names=frozenset({SEED_ROOT_KEY.name}),
-        changed_source_names=frozenset(),
-        expected_warning_fragments=(
-            "selected model 'c' will build on",
-            "- b",
-            "- root_seed",
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectionStalenessWarningTestCase(
+            description="changed seed outside selection warns",
+            upstream_key=SEED_KEY,
+            execution_selected_keys=frozenset(),
+            expected_warning_fragments=("selected model 'c' will build on", "- orders_seed"),
         ),
-    ),
-    SelectionStalenessGraphWarningTestCase(
-        description="multi-hop source root warns for stale intermediate and source",
-        upstream_deps={
-            MODEL_KEY: (MODEL_B_KEY,),
-            MODEL_B_KEY: (SOURCE_ROOT_KEY,),
-        },
-        selected_keys=frozenset({MODEL_KEY}),
-        execution_selected_keys=frozenset(),
-        changed_model_names=frozenset(),
-        changed_seed_names=frozenset(),
-        changed_source_names=frozenset({SOURCE_ROOT_KEY.name}),
-        expected_warning_fragments=(
-            "selected model 'c' will build on",
-            "- b",
-            "- root_source",
+        SelectionStalenessWarningTestCase(
+            description="changed seed in selected closure does not warn",
+            upstream_key=SEED_KEY,
+            execution_selected_keys=frozenset({MODEL_KEY, SEED_KEY}),
+            expected_warning_fragments=(),
         ),
-    ),
-    SelectionStalenessGraphWarningTestCase(
-        description="branching graph reports multiple unbuilt changed roots",
-        upstream_deps={
-            MODEL_KEY: (MODEL_B_KEY, MODEL_D_KEY),
-            MODEL_B_KEY: (MODEL_A_KEY,),
-        },
-        selected_keys=frozenset({MODEL_KEY}),
-        execution_selected_keys=frozenset(),
-        changed_model_names=frozenset({MODEL_A_KEY.name, MODEL_D_KEY.name}),
-        changed_seed_names=frozenset(),
-        changed_source_names=frozenset(),
-        expected_warning_fragments=(
-            "selected model 'c' will build on",
-            "- a",
-            "- b",
-            "- d",
+        SelectionStalenessWarningTestCase(
+            description="changed source outside selection warns",
+            upstream_key=SOURCE_KEY,
+            execution_selected_keys=frozenset(),
+            expected_warning_fragments=("selected model 'c' will build on", "- raw_orders"),
         ),
-    ),
-    SelectionStalenessGraphWarningTestCase(
-        description="mixed selected and unselected changed parents warns only for unselected",
-        upstream_deps={
-            MODEL_KEY: (MODEL_A_KEY, MODEL_B_KEY),
-        },
-        selected_keys=frozenset({MODEL_A_KEY, MODEL_KEY}),
-        execution_selected_keys=frozenset({MODEL_A_KEY, MODEL_KEY}),
-        changed_model_names=frozenset({MODEL_A_KEY.name, MODEL_B_KEY.name}),
-        changed_seed_names=frozenset(),
-        changed_source_names=frozenset(),
-        expected_warning_fragments=(
-            "selected model 'c' will build on",
-            "- b",
+        SelectionStalenessWarningTestCase(
+            description="changed source in selected closure does not warn",
+            upstream_key=SOURCE_KEY,
+            execution_selected_keys=frozenset({MODEL_KEY, SOURCE_KEY}),
+            expected_warning_fragments=(),
         ),
-        unexpected_warning_fragments=("- a",),
-    ),
-    SelectionStalenessGraphWarningTestCase(
-        description="diamond graph reports both stale intermediates",
-        upstream_deps={
-            MODEL_KEY: (MODEL_B_KEY, MODEL_D_KEY),
-            MODEL_B_KEY: (MODEL_A_KEY,),
-            MODEL_D_KEY: (MODEL_A_KEY,),
-        },
-        selected_keys=frozenset({MODEL_KEY}),
-        execution_selected_keys=frozenset(),
-        changed_model_names=frozenset({MODEL_A_KEY.name}),
-        changed_seed_names=frozenset(),
-        changed_source_names=frozenset(),
-        expected_warning_fragments=(
-            "selected model 'c' will build on",
-            "- a",
-            "- b",
-            "- d",
-        ),
-    ),
-    SelectionStalenessGraphWarningTestCase(
-        description="warning trigger list is capped",
-        upstream_deps={
-            MODEL_KEY: tuple(
-                CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=f"a{i}")
-                for i in range(1, 7)
-            ),
-        },
-        selected_keys=frozenset({MODEL_KEY}),
-        execution_selected_keys=frozenset(),
-        changed_model_names=frozenset({f"a{i}" for i in range(1, 7)}),
-        changed_seed_names=frozenset(),
-        changed_source_names=frozenset(),
-        expected_warning_fragments=(
-            "selected model 'c' will build on",
-            "- a1",
-            "- a5",
-            "+1 more",
-        ),
-    ),
-    SelectionStalenessGraphWarningTestCase(
-        description="cyclic stale graph terminates and reports changed root",
-        upstream_deps={
-            MODEL_KEY: (MODEL_B_KEY,),
-            MODEL_B_KEY: (MODEL_KEY, MODEL_A_KEY),
-        },
-        selected_keys=frozenset({MODEL_KEY}),
-        execution_selected_keys=frozenset(),
-        changed_model_names=frozenset({MODEL_A_KEY.name}),
-        changed_seed_names=frozenset(),
-        changed_source_names=frozenset(),
-        expected_warning_fragments=(
-            "selected model 'c' will build on",
-            "- a",
-        ),
-    ),
-    SelectionStalenessGraphWarningTestCase(
-        description="self cycle does not report selected model as its own trigger",
-        upstream_deps={
-            MODEL_KEY: (MODEL_KEY, MODEL_A_KEY),
-        },
-        selected_keys=frozenset({MODEL_KEY}),
-        execution_selected_keys=frozenset(),
-        changed_model_names=frozenset({MODEL_A_KEY.name}),
-        changed_seed_names=frozenset(),
-        changed_source_names=frozenset(),
-        expected_warning_fragments=(
-            "selected model 'c' will build on",
-            "- a",
-        ),
-        unexpected_warning_fragments=("- c",),
-    ),
-]
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_seed_or_source_change_when_classifying_then_warns_only_if_unselected(
     test_case: SelectionStalenessWarningTestCase,
 ) -> None:
@@ -313,8 +173,148 @@ def test_given_seed_or_source_change_when_classifying_then_warns_only_if_unselec
 
 @pytest.mark.parametrize(
     "test_case",
-    GRAPH_TEST_CASES,
-    ids=[case.description for case in GRAPH_TEST_CASES],
+    [
+        SelectionStalenessGraphWarningTestCase(
+            description="multi-hop seed root warns for stale intermediate and seed",
+            upstream_deps={
+                MODEL_KEY: (MODEL_B_KEY,),
+                MODEL_B_KEY: (SEED_ROOT_KEY,),
+            },
+            selected_keys=frozenset({MODEL_KEY}),
+            execution_selected_keys=frozenset(),
+            changed_model_names=frozenset(),
+            changed_seed_names=frozenset({SEED_ROOT_KEY.name}),
+            changed_source_names=frozenset(),
+            expected_warning_fragments=(
+                "selected model 'c' will build on",
+                "- b",
+                "- root_seed",
+            ),
+        ),
+        SelectionStalenessGraphWarningTestCase(
+            description="multi-hop source root warns for stale intermediate and source",
+            upstream_deps={
+                MODEL_KEY: (MODEL_B_KEY,),
+                MODEL_B_KEY: (SOURCE_ROOT_KEY,),
+            },
+            selected_keys=frozenset({MODEL_KEY}),
+            execution_selected_keys=frozenset(),
+            changed_model_names=frozenset(),
+            changed_seed_names=frozenset(),
+            changed_source_names=frozenset({SOURCE_ROOT_KEY.name}),
+            expected_warning_fragments=(
+                "selected model 'c' will build on",
+                "- b",
+                "- root_source",
+            ),
+        ),
+        SelectionStalenessGraphWarningTestCase(
+            description="branching graph reports multiple unbuilt changed roots",
+            upstream_deps={
+                MODEL_KEY: (MODEL_B_KEY, MODEL_D_KEY),
+                MODEL_B_KEY: (MODEL_A_KEY,),
+            },
+            selected_keys=frozenset({MODEL_KEY}),
+            execution_selected_keys=frozenset(),
+            changed_model_names=frozenset({MODEL_A_KEY.name, MODEL_D_KEY.name}),
+            changed_seed_names=frozenset(),
+            changed_source_names=frozenset(),
+            expected_warning_fragments=(
+                "selected model 'c' will build on",
+                "- a",
+                "- b",
+                "- d",
+            ),
+        ),
+        SelectionStalenessGraphWarningTestCase(
+            description="mixed selected and unselected changed parents warns only for unselected",
+            upstream_deps={
+                MODEL_KEY: (MODEL_A_KEY, MODEL_B_KEY),
+            },
+            selected_keys=frozenset({MODEL_A_KEY, MODEL_KEY}),
+            execution_selected_keys=frozenset({MODEL_A_KEY, MODEL_KEY}),
+            changed_model_names=frozenset({MODEL_A_KEY.name, MODEL_B_KEY.name}),
+            changed_seed_names=frozenset(),
+            changed_source_names=frozenset(),
+            expected_warning_fragments=(
+                "selected model 'c' will build on",
+                "- b",
+            ),
+            unexpected_warning_fragments=("- a",),
+        ),
+        SelectionStalenessGraphWarningTestCase(
+            description="diamond graph reports both stale intermediates",
+            upstream_deps={
+                MODEL_KEY: (MODEL_B_KEY, MODEL_D_KEY),
+                MODEL_B_KEY: (MODEL_A_KEY,),
+                MODEL_D_KEY: (MODEL_A_KEY,),
+            },
+            selected_keys=frozenset({MODEL_KEY}),
+            execution_selected_keys=frozenset(),
+            changed_model_names=frozenset({MODEL_A_KEY.name}),
+            changed_seed_names=frozenset(),
+            changed_source_names=frozenset(),
+            expected_warning_fragments=(
+                "selected model 'c' will build on",
+                "- a",
+                "- b",
+                "- d",
+            ),
+        ),
+        SelectionStalenessGraphWarningTestCase(
+            description="warning trigger list is capped",
+            upstream_deps={
+                MODEL_KEY: tuple(
+                    CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=f"a{i}")
+                    for i in range(1, 7)
+                ),
+            },
+            selected_keys=frozenset({MODEL_KEY}),
+            execution_selected_keys=frozenset(),
+            changed_model_names=frozenset({f"a{i}" for i in range(1, 7)}),
+            changed_seed_names=frozenset(),
+            changed_source_names=frozenset(),
+            expected_warning_fragments=(
+                "selected model 'c' will build on",
+                "- a1",
+                "- a5",
+                "+1 more",
+            ),
+        ),
+        SelectionStalenessGraphWarningTestCase(
+            description="cyclic stale graph terminates and reports changed root",
+            upstream_deps={
+                MODEL_KEY: (MODEL_B_KEY,),
+                MODEL_B_KEY: (MODEL_KEY, MODEL_A_KEY),
+            },
+            selected_keys=frozenset({MODEL_KEY}),
+            execution_selected_keys=frozenset(),
+            changed_model_names=frozenset({MODEL_A_KEY.name}),
+            changed_seed_names=frozenset(),
+            changed_source_names=frozenset(),
+            expected_warning_fragments=(
+                "selected model 'c' will build on",
+                "- a",
+            ),
+        ),
+        SelectionStalenessGraphWarningTestCase(
+            description="self cycle does not report selected model as its own trigger",
+            upstream_deps={
+                MODEL_KEY: (MODEL_KEY, MODEL_A_KEY),
+            },
+            selected_keys=frozenset({MODEL_KEY}),
+            execution_selected_keys=frozenset(),
+            changed_model_names=frozenset({MODEL_A_KEY.name}),
+            changed_seed_names=frozenset(),
+            changed_source_names=frozenset(),
+            expected_warning_fragments=(
+                "selected model 'c' will build on",
+                "- a",
+            ),
+            unexpected_warning_fragments=("- c",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_stale_upstream_graph_when_classifying_then_reports_expected_triggers(
     test_case: SelectionStalenessGraphWarningTestCase,
@@ -403,24 +403,21 @@ def test_given_stale_upstream_graph_when_classifying_then_reports_expected_trigg
         assert unexpected_fragment not in warning_text
 
 
-REUSE_SATISFIED_TEST_CASES: list[ReuseSatisfiedStalenessTestCase] = [
-    ReuseSatisfiedStalenessTestCase(
-        description="changed upstream that is not reuse-satisfied warns the selected leaf",
-        reuse_satisfied_model_names=frozenset(),
-        expected_warns=True,
-    ),
-    ReuseSatisfiedStalenessTestCase(
-        description="changed upstream satisfied by reuse does not warn the selected leaf",
-        reuse_satisfied_model_names=frozenset({"dep"}),
-        expected_warns=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    REUSE_SATISFIED_TEST_CASES,
-    ids=[case.description for case in REUSE_SATISFIED_TEST_CASES],
+    [
+        ReuseSatisfiedStalenessTestCase(
+            description="changed upstream that is not reuse-satisfied warns the selected leaf",
+            reuse_satisfied_model_names=frozenset(),
+            expected_warns=True,
+        ),
+        ReuseSatisfiedStalenessTestCase(
+            description="changed upstream satisfied by reuse does not warn the selected leaf",
+            reuse_satisfied_model_names=frozenset({"dep"}),
+            expected_warns=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_changed_upstream_when_classifying_then_respects_reuse_satisfaction(
     test_case: ReuseSatisfiedStalenessTestCase,
@@ -435,46 +432,43 @@ def test_given_changed_upstream_when_classifying_then_respects_reuse_satisfactio
     assert warns == test_case.expected_warns
 
 
-STALE_WARNING_MESSAGE_TEST_CASES: list[StaleWarningMessageTestCase] = [
-    StaleWarningMessageTestCase(
-        description="lists every trigger as a bullet when under the cap",
-        model_label="selected model",
-        model_name="leaf",
-        trigger_label="upstream(s)",
-        trigger_names=("a", "b", "c"),
-        expected_fragments=(
-            "selected model 'leaf' will build on 3 stale upstream(s) not selected for rebuild:",
-            "    - a",
-            "    - b",
-            "    - c",
-            "    rebuild the closure to refresh them: --select +leaf",
-        ),
-        unexpected_fragments=("more",),
-        expected_bullet_count=3,
-    ),
-    StaleWarningMessageTestCase(
-        description="caps the bullet list at five and summarizes the remainder",
-        model_label="selected dbt model",
-        model_name="leaf",
-        trigger_label="upstream(s)",
-        trigger_names=("a", "b", "c", "d", "e", "f", "g"),
-        expected_fragments=(
-            "selected dbt model 'leaf' will build on 7 stale upstream(s) not selected for rebuild:",
-            "    - a",
-            "    - e",
-            "    +2 more",
-            "    rebuild the closure to refresh them: --select +leaf",
-        ),
-        unexpected_fragments=("    - f", "    - g"),
-        expected_bullet_count=5,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    STALE_WARNING_MESSAGE_TEST_CASES,
-    ids=[case.description for case in STALE_WARNING_MESSAGE_TEST_CASES],
+    [
+        StaleWarningMessageTestCase(
+            description="lists every trigger as a bullet when under the cap",
+            model_label="selected model",
+            model_name="leaf",
+            trigger_label="upstream(s)",
+            trigger_names=("a", "b", "c"),
+            expected_fragments=(
+                "selected model 'leaf' will build on 3 stale upstream(s) not selected for rebuild:",
+                "    - a",
+                "    - b",
+                "    - c",
+                "    rebuild the closure to refresh them: --select +leaf",
+            ),
+            unexpected_fragments=("more",),
+            expected_bullet_count=3,
+        ),
+        StaleWarningMessageTestCase(
+            description="caps the bullet list at five and summarizes the remainder",
+            model_label="selected dbt model",
+            model_name="leaf",
+            trigger_label="upstream(s)",
+            trigger_names=("a", "b", "c", "d", "e", "f", "g"),
+            expected_fragments=(
+                "selected dbt model 'leaf' will build on 7 stale upstream(s) not selected for rebuild:",
+                "    - a",
+                "    - e",
+                "    +2 more",
+                "    rebuild the closure to refresh them: --select +leaf",
+            ),
+            unexpected_fragments=("    - f", "    - g"),
+            expected_bullet_count=5,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_trigger_names_when_formatting_stale_warning_then_caps_and_structures_message(
     test_case: StaleWarningMessageTestCase,

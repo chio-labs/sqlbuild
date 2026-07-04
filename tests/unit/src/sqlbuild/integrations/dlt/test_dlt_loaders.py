@@ -24,7 +24,7 @@ from tests.unit.src.sqlbuild.integrations.dlt._test_types import DltLoaderDiscov
             expected_function_name="raw_orders",
         )
     ],
-    ids=["builds deterministic synthetic loader"],
+    ids=lambda case: case.description,
 )
 def test_given_dlt_source_when_building_loader_functions_then_name_is_deterministic(
     test_case: DltLoaderDiscoveryTestCase,

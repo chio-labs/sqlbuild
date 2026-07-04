@@ -22,45 +22,48 @@ _MACRO_CONTEXT: MacroContext = MacroContext(
     vars={"project_name": "demo"},
 )
 
-TEST_CASES: list[ExpandSqlMacrosTestCase] = [
-    ExpandSqlMacrosTestCase(
-        description="uses macro override text instead of loaded macro function",
-        macro_file_contents="""
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpandSqlMacrosTestCase(
+            description="uses macro override text instead of loaded macro function",
+            macro_file_contents="""
 def country() -> str:
     return "'CA'"
 """.strip()
-        + "\n",
-        sql="SELECT @country() AS country",
-        macro_overrides={"country": "'US'"},
-        expected_sql="SELECT 'US' AS country",
-    ),
-    ExpandSqlMacrosTestCase(
-        description="uses macro override text without evaluating macro arguments",
-        macro_file_contents="""
+            + "\n",
+            sql="SELECT @country() AS country",
+            macro_overrides={"country": "'US'"},
+            expected_sql="SELECT 'US' AS country",
+        ),
+        ExpandSqlMacrosTestCase(
+            description="uses macro override text without evaluating macro arguments",
+            macro_file_contents="""
 def status(value: str) -> str:
     return value
 """.strip()
-        + "\n",
-        sql="SELECT @status(@missing_nested()) AS status",
-        macro_overrides={"status": "'paid'"},
-        expected_sql="SELECT 'paid' AS status",
-    ),
-    ExpandSqlMacrosTestCase(
-        description="expands nested macro arguments",
-        macro_file_contents="""
+            + "\n",
+            sql="SELECT @status(@missing_nested()) AS status",
+            macro_overrides={"status": "'paid'"},
+            expected_sql="SELECT 'paid' AS status",
+        ),
+        ExpandSqlMacrosTestCase(
+            description="expands nested macro arguments",
+            macro_file_contents="""
 def project_column() -> str:
     return "order_id"
 
 def select_column(column_name: str) -> str:
     return f"SELECT {column_name}"
 """.strip()
-        + "\n",
-        sql="@select_column(@project_column())",
-        expected_sql="SELECT order_id",
-    ),
-    ExpandSqlMacrosTestCase(
-        description="expands multiple nested macro arguments in one call",
-        macro_file_contents="""
+            + "\n",
+            sql="@select_column(@project_column())",
+            expected_sql="SELECT order_id",
+        ),
+        ExpandSqlMacrosTestCase(
+            description="expands multiple nested macro arguments in one call",
+            macro_file_contents="""
 def left_column() -> str:
     return "order_id"
 
@@ -70,13 +73,13 @@ def right_column() -> str:
 def select_columns(left: str, right: str) -> str:
     return f"SELECT {left}, {right}"
 """.strip()
-        + "\n",
-        sql="@select_columns(@left_column(), @right_column())",
-        expected_sql="SELECT order_id, customer_id",
-    ),
-    ExpandSqlMacrosTestCase(
-        description="expands ten nested macro calls in a chain",
-        macro_file_contents="""
+            + "\n",
+            sql="@select_columns(@left_column(), @right_column())",
+            expected_sql="SELECT order_id, customer_id",
+        ),
+        ExpandSqlMacrosTestCase(
+            description="expands ten nested macro calls in a chain",
+            macro_file_contents="""
 def step_1(value: str) -> str:
     return f"{value}_1"
 
@@ -107,34 +110,34 @@ def step_9(value: str) -> str:
 def step_10(value: str) -> str:
     return f"SELECT {value}_10"
 """.strip()
-        + "\n",
-        sql='@step_10(@step_9(@step_8(@step_7(@step_6(@step_5(@step_4(@step_3(@step_2(@step_1("base"))))))))))',
-        expected_sql="SELECT base_1_2_3_4_5_6_7_8_9_10",
-    ),
-    ExpandSqlMacrosTestCase(
-        description="ignores fake macro text inside line comments and strings",
-        macro_file_contents="""
+            + "\n",
+            sql='@step_10(@step_9(@step_8(@step_7(@step_6(@step_5(@step_4(@step_3(@step_2(@step_1("base"))))))))))',
+            expected_sql="SELECT base_1_2_3_4_5_6_7_8_9_10",
+        ),
+        ExpandSqlMacrosTestCase(
+            description="ignores fake macro text inside line comments and strings",
+            macro_file_contents="""
 def project_columns() -> str:
     return "order_id, customer_id"
 """.strip()
-        + "\n",
-        sql="""
+            + "\n",
+            sql="""
 -- @fake_macro()
 SELECT '@fake_macro()' AS label, @project_columns() FROM raw_orders
 """.strip(),
-        expected_sql="""
+            expected_sql="""
 -- @fake_macro()
 SELECT '@fake_macro()' AS label, order_id, customer_id FROM raw_orders
 """.strip(),
-    ),
-    ExpandSqlMacrosTestCase(
-        description="ignores full email addresses and bare domains in comments and strings",
-        macro_file_contents="""
+        ),
+        ExpandSqlMacrosTestCase(
+            description="ignores full email addresses and bare domains in comments and strings",
+            macro_file_contents="""
 def project_columns() -> str:
     return "order_id"
 """.strip()
-        + "\n",
-        sql="""
+            + "\n",
+            sql="""
 -- contact: analyst@example.com and @example.com
 SELECT
   'analyst@example.com' AS email_value,
@@ -142,7 +145,7 @@ SELECT
   @project_columns()
 FROM raw_orders
 """.strip(),
-        expected_sql="""
+            expected_sql="""
 -- contact: analyst@example.com and @example.com
 SELECT
   'analyst@example.com' AS email_value,
@@ -150,36 +153,36 @@ SELECT
   order_id
 FROM raw_orders
 """.strip(),
-    ),
-    ExpandSqlMacrosTestCase(
-        description="ignores fake macro text inside block comments and quoted identifiers",
-        macro_file_contents="""
+        ),
+        ExpandSqlMacrosTestCase(
+            description="ignores fake macro text inside block comments and quoted identifiers",
+            macro_file_contents="""
 def project_columns() -> str:
     return "order_id"
 """.strip()
-        + "\n",
-        sql="""
+            + "\n",
+            sql="""
 /* @fake_macro() */
 SELECT `@fake_macro()` AS quoted_name, @project_columns() FROM raw_orders
 """.strip(),
-        expected_sql="""
+            expected_sql="""
 /* @fake_macro() */
 SELECT `@fake_macro()` AS quoted_name, order_id FROM raw_orders
 """.strip(),
-    ),
-    ExpandSqlMacrosTestCase(
-        description="passes compile macro context to ctx-aware macros",
-        macro_file_contents="""
+        ),
+        ExpandSqlMacrosTestCase(
+            description="passes compile macro context to ctx-aware macros",
+            macro_file_contents="""
 def adapter_name(ctx) -> str:
     return ctx.adapter_name
 """.strip()
-        + "\n",
-        sql="SELECT @adapter_name() AS adapter_name",
-        expected_sql="SELECT bigquery AS adapter_name",
-    ),
-    ExpandSqlMacrosTestCase(
-        description="passes full compile macro context fields to ctx-aware macros",
-        macro_file_contents="""
+            + "\n",
+            sql="SELECT @adapter_name() AS adapter_name",
+            expected_sql="SELECT bigquery AS adapter_name",
+        ),
+        ExpandSqlMacrosTestCase(
+            description="passes full compile macro context fields to ctx-aware macros",
+            macro_file_contents="""
 def context_summary(ctx) -> str:
     summary = (
         f"{ctx.adapter_name}|{ctx.sql_analysis_enabled}|"
@@ -187,17 +190,12 @@ def context_summary(ctx) -> str:
     )
     return f"SELECT '{summary}'"
 """.strip()
-        + "\n",
-        sql="@context_summary()",
-        expected_sql="SELECT 'bigquery|True|dev|demo'",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+            + "\n",
+            sql="@context_summary()",
+            expected_sql="SELECT 'bigquery|True|dev|demo'",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sql_macro_variants_when_expanding_then_it_returns_expected_sql(
     test_case: ExpandSqlMacrosTestCase,
@@ -218,49 +216,46 @@ def test_given_sql_macro_variants_when_expanding_then_it_returns_expected_sql(
     assert expanded_sql == test_case.expected_sql
 
 
-ERROR_TEST_CASES: list[ExpandSqlMacrosErrorTestCase] = [
-    ExpandSqlMacrosErrorTestCase(
-        description="raises when a ctx-aware macro is called with reserved ctx kwarg",
-        macro_file_contents="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpandSqlMacrosErrorTestCase(
+            description="raises when a ctx-aware macro is called with reserved ctx kwarg",
+            macro_file_contents="""
 def adapter_name(ctx) -> str:
     return ctx.adapter_name
 """.strip()
-        + "\n",
-        sql="SELECT @adapter_name(ctx='manual') FROM raw_orders",
-        expected_error_fragment="reserved for injected macro context",
-    ),
-    ExpandSqlMacrosErrorTestCase(
-        description="raises when a top level macro returns a non string",
-        macro_file_contents="""
+            + "\n",
+            sql="SELECT @adapter_name(ctx='manual') FROM raw_orders",
+            expected_error_fragment="reserved for injected macro context",
+        ),
+        ExpandSqlMacrosErrorTestCase(
+            description="raises when a top level macro returns a non string",
+            macro_file_contents="""
 def bad_macro() -> list[str]:
     return ["order_id"]
 """.strip()
-        + "\n",
-        sql="SELECT @bad_macro() FROM raw_orders",
-        expected_error_fragment="must return a SQL string when used directly in SQL",
-    ),
-    ExpandSqlMacrosErrorTestCase(
-        description="raises when macro output contains an unexpanded macro call",
-        macro_file_contents="""
+            + "\n",
+            sql="SELECT @bad_macro() FROM raw_orders",
+            expected_error_fragment="must return a SQL string when used directly in SQL",
+        ),
+        ExpandSqlMacrosErrorTestCase(
+            description="raises when macro output contains an unexpanded macro call",
+            macro_file_contents="""
 def outer_macro() -> str:
     return "@inner_macro()"
 
 def inner_macro() -> str:
     return "order_id"
 """.strip()
-        + "\n",
-        sql="SELECT @outer_macro() FROM raw_orders",
-        expected_error_fragment=(
-            r"produced output containing unexpanded macro call '@inner_macro\('"
+            + "\n",
+            sql="SELECT @outer_macro() FROM raw_orders",
+            expected_error_fragment=(
+                r"produced output containing unexpanded macro call '@inner_macro\('"
+            ),
         ),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    ERROR_TEST_CASES,
-    ids=[case.description for case in ERROR_TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_sql_macro_usage_when_expanding_then_it_raises_clear_errors(
     test_case: ExpandSqlMacrosErrorTestCase,

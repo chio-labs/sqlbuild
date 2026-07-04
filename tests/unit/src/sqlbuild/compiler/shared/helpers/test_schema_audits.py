@@ -29,7 +29,7 @@ from tests.unit.src.sqlbuild.compiler.shared.helpers._test_types import (
             expected_argument_keys=("column",),
         )
     ],
-    ids=["parses always_run as reserved audit option"],
+    ids=lambda case: case.description,
 )
 def test_given_audit_mapping_when_parsing_then_always_run_is_reserved_option(
     test_case: ParseAuditInstanceTestCase,
@@ -55,7 +55,7 @@ def test_given_audit_mapping_when_parsing_then_always_run_is_reserved_option(
             expected_error_fragment="'always_run' must be a boolean",
         )
     ],
-    ids=["rejects non-boolean always_run"],
+    ids=lambda case: case.description,
 )
 def test_given_non_boolean_always_run_when_parsing_then_raises_clear_error(
     test_case: ParseAuditInstanceErrorTestCase,

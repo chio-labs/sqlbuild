@@ -22,106 +22,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
 
-DIFF_METADATA_ERROR_E2E_TEST_CASES: tuple[DbtDiffErrorE2ETestCase, ...] = (
-    DbtDiffErrorE2ETestCase(
-        description="full diff without unique key explains how to fix",
-        command=("dbt", "diff", "--select", "dbt_orders", "--full"),
-        include_unique_key=False,
-        include_cursor_meta=True,
-        expected_returncode=1,
-        expected_stderr_fragments=(
-            "requires model 'dbt_orders' to define config.unique_key",
-            "--schema-only",
-        ),
-    ),
-    DbtDiffErrorE2ETestCase(
-        description="bounded diff without cursor metadata explains how to fix",
-        command=("dbt", "diff", "--select", "dbt_orders", "--bounded", "7d"),
-        include_unique_key=True,
-        include_cursor_meta=False,
-        expected_returncode=1,
-        expected_stderr_fragments=(
-            "requires model 'dbt_orders' to define SQLBuild cursor metadata",
-            "meta.sqlbuild.cursor",
-        ),
-    ),
-)
-
-
-DIFF_CONFIG_ERROR_E2E_TEST_CASES: tuple[DbtDiffConfigErrorE2ETestCase, ...] = (
-    DbtDiffConfigErrorE2ETestCase(
-        description="missing production_ref config explains how to configure",
-        command=("dbt", "diff", "--select", "dbt_orders", "--schema-only"),
-        include_production_ref=False,
-        production_ref_git_ref="prod",
-        expected_returncode=1,
-        expected_stderr_fragments=(
-            "dbt diff requires [dbt.production_ref] to be configured",
-            "sqb dbt init",
-        ),
-    ),
-    DbtDiffConfigErrorE2ETestCase(
-        description="invalid reuse git ref explains how to fix",
-        command=("dbt", "diff", "--select", "dbt_orders", "--schema-only"),
-        include_production_ref=True,
-        production_ref_git_ref="does-not-exist",
-        expected_returncode=1,
-        expected_stderr_fragments=(
-            "dbt production_ref git_ref 'does-not-exist' does not exist in this repository",
-        ),
-    ),
-)
-
-
-DIFF_SELECTION_E2E_TEST_CASES: tuple[DbtDiffSelectionE2ETestCase, ...] = (
-    DbtDiffSelectionE2ETestCase(
-        description="multi select shows both models and exclude narrows them",
-        command=(
-            "--no-color",
-            "dbt",
-            "diff",
-            "--select",
-            "dbt_orders",
-            "dbt_customers",
-            "--exclude",
-            "dbt_customers",
-            "--schema-only",
-        ),
-        expected_returncode=0,
-        expected_stdout_fragments=("dbt_orders",),
-        expected_absent_stdout_fragments=("dbt_customers",),
-    ),
-    DbtDiffSelectionE2ETestCase(
-        description="multi select shows both models",
-        command=(
-            "--no-color",
-            "dbt",
-            "diff",
-            "--select",
-            "dbt_orders",
-            "dbt_customers",
-            "--schema-only",
-        ),
-        expected_returncode=0,
-        expected_stdout_fragments=("dbt_orders", "dbt_customers", "selected models: 2"),
-    ),
-    DbtDiffSelectionE2ETestCase(
-        description="tag selector flows through to dbt diff",
-        command=(
-            "--no-color",
-            "dbt",
-            "diff",
-            "--select",
-            "tag:finance",
-            "--schema-only",
-        ),
-        expected_returncode=0,
-        expected_stdout_fragments=("dbt_customers", "selected models: 1"),
-        expected_absent_stdout_fragments=("dbt_orders",),
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -145,7 +45,7 @@ DIFF_SELECTION_E2E_TEST_CASES: tuple[DbtDiffSelectionE2ETestCase, ...] = (
             ),
         )
     ],
-    ids=["schema-only diff reports no schema differences"],
+    ids=lambda case: case.description,
 )
 def test_given_unchanged_model_when_diffing_schema_only_then_reports_no_differences(
     tmp_path: Path,
@@ -191,7 +91,7 @@ def test_given_unchanged_model_when_diffing_schema_only_then_reports_no_differen
             ),
         )
     ],
-    ids=["full diff reports row differences against production"],
+    ids=lambda case: case.description,
 )
 def test_given_changed_model_when_diffing_full_then_reports_row_differences(
     tmp_path: Path,
@@ -235,7 +135,7 @@ def test_given_changed_model_when_diffing_full_then_reports_row_differences(
             ),
         )
     ],
-    ids=["bounded diff uses model cursor metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_cursor_metadata_when_diffing_bounded_then_reports_rows(
     tmp_path: Path,
@@ -267,8 +167,31 @@ def test_given_cursor_metadata_when_diffing_bounded_then_reports_rows(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_METADATA_ERROR_E2E_TEST_CASES,
-    ids=[case.description for case in DIFF_METADATA_ERROR_E2E_TEST_CASES],
+    (
+        DbtDiffErrorE2ETestCase(
+            description="full diff without unique key explains how to fix",
+            command=("dbt", "diff", "--select", "dbt_orders", "--full"),
+            include_unique_key=False,
+            include_cursor_meta=True,
+            expected_returncode=1,
+            expected_stderr_fragments=(
+                "requires model 'dbt_orders' to define config.unique_key",
+                "--schema-only",
+            ),
+        ),
+        DbtDiffErrorE2ETestCase(
+            description="bounded diff without cursor metadata explains how to fix",
+            command=("dbt", "diff", "--select", "dbt_orders", "--bounded", "7d"),
+            include_unique_key=True,
+            include_cursor_meta=False,
+            expected_returncode=1,
+            expected_stderr_fragments=(
+                "requires model 'dbt_orders' to define SQLBuild cursor metadata",
+                "meta.sqlbuild.cursor",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_missing_diff_metadata_when_diffing_then_error_explains_fix(
     tmp_path: Path,
@@ -296,8 +219,30 @@ def test_given_missing_diff_metadata_when_diffing_then_error_explains_fix(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_CONFIG_ERROR_E2E_TEST_CASES,
-    ids=[case.description for case in DIFF_CONFIG_ERROR_E2E_TEST_CASES],
+    (
+        DbtDiffConfigErrorE2ETestCase(
+            description="missing production_ref config explains how to configure",
+            command=("dbt", "diff", "--select", "dbt_orders", "--schema-only"),
+            include_production_ref=False,
+            production_ref_git_ref="prod",
+            expected_returncode=1,
+            expected_stderr_fragments=(
+                "dbt diff requires [dbt.production_ref] to be configured",
+                "sqb dbt init",
+            ),
+        ),
+        DbtDiffConfigErrorE2ETestCase(
+            description="invalid reuse git ref explains how to fix",
+            command=("dbt", "diff", "--select", "dbt_orders", "--schema-only"),
+            include_production_ref=True,
+            production_ref_git_ref="does-not-exist",
+            expected_returncode=1,
+            expected_stderr_fragments=(
+                "dbt production_ref git_ref 'does-not-exist' does not exist in this repository",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_diff_config_when_diffing_then_error_explains_fix(
     tmp_path: Path,
@@ -325,8 +270,54 @@ def test_given_invalid_diff_config_when_diffing_then_error_explains_fix(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_SELECTION_E2E_TEST_CASES,
-    ids=[case.description for case in DIFF_SELECTION_E2E_TEST_CASES],
+    (
+        DbtDiffSelectionE2ETestCase(
+            description="multi select shows both models and exclude narrows them",
+            command=(
+                "--no-color",
+                "dbt",
+                "diff",
+                "--select",
+                "dbt_orders",
+                "dbt_customers",
+                "--exclude",
+                "dbt_customers",
+                "--schema-only",
+            ),
+            expected_returncode=0,
+            expected_stdout_fragments=("dbt_orders",),
+            expected_absent_stdout_fragments=("dbt_customers",),
+        ),
+        DbtDiffSelectionE2ETestCase(
+            description="multi select shows both models",
+            command=(
+                "--no-color",
+                "dbt",
+                "diff",
+                "--select",
+                "dbt_orders",
+                "dbt_customers",
+                "--schema-only",
+            ),
+            expected_returncode=0,
+            expected_stdout_fragments=("dbt_orders", "dbt_customers", "selected models: 2"),
+        ),
+        DbtDiffSelectionE2ETestCase(
+            description="tag selector flows through to dbt diff",
+            command=(
+                "--no-color",
+                "dbt",
+                "diff",
+                "--select",
+                "tag:finance",
+                "--schema-only",
+            ),
+            expected_returncode=0,
+            expected_stdout_fragments=("dbt_customers", "selected models: 1"),
+            expected_absent_stdout_fragments=("dbt_orders",),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_diff_selectors_when_diffing_then_scopes_models(
     tmp_path: Path,
@@ -363,7 +354,7 @@ def test_given_diff_selectors_when_diffing_then_scopes_models(
             expected_stdout_fragments=("Schemas", "schema differences: 1", "added columns: 1"),
         )
     ],
-    ids=["schema diff detects added column"],
+    ids=lambda case: case.description,
 )
 def test_given_added_column_when_diffing_schema_only_then_reports_schema_difference(
     tmp_path: Path,

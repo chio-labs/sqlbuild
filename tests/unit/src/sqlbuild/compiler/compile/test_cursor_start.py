@@ -34,7 +34,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
             expected_cursor_start=30,
         )
     ],
-    ids=["model cursor_start overrides path and project defaults"],
+    ids=lambda case: case.description,
 )
 def test_given_cursor_start_layers_when_building_compile_inputs_then_model_uses_model_precedence(
     test_case: CursorStartCompileInputsTestCase,
@@ -52,37 +52,34 @@ def test_given_cursor_start_layers_when_building_compile_inputs_then_model_uses_
     )
 
 
-ERROR_TEST_CASES: list[CursorStartCompileErrorTestCase] = [
-    CursorStartCompileErrorTestCase(
-        description="cursor_start requires cursor",
-        repo_files={
-            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
-            "models/orders.sql": (
-                "MODEL (\nmaterialized incremental\nincremental_strategy merge\n"
-                "cursor_type integer\ncursor_start 100\n);\n\nSELECT 1 AS id"
-            ),
-        },
-        expected_error_fragment="cursor_start requires cursor",
-    ),
-    CursorStartCompileErrorTestCase(
-        description="integer cursor_start rejects non whole number",
-        repo_files={
-            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
-            "models/orders.sql": (
-                "MODEL (\nmaterialized incremental\nincremental_strategy merge\ncursor id\n"
-                "cursor_type integer\nunique_key [id]\n"
-                "cursor_start '3.14'\n);\n\nSELECT 1 AS id"
-            ),
-        },
-        expected_error_fragment="cursor_start value '3.14' is not a whole number",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ERROR_TEST_CASES,
-    ids=[case.description for case in ERROR_TEST_CASES],
+    [
+        CursorStartCompileErrorTestCase(
+            description="cursor_start requires cursor",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "models/orders.sql": (
+                    "MODEL (\nmaterialized incremental\nincremental_strategy merge\n"
+                    "cursor_type integer\ncursor_start 100\n);\n\nSELECT 1 AS id"
+                ),
+            },
+            expected_error_fragment="cursor_start requires cursor",
+        ),
+        CursorStartCompileErrorTestCase(
+            description="integer cursor_start rejects non whole number",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "models/orders.sql": (
+                    "MODEL (\nmaterialized incremental\nincremental_strategy merge\ncursor id\n"
+                    "cursor_type integer\nunique_key [id]\n"
+                    "cursor_start '3.14'\n);\n\nSELECT 1 AS id"
+                ),
+            },
+            expected_error_fragment="cursor_start value '3.14' is not a whole number",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_cursor_start_when_building_compile_inputs_then_raises_clear_error(
     test_case: CursorStartCompileErrorTestCase,

@@ -30,7 +30,7 @@ from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
             expected_hash_changes_with_observed_at=False,
         )
     ],
-    ids=["hash is stable and ignores observed_at"],
+    ids=lambda case: case.description,
 )
 def test_given_same_source_freshness_identity_when_hashing_then_ignores_observed_at(
     test_case: SharedSourceFreshnessHashTestCase,

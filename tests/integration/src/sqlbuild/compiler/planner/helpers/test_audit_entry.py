@@ -36,53 +36,51 @@ _STUB_BLOCK: DiscoveredAuditBlock = DiscoveredAuditBlock(
     sql_body="",
 )
 
-EXECUTE_AUDIT_TEST_CASES: list[ExecuteAuditTestCase] = [
-    ExecuteAuditTestCase(
-        description=("not_null audit on clean table returns zero rows"),
-        setup_sql=(
-            "CREATE TABLE main.orders (id INTEGER NOT NULL, name VARCHAR NOT NULL)",
-            "INSERT INTO main.orders VALUES (1, 'alice'), (2, 'bob')",
-        ),
-        audit_sql=('SELECT id FROM __ref("orders") WHERE id IS NULL'),
-        model_locations={"orders": "main.orders"},
-        source_map={},
-        expected_row_count=0,
-    ),
-    ExecuteAuditTestCase(
-        description=("not_null audit on table with nulls returns failing rows"),
-        setup_sql=(
-            "CREATE TABLE main.orders (id INTEGER, name VARCHAR)",
-            "INSERT INTO main.orders VALUES (1, 'alice'), (NULL, 'bob'), (NULL, NULL)",
-        ),
-        audit_sql=('SELECT id FROM __ref("orders") WHERE id IS NULL'),
-        model_locations={"orders": "main.orders"},
-        source_map={},
-        expected_row_count=2,
-    ),
-    ExecuteAuditTestCase(
-        description=("audit with source reference executes against source table"),
-        setup_sql=(
-            "CREATE TABLE main.raw_payments (id INTEGER, status VARCHAR)",
-            "INSERT INTO main.raw_payments VALUES (1, 'paid'), (2, NULL)",
-        ),
-        audit_sql=('SELECT id FROM __source("raw_payments") WHERE status IS NULL'),
-        model_locations={},
-        source_map={
-            "raw_payments": SourceEntry(
-                name="raw_payments",
-                schema="main",
-                table="raw_payments",
-            ),
-        },
-        expected_row_count=1,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    EXECUTE_AUDIT_TEST_CASES,
-    ids=[case.description for case in EXECUTE_AUDIT_TEST_CASES],
+    [
+        ExecuteAuditTestCase(
+            description=("not_null audit on clean table returns zero rows"),
+            setup_sql=(
+                "CREATE TABLE main.orders (id INTEGER NOT NULL, name VARCHAR NOT NULL)",
+                "INSERT INTO main.orders VALUES (1, 'alice'), (2, 'bob')",
+            ),
+            audit_sql=('SELECT id FROM __ref("orders") WHERE id IS NULL'),
+            model_locations={"orders": "main.orders"},
+            source_map={},
+            expected_row_count=0,
+        ),
+        ExecuteAuditTestCase(
+            description=("not_null audit on table with nulls returns failing rows"),
+            setup_sql=(
+                "CREATE TABLE main.orders (id INTEGER, name VARCHAR)",
+                "INSERT INTO main.orders VALUES (1, 'alice'), (NULL, 'bob'), (NULL, NULL)",
+            ),
+            audit_sql=('SELECT id FROM __ref("orders") WHERE id IS NULL'),
+            model_locations={"orders": "main.orders"},
+            source_map={},
+            expected_row_count=2,
+        ),
+        ExecuteAuditTestCase(
+            description=("audit with source reference executes against source table"),
+            setup_sql=(
+                "CREATE TABLE main.raw_payments (id INTEGER, status VARCHAR)",
+                "INSERT INTO main.raw_payments VALUES (1, 'paid'), (2, NULL)",
+            ),
+            audit_sql=('SELECT id FROM __source("raw_payments") WHERE status IS NULL'),
+            model_locations={},
+            source_map={
+                "raw_payments": SourceEntry(
+                    name="raw_payments",
+                    schema="main",
+                    table="raw_payments",
+                ),
+            },
+            expected_row_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_audit_when_executing_resolved_sql_then_returns_expected_rows(
     test_case: ExecuteAuditTestCase,

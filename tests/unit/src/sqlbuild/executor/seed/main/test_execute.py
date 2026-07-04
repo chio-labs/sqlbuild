@@ -30,7 +30,7 @@ from tests.unit.src.sqlbuild.executor.seed.main.helpers import build_seed_plan_e
             expected_fingerprint_table_exists=False,
         )
     ],
-    ids=["failed seed load does not write fingerprint state"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_load_failure_when_executing_then_does_not_write_fingerprint(
     test_case: SeedFingerprintFailureTestCase,

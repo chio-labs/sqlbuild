@@ -79,7 +79,7 @@ _PROJECT_YML: str = (
             ),
         ),
     ],
-    ids=["first run builds all partitions and populates tracking table"],
+    ids=lambda case: case.description,
 )
 def test_given_partition_tracked_materialization_when_first_run_then_builds_all_partitions(
     test_case: PartitionTrackingTestCase,
@@ -158,32 +158,29 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
 # --- Existing relation detection tests ---
 
 
-EXISTING_RELATION_TEST_CASES: list[ExistingRelationTestCase] = [
-    ExistingRelationTestCase(
-        description="first run with no existing target passes None",
-        expected_row_count=1,
-        expected_existing_was_none=True,
-    ),
-    ExistingRelationTestCase(
-        description="subsequent run with existing target passes RelationInfo",
-        setup_sql=(
-            "CREATE TABLE main.test_model (old_col INT)",
-            "INSERT INTO main.test_model VALUES (999)",
-        ),
-        existing_database=None,
-        existing_schema="main",
-        existing_name="test_model",
-        existing_type="BASE TABLE",
-        expected_row_count=1,
-        expected_existing_was_none=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    EXISTING_RELATION_TEST_CASES,
-    ids=[case.description for case in EXISTING_RELATION_TEST_CASES],
+    [
+        ExistingRelationTestCase(
+            description="first run with no existing target passes None",
+            expected_row_count=1,
+            expected_existing_was_none=True,
+        ),
+        ExistingRelationTestCase(
+            description="subsequent run with existing target passes RelationInfo",
+            setup_sql=(
+                "CREATE TABLE main.test_model (old_col INT)",
+                "INSERT INTO main.test_model VALUES (999)",
+            ),
+            existing_database=None,
+            existing_schema="main",
+            existing_name="test_model",
+            existing_type="BASE TABLE",
+            expected_row_count=1,
+            expected_existing_was_none=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_when_target_state_varies_then_existing_relation_correct(
     test_case: ExistingRelationTestCase,
@@ -225,34 +222,31 @@ def test_given_custom_materialization_when_target_state_varies_then_existing_rel
 # --- Placeholder execution tests ---
 
 
-PLACEHOLDER_EXECUTION_TEST_CASES: list[PlaceholderExecutionTestCase] = [
-    PlaceholderExecutionTestCase(
-        description="@@@placeholders substituted and SQL executes against database",
-        model_sql=(
-            "SELECT * FROM (VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, name) "
-            "WHERE id >= @@@start_id AND id < @@@end_id"
-        ),
-        placeholders={"start_id": "1", "end_id": "4"},
-        substitutions={"start_id": "2", "end_id": "4"},
-        expected_row_count=2,
-    ),
-    PlaceholderExecutionTestCase(
-        description="@@@placeholder with string values and quoting",
-        model_sql=(
-            "SELECT * FROM (VALUES ('alice', 10), ('bob', 20), ('charlie', 30)) AS t(name, score) "
-            "WHERE name = @@@target_name"
-        ),
-        placeholders={"target_name": "'alice'"},
-        substitutions={"target_name": "'bob'"},
-        expected_row_count=1,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PLACEHOLDER_EXECUTION_TEST_CASES,
-    ids=[case.description for case in PLACEHOLDER_EXECUTION_TEST_CASES],
+    [
+        PlaceholderExecutionTestCase(
+            description="@@@placeholders substituted and SQL executes against database",
+            model_sql=(
+                "SELECT * FROM (VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, name) "
+                "WHERE id >= @@@start_id AND id < @@@end_id"
+            ),
+            placeholders={"start_id": "1", "end_id": "4"},
+            substitutions={"start_id": "2", "end_id": "4"},
+            expected_row_count=2,
+        ),
+        PlaceholderExecutionTestCase(
+            description="@@@placeholder with string values and quoting",
+            model_sql=(
+                "SELECT * FROM (VALUES ('alice', 10), ('bob', 20), ('charlie', 30)) AS t(name, score) "
+                "WHERE name = @@@target_name"
+            ),
+            placeholders={"target_name": "'alice'"},
+            substitutions={"target_name": "'bob'"},
+            expected_row_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_with_placeholders_when_substituted_then_executes(
     test_case: PlaceholderExecutionTestCase,
@@ -288,7 +282,7 @@ def test_given_custom_materialization_with_placeholders_when_substituted_then_ex
             expected_min_audit_row_count=1,
         ),
     ],
-    ids=["user audit against staging finds real rows and blocks promotion"],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_when_audit_finds_rows_in_staging_then_blocks(
     test_case: PrePromotionAuditTestCase,
@@ -317,55 +311,52 @@ def test_given_custom_materialization_when_audit_finds_rows_in_staging_then_bloc
 # --- Scheduler routing tests ---
 
 
-SCHEDULER_ROUTING_TEST_CASES: list[SchedulerRoutingTestCase] = [
-    SchedulerRoutingTestCase(
-        description="custom materialization dispatched through scheduler alongside regular table",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_YML,
-            "models/regular.sql": (
-                "MODEL (materialized table);\n\nSELECT 1 AS id, 'regular' AS name"
-            ),
-            "models/custom_model.sql": (
-                "MODEL (materialized test_custom);\n\nSELECT 2 AS id, 'custom' AS name"
-            ),
-        },
-        expected_status=BuildStatus.SUCCESS,
-        expected_success_count=2,
-        expected_query_results=(
-            ("SELECT id, name FROM main.regular", ((1, "regular"),)),
-            (
-                "SELECT id, name, custom_marker FROM main.custom_model",
-                ((2, "custom", "via_custom_fn"),),
-            ),
-        ),
-    ),
-    SchedulerRoutingTestCase(
-        description="custom materialization downstream of regular table receives correct data",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_YML,
-            "models/upstream.sql": (
-                "MODEL (materialized table);\n\nSELECT 10 AS id, 'upstream' AS origin"
-            ),
-            "models/downstream_custom.sql": (
-                'MODEL (materialized test_custom);\n\nSELECT id, origin FROM __ref("upstream")'
-            ),
-        },
-        expected_status=BuildStatus.SUCCESS,
-        expected_success_count=2,
-        expected_query_results=(
-            (
-                "SELECT id, origin, custom_marker FROM main.downstream_custom",
-                ((10, "upstream", "via_custom_fn"),),
-            ),
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SCHEDULER_ROUTING_TEST_CASES,
-    ids=[case.description for case in SCHEDULER_ROUTING_TEST_CASES],
+    [
+        SchedulerRoutingTestCase(
+            description="custom materialization dispatched through scheduler alongside regular table",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "models/regular.sql": (
+                    "MODEL (materialized table);\n\nSELECT 1 AS id, 'regular' AS name"
+                ),
+                "models/custom_model.sql": (
+                    "MODEL (materialized test_custom);\n\nSELECT 2 AS id, 'custom' AS name"
+                ),
+            },
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=2,
+            expected_query_results=(
+                ("SELECT id, name FROM main.regular", ((1, "regular"),)),
+                (
+                    "SELECT id, name, custom_marker FROM main.custom_model",
+                    ((2, "custom", "via_custom_fn"),),
+                ),
+            ),
+        ),
+        SchedulerRoutingTestCase(
+            description="custom materialization downstream of regular table receives correct data",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_YML,
+                "models/upstream.sql": (
+                    "MODEL (materialized table);\n\nSELECT 10 AS id, 'upstream' AS origin"
+                ),
+                "models/downstream_custom.sql": (
+                    'MODEL (materialized test_custom);\n\nSELECT id, origin FROM __ref("upstream")'
+                ),
+            },
+            expected_status=BuildStatus.SUCCESS,
+            expected_success_count=2,
+            expected_query_results=(
+                (
+                    "SELECT id, origin, custom_marker FROM main.downstream_custom",
+                    ((10, "upstream", "via_custom_fn"),),
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_build_with_custom_materialization_when_scheduled_then_routes_correctly(
     test_case: SchedulerRoutingTestCase,

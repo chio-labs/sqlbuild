@@ -27,7 +27,7 @@ from tests.unit.src.sqlbuild.adapter.strict.helpers import (
             expected_missing_methods=frozenset(),
         )
     ],
-    ids=["strict adapter covers every public base adapter method"],
+    ids=lambda case: case.description,
 )
 def test_given_base_adapter_public_methods_when_checking_strict_contract_then_all_are_abstract(
     test_case: StrictAdapterContractTestCase,
@@ -52,7 +52,7 @@ def test_given_base_adapter_public_methods_when_checking_strict_contract_then_al
             expected_violations=(),
         )
     ],
-    ids=["first-class adapters implement strict contract below base adapter"],
+    ids=lambda case: case.description,
 )
 def test_given_first_class_adapters_when_checking_contract_then_no_method_comes_from_base(
     test_case: FirstClassAdapterImplementationContractTestCase,
@@ -71,7 +71,7 @@ def test_given_first_class_adapters_when_checking_contract_then_no_method_comes_
             expected_error_fragment="does not support table freshness metadata",
         )
     ],
-    ids=["duckdb table freshness metadata is unsupported by default"],
+    ids=lambda case: case.description,
 )
 def test_given_unsupported_adapter_when_getting_table_freshness_metadata_then_raises_clear_error(
     test_case: TableFreshnessMetadataUnsupportedTestCase,

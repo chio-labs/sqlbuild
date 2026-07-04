@@ -11,65 +11,63 @@ from sqlbuild.integrations.dbt.pipeline.main.debug import debug_dbt_from_project
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtDebugPipelineTestCase
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import RecordingDbtInvoker
 
-DBT_DEBUG_PIPELINE_TEST_CASES: tuple[DbtDebugPipelineTestCase, ...] = (
-    DbtDebugPipelineTestCase(
-        description="runs dbt debug with resolved config and strips SQLBuild local args",
-        args=(
-            "--project-dir",
-            "../dbt_project",
-            "--profiles-dir",
-            "../profiles",
-            "--target",
-            "dev",
-            "--target-path",
-            "../target/dbt",
-            "--no-connection",
-            "--connection",
-        ),
-        expected_argv=(
-            "dbt",
-            "debug",
-            "--project-dir",
-            "{dbt_project}",
-            "--profiles-dir",
-            "{profiles}",
-            "--target",
-            "dev",
-            "--connection",
-        ),
-        expected_stdout="dbt ok\n",
-        expected_stderr="dbt warn\n",
-        expected_returncode=0,
-    ),
-    DbtDebugPipelineTestCase(
-        description="uses local dbt target when cli target is absent",
-        args=(
-            "--project-dir",
-            "../dbt_project",
-            "--profiles-dir",
-            "../profiles",
-        ),
-        expected_argv=(
-            "dbt",
-            "debug",
-            "--project-dir",
-            "{dbt_project}",
-            "--profiles-dir",
-            "{profiles}",
-            "--target",
-            "pat",
-        ),
-        expected_stdout="dbt ok\n",
-        expected_stderr="dbt warn\n",
-        expected_returncode=0,
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_DEBUG_PIPELINE_TEST_CASES,
-    ids=[case.description for case in DBT_DEBUG_PIPELINE_TEST_CASES],
+    (
+        DbtDebugPipelineTestCase(
+            description="runs dbt debug with resolved config and strips SQLBuild local args",
+            args=(
+                "--project-dir",
+                "../dbt_project",
+                "--profiles-dir",
+                "../profiles",
+                "--target",
+                "dev",
+                "--target-path",
+                "../target/dbt",
+                "--no-connection",
+                "--connection",
+            ),
+            expected_argv=(
+                "dbt",
+                "debug",
+                "--project-dir",
+                "{dbt_project}",
+                "--profiles-dir",
+                "{profiles}",
+                "--target",
+                "dev",
+                "--connection",
+            ),
+            expected_stdout="dbt ok\n",
+            expected_stderr="dbt warn\n",
+            expected_returncode=0,
+        ),
+        DbtDebugPipelineTestCase(
+            description="uses local dbt target when cli target is absent",
+            args=(
+                "--project-dir",
+                "../dbt_project",
+                "--profiles-dir",
+                "../profiles",
+            ),
+            expected_argv=(
+                "dbt",
+                "debug",
+                "--project-dir",
+                "{dbt_project}",
+                "--profiles-dir",
+                "{profiles}",
+                "--target",
+                "pat",
+            ),
+            expected_stdout="dbt ok\n",
+            expected_stderr="dbt warn\n",
+            expected_returncode=0,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_dbt_debug_args_when_running_pipeline_then_invokes_only_dbt_debug(
     tmp_path: Path,

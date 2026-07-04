@@ -20,74 +20,57 @@ from tests.unit.src.sqlbuild.spec.models.targets._test_types import (
     TargetConfigReuseLocalSourceTestCase,
 )
 
-TARGET_CONFIG_REUSE_ERROR_TEST_CASES: list[TargetConfigReuseErrorTestCase] = [
-    TargetConfigReuseErrorTestCase(
-        description="rejects unknown reuse_from target",
-        target_name="dev",
-        reuse_from="missing",
-        expected_error_fragment="Target 'dev' reuse_from references unknown target 'missing'",
-    ),
-    TargetConfigReuseErrorTestCase(
-        description="rejects self reuse_from target",
-        target_name="dev",
-        reuse_from="dev",
-        expected_error_fragment="Target 'dev' cannot reuse from itself",
-    ),
-]
-
-EFFECTIVE_FORCE_TEST_CASES: list[EffectiveForceResolutionTestCase] = [
-    EffectiveForceResolutionTestCase(
-        description="uses default false when nothing is configured",
-        project_config=ProjectConfig(name="demo", adapter="duckdb"),
-        local_config=LocalConfig(),
-        cli_force=False,
-        expected_force=False,
-    ),
-    EffectiveForceResolutionTestCase(
-        description="uses global settings force when target does not override",
-        project_config=ProjectConfig(
-            name="demo",
-            adapter="duckdb",
-            default_target="dev",
-            settings=SettingsConfig(force=True),
-            targets={"dev": TargetConfig()},
-        ),
-        local_config=LocalConfig(),
-        cli_force=False,
-        expected_force=True,
-    ),
-    EffectiveForceResolutionTestCase(
-        description="allows target false to override global true",
-        project_config=ProjectConfig(
-            name="demo",
-            adapter="duckdb",
-            default_target="prod",
-            settings=SettingsConfig(force=True),
-            targets={"prod": TargetConfig(force=False)},
-        ),
-        local_config=LocalConfig(),
-        cli_force=False,
-        expected_force=False,
-    ),
-    EffectiveForceResolutionTestCase(
-        description="allows cli force to override target false",
-        project_config=ProjectConfig(
-            name="demo",
-            adapter="duckdb",
-            default_target="prod",
-            targets={"prod": TargetConfig(force=False)},
-        ),
-        local_config=LocalConfig(),
-        cli_force=True,
-        expected_force=True,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    EFFECTIVE_FORCE_TEST_CASES,
-    ids=[case.description for case in EFFECTIVE_FORCE_TEST_CASES],
+    [
+        EffectiveForceResolutionTestCase(
+            description="uses default false when nothing is configured",
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            cli_force=False,
+            expected_force=False,
+        ),
+        EffectiveForceResolutionTestCase(
+            description="uses global settings force when target does not override",
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                default_target="dev",
+                settings=SettingsConfig(force=True),
+                targets={"dev": TargetConfig()},
+            ),
+            local_config=LocalConfig(),
+            cli_force=False,
+            expected_force=True,
+        ),
+        EffectiveForceResolutionTestCase(
+            description="allows target false to override global true",
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                default_target="prod",
+                settings=SettingsConfig(force=True),
+                targets={"prod": TargetConfig(force=False)},
+            ),
+            local_config=LocalConfig(),
+            cli_force=False,
+            expected_force=False,
+        ),
+        EffectiveForceResolutionTestCase(
+            description="allows cli force to override target false",
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                default_target="prod",
+                targets={"prod": TargetConfig(force=False)},
+            ),
+            local_config=LocalConfig(),
+            cli_force=True,
+            expected_force=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_force_config_when_resolving_effective_force_then_precedence_is_applied(
     test_case: EffectiveForceResolutionTestCase,
@@ -154,7 +137,7 @@ def test_given_force_config_when_resolving_effective_force_then_precedence_is_ap
             expected_reuse_hard_copy=True,
         )
     ],
-    ids=["merges local state overrides over project state config"],
+    ids=lambda case: case.description,
 )
 def test_given_project_and_local_state_config_when_resolving_then_local_overrides_are_applied(
     test_case: TargetConfigResolutionTestCase,
@@ -177,8 +160,21 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
 
 @pytest.mark.parametrize(
     "test_case",
-    TARGET_CONFIG_REUSE_ERROR_TEST_CASES,
-    ids=[case.description for case in TARGET_CONFIG_REUSE_ERROR_TEST_CASES],
+    [
+        TargetConfigReuseErrorTestCase(
+            description="rejects unknown reuse_from target",
+            target_name="dev",
+            reuse_from="missing",
+            expected_error_fragment="Target 'dev' reuse_from references unknown target 'missing'",
+        ),
+        TargetConfigReuseErrorTestCase(
+            description="rejects self reuse_from target",
+            target_name="dev",
+            reuse_from="dev",
+            expected_error_fragment="Target 'dev' cannot reuse from itself",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_reuse_from_when_resolving_target_then_it_raises(
     test_case: TargetConfigReuseErrorTestCase,
@@ -206,7 +202,7 @@ def test_given_invalid_reuse_from_when_resolving_target_then_it_raises(
             expected_reuse_from="prod_local",
         )
     ],
-    ids=["allows reuse_from target defined only in local config"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_exists_only_in_local_config_when_resolving_then_it_is_allowed(
     test_case: TargetConfigReuseLocalSourceTestCase,

@@ -169,7 +169,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_absent_runtime_fragments=("__SQB_CURSOR_START__", "__SQB_CURSOR_END__"),
         )
     ],
-    ids=["fresh build succeeds for model-backed normal and microbatch cursor models"],
+    ids=lambda case: case.description,
 )
 def test_given_inline_project_when_building_model_backed_cursor_models_then_it_succeeds(
     test_case: ModelBackedCursorBuildE2ETestCase,

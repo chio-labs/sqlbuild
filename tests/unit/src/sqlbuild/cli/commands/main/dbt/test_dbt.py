@@ -22,106 +22,31 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt.helpers import (
     write_minimal_sqlbuild_project,
 )
 
-PROGRESS_TEST_CASES: list[DbtPlanProgressTestCase] = [
-    DbtPlanProgressTestCase(
-        description="human output writes progress and plan to stdout",
-        json_output=False,
-        expected_stdout_fragments=(
-            "Compiling dbt project...",
-            "Generated dbt interop plan.",
-            "Plan ready",
-        ),
-        expected_stderr_fragments=(),
-    ),
-    DbtPlanProgressTestCase(
-        description="json output writes progress to stderr and json to stdout",
-        json_output=True,
-        expected_stdout_fragments=('"command": "plan"',),
-        expected_stderr_fragments=(
-            "Compiling dbt project...",
-            "Generated dbt interop plan.",
-        ),
-    ),
-]
-
-EXECUTION_WRAPPER_TEST_CASES: list[DbtExecutionWrapperTestCase] = [
-    DbtExecutionWrapperTestCase(
-        description="dbt run strips local json and verbose flags before execution",
-        command_name="run",
-        args=("--json", "--verbose", "--select", "tag:nightly"),
-        expected_forwarded_args=("--select", "tag:nightly"),
-        expected_progress_stream_name="stderr",
-    ),
-    DbtExecutionWrapperTestCase(
-        description="dbt build keeps human output on stdout",
-        command_name="build",
-        args=("--select", "tag:nightly"),
-        expected_forwarded_args=("--select", "tag:nightly"),
-        expected_progress_stream_name="stdout",
-    ),
-    DbtExecutionWrapperTestCase(
-        description="dbt test strips local json and verbose flags before execution",
-        command_name="test",
-        args=("--json", "--verbose", "--select", "test_type:data"),
-        expected_forwarded_args=("--select", "test_type:data"),
-        expected_progress_stream_name="stderr",
-    ),
-]
-
-DEBUG_WRAPPER_TEST_CASES: list[DbtDebugWrapperTestCase] = [
-    DbtDebugWrapperTestCase(
-        description="debug runs dbt then SQLBuild diagnostics and skips SQLBuild connection",
-        args=("--project-dir", "dbt_project", "--no-connection"),
-        expected_dbt_args=("--project-dir", "dbt_project", "--no-connection"),
-        expected_sqlbuild_no_connection=True,
-        expected_exit_code=0,
-        expected_stderr_fragments=(
-            "Running dbt debug...",
-            "Running SQLBuild diagnostics...",
-        ),
-    ),
-    DbtDebugWrapperTestCase(
-        description="debug returns failure when dbt debug fails after SQLBuild diagnostics",
-        args=(
-            "--project-dir",
-            "dbt_project",
-        ),
-        expected_dbt_args=("--project-dir", "dbt_project"),
-        expected_sqlbuild_no_connection=False,
-        expected_exit_code=1,
-    ),
-]
-
-AUTO_INIT_NO_CREATE_TEST_CASES: list[DbtAutoInitTestCase] = [
-    DbtAutoInitTestCase(
-        description="uses current SQLBuild project when config exists",
-        has_current_sqlbuild_project=True,
-        has_sibling_sqlbuild_project=False,
-        dbt_args=("--select", "orders"),
-        expected_init_called=False,
-        expected_forwarded_project_dir_name="dbt_project",
-        expected_request_dbt_project_dir_name=None,
-        expected_request_profiles_dir=None,
-        expected_request_target_name=None,
-    ),
-    DbtAutoInitTestCase(
-        description="uses existing sibling SQLBuild twin when current project is dbt",
-        has_current_sqlbuild_project=False,
-        has_sibling_sqlbuild_project=True,
-        dbt_args=("--select", "orders"),
-        expected_init_called=False,
-        expected_forwarded_project_dir_name="sqlbuild_project",
-        expected_request_dbt_project_dir_name=None,
-        expected_request_profiles_dir=None,
-        expected_request_target_name=None,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PROGRESS_TEST_CASES,
-    ids=[case.description for case in PROGRESS_TEST_CASES],
+    [
+        DbtPlanProgressTestCase(
+            description="human output writes progress and plan to stdout",
+            json_output=False,
+            expected_stdout_fragments=(
+                "Compiling dbt project...",
+                "Generated dbt interop plan.",
+                "Plan ready",
+            ),
+            expected_stderr_fragments=(),
+        ),
+        DbtPlanProgressTestCase(
+            description="json output writes progress to stderr and json to stdout",
+            json_output=True,
+            expected_stdout_fragments=('"command": "plan"',),
+            expected_stderr_fragments=(
+                "Compiling dbt project...",
+                "Generated dbt interop plan.",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
     test_case: DbtPlanProgressTestCase,
@@ -172,8 +97,30 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
 
 @pytest.mark.parametrize(
     "test_case",
-    EXECUTION_WRAPPER_TEST_CASES,
-    ids=[case.description for case in EXECUTION_WRAPPER_TEST_CASES],
+    [
+        DbtExecutionWrapperTestCase(
+            description="dbt run strips local json and verbose flags before execution",
+            command_name="run",
+            args=("--json", "--verbose", "--select", "tag:nightly"),
+            expected_forwarded_args=("--select", "tag:nightly"),
+            expected_progress_stream_name="stderr",
+        ),
+        DbtExecutionWrapperTestCase(
+            description="dbt build keeps human output on stdout",
+            command_name="build",
+            args=("--select", "tag:nightly"),
+            expected_forwarded_args=("--select", "tag:nightly"),
+            expected_progress_stream_name="stdout",
+        ),
+        DbtExecutionWrapperTestCase(
+            description="dbt test strips local json and verbose flags before execution",
+            command_name="test",
+            args=("--json", "--verbose", "--select", "test_type:data"),
+            expected_forwarded_args=("--select", "test_type:data"),
+            expected_progress_stream_name="stderr",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_execution_command_when_running_then_routes_expected_stream_and_args(
     test_case: DbtExecutionWrapperTestCase,
@@ -226,8 +173,30 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
 
 @pytest.mark.parametrize(
     "test_case",
-    DEBUG_WRAPPER_TEST_CASES,
-    ids=[case.description for case in DEBUG_WRAPPER_TEST_CASES],
+    [
+        DbtDebugWrapperTestCase(
+            description="debug runs dbt then SQLBuild diagnostics and skips SQLBuild connection",
+            args=("--project-dir", "dbt_project", "--no-connection"),
+            expected_dbt_args=("--project-dir", "dbt_project", "--no-connection"),
+            expected_sqlbuild_no_connection=True,
+            expected_exit_code=0,
+            expected_stderr_fragments=(
+                "Running dbt debug...",
+                "Running SQLBuild diagnostics...",
+            ),
+        ),
+        DbtDebugWrapperTestCase(
+            description="debug returns failure when dbt debug fails after SQLBuild diagnostics",
+            args=(
+                "--project-dir",
+                "dbt_project",
+            ),
+            expected_dbt_args=("--project-dir", "dbt_project"),
+            expected_sqlbuild_no_connection=False,
+            expected_exit_code=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debug(
     test_case: DbtDebugWrapperTestCase,
@@ -290,8 +259,31 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
 
 @pytest.mark.parametrize(
     "test_case",
-    AUTO_INIT_NO_CREATE_TEST_CASES,
-    ids=[case.description for case in AUTO_INIT_NO_CREATE_TEST_CASES],
+    [
+        DbtAutoInitTestCase(
+            description="uses current SQLBuild project when config exists",
+            has_current_sqlbuild_project=True,
+            has_sibling_sqlbuild_project=False,
+            dbt_args=("--select", "orders"),
+            expected_init_called=False,
+            expected_forwarded_project_dir_name="dbt_project",
+            expected_request_dbt_project_dir_name=None,
+            expected_request_profiles_dir=None,
+            expected_request_target_name=None,
+        ),
+        DbtAutoInitTestCase(
+            description="uses existing sibling SQLBuild twin when current project is dbt",
+            has_current_sqlbuild_project=False,
+            has_sibling_sqlbuild_project=True,
+            dbt_args=("--select", "orders"),
+            expected_init_called=False,
+            expected_forwarded_project_dir_name="sqlbuild_project",
+            expected_request_dbt_project_dir_name=None,
+            expected_request_profiles_dir=None,
+            expected_request_target_name=None,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expected_project(
     test_case: DbtAutoInitTestCase,
@@ -379,7 +371,7 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
             expected_request_target_name="dev",
         )
     ],
-    ids=["creates sibling SQLBuild twin from typed dbt config flags"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_and_uses_twin(
     test_case: DbtAutoInitTestCase,

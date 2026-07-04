@@ -75,7 +75,7 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
             expected_provider_usage_annotation_modules=(SlackProvider.__module__,),
         )
     ],
-    ids=["builds graph inventory across all executable Python node kinds"],
+    ids=lambda case: case.description,
 )
 def test_given_discovered_python_functions_when_building_graph_then_indexes_nodes_and_edges(
     test_case: PythonNodeGraphInventoryTestCase,

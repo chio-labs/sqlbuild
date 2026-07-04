@@ -50,54 +50,52 @@ from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
     write_seed_file,
 )
 
-EXPRESSION_NULLABILITY_RULE_TEST_CASES: list[DatabricksExpressionNullabilityRuleTestCase] = [
-    DatabricksExpressionNullabilityRuleTestCase(
-        description="LOWER preserves non-null literal",
-        function_name="LOWER",
-        sql_expression="LOWER('READY')",
-        rule_args=(InferredNullability.NON_NULL,),
-        expected_nullability=InferredNullability.NON_NULL,
-        expected_is_null=False,
-    ),
-    DatabricksExpressionNullabilityRuleTestCase(
-        description="LOWER preserves nullable input",
-        function_name="LOWER",
-        sql_expression="LOWER(CAST(NULL AS STRING))",
-        rule_args=(InferredNullability.NULLABLE,),
-        expected_nullability=InferredNullability.NULLABLE,
-        expected_is_null=True,
-    ),
-    DatabricksExpressionNullabilityRuleTestCase(
-        description="IF with non-null result branches is non-null",
-        function_name="IF",
-        sql_expression="IF(TRUE, 'yes', 'no')",
-        rule_args=(
-            InferredNullability.UNKNOWN,
-            InferredNullability.NON_NULL,
-            InferredNullability.NON_NULL,
-        ),
-        expected_nullability=InferredNullability.NON_NULL,
-        expected_is_null=False,
-    ),
-    DatabricksExpressionNullabilityRuleTestCase(
-        description="IF with nullable result branch can be null",
-        function_name="IF",
-        sql_expression="IF(TRUE, CAST(NULL AS STRING), 'no')",
-        rule_args=(
-            InferredNullability.UNKNOWN,
-            InferredNullability.NULLABLE,
-            InferredNullability.NON_NULL,
-        ),
-        expected_nullability=InferredNullability.NULLABLE,
-        expected_is_null=True,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    EXPRESSION_NULLABILITY_RULE_TEST_CASES,
-    ids=[case.description for case in EXPRESSION_NULLABILITY_RULE_TEST_CASES],
+    [
+        DatabricksExpressionNullabilityRuleTestCase(
+            description="LOWER preserves non-null literal",
+            function_name="LOWER",
+            sql_expression="LOWER('READY')",
+            rule_args=(InferredNullability.NON_NULL,),
+            expected_nullability=InferredNullability.NON_NULL,
+            expected_is_null=False,
+        ),
+        DatabricksExpressionNullabilityRuleTestCase(
+            description="LOWER preserves nullable input",
+            function_name="LOWER",
+            sql_expression="LOWER(CAST(NULL AS STRING))",
+            rule_args=(InferredNullability.NULLABLE,),
+            expected_nullability=InferredNullability.NULLABLE,
+            expected_is_null=True,
+        ),
+        DatabricksExpressionNullabilityRuleTestCase(
+            description="IF with non-null result branches is non-null",
+            function_name="IF",
+            sql_expression="IF(TRUE, 'yes', 'no')",
+            rule_args=(
+                InferredNullability.UNKNOWN,
+                InferredNullability.NON_NULL,
+                InferredNullability.NON_NULL,
+            ),
+            expected_nullability=InferredNullability.NON_NULL,
+            expected_is_null=False,
+        ),
+        DatabricksExpressionNullabilityRuleTestCase(
+            description="IF with nullable result branch can be null",
+            function_name="IF",
+            sql_expression="IF(TRUE, CAST(NULL AS STRING), 'no')",
+            rule_args=(
+                InferredNullability.UNKNOWN,
+                InferredNullability.NULLABLE,
+                InferredNullability.NON_NULL,
+            ),
+            expected_nullability=InferredNullability.NULLABLE,
+            expected_is_null=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_expression_rule_when_querying_then_databricks_matches_nullability_expectation(
     test_case: DatabricksExpressionNullabilityRuleTestCase,
@@ -120,114 +118,32 @@ def test_given_expression_rule_when_querying_then_databricks_matches_nullability
     assert result.rows == ((test_case.expected_is_null,),)
 
 
-QUERY_TEST_CASES: list[DatabricksQueryTestCase] = [
-    DatabricksQueryTestCase(
-        description="returns rows and truncation for limited query",
-        sql=(
-            "SELECT * FROM ("
-            "SELECT 1 AS id, 'alice' AS name UNION ALL "
-            "SELECT 2 AS id, 'bob' AS name"
-            ") ORDER BY id"
-        ),
-        limit=1,
-        expected_result=QueryResult(
-            columns=("id", "name"),
-            rows=((1, "alice"),),
-            truncated=True,
-        ),
-    ),
-    DatabricksQueryTestCase(
-        description="returns ok result for ddl query",
-        sql="CREATE OR REPLACE TABLE __sqb_query_temp (id INTEGER)",
-        limit=20,
-        expected_result=QueryResult(),
-    ),
-]
-
-SCHEMA_DIFF_TEST_CASES: list[DatabricksSchemaDiffTestCase] = [
-    DatabricksSchemaDiffTestCase(
-        description="detects added removed and changed column types",
-        left_sql="CREATE OR REPLACE TABLE left_t (id INT, status STRING, old_col BOOLEAN)",
-        right_sql="CREATE OR REPLACE TABLE right_t (id STRING, status STRING, new_col DATE)",
-        expected_result=SchemaDiffResult(
-            added_columns=(ColumnInfo(name="new_col", type="DATE"),),
-            removed_columns=(ColumnInfo(name="old_col", type="BOOLEAN"),),
-            type_changed_columns=(
-                (
-                    ColumnInfo(name="id", type="INT"),
-                    ColumnInfo(name="id", type="STRING"),
-                ),
-            ),
-        ),
-    ),
-    DatabricksSchemaDiffTestCase(
-        description="ignores equivalent scalar aliases and detects numeric scale changes",
-        left_sql=(
-            "CREATE OR REPLACE TABLE left_t ("
-            "id BIGINT, amount DECIMAL(10,2), widened DECIMAL(10,2))"
-        ),
-        right_sql=(
-            "CREATE OR REPLACE TABLE right_t (id LONG, amount NUMERIC(10,2), widened NUMERIC(10,3))"
-        ),
-        expected_result=SchemaDiffResult(
-            type_changed_columns=(
-                (
-                    ColumnInfo(name="widened", type="DECIMAL(10,2)"),
-                    ColumnInfo(name="widened", type="DECIMAL(10,3)"),
-                ),
-            ),
-        ),
-    ),
-]
-
-ROW_DIFF_TEST_CASES: list[DatabricksRowDiffTestCase] = [
-    DatabricksRowDiffTestCase(
-        description="detects equal unequal and side-only rows",
-        left_sql=(
-            "CREATE OR REPLACE TABLE left_t AS "
-            "SELECT 1 AS id, 'a' AS val UNION ALL "
-            "SELECT 2 AS id, 'b' AS val UNION ALL "
-            "SELECT 3 AS id, 'c' AS val"
-        ),
-        right_sql=(
-            "CREATE OR REPLACE TABLE right_t AS "
-            "SELECT 1 AS id, 'a' AS val UNION ALL "
-            "SELECT 2 AS id, 'x' AS val UNION ALL "
-            "SELECT 4 AS id, 'd' AS val"
-        ),
-        unique_key="id",
-        expected_result=RowDiffResult(
-            left_count=3,
-            right_count=3,
-            joined_count=4,
-            equal_count=1,
-            unequal_count=1,
-            left_only_count=1,
-            right_only_count=1,
-        ),
-    ),
-    DatabricksRowDiffTestCase(
-        description="counts equal rows for identical tables",
-        left_sql="CREATE OR REPLACE TABLE left_t AS SELECT 1 AS id, 10 AS amount",
-        right_sql="CREATE OR REPLACE TABLE right_t AS SELECT 1 AS id, 10 AS amount",
-        unique_key="id",
-        expected_result=RowDiffResult(
-            left_count=1,
-            right_count=1,
-            joined_count=1,
-            equal_count=1,
-            unequal_count=0,
-            left_only_count=0,
-            right_only_count=0,
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    QUERY_TEST_CASES,
-    ids=[case.description for case in QUERY_TEST_CASES],
+    [
+        DatabricksQueryTestCase(
+            description="returns rows and truncation for limited query",
+            sql=(
+                "SELECT * FROM ("
+                "SELECT 1 AS id, 'alice' AS name UNION ALL "
+                "SELECT 2 AS id, 'bob' AS name"
+                ") ORDER BY id"
+            ),
+            limit=1,
+            expected_result=QueryResult(
+                columns=("id", "name"),
+                rows=((1, "alice"),),
+                truncated=True,
+            ),
+        ),
+        DatabricksQueryTestCase(
+            description="returns ok result for ddl query",
+            sql="CREATE OR REPLACE TABLE __sqb_query_temp (id INTEGER)",
+            limit=20,
+            expected_result=QueryResult(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sql_when_querying_then_returns_expected_result(
     test_case: DatabricksQueryTestCase,
@@ -273,7 +189,7 @@ def test_given_sql_when_querying_then_returns_expected_result(
             expected_query_column_names=("order_id", "status"),
         )
     ],
-    ids=["discovers created table and view metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_relations_when_introspecting_then_returns_expected_metadata(
     test_case: DatabricksSchemaIntrospectionTestCase,
@@ -359,7 +275,7 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
             expected_data_version_type=datetime,
         )
     ],
-    ids=["delta table freshness metadata advances after table DML"],
+    ids=lambda case: case.description,
 )
 def test_given_delta_table_dml_when_getting_freshness_metadata_then_version_advances(
     test_case: DatabricksTableFreshnessMetadataTestCase,
@@ -454,8 +370,42 @@ def test_given_delta_table_dml_when_getting_freshness_metadata_then_version_adva
 
 @pytest.mark.parametrize(
     "test_case",
-    SCHEMA_DIFF_TEST_CASES,
-    ids=[case.description for case in SCHEMA_DIFF_TEST_CASES],
+    [
+        DatabricksSchemaDiffTestCase(
+            description="detects added removed and changed column types",
+            left_sql="CREATE OR REPLACE TABLE left_t (id INT, status STRING, old_col BOOLEAN)",
+            right_sql="CREATE OR REPLACE TABLE right_t (id STRING, status STRING, new_col DATE)",
+            expected_result=SchemaDiffResult(
+                added_columns=(ColumnInfo(name="new_col", type="DATE"),),
+                removed_columns=(ColumnInfo(name="old_col", type="BOOLEAN"),),
+                type_changed_columns=(
+                    (
+                        ColumnInfo(name="id", type="INT"),
+                        ColumnInfo(name="id", type="STRING"),
+                    ),
+                ),
+            ),
+        ),
+        DatabricksSchemaDiffTestCase(
+            description="ignores equivalent scalar aliases and detects numeric scale changes",
+            left_sql=(
+                "CREATE OR REPLACE TABLE left_t ("
+                "id BIGINT, amount DECIMAL(10,2), widened DECIMAL(10,2))"
+            ),
+            right_sql=(
+                "CREATE OR REPLACE TABLE right_t (id LONG, amount NUMERIC(10,2), widened NUMERIC(10,3))"
+            ),
+            expected_result=SchemaDiffResult(
+                type_changed_columns=(
+                    (
+                        ColumnInfo(name="widened", type="DECIMAL(10,2)"),
+                        ColumnInfo(name="widened", type="DECIMAL(10,3)"),
+                    ),
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_relations_when_diffing_schema_then_returns_expected_result(
     test_case: DatabricksSchemaDiffTestCase,
@@ -490,8 +440,49 @@ def test_given_relations_when_diffing_schema_then_returns_expected_result(
 
 @pytest.mark.parametrize(
     "test_case",
-    ROW_DIFF_TEST_CASES,
-    ids=[case.description for case in ROW_DIFF_TEST_CASES],
+    [
+        DatabricksRowDiffTestCase(
+            description="detects equal unequal and side-only rows",
+            left_sql=(
+                "CREATE OR REPLACE TABLE left_t AS "
+                "SELECT 1 AS id, 'a' AS val UNION ALL "
+                "SELECT 2 AS id, 'b' AS val UNION ALL "
+                "SELECT 3 AS id, 'c' AS val"
+            ),
+            right_sql=(
+                "CREATE OR REPLACE TABLE right_t AS "
+                "SELECT 1 AS id, 'a' AS val UNION ALL "
+                "SELECT 2 AS id, 'x' AS val UNION ALL "
+                "SELECT 4 AS id, 'd' AS val"
+            ),
+            unique_key="id",
+            expected_result=RowDiffResult(
+                left_count=3,
+                right_count=3,
+                joined_count=4,
+                equal_count=1,
+                unequal_count=1,
+                left_only_count=1,
+                right_only_count=1,
+            ),
+        ),
+        DatabricksRowDiffTestCase(
+            description="counts equal rows for identical tables",
+            left_sql="CREATE OR REPLACE TABLE left_t AS SELECT 1 AS id, 10 AS amount",
+            right_sql="CREATE OR REPLACE TABLE right_t AS SELECT 1 AS id, 10 AS amount",
+            unique_key="id",
+            expected_result=RowDiffResult(
+                left_count=1,
+                right_count=1,
+                joined_count=1,
+                equal_count=1,
+                unequal_count=0,
+                left_only_count=0,
+                right_only_count=0,
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_relations_when_diffing_rows_then_returns_expected_result(
     test_case: DatabricksRowDiffTestCase,
@@ -558,7 +549,7 @@ def test_given_relations_when_diffing_rows_then_returns_expected_result(
             ),
         )
     ],
-    ids=["returns unequal row samples for changed values"],
+    ids=lambda case: case.description,
 )
 def test_given_relations_when_sampling_unequal_rows_then_returns_expected_examples(
     test_case: DatabricksRowDiffSampleTestCase,
@@ -615,7 +606,7 @@ def test_given_relations_when_sampling_unequal_rows_then_returns_expected_exampl
             expected_side_only_samples=((("id", 1),),),
         )
     ],
-    ids=["returns side only key samples"],
+    ids=lambda case: case.description,
 )
 def test_given_relations_when_sampling_side_only_rows_then_returns_expected_examples(
     test_case: DatabricksRowDiffSampleTestCase,
@@ -665,7 +656,7 @@ def test_given_relations_when_sampling_side_only_rows_then_returns_expected_exam
             expected_statement_count=5,
         )
     ],
-    ids=["loads seed csv and builds table from select sql"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows(
     test_case: DatabricksBuildFlowTestCase,
@@ -716,28 +707,25 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
     assert len(recorder.snapshot()) == test_case.expected_statement_count
 
 
-RELATION_REUSE_COPY_TEST_CASES: tuple[DatabricksRelationReuseCopyTestCase, ...] = (
-    DatabricksRelationReuseCopyTestCase(
-        description="cheap reuse shallow clones relation",
-        hard_copy=False,
-        destination_name="orders_cheap_reuse",
-        expected_rows=((1, "alice"), (2, "bob")),
-        expected_recorded_fragment=" SHALLOW CLONE ",
-    ),
-    DatabricksRelationReuseCopyTestCase(
-        description="hard copy reuse uses CTAS",
-        hard_copy=True,
-        destination_name="orders_hard_reuse",
-        expected_rows=((1, "alice"), (2, "bob")),
-        expected_recorded_fragment=" AS SELECT * FROM ",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RELATION_REUSE_COPY_TEST_CASES,
-    ids=[case.description for case in RELATION_REUSE_COPY_TEST_CASES],
+    (
+        DatabricksRelationReuseCopyTestCase(
+            description="cheap reuse shallow clones relation",
+            hard_copy=False,
+            destination_name="orders_cheap_reuse",
+            expected_rows=((1, "alice"), (2, "bob")),
+            expected_recorded_fragment=" SHALLOW CLONE ",
+        ),
+        DatabricksRelationReuseCopyTestCase(
+            description="hard copy reuse uses CTAS",
+            hard_copy=True,
+            destination_name="orders_hard_reuse",
+            expected_rows=((1, "alice"), (2, "bob")),
+            expected_recorded_fragment=" AS SELECT * FROM ",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_reuse_origin_when_creating_relation_then_databricks_uses_expected_copy_mode(
     test_case: DatabricksRelationReuseCopyTestCase,
@@ -793,7 +781,7 @@ def test_given_reuse_origin_when_creating_relation_then_databricks_uses_expected
             expected_rows=((1, "new"), (2, "keep"), (3, "add")),
         )
     ],
-    ids=["merges source rows into target table"],
+    ids=lambda case: case.description,
 )
 def test_given_merge_source_when_merging_then_target_matches_expected_rows(
     test_case: DatabricksMergeTestCase,
@@ -838,7 +826,7 @@ def test_given_merge_source_when_merging_then_target_matches_expected_rows(
             expected_target_name="fingerprint_model",
         )
     ],
-    ids=["base64 multiline sql round trips"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_row_when_written_to_databricks_then_base64_sql_round_trips(
     test_case: DatabricksFingerprintTestCase,

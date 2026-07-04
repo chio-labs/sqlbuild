@@ -44,7 +44,7 @@ ADAPTER: DuckDbAdapter = DuckDbAdapter()
             ),
         )
     ],
-    ids=["creates table with payload column"],
+    ids=lambda case: case.description,
 )
 def test_given_schema_when_rendering_create_sql_then_contains_watermark_columns(
     test_case: RenderNodeSourceWatermarkSqlTestCase,
@@ -74,7 +74,7 @@ def test_given_schema_when_rendering_create_sql_then_contains_watermark_columns(
             ),
         )
     ],
-    ids=["reads latest row per node identity"],
+    ids=lambda case: case.description,
 )
 def test_given_schema_when_rendering_latest_read_sql_then_partitions_by_node_identity(
     test_case: RenderNodeSourceWatermarkSqlTestCase,
@@ -102,7 +102,7 @@ def test_given_schema_when_rendering_latest_read_sql_then_partitions_by_node_ide
             ),
         )
     ],
-    ids=["inserts one row per node run with encoded payload"],
+    ids=lambda case: case.description,
 )
 def test_given_watermark_record_when_rendering_insert_sql_then_inserts_payload_row(
     test_case: RenderNodeSourceWatermarkSqlTestCase,

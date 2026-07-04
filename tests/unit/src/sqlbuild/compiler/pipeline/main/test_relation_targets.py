@@ -28,7 +28,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline.main.helpers import RelationTarge
             expected_source_relation="deferred_raw.orders",
         )
     ],
-    ids=["source refs use source read map instead of load map"],
+    ids=lambda case: case.description,
 )
 def test_given_source_read_map_when_building_python_relation_targets_then_uses_read_relation(
     test_case: PythonRelationTargetsTestCase,

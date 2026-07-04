@@ -34,7 +34,7 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.helpers import chained_sql_tes
             ),
         )
     ],
-    ids=["skips empty test and audit phases"],
+    ids=lambda case: case.description,
 )
 def test_given_empty_sqlbuild_test_work_when_executing_then_skips_empty_phases(
     test_case: DbtSqlbuildWorkOutputTestCase,
@@ -71,7 +71,7 @@ def test_given_empty_sqlbuild_test_work_when_executing_then_skips_empty_phases(
             ),
         )
     ],
-    ids=["separates test preflight from first test row"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_test_work_when_preflight_completes_then_separates_first_row(
     test_case: DbtSqlbuildWorkOutputTestCase,
@@ -131,7 +131,7 @@ def test_given_sqlbuild_test_work_when_preflight_completes_then_separates_first_
             unexpected_fragments=("\nTest (1 selected)\n",),
         )
     ],
-    ids=["styles the test header with success_strong color"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_test_work_when_rendering_header_then_uses_success_strong_color(
     test_case: DbtSqlbuildWorkOutputTestCase,

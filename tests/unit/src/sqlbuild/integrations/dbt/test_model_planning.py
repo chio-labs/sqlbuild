@@ -72,50 +72,48 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     write_dbt_test_fingerprint,
 )
 
-MODEL_PLANNING_TEST_CASES: tuple[DbtModelPlanningTestCase, ...] = (
-    DbtModelPlanningTestCase(
-        description="missing fingerprint plans first run",
-        create_relation=False,
-        fingerprint_hash=None,
-        expected_action=DbtModelPlanAction.RUN,
-        expected_reason=DbtModelPlanReason.FIRST_RUN,
-    ),
-    DbtModelPlanningTestCase(
-        description="missing relation plans rerun",
-        create_relation=False,
-        fingerprint_hash="same_hash",
-        expected_action=DbtModelPlanAction.RUN,
-        expected_reason=DbtModelPlanReason.RELATION_MISSING,
-    ),
-    DbtModelPlanningTestCase(
-        description="checksum change plans rerun",
-        create_relation=True,
-        fingerprint_hash="old_hash",
-        expected_action=DbtModelPlanAction.RUN,
-        expected_reason=DbtModelPlanReason.CHECKSUM_CHANGED,
-    ),
-    DbtModelPlanningTestCase(
-        description="matching checksum and relation plans current",
-        create_relation=True,
-        fingerprint_hash="same_hash",
-        expected_action=DbtModelPlanAction.CURRENT,
-        expected_reason=DbtModelPlanReason.NO_CHANGE,
-    ),
-    DbtModelPlanningTestCase(
-        description="force plans matching checksum and relation for rerun",
-        create_relation=True,
-        fingerprint_hash="same_hash",
-        force=True,
-        expected_action=DbtModelPlanAction.RUN,
-        expected_reason=DbtModelPlanReason.FORCED,
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    MODEL_PLANNING_TEST_CASES,
-    ids=[case.description for case in MODEL_PLANNING_TEST_CASES],
+    (
+        DbtModelPlanningTestCase(
+            description="missing fingerprint plans first run",
+            create_relation=False,
+            fingerprint_hash=None,
+            expected_action=DbtModelPlanAction.RUN,
+            expected_reason=DbtModelPlanReason.FIRST_RUN,
+        ),
+        DbtModelPlanningTestCase(
+            description="missing relation plans rerun",
+            create_relation=False,
+            fingerprint_hash="same_hash",
+            expected_action=DbtModelPlanAction.RUN,
+            expected_reason=DbtModelPlanReason.RELATION_MISSING,
+        ),
+        DbtModelPlanningTestCase(
+            description="checksum change plans rerun",
+            create_relation=True,
+            fingerprint_hash="old_hash",
+            expected_action=DbtModelPlanAction.RUN,
+            expected_reason=DbtModelPlanReason.CHECKSUM_CHANGED,
+        ),
+        DbtModelPlanningTestCase(
+            description="matching checksum and relation plans current",
+            create_relation=True,
+            fingerprint_hash="same_hash",
+            expected_action=DbtModelPlanAction.CURRENT,
+            expected_reason=DbtModelPlanReason.NO_CHANGE,
+        ),
+        DbtModelPlanningTestCase(
+            description="force plans matching checksum and relation for rerun",
+            create_relation=True,
+            fingerprint_hash="same_hash",
+            force=True,
+            expected_action=DbtModelPlanAction.RUN,
+            expected_reason=DbtModelPlanReason.FORCED,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_dbt_model_state_when_planning_then_returns_expected_action(
     test_case: DbtModelPlanningTestCase,
@@ -182,7 +180,7 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
             },
         )
     ],
-    ids=["prefetches dbt model relation existence in one bulk call"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existence_once(
     test_case: DbtModelPlanningRelationPrefetchTestCase,
@@ -279,7 +277,7 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
             expected_seed_relation_exists_call_count=0,
         )
     ],
-    ids=["seed existence resolves from the bulk relation set with no per-seed query"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_query(
     test_case: DbtSeedRelationPrefetchTestCase,
@@ -372,7 +370,7 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
             expected_metadata_fragment='"resource_type":"model"',
         )
     ],
-    ids=["model fingerprint stores SQL definition and metadata separately"],
+    ids=lambda case: case.description,
 )
 def test_given_successful_dbt_model_when_writing_fingerprint_then_definition_is_query_sql(
     test_case: DbtFingerprintWriteTestCase,
@@ -448,7 +446,7 @@ def test_given_successful_dbt_model_when_writing_fingerprint_then_definition_is_
             ),
         )
     ],
-    ids=["pruned execution argv keeps runnable models and seed names"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable_work(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -518,7 +516,7 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
             ),
         )
     ],
-    ids=["unchanged seed is excluded from execution argv when a model runs"],
+    ids=lambda case: case.description,
 )
 def test_given_unchanged_seed_when_building_execution_argv_then_excludes_seed(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -573,7 +571,7 @@ def test_given_unchanged_seed_when_building_execution_argv_then_excludes_seed(
             expected_argv=None,
         )
     ],
-    ids=["defer cloned required model is excluded from dbt execution argv"],
+    ids=lambda case: case.description,
 )
 def test_given_defer_cloned_required_when_building_argv_then_excludes_required_model(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -627,7 +625,7 @@ def test_given_defer_cloned_required_when_building_argv_then_excludes_required_m
             ),
         )
     ],
-    ids=["pruned execution argv uses exact fqn selectors"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_model_plan_with_fqn_when_building_execution_argv_then_selects_exact_nodes(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -712,7 +710,7 @@ def test_given_dbt_model_plan_with_fqn_when_building_execution_argv_then_selects
             expected_argv=None,
         )
     ],
-    ids=["current model plan skips dbt build when only selected tests remain"],
+    ids=lambda case: case.description,
 )
 def test_given_current_dbt_model_plan_when_building_execution_argv_then_skips_dbt(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -762,7 +760,7 @@ def test_given_current_dbt_model_plan_when_building_execution_argv_then_skips_db
             expected_argv=None,
         )
     ],
-    ids=["current model plan prunes selected seeds"],
+    ids=lambda case: case.description,
 )
 def test_given_current_dbt_models_and_selected_seed_when_building_execution_argv_then_prunes_seed(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -818,7 +816,7 @@ def test_given_current_dbt_models_and_selected_seed_when_building_execution_argv
             ),
         )
     ],
-    ids=["runnable model plan keeps selected tests"],
+    ids=lambda case: case.description,
 )
 def test_given_runnable_dbt_model_and_selected_test_when_building_execution_argv_then_runs_test(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -872,7 +870,7 @@ def test_given_runnable_dbt_model_and_selected_test_when_building_execution_argv
             expected_argv=("dbt", "test", "--select", "not_null_current_id"),
         )
     ],
-    ids=["dbt test preserves selected tests even when models are current"],
+    ids=lambda case: case.description,
 )
 def test_given_current_dbt_model_and_selected_test_when_testing_then_runs_test(
     test_case: DbtExecutionArgvPruningTestCase,
@@ -932,7 +930,7 @@ def test_given_current_dbt_model_and_selected_test_when_testing_then_runs_test(
             expected_blocked_sqlbuild_model_names=("downstream_failed",),
         )
     ],
-    ids=["dbt model outcomes map changed and failed models to SQLBuild overlay"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_node_results_when_building_outcome_then_maps_sqlbuild_overlay(
     test_case: DbtExecutionOutcomeTestCase,
@@ -1051,7 +1049,7 @@ def test_given_dbt_node_results_when_building_outcome_then_maps_sqlbuild_overlay
             ),
         )
     ],
-    ids=["run results fallback captures failed model omitted from event stream"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome_blocks_downstream(
     test_case: DbtExecutionOutcomeTestCase,
@@ -1154,7 +1152,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
             ),
         )
     ],
-    ids=["run results fallback renders failed dbt test detail"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_run_results_when_event_stream_omits_failed_test_then_renders_failure(
     test_case: DbtRunResultsFallbackRenderTestCase,
@@ -1213,7 +1211,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_test_then_renders_
             unexpected_output_fragments=("2/7", "1/6"),
         )
     ],
-    ids=["dbt ls total overrides inconsistent dbt event counters"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_execution_when_ls_counts_final_selection_then_streams_consistent_total(
     test_case: DbtExecutionTotalRenderTestCase,
@@ -1286,7 +1284,7 @@ def test_given_dbt_execution_when_ls_counts_final_selection_then_streams_consist
             expected_blocked_source_unique_ids=("source.analytics.raw.orders",),
         )
     ],
-    ids=["source age error blocks downstream dbt and SQLBuild models"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
     test_case: DbtModelSourceBlockingTestCase,
@@ -1394,7 +1392,7 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
             expected_freshness_request_names=("customers", "orders"),
         )
     ],
-    ids=["observes all manifest sources while candidates stay scoped"],
+    ids=lambda case: case.description,
 )
 def test_given_candidate_branch_when_planning_then_observes_all_manifest_sources(
     test_case: DbtSourceFreshnessScopeTestCase,
@@ -1482,7 +1480,7 @@ def test_given_candidate_branch_when_planning_then_observes_all_manifest_sources
             expected_blocked_source_unique_ids=(),
         )
     ],
-    ids=["changed source freshness reruns downstream dbt and SQLBuild models"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstream_models(
     test_case: DbtModelSourceBlockingTestCase,

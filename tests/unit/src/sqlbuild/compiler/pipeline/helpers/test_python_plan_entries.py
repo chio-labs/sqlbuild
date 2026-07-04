@@ -24,29 +24,27 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
     build_orders_python_node_graph,
 )
 
-PYTHON_PLAN_IDENTITY_STATUS_TEST_CASES: list[PythonPlanIdentityStatusTestCase] = [
-    PythonPlanIdentityStatusTestCase(
-        description="marks missing previous identity as new",
-        previous_version_hash=None,
-        expected_status=PythonIdentityStatus.NEW,
-    ),
-    PythonPlanIdentityStatusTestCase(
-        description="marks matching previous identity as unchanged",
-        previous_version_hash="current",
-        expected_status=PythonIdentityStatus.UNCHANGED,
-    ),
-    PythonPlanIdentityStatusTestCase(
-        description="marks different previous identity as changed",
-        previous_version_hash="previous",
-        expected_status=PythonIdentityStatus.CHANGED,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_PLAN_IDENTITY_STATUS_TEST_CASES,
-    ids=[case.description for case in PYTHON_PLAN_IDENTITY_STATUS_TEST_CASES],
+    [
+        PythonPlanIdentityStatusTestCase(
+            description="marks missing previous identity as new",
+            previous_version_hash=None,
+            expected_status=PythonIdentityStatus.NEW,
+        ),
+        PythonPlanIdentityStatusTestCase(
+            description="marks matching previous identity as unchanged",
+            previous_version_hash="current",
+            expected_status=PythonIdentityStatus.UNCHANGED,
+        ),
+        PythonPlanIdentityStatusTestCase(
+            description="marks different previous identity as changed",
+            previous_version_hash="previous",
+            expected_status=PythonIdentityStatus.CHANGED,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_previous_python_identity_when_building_plan_entries_then_sets_status(
     test_case: PythonPlanIdentityStatusTestCase,

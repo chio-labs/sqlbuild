@@ -16,29 +16,31 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_seed_identity_compiled_seed,
 )
 
-TEST_CASES: list[SeedIdentityTestCase] = [
-    SeedIdentityTestCase(
-        description="line ending normalization preserves identity",
-        seed_contents="id,name\n1,Ada\n2,Grace\n",
-        comparison_contents="id,name\r\n1,Ada\r\n2,Grace\r\n",
-        expected_same_identity=True,
-    ),
-    SeedIdentityTestCase(
-        description="utf-8 bom normalization preserves identity",
-        seed_contents="id,name\n1,Ada\n",
-        comparison_contents="\ufeffid,name\n1,Ada\n",
-        expected_same_identity=True,
-    ),
-    SeedIdentityTestCase(
-        description="content change alters identity",
-        seed_contents="id,name\n1,Ada\n",
-        comparison_contents="id,name\n1,Grace\n",
-        expected_same_identity=False,
-    ),
-]
 
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SeedIdentityTestCase(
+            description="line ending normalization preserves identity",
+            seed_contents="id,name\n1,Ada\n2,Grace\n",
+            comparison_contents="id,name\r\n1,Ada\r\n2,Grace\r\n",
+            expected_same_identity=True,
+        ),
+        SeedIdentityTestCase(
+            description="utf-8 bom normalization preserves identity",
+            seed_contents="id,name\n1,Ada\n",
+            comparison_contents="\ufeffid,name\n1,Ada\n",
+            expected_same_identity=True,
+        ),
+        SeedIdentityTestCase(
+            description="content change alters identity",
+            seed_contents="id,name\n1,Ada\n",
+            comparison_contents="id,name\n1,Grace\n",
+            expected_same_identity=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_seed_content_when_hashing_then_identity_is_stable_and_content_sensitive(
     test_case: SeedIdentityTestCase,
     tmp_path: Path,
@@ -63,7 +65,7 @@ def test_given_seed_content_when_hashing_then_identity_is_stable_and_content_sen
             expected_same_identity=False,
         )
     ],
-    ids=["csv delimiter affects identity"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_csv_config_when_hashing_then_config_affects_identity(
     test_case: SeedIdentityCsvConfigTestCase,

@@ -31,7 +31,7 @@ dg: Any = pytest.importorskip("dagster")
             expected_dag_contents=json.dumps(build_dagster_test_dag()),
         )
     ],
-    ids=["prepare writes dag command output to default artifact path"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_project_when_preparing_then_writes_default_dag_artifact(
     test_case: DagsterProjectPrepareTestCase,
@@ -64,7 +64,7 @@ def test_given_sqlbuild_project_when_preparing_then_writes_default_dag_artifact(
             expected_error_fragment="SQLBuild DAG preparation failed with exit code 9",
         )
     ],
-    ids=["prepare raises clear error when dag command fails"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_project_when_prepare_command_fails_then_raises_prepare_error(
     test_case: DagsterProjectPrepareFailureTestCase,
@@ -98,7 +98,7 @@ def test_given_sqlbuild_project_when_prepare_command_fails_then_raises_prepare_e
             expected_dag_contents=json.dumps(build_dagster_test_dag()),
         )
     ],
-    ids=["prepare if dev writes dag artifact under Dagster dev cli"],
+    ids=lambda case: case.description,
 )
 def test_given_dev_cli_environment_when_preparing_if_dev_then_writes_dag_artifact(
     test_case: DagsterProjectPrepareTestCase,
@@ -139,7 +139,7 @@ def test_given_dev_cli_environment_when_preparing_if_dev_then_writes_dag_artifac
             ),
         )
     ],
-    ids=["decorator loads dag artifact from project default path"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_project_when_decorating_assets_then_loads_project_dag_path(
     test_case: DagsterProjectDecoratorTestCase,

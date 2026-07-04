@@ -7,28 +7,26 @@ from tests.unit.src.sqlbuild.shared.helpers.sql_resolution._test_types import (
     AssertNoUnresolvedSqlMarkersTestCase,
 )
 
-UNRESOLVED_SQL_MARKER_TEST_CASES: list[AssertNoUnresolvedSqlMarkersTestCase] = [
-    AssertNoUnresolvedSqlMarkersTestCase(
-        description="raises on unresolved ref marker",
-        sql='SELECT * FROM __ref("orders")',
-        context="audit 'not_null' planned SQL",
-        expected_error_fragment=r"still contains unresolved __ref\(\) markers",
-        expected_code="R001",
-    ),
-    AssertNoUnresolvedSqlMarkersTestCase(
-        description="raises on unresolved source marker",
-        sql='SELECT * FROM __source("raw_orders")',
-        context="audit 'not_null' executable SQL",
-        expected_error_fragment=r"still contains unresolved __source\(\) markers",
-        expected_code="R003",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    UNRESOLVED_SQL_MARKER_TEST_CASES,
-    ids=[case.description for case in UNRESOLVED_SQL_MARKER_TEST_CASES],
+    [
+        AssertNoUnresolvedSqlMarkersTestCase(
+            description="raises on unresolved ref marker",
+            sql='SELECT * FROM __ref("orders")',
+            context="audit 'not_null' planned SQL",
+            expected_error_fragment=r"still contains unresolved __ref\(\) markers",
+            expected_code="R001",
+        ),
+        AssertNoUnresolvedSqlMarkersTestCase(
+            description="raises on unresolved source marker",
+            sql='SELECT * FROM __source("raw_orders")',
+            context="audit 'not_null' executable SQL",
+            expected_error_fragment=r"still contains unresolved __source\(\) markers",
+            expected_code="R003",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_unresolved_executable_sql_when_validating_then_it_raises_clear_error(
     test_case: AssertNoUnresolvedSqlMarkersTestCase,
@@ -49,7 +47,7 @@ def test_given_unresolved_executable_sql_when_validating_then_it_raises_clear_er
             expected_error_fragment="",
         )
     ],
-    ids=["passes for resolved executable sql"],
+    ids=lambda case: case.description,
 )
 def test_given_resolved_executable_sql_when_validating_then_it_passes(
     test_case: AssertNoUnresolvedSqlMarkersTestCase,

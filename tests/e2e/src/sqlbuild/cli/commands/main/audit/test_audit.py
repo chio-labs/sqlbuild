@@ -41,7 +41,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         ),
     ],
-    ids=["audit runs all audits against built relations and all pass"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_project_when_running_audit_then_all_audits_pass(
     test_case: AuditE2ETestCase,

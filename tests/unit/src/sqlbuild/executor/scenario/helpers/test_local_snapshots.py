@@ -31,42 +31,40 @@ from tests.unit.src.sqlbuild.executor.scenario.helpers.helpers import (
 SCENARIO_NAME: str = "revenue__customer_refund"
 INPUT_FINGERPRINT: str = "fresh123"
 
-LOCAL_SNAPSHOT_LOAD_TEST_CASES: list[ScenarioLocalSnapshotLoadTestCase] = [
-    ScenarioLocalSnapshotLoadTestCase(
-        description="loads typed jsonl rows into duckdb tables",
-        columns=(
-            ("order_id", "NUMBER", "BIGINT"),
-            ("amount", "NUMBER(10,2)", "DECIMAL(10,2)"),
-            ("order_date", "DATE", "DATE"),
-        ),
-        rows=(
-            {"order_id": 1, "amount": "10.50", "order_date": "2026-01-02"},
-            {"order_id": 2, "amount": "20.25", "order_date": "2026-01-03"},
-        ),
-        expected_table_name="__sqb_local__source__raw__orders",
-        expected_summary_row=(2, 2, "30.75"),
-    ),
-    ScenarioLocalSnapshotLoadTestCase(
-        description="loads warehouse-folded jsonl keys case-insensitively",
-        columns=(
-            ("order_id", "NUMBER", "BIGINT"),
-            ("amount", "NUMBER(10,2)", "DECIMAL(10,2)"),
-            ("order_date", "DATE", "DATE"),
-        ),
-        rows=(
-            {"ORDER_ID": 1, "AMOUNT": "10.50", "ORDER_DATE": "2026-01-02"},
-            {"ORDER_ID": 2, "AMOUNT": "20.25", "ORDER_DATE": "2026-01-03"},
-        ),
-        expected_table_name="__sqb_local__source__raw__orders",
-        expected_summary_row=(2, 2, "30.75"),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    LOCAL_SNAPSHOT_LOAD_TEST_CASES,
-    ids=[case.description for case in LOCAL_SNAPSHOT_LOAD_TEST_CASES],
+    [
+        ScenarioLocalSnapshotLoadTestCase(
+            description="loads typed jsonl rows into duckdb tables",
+            columns=(
+                ("order_id", "NUMBER", "BIGINT"),
+                ("amount", "NUMBER(10,2)", "DECIMAL(10,2)"),
+                ("order_date", "DATE", "DATE"),
+            ),
+            rows=(
+                {"order_id": 1, "amount": "10.50", "order_date": "2026-01-02"},
+                {"order_id": 2, "amount": "20.25", "order_date": "2026-01-03"},
+            ),
+            expected_table_name="__sqb_local__source__raw__orders",
+            expected_summary_row=(2, 2, "30.75"),
+        ),
+        ScenarioLocalSnapshotLoadTestCase(
+            description="loads warehouse-folded jsonl keys case-insensitively",
+            columns=(
+                ("order_id", "NUMBER", "BIGINT"),
+                ("amount", "NUMBER(10,2)", "DECIMAL(10,2)"),
+                ("order_date", "DATE", "DATE"),
+            ),
+            rows=(
+                {"ORDER_ID": 1, "AMOUNT": "10.50", "ORDER_DATE": "2026-01-02"},
+                {"ORDER_ID": 2, "AMOUNT": "20.25", "ORDER_DATE": "2026-01-03"},
+            ),
+            expected_table_name="__sqb_local__source__raw__orders",
+            expected_summary_row=(2, 2, "30.75"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_fresh_snapshot_when_loading_into_duckdb_then_creates_typed_tables(
     tmp_path: Path,
@@ -100,59 +98,56 @@ def test_given_fresh_snapshot_when_loading_into_duckdb_then_creates_typed_tables
     assert summary_row == test_case.expected_summary_row
 
 
-LOCAL_SNAPSHOT_LOAD_ERROR_TEST_CASES: list[ScenarioLocalSnapshotLoadErrorTestCase] = [
-    ScenarioLocalSnapshotLoadErrorTestCase(
-        description="invalid local type reports column context",
-        columns=(
-            ("payload", "OBJECT", "NOT_A_DUCKDB_TYPE"),
-            ("metadata", "VARIANT", "ALSO_NOT_A_DUCKDB_TYPE"),
-        ),
-        file_contents='{"payload":"abc"}\n',
-        expected_error_code=SCENARIO_LOCAL_TYPE_INVALID,
-        expected_error_fragments=(
-            "DuckDB rejected 2 local_type errors",
-            "local_type 'NOT_A_DUCKDB_TYPE'",
-            "local_type 'ALSO_NOT_A_DUCKDB_TYPE'",
-            "scenario 'revenue__customer_refund'",
-            "relation 'source raw__orders'",
-            "column 'payload'",
-            "column 'metadata'",
-            "scenario.json",
-        ),
-    ),
-    ScenarioLocalSnapshotLoadErrorTestCase(
-        description="malformed jsonl reports snapshot file context",
-        columns=(("order_id", "NUMBER", "BIGINT"),),
-        file_contents='{"order_id":1}\n{not json}\n',
-        expected_error_code=SCENARIO_LOCAL_JSONL_INVALID,
-        expected_error_fragments=(
-            "invalid local snapshot JSONL",
-            "sources/raw__orders.jsonl",
-            "relation 'source raw__orders'",
-            "line 2",
-        ),
-    ),
-    ScenarioLocalSnapshotLoadErrorTestCase(
-        description="uncastable jsonl value reports column context",
-        columns=(("order_date", "DATE", "DATE"),),
-        file_contents='{"order_date":"not-a-date"}\n',
-        expected_error_code=SCENARIO_LOCAL_LOAD_FAILED,
-        expected_error_fragments=(
-            "could not load local snapshot JSONL",
-            "sources/raw__orders.jsonl",
-            "relation 'source raw__orders'",
-            "column 'order_date'",
-            "local_type 'DATE'",
-            "row 1",
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    LOCAL_SNAPSHOT_LOAD_ERROR_TEST_CASES,
-    ids=[case.description for case in LOCAL_SNAPSHOT_LOAD_ERROR_TEST_CASES],
+    [
+        ScenarioLocalSnapshotLoadErrorTestCase(
+            description="invalid local type reports column context",
+            columns=(
+                ("payload", "OBJECT", "NOT_A_DUCKDB_TYPE"),
+                ("metadata", "VARIANT", "ALSO_NOT_A_DUCKDB_TYPE"),
+            ),
+            file_contents='{"payload":"abc"}\n',
+            expected_error_code=SCENARIO_LOCAL_TYPE_INVALID,
+            expected_error_fragments=(
+                "DuckDB rejected 2 local_type errors",
+                "local_type 'NOT_A_DUCKDB_TYPE'",
+                "local_type 'ALSO_NOT_A_DUCKDB_TYPE'",
+                "scenario 'revenue__customer_refund'",
+                "relation 'source raw__orders'",
+                "column 'payload'",
+                "column 'metadata'",
+                "scenario.json",
+            ),
+        ),
+        ScenarioLocalSnapshotLoadErrorTestCase(
+            description="malformed jsonl reports snapshot file context",
+            columns=(("order_id", "NUMBER", "BIGINT"),),
+            file_contents='{"order_id":1}\n{not json}\n',
+            expected_error_code=SCENARIO_LOCAL_JSONL_INVALID,
+            expected_error_fragments=(
+                "invalid local snapshot JSONL",
+                "sources/raw__orders.jsonl",
+                "relation 'source raw__orders'",
+                "line 2",
+            ),
+        ),
+        ScenarioLocalSnapshotLoadErrorTestCase(
+            description="uncastable jsonl value reports column context",
+            columns=(("order_date", "DATE", "DATE"),),
+            file_contents='{"order_date":"not-a-date"}\n',
+            expected_error_code=SCENARIO_LOCAL_LOAD_FAILED,
+            expected_error_fragments=(
+                "could not load local snapshot JSONL",
+                "sources/raw__orders.jsonl",
+                "relation 'source raw__orders'",
+                "column 'order_date'",
+                "local_type 'DATE'",
+                "row 1",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_local_snapshot_when_loading_then_raises_coded_error(
     tmp_path: Path,

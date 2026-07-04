@@ -45,7 +45,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_sh
             ),
         )
     ],
-    ids=["dag json reports static graph without warehouse planning"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_running_dag_json_then_it_reports_static_graph(
     test_case: DagJsonBuildE2ETestCase,
