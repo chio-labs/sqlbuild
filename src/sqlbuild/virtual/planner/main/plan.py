@@ -19,6 +19,10 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
+    DeferralInputs,
+    PlannerOverrides,
+    PlannerPolicies,
+    PlannerSelection,
     PlanOutput,
     RunDespiteUnchangedPlanningResult,
 )
@@ -253,20 +257,25 @@ def run_virtual_plan_pipeline(
                 project=graph.project,
                 adapter=adapter,
                 connection=connection,
-                select=effective_select_with_seeds,
-                exclude=(),
-                cursor_overrides=cursor_overrides,
-                full_refresh=full_refresh,
-                auto_load_sources=auto_load_sources,
-                reload_sources=reload_sources,
+                selection=PlannerSelection(select=effective_select_with_seeds),
+                overrides=PlannerOverrides(
+                    cursor_overrides=cursor_overrides,
+                    full_refresh=full_refresh,
+                    reload_sources=reload_sources,
+                ),
+                deferral=DeferralInputs(
+                    deferred_locations=deferred_locations,
+                    deferred_relations=deferred_relations,
+                    defer_sources_to=defer_sources_to,
+                    source_deferral_enabled=source_deferral_enabled,
+                ),
+                policies=PlannerPolicies(
+                    auto_load_sources=auto_load_sources,
+                    enable_reuse_planning=False,
+                ),
                 on_progress=on_progress,
                 project_config=discovered_inputs.project_config,
                 local_config=discovered_inputs.local_config,
-                defer_sources_to=defer_sources_to,
-                source_deferral_enabled=source_deferral_enabled,
-                deferred_locations=deferred_locations,
-                deferred_relations=deferred_relations,
-                enable_reuse_planning=False,
             )
         else:
             plan_output = PlanOutput(

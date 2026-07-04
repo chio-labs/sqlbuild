@@ -36,6 +36,15 @@ class PythonPlanEntry:
 
 
 @dataclass(frozen=True)
+class PythonRunPlanOutputs:
+    """Plan output and Python entries after python-aware run selection."""
+
+    plan_output: PlanOutput
+    python_plan_entries: tuple[PythonPlanEntry, ...]
+    selected_python_node_names: frozenset[str]
+
+
+@dataclass(frozen=True)
 class CompilePipelineResult:
     """Complete output from the compile-and-plan pipeline."""
 

@@ -51,6 +51,7 @@ from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
     CursorOverrides,
+    DeferralInputs,
     ModelCursorSnapshot,
     ModelPlanEntry,
     PlannerModelEntryResults,
@@ -103,25 +104,25 @@ def build_planner_relations_context(
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
-    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    deferral: DeferralInputs | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
-    defer_sources_to: str | None = None,
-    source_deferral_enabled: bool = True,
     require_source_deferral_config: bool = True,
+    known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
 ) -> PlannerRelationsContext:
     """Resolve relation locations and source metadata for plan entry construction."""
 
+    effective_deferral: DeferralInputs = deferral if deferral is not None else DeferralInputs()
     model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
     seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
     function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
         project.functions
     )
-    if deferred_locations is not None:
-        apply_deferred_locations(
+    if effective_deferral.deferred_locations is not None:
+        model_locations, seed_locations = apply_deferred_locations(
             model_locations=model_locations,
             seed_locations=seed_locations,
-            deferred_locations=deferred_locations,
+            deferred_locations=effective_deferral.deferred_locations,
             selected_keys=scope.selected_keys,
         )
     source_map: dict[str, SourceEntry] = build_source_load_map(
@@ -135,10 +136,10 @@ def build_planner_relations_context(
             selected_keys=scope.selected_keys,
             project_config=project_config,
             local_config=local_config,
-            defer_sources_to=defer_sources_to,
+            defer_sources_to=effective_deferral.defer_sources_to,
             require_source_deferral_config=require_source_deferral_config,
         )
-        if source_deferral_enabled
+        if effective_deferral.source_deferral_enabled
         else source_map
     )
     return PlannerRelationsContext(
@@ -147,13 +148,38 @@ def build_planner_relations_context(
         function_locations=function_locations,
         source_map=source_map,
         source_read_map=source_read_map,
-        source_warehouse_columns=gather_source_columns(
+        source_warehouse_columns=_resolve_source_warehouse_columns(
             project=project,
             adapter=adapter,
             connection=connection,
-            source_entries=tuple(source_read_map.values()),
+            source_read_map=source_read_map,
+            known_source_columns=known_source_columns,
         ),
         star_exclude_keyword=adapter.star_exclude_keyword(),
+    )
+
+
+def _resolve_source_warehouse_columns(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    connection: Any,
+    source_read_map: dict[str, SourceEntry],
+    known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None,
+) -> dict[str, tuple[ColumnInfo, ...]]:
+    """Reuse already-gathered source columns for the read map or gather them once."""
+
+    if known_source_columns is not None:
+        return {
+            name: known_source_columns[name]
+            for name in source_read_map
+            if name in known_source_columns
+        }
+    return gather_source_columns(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        source_entries=tuple(source_read_map.values()),
     )
 
 

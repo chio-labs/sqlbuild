@@ -14,7 +14,6 @@ from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.identity.standard import (
     build_standard_model_version_identities,
 )
-from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     ModelPlanEntry,
@@ -39,6 +38,7 @@ from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     SourceCursorInputPlanErrorTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
+    build_execution_plan_from_kwargs,
     build_project_from_format_test_case,
     build_project_from_source_cursor_input_test_case,
     build_project_from_test_case,
@@ -174,7 +174,7 @@ def test_given_project_when_building_plan_then_produces_expected_output(
     project: Any = build_project_from_test_case(test_case)
 
     progress_messages: list[str] = []
-    plan: PlanOutput = build_execution_plan(
+    plan: PlanOutput = build_execution_plan_from_kwargs(
         project=project,
         adapter=adapter,
         connection=connection,
@@ -292,7 +292,7 @@ def test_given_partial_selected_rebuild_when_executed_then_next_plan_still_repor
         model_configs=test_case.model_configs,
     )
     write_standard_model_state(adapter=adapter, connection=connection, project=previous_project)
-    build_plan: PlanOutput = build_execution_plan(
+    build_plan: PlanOutput = build_execution_plan_from_kwargs(
         project=current_project,
         adapter=adapter,
         connection=connection,
@@ -335,7 +335,7 @@ def test_given_partial_selected_rebuild_when_executed_then_next_plan_still_repor
             "ORDER BY ts DESC LIMIT 1"
         ).fetchone()[0]
     )
-    replan: PlanOutput = build_execution_plan(
+    replan: PlanOutput = build_execution_plan_from_kwargs(
         project=current_project,
         adapter=adapter,
         connection=connection,
@@ -398,7 +398,7 @@ def test_given_missing_source_cursor_input_column_when_building_plan_then_raises
     project: Any = build_project_from_source_cursor_input_test_case(test_case)
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
-        build_execution_plan(
+        build_execution_plan_from_kwargs(
             project=project,
             adapter=adapter,
             connection=connection,
@@ -471,7 +471,7 @@ def test_given_cursor_type_mismatch_when_building_plan_then_produces_warning(
     project: Any = build_project_from_test_case(test_case)
 
     progress_messages: list[str] = []
-    plan: PlanOutput = build_execution_plan(
+    plan: PlanOutput = build_execution_plan_from_kwargs(
         project=project,
         adapter=adapter,
         connection=connection,
@@ -710,7 +710,7 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
 
     project: Any = build_project_from_test_case(test_case)
 
-    plan: PlanOutput = build_execution_plan(
+    plan: PlanOutput = build_execution_plan_from_kwargs(
         project=project,
         adapter=adapter,
         connection=connection,
@@ -824,7 +824,7 @@ def test_given_real_plan_when_formatting_then_contains_expected_fragments(
 
     project: Any = build_project_from_format_test_case(test_case)
 
-    plan: PlanOutput = build_execution_plan(
+    plan: PlanOutput = build_execution_plan_from_kwargs(
         project=project,
         adapter=adapter,
         connection=connection,

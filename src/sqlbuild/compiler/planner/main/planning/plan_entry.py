@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.helpers.pruning.cascade import resolve_cascades
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     CursorOverrides,
+    DeferralInputs,
     PlannerChangeResults,
     PlannerModelEntryResults,
     PlannerRelationsContext,
@@ -56,11 +57,13 @@ def build_plan_output_from_model_changes_phase(
         adapter=adapter,
         connection=connection,
         scope=scope,
-        deferred_locations=deferred_locations,
+        deferral=DeferralInputs(
+            deferred_locations=deferred_locations,
+            defer_sources_to=defer_sources_to,
+            source_deferral_enabled=source_deferral_enabled,
+        ),
         project_config=project_config,
         local_config=local_config,
-        defer_sources_to=defer_sources_to,
-        source_deferral_enabled=source_deferral_enabled,
     )
     detected_changes: PlannerChangeResults = detect_changes(
         project=project,

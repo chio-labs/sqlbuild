@@ -53,12 +53,13 @@ def prune_standard_unchanged_scope(
     expected_version_hashes: dict[str, str] | None = None,
     expected_seed_version_hashes: dict[str, str] | None = None,
     built_seed_fingerprints: dict[str, Fingerprint] | None = None,
-    user_selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> PlannerScope:
     """Remove unchanged selected SQL nodes for standard stale-only planning."""
 
     selected_keys: set[CompiledObjectKey] = set()
-    identity_scope_keys: frozenset[CompiledObjectKey] = user_selected_keys or scope.selected_keys
+    identity_scope_keys: frozenset[CompiledObjectKey] = (
+        scope.user_selected_keys or scope.selected_keys
+    )
     forced_stale: frozenset[str] = frozenset(forced_stale_model_names)
     identity_stale_keys: frozenset[CompiledObjectKey] = frozenset(
         key

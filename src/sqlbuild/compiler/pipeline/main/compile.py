@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -23,31 +22,30 @@ from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
 )
 from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline.helpers.python_plan_entries import (
-    build_python_plan_entries,
-    build_skipped_task_asset_ingress_warnings,
-)
-from sqlbuild.compiler.pipeline.helpers.python_stale_selection import (
-    filter_python_node_names_for_selected_sql,
-)
+from sqlbuild.compiler.pipeline.helpers.python_plan_entries import build_python_run_plan_outputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.prepare_versions import (
     load_custom_prepare_version_functions,
 )
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph, PythonPlanEntry
+from sqlbuild.compiler.pipeline.models import (
+    CompilePipelineResult,
+    ProjectGraph,
+    PythonRunPlanOutputs,
+)
 from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
-from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    CursorOverrides,
+    DeferralInputs,
+    PlannerOverrides,
+    PlannerPolicies,
+    PlannerSelection,
+    PlanOutput,
+)
 from sqlbuild.compiler.planner.types import StandardScopePruning, WorkSelectionPolicy
-from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
-from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
 from sqlbuild.compiler.python_nodes.main.run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
-from sqlbuild.compiler.python_nodes.models import (
-    PythonNodeGraph,
-    PythonSqlRunLifecyclePlan,
-    PythonSqlRunSelection,
-)
+from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.compiler.shared.helpers.lineage_graph import (
     build_lineage_downstream_deps,
     build_lineage_upstream_deps,
@@ -209,72 +207,55 @@ def _build_result(
         project=project,
         adapter=adapter,
         connection=connection,
-        select=select,
-        exclude=exclude,
-        selected_keys=selected_sql_keys,
-        deferred_locations=deferred_locations,
-        deferred_relations=deferred_relations,
-        cursor_overrides=cursor_overrides,
-        full_refresh=full_refresh,
-        standard_scope_pruning=(
-            StandardScopePruning.PRUNE_UNCHANGED
-            if work_selection_policy == WorkSelectionPolicy.STALE_ONLY
-            else StandardScopePruning.NONE
+        selection=PlannerSelection(
+            select=select,
+            exclude=exclude,
+            selected_keys=selected_sql_keys,
         ),
-        auto_load_sources=auto_load_sources,
-        reload_sources=reload_sources,
+        overrides=PlannerOverrides(
+            cursor_overrides=cursor_overrides,
+            full_refresh=full_refresh,
+            reload_sources=reload_sources,
+        ),
+        deferral=DeferralInputs(
+            deferred_locations=deferred_locations,
+            deferred_relations=deferred_relations,
+            defer_sources_to=defer_sources_to,
+            source_deferral_enabled=source_deferral_enabled,
+        ),
+        policies=PlannerPolicies(
+            standard_scope_pruning=(
+                StandardScopePruning.PRUNE_UNCHANGED
+                if work_selection_policy == WorkSelectionPolicy.STALE_ONLY
+                else StandardScopePruning.NONE
+            ),
+            auto_load_sources=auto_load_sources,
+            custom_prepare_version_materializations=frozenset(
+                custom_prepare_version_functions.keys()
+            ),
+        ),
         on_progress=on_progress,
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        defer_sources_to=defer_sources_to,
-        source_deferral_enabled=source_deferral_enabled,
-        custom_prepare_version_materializations=frozenset(custom_prepare_version_functions.keys()),
     )
     custom_materializations: dict[str, Any] = load_custom_materializations(
         discovered_inputs.materialization_files
     )
-    python_plan_entries: tuple[PythonPlanEntry, ...] = ()
-    if run_selection is not None:
-        python_graph: PythonNodeGraph = build_discovered_python_node_graph(
-            discovered_inputs=discovered_inputs
-        )
-        if work_selection_policy == WorkSelectionPolicy.STALE_ONLY:
-            selected_python_node_names = filter_python_node_names_for_selected_sql(
-                python_graph=python_graph,
-                python_node_names=selected_python_node_names,
-                selected_sql_keys=plan_output.selected_keys,
-            )
-        plan_output = replace(
-            plan_output,
-            warnings=(
-                *plan_output.warnings,
-                *build_skipped_task_asset_ingress_warnings(
-                    plan_output=plan_output,
-                    run_selection=run_selection,
-                    python_graph=python_graph,
-                ),
-            ),
-        )
-        lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
-            selection=PythonSqlRunSelection(
-                sql_keys=plan_output.selected_keys,
-                python_node_names=selected_python_node_names,
-            ),
-            python_graph=python_graph,
-        )
-        python_plan_entries = build_python_plan_entries(
-            lifecycle_plan=lifecycle_plan,
-            python_graph=python_graph,
-            previous_identities=plan_output.python_identity_fingerprints,
-        )
+    python_outputs: PythonRunPlanOutputs = build_python_run_plan_outputs(
+        discovered_inputs=discovered_inputs,
+        plan_output=plan_output,
+        run_selection=run_selection,
+        selected_python_node_names=selected_python_node_names,
+        work_selection_policy=work_selection_policy,
+    )
 
     return CompilePipelineResult(
         project=project,
-        plan_output=plan_output,
+        plan_output=python_outputs.plan_output,
         custom_materializations=custom_materializations,
         custom_prepare_version_functions=custom_prepare_version_functions,
-        python_node_names=selected_python_node_names,
-        python_plan_entries=python_plan_entries,
+        python_node_names=python_outputs.selected_python_node_names,
+        python_plan_entries=python_outputs.python_plan_entries,
     )
 
 

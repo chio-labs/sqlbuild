@@ -111,16 +111,19 @@ def build_standard_reuse_from_target_snapshot(
                 "resolve to a fingerprint schema"
             )
         reuse_origin_schema: str = reuse_origin.schema
-        fingerprint_set: FingerprintSet = _read_reuse_origin_fingerprints(
-            adapter=adapter,
-            connection=connection,
-            fingerprint_sets=fingerprint_sets,
-            fingerprint_table_lookup=fingerprint_table_lookup,
-            active_target_name=project.effective_target_name,
-            reuse_from_target_name=reuse_from_target_name,
-            database=reuse_origin.database,
-            schema=reuse_origin_schema,
-        )
+        fingerprint_cache_key: tuple[str | None, str] = (reuse_origin.database, reuse_origin_schema)
+        fingerprint_set: FingerprintSet | None = fingerprint_sets.get(fingerprint_cache_key)
+        if fingerprint_set is None:
+            fingerprint_set = _read_reuse_origin_fingerprints(
+                adapter=adapter,
+                connection=connection,
+                fingerprint_table_lookup=fingerprint_table_lookup,
+                active_target_name=project.effective_target_name,
+                reuse_from_target_name=reuse_from_target_name,
+                database=reuse_origin.database,
+                schema=reuse_origin_schema,
+            )
+            fingerprint_sets[fingerprint_cache_key] = fingerprint_set
         fingerprint: Fingerprint | None = fingerprint_set.fingerprints.get(model.name)
         model_snapshots[model.name] = StandardReuseFromTargetModelSnapshot(
             model_name=model.name,
@@ -152,17 +155,12 @@ def _read_reuse_origin_fingerprints(
     *,
     adapter: BaseAdapter,
     connection: Any,
-    fingerprint_sets: dict[tuple[str | None, str], FingerprintSet],
     fingerprint_table_lookup: RelationLookup,
     active_target_name: str,
     reuse_from_target_name: str,
     database: str | None,
     schema: str,
 ) -> FingerprintSet:
-    cache_key: tuple[str | None, str] = (database, schema)
-    cached: FingerprintSet | None = fingerprint_sets.get(cache_key)
-    if cached is not None:
-        return cached
     try:
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
@@ -183,7 +181,6 @@ def _read_reuse_origin_fingerprints(
             "Reuse requires access to the reuse origin fingerprint table so SQLBuild can "
             "prove the reuse origin relation matches the expected version."
         ) from error
-    fingerprint_sets[cache_key] = fingerprint_set
     return fingerprint_set
 
 

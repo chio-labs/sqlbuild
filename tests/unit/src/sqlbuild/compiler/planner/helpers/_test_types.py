@@ -70,6 +70,15 @@ class SourceColumnsTestCase:
 
 
 @dataclass(frozen=True)
+class KnownSourceColumnsReuseTestCase:
+    description: str
+    known_source_columns: dict[str, tuple[str, ...]] | None
+    adapter_column_names: tuple[str, ...]
+    expected_queried_sql_count: int
+    expected_source_column_names: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
 class SeedIdentityTestCase:
     description: str
     seed_contents: str

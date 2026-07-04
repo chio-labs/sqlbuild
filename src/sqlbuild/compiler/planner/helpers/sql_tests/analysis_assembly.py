@@ -36,7 +36,6 @@ def try_resolve_test_model_sql_with_sql_analysis(
     function_locations: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
-    reachable_mocks: set[str],
     file_label: str,
 ) -> SqlAnalysisResolvedTestSql | None:
     """Return Polyglot-backed readable test SQL or None on import/parse failure."""
@@ -44,6 +43,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
         return None
+    reachable_mocks: set[str] = set()
 
     try:
         parsed: Any = polyglot_module.parse_one(query_sql, dialect="generic")
@@ -200,11 +200,13 @@ def try_resolve_test_model_sql_with_sql_analysis(
             resolved_sql=cte_body_sql,
             cte_body_sql=cte_body_sql,
             generated_ctes=generated_ctes,
+            reachable_mock_names=frozenset(reachable_mocks),
         )
     return SqlAnalysisResolvedTestSql(
         resolved_sql=f"WITH {', '.join(cte_parts)} {outer_sql}",
         cte_body_sql=cte_body_sql,
         generated_ctes=generated_ctes,
+        reachable_mock_names=frozenset(reachable_mocks),
     )
 
 
