@@ -750,6 +750,175 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=(),
         ),
         CheckPathsTestCase(
+            description="reports main public function statement cap violations",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/plan.py": (
+                    "def run_plan() -> int:\n"
+                    + "\n".join(f"    result = {index}" for index in range(41))
+                    + "\n    return result\n"
+                ),
+            },
+            expected_violation_codes=("SC063",),
+        ),
+        CheckPathsTestCase(
+            description="reports main public function distinct call cap violations",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/plan.py": (
+                    "def run_plan() -> int:\n"
+                    + "\n".join(f"    result = phase_{index}()" for index in range(21))
+                    + "\n    return result\n"
+                ),
+            },
+            expected_violation_codes=("SC064",),
+        ),
+        CheckPathsTestCase(
+            description="reports main public function local variable cap violations",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/plan.py": (
+                    "def run_plan() -> tuple[int, ...]:\n"
+                    + "\n".join(f"    value_{index} = {index}" for index in range(21))
+                    + "\n    return (\n"
+                    + "\n".join(f"        value_{index}," for index in range(21))
+                    + "\n    )\n"
+                ),
+            },
+            expected_violation_codes=("SC065",),
+        ),
+        CheckPathsTestCase(
+            description="reports discarded main phase call results",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/plan.py": dedent(
+                    """
+                def run_plan() -> str:
+                    build_phase()
+                    return "demo"
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=("SC066",),
+        ),
+        CheckPathsTestCase(
+            description="allows discarded validator callback diagnostic writer and method calls",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/plan.py": dedent(
+                    """
+                def run_plan(on_done, stream, backend) -> str:
+                    results: list[str] = []
+                    validate_inputs()
+                    enforce_policy()
+                    check_state()
+                    on_progress()
+                    report_progress("halfway")
+                    _report_progress("still going")
+                    log_event()
+                    print("demo")
+                    write_summary(results)
+                    _ = build_receipt()
+                    results.append("demo")
+                    stream.write("demo")
+                    backend.close()
+                    on_done.complete()
+                    return "demo"
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
+            description="reports discarded underscore-prefixed phase call results",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/plan.py": dedent(
+                    """
+                def run_plan() -> str:
+                    _build_phase()
+                    return "demo"
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=("SC066",),
+        ),
+        CheckPathsTestCase(
+            description="reports helper parameter mutation in compiler and executor phases",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/compiler/__init__.py": '"""Compiler domain."""\n',
+                "src/sqlbuild/compiler/planner/__init__.py": '"""Planner package."""\n',
+                "src/sqlbuild/compiler/planner/helpers/phase.py": dedent(
+                    """
+                def merge_values(values: list[str]) -> list[str]:
+                    values.append("demo")
+                    return values
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=("SC067",),
+        ),
+        CheckPathsTestCase(
+            description="allows documented deliberate helper parameter mutation",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/executor/__init__.py": '"""Executor domain."""\n',
+                "src/sqlbuild/executor/load/__init__.py": '"""Load package."""\n',
+                "src/sqlbuild/executor/load/helpers/phase.py": dedent(
+                    """
+                def merge_values(values: list[str]) -> list[str]:
+                    values.append("demo")  # sc: allow-param-mutation
+                    return values
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
+            description="allows methods mutating self in compiler and executor helpers",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/compiler/__init__.py": '"""Compiler domain."""\n',
+                "src/sqlbuild/compiler/planner/__init__.py": '"""Planner package."""\n',
+                "src/sqlbuild/compiler/planner/helpers/phase.py": dedent(
+                    """
+                class _PhaseState:
+                    def __init__(self, values: list[str]) -> None:
+                        self.values = values
+
+                    def merge(self, extra: list[str]) -> None:
+                        self.values.extend(extra)
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
+            description="reports mutable dataclasses in models modules",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/models.py": dedent(
+                    """
+                from dataclasses import dataclass
+
+
+                @dataclass
+                class ExampleModel:
+                    name: str
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=("SC068",),
+        ),
+        CheckPathsTestCase(
             description="reports generic main.py inside main entry package",
             repo_files=compliant_repo_files()
             | {

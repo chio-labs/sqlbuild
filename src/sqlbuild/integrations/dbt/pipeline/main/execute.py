@@ -111,6 +111,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
+from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
@@ -177,27 +178,25 @@ def execute_dbt_interop_from_project(
     runner: DbtRunner = dbt_runner or DbtRunner(dbt_executable=dbt_executable)
 
     dbt_compile_start: float = time.monotonic()
-    _report_progress(on_progress, "Compiling dbt project...")
+    report_progress(on_progress, "Compiling dbt project...")
     compile_result: DbtCommandResult = runner.compile(
         options=dbt_options,
         full_refresh=command == DbtInteropCommand.TEST,
     )
     if compile_result.returncode != 0:
         raise DbtInteropRuntimeError("dbt compile failed", help=dbt_failure_detail(compile_result))
-    _report_progress(
+    report_progress(
         on_progress, f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
     )
 
     manifest_start: float = time.monotonic()
-    _report_progress(on_progress, "Loading dbt manifest...")
+    report_progress(on_progress, "Loading dbt manifest...")
     manifest_path: Path = resolve_dbt_manifest_path(options=dbt_options)
     manifest: DbtManifestIndex = load_dbt_manifest_index(manifest_path=manifest_path)
-    _report_progress(
-        on_progress, f"Loaded dbt manifest. ({time.monotonic() - manifest_start:.2f}s)"
-    )
+    report_progress(on_progress, f"Loaded dbt manifest. ({time.monotonic() - manifest_start:.2f}s)")
 
     sqlbuild_compile_start: float = time.monotonic()
-    _report_progress(on_progress, "Compiling SQLBuild project...")
+    report_progress(on_progress, "Compiling SQLBuild project...")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -210,20 +209,20 @@ def execute_dbt_interop_from_project(
         cli_vars=dbt_vars,
         external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
-    _report_progress(
+    report_progress(
         on_progress,
         f"Compiled SQLBuild project. ({time.monotonic() - sqlbuild_compile_start:.2f}s)",
     )
 
     graph_start: float = time.monotonic()
-    _report_progress(on_progress, "Building dbt interop graph...")
+    report_progress(on_progress, "Building dbt interop graph...")
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
-    _report_progress(
+    report_progress(
         on_progress, f"Built dbt interop graph. ({time.monotonic() - graph_start:.2f}s)"
     )
 
     selection_start: float = time.monotonic()
-    _report_progress(on_progress, "Resolving dbt and SQLBuild selection...")
+    report_progress(on_progress, "Resolving dbt and SQLBuild selection...")
     plan: DbtInteropPlan = plan_dbt_interop_command(
         command=command,
         project=project,
@@ -238,7 +237,7 @@ def execute_dbt_interop_from_project(
         dbt_executable=dbt_executable,
         sqlbuild_executable=sqlbuild_executable,
     )
-    _report_progress(
+    report_progress(
         on_progress,
         f"Resolved dbt and SQLBuild selection. ({time.monotonic() - selection_start:.2f}s)",
     )
@@ -500,7 +499,7 @@ def execute_dbt_interop_from_project(
         and plan.dbt_model_plan.source_freshness.observed_records
     ):
         watermark_connect_start: float = time.monotonic()
-        _report_progress(on_progress, "Reading dbt node source watermarks...")
+        report_progress(on_progress, "Reading dbt node source watermarks...")
         dbt_watermark_connection: object = adapter.connect(connection_config)
         try:
             dbt_watermark_context = build_dbt_node_source_watermark_context(
@@ -514,15 +513,15 @@ def execute_dbt_interop_from_project(
             )
         finally:
             adapter.close(dbt_watermark_connection)
-        _report_progress(
+        report_progress(
             on_progress,
             f"Read dbt node source watermarks. ({time.monotonic() - watermark_connect_start:.2f}s)",
         )
     if project.settings.query_change_tracking and adapter_name != BuiltinAdapter.DUCKDB:
         state_connect_start: float = time.monotonic()
-        _report_progress(on_progress, "Connecting to warehouse for dbt fingerprint writes...")
+        report_progress(on_progress, "Connecting to warehouse for dbt fingerprint writes...")
         dbt_state_connection = adapter.connect(connection_config)
-        _report_progress(
+        report_progress(
             on_progress,
             "Connected for dbt fingerprint writes. "
             f"({time.monotonic() - state_connect_start:.2f}s)",
@@ -583,7 +582,7 @@ def execute_dbt_interop_from_project(
 
     if buffered_dbt_results and project.settings.query_change_tracking:
         fingerprint_start: float = time.monotonic()
-        _report_progress(on_progress, "Recording dbt fingerprints...")
+        report_progress(on_progress, "Recording dbt fingerprints...")
         duckdb_connection: object = adapter.connect(connection_config)
         try:
             dbt_result: DbtNodeExecutionResult
@@ -605,13 +604,13 @@ def execute_dbt_interop_from_project(
                 )
         finally:
             adapter.close(duckdb_connection)
-        _report_progress(
+        report_progress(
             on_progress,
             f"Recorded dbt fingerprints. ({time.monotonic() - fingerprint_start:.2f}s)",
         )
     if dbt_execution.returncode == 0 and dbt_watermark_context is not None:
         watermark_start: float = time.monotonic()
-        _report_progress(on_progress, "Recording dbt node source watermarks...")
+        report_progress(on_progress, "Recording dbt node source watermarks...")
         watermark_connection: object = adapter.connect(connection_config)
         try:
             write_dbt_node_source_watermark_records(
@@ -623,7 +622,7 @@ def execute_dbt_interop_from_project(
             )
         finally:
             adapter.close(watermark_connection)
-        _report_progress(
+        report_progress(
             on_progress,
             f"Recorded dbt node source watermarks. ({time.monotonic() - watermark_start:.2f}s)",
         )
@@ -650,7 +649,7 @@ def execute_dbt_interop_from_project(
     if plan.sqlbuild_skip_reason is not None:
         output_stream.write("\n")
         output_stream.flush()
-        _report_progress(on_progress, "No SQLBuild work selected.")
+        report_progress(on_progress, "No SQLBuild work selected.")
         exit_code: int = max(
             dbt_execution.returncode,
             dbt_blocked_exit_code(plan),
@@ -789,11 +788,6 @@ def execute_dbt_interop_from_project(
         dbt_blocked_exit_code(plan),
         missing_dbt_relations_exit_code(missing_dbt_relation_blocked_models),
     )
-
-
-def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
-    if on_progress is not None:
-        on_progress(message)
 
 
 def _with_effective_force(*, args: tuple[str, ...], force: bool) -> tuple[str, ...]:

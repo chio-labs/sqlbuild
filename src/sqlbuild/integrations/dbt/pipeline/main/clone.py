@@ -41,6 +41,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.clone import (
     parse_dbt_clone_options,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 from sqlbuild.spec.models.project import DbtProductionRefConfig, resolve_effective_adapter_name
 
@@ -74,7 +75,7 @@ def run_dbt_clone_from_project(
         dbt_args=options.dbt_args,
     )
     runner: DbtRunner = DbtRunner()
-    _report_progress(on_progress, "Compiling dbt project...")
+    report_progress(on_progress, "Compiling dbt project...")
     compile_start: float = time.monotonic()
     compile_result: DbtCommandResult = runner.compile(options=dbt_options)
     if compile_result.returncode != 0:
@@ -82,15 +83,13 @@ def run_dbt_clone_from_project(
             "dbt compile failed",
             help=compile_result.stderr or compile_result.stdout,
         )
-    _report_progress(
-        on_progress, f"Compiled dbt project. ({time.monotonic() - compile_start:.2f}s)"
-    )
-    _report_progress(on_progress, "Loading dbt manifest...")
+    report_progress(on_progress, f"Compiled dbt project. ({time.monotonic() - compile_start:.2f}s)")
+    report_progress(on_progress, "Loading dbt manifest...")
     current_manifest: DbtManifestIndex = load_dbt_manifest_index(
         manifest_path=resolve_dbt_manifest_path(options=dbt_options)
     )
-    _report_progress(on_progress, "Loaded dbt manifest.")
-    _report_progress(
+    report_progress(on_progress, "Loaded dbt manifest.")
+    report_progress(
         on_progress, f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
     )
     production_ref_start: float = time.monotonic()
@@ -103,12 +102,12 @@ def run_dbt_clone_from_project(
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(production_ref_compile.manifest_contents)
     )
-    _report_progress(
+    report_progress(
         on_progress,
         f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
         f"({time.monotonic() - production_ref_start:.2f}s)",
     )
-    _report_progress(on_progress, "Resolving dbt selection...")
+    report_progress(on_progress, "Resolving dbt selection...")
     selected_nodes: tuple[DbtLsNode, ...] = _resolve_selected_nodes(
         runner=runner,
         dbt_options=dbt_options,
@@ -131,10 +130,10 @@ def run_dbt_clone_from_project(
         adapter_name=adapter_name,
         discovered_inputs=discovered_inputs,
     )
-    _report_progress(on_progress, f"Connecting to {adapter_name}...")
+    report_progress(on_progress, f"Connecting to {adapter_name}...")
     connect_start: float = time.monotonic()
     connection: Any = adapter.connect(connection_config)
-    _report_progress(
+    report_progress(
         on_progress, f"Connected to {adapter_name}. ({time.monotonic() - connect_start:.2f}s)"
     )
     origin_label: str = production_ref.git_ref
@@ -145,7 +144,7 @@ def run_dbt_clone_from_project(
         or "current"
     )
     try:
-        _report_progress(on_progress, "Applying clone plan...")
+        report_progress(on_progress, "Applying clone plan...")
         clone_start: float = time.monotonic()
 
         def _on_start(total: int) -> None:
@@ -162,9 +161,7 @@ def run_dbt_clone_from_project(
             on_start=_on_start,
             on_item=on_item,
         )
-        _report_progress(
-            on_progress, f"Applied clone plan. ({time.monotonic() - clone_start:.2f}s)"
-        )
+        report_progress(on_progress, f"Applied clone plan. ({time.monotonic() - clone_start:.2f}s)")
     finally:
         adapter.close(connection)
     return DbtCloneRun(
@@ -189,8 +186,3 @@ def _resolve_selected_nodes(
             help=ls_result.command.stderr or ls_result.command.stdout,
         )
     return ls_result.nodes
-
-
-def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
-    if on_progress is not None:
-        on_progress(message)

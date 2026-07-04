@@ -57,6 +57,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtModelPlanningResult,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
 from sqlbuild.shared.models import RelationLookup
 
@@ -263,7 +264,7 @@ def build_dbt_model_plan_output(
         on_connection_complete(1, time.monotonic() - start)
     try:
         planning_start: float = time.monotonic()
-        _report_progress(
+        report_progress(
             on_progress,
             "Inspecting dbt model state: checking warehouse relations and fingerprints...",
         )
@@ -278,18 +279,13 @@ def build_dbt_model_plan_output(
             adapter=adapter,
             connection=connection,
         )
-        _report_progress(
+        report_progress(
             on_progress,
             f"Inspected dbt model state. ({time.monotonic() - planning_start:.2f}s)",
         )
         return result
     finally:
         adapter.close(connection)
-
-
-def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
-    if on_progress is not None:
-        on_progress(message)
 
 
 def _dbt_node_source_watermark_graph_kwargs(

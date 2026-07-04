@@ -61,6 +61,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtProductionRefCompileResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import execute_dbt_clone
+from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtSupportedResourceType
 from sqlbuild.shared.helpers.graph.algorithms import (
     resolve_clone_boundary,
@@ -102,7 +103,7 @@ def run_dbt_defer_clone_prephase(
     caused_by_names: tuple[str, ...],
 ) -> CloneExecutionResult | None:
     if not unique_ids:
-        _report_progress(on_progress, "defer-clone enabled but no clonable dbt boundary resolved.")
+        report_progress(on_progress, "defer-clone enabled but no clonable dbt boundary resolved.")
         return None
     production_ref: DbtProductionRefConfig = discovered_inputs.project_config.dbt.production_ref
     if production_ref.git_ref is None or production_ref.generate_schema_name_override is None:
@@ -114,7 +115,7 @@ def run_dbt_defer_clone_prephase(
                 "generate_schema_name_override in sqlbuild_project.toml."
             ),
         )
-    _report_progress(
+    report_progress(
         on_progress, f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
     )
     production_ref_start: float = time.monotonic()
@@ -127,7 +128,7 @@ def run_dbt_defer_clone_prephase(
     reuse_manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(production_ref_compile.manifest_contents)
     )
-    _report_progress(
+    report_progress(
         on_progress,
         f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
         f"({time.monotonic() - production_ref_start:.2f}s)",
@@ -387,7 +388,7 @@ def _write_defer_clone_dbt_fingerprints(
             ),
         )
     if warnings:
-        _report_progress(on_progress, "; ".join(warnings))
+        report_progress(on_progress, "; ".join(warnings))
 
 
 def _write_defer_clone_dbt_node_source_watermarks(
@@ -463,7 +464,7 @@ def _write_defer_clone_dbt_node_source_watermarks(
         render_create_table_sql=adapter.render_create_node_source_watermark_table_sql,
         render_insert_records_sql=adapter.render_insert_node_source_watermark_records_sql,
     )
-    _report_progress(
+    report_progress(
         on_progress,
         f"Recorded dbt defer-clone node source watermarks ({len(records)}).",
     )
@@ -501,8 +502,3 @@ def _reuse_state_location(
         if model is not None and model.schema is not None:
             return model.database, model.schema
     return None, None
-
-
-def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
-    if on_progress is not None:
-        on_progress(message)

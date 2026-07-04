@@ -86,6 +86,26 @@ _SC045_ALLOWED_PATH_MARKERS_BY_TERM: dict[str, tuple[str, ...]] = {
 _MAX_SOURCE_FILE_LINES: int = 2000
 _MAX_HELPER_FLAT_MODULES: int = 10
 _MAX_MAIN_FLAT_MODULES: int = 20
+_MAX_MAIN_PUBLIC_FUNCTION_STATEMENTS: int = 40
+_MAX_MAIN_PUBLIC_FUNCTION_DISTINCT_CALLS: int = 20
+_MAX_MAIN_PUBLIC_FUNCTION_LOCALS: int = 20
+_PARAMETER_MUTATION_METHODS: frozenset[str] = frozenset(
+    {"add", "append", "clear", "extend", "insert", "pop", "remove", "setdefault", "update"}
+)
+_DISCARDED_CALL_VALIDATOR_PREFIXES: frozenset[str] = frozenset({"check_", "enforce_", "validate_"})
+_DISCARDED_CALL_CALLBACK_PREFIXES: frozenset[str] = frozenset({"on_", "report_"})
+_DISCARDED_CALL_DIAGNOSTIC_PREFIXES: frozenset[str] = frozenset({"log"})
+_DISCARDED_CALL_WRITER_PREFIXES: frozenset[str] = frozenset({"write_"})
+_DISCARDED_CALL_ALLOWED_NAMES: frozenset[str] = frozenset({"print"})
+_PARAMETER_MUTATION_EXEMPT_PARAMETERS: frozenset[str] = frozenset({"cls", "self"})
+_PARAMETER_MUTATION_ALLOW_COMMENT: str = "# sc: allow-param-mutation"
+_MAIN_PHASE_REMEDIATION_MESSAGE: str = (
+    "main/ public functions are orchestrators: they should read as an ordered list of "
+    "named phases. Extract cohesive stages into helpers/ functions that each accept "
+    "explicit inputs and RETURN a named result model (no mutable threading), then call "
+    "them in sequence. Do not create '_part_one'-style splits; name each phase after "
+    "the result it produces (e.g. 'resolve_planner_scopes', 'detect_staleness')."
+)
 _MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "helpers", "shared"})
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/client.py",
@@ -114,6 +134,7 @@ _SC056_COMMENT_ALLOWED_PREFIXES: tuple[str, ...] = (
     "# pyright:",
     "# pylint:",
     "# pragma:",
+    _PARAMETER_MUTATION_ALLOW_COMMENT,
 )
 _DOCSTRING_BEARING_NODE_TYPES: tuple[type[ast.AST], ...] = (
     ast.FunctionDef,
@@ -987,6 +1008,18 @@ def check_models_module(file_path: Path, module: ast.Module) -> list[Violation]:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
         if isinstance(node, ast.ClassDef) and _is_allowed_model_class(node):
+            if _is_dataclass_class(node) and not _dataclass_is_frozen(node):
+                violations.append(
+                    Violation(
+                        code="SC068",
+                        path=file_path,
+                        line=node.lineno,
+                        message=(
+                            "models.py dataclasses must set frozen=True; result models are "
+                            "shared across phases and must be immutable"
+                        ),
+                    )
+                )
             continue
         violations.append(
             Violation(
@@ -999,6 +1032,144 @@ def check_models_module(file_path: Path, module: ast.Module) -> list[Violation]:
                 ),
             )
         )
+    return violations
+
+
+def check_main_public_function_shape(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Cap main/ public functions so they stay phase-shaped orchestrators."""
+
+    if not _is_main_package_module(file_path):
+        return []
+
+    violations: list[Violation] = []
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef
+    for function_node in _public_top_level_function_nodes(module):
+        statement_count: int = (
+            sum(1 for node in ast.walk(function_node) if isinstance(node, ast.stmt)) - 1
+        )
+        if statement_count > _MAX_MAIN_PUBLIC_FUNCTION_STATEMENTS:
+            violations.append(
+                Violation(
+                    code="SC063",
+                    path=file_path,
+                    line=function_node.lineno,
+                    message=(
+                        f"public function '{function_node.name}' has {statement_count} "
+                        "statements (main/ limit: 40). "
+                        f"{_MAIN_PHASE_REMEDIATION_MESSAGE}"
+                    ),
+                )
+            )
+
+        distinct_calls: int = len(_distinct_callee_names(function_node))
+        if distinct_calls > _MAX_MAIN_PUBLIC_FUNCTION_DISTINCT_CALLS:
+            violations.append(
+                Violation(
+                    code="SC064",
+                    path=file_path,
+                    line=function_node.lineno,
+                    message=(
+                        f"public function '{function_node.name}' calls {distinct_calls} "
+                        "distinct functions (main/ limit: 20). "
+                        f"{_MAIN_PHASE_REMEDIATION_MESSAGE}"
+                    ),
+                )
+            )
+
+        local_count: int = len(_assigned_local_names(function_node))
+        if local_count > _MAX_MAIN_PUBLIC_FUNCTION_LOCALS:
+            violations.append(
+                Violation(
+                    code="SC065",
+                    path=file_path,
+                    line=function_node.lineno,
+                    message=(
+                        f"public function '{function_node.name}' juggles {local_count} "
+                        "local variables (main/ limit: 20). This usually means multiple "
+                        "phases' intermediate state is interleaved; each extracted phase "
+                        "should own its intermediates and return one result model."
+                    ),
+                )
+            )
+    return violations
+
+
+def check_main_discarded_call_results(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Require main/ orchestrators to consume phase call results."""
+
+    if not _is_main_package_module(file_path):
+        return []
+
+    violations: list[Violation] = []
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef
+    for function_node in _public_top_level_function_nodes(module):
+        node: ast.AST
+        for node in ast.walk(function_node):
+            if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+                continue
+            if _discarded_call_is_allowed(node.value):
+                continue
+            violations.append(
+                Violation(
+                    code="SC066",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        f"result of '{_call_display_name(node.value)}' is discarded in "
+                        f"main/ orchestrator '{function_node.name}'. Phases must return "
+                        "their effect as a value (assign to a typed local or return it). "
+                        "Bare calls are reserved for validators (validate_*/enforce_*/"
+                        "check_*), callbacks and progress (on_*/report_*), diagnostics "
+                        "(log*/print), and writers (write_*); discard a genuine void "
+                        "effect explicitly with '_ = ...'. Do not communicate between "
+                        "phases by mutation."
+                    ),
+                )
+            )
+    return violations
+
+
+def check_no_parameter_mutation_in_phase_helpers(
+    repo_root: Path, file_path: Path, module: ast.Module
+) -> list[Violation]:
+    """Reject hidden dataflow from mutating function parameters in phase helpers."""
+
+    if not _is_compiler_or_executor_helper_module(repo_root=repo_root, file_path=file_path):
+        return []
+
+    source_lines: list[str] = file_path.read_text(encoding="utf-8").splitlines()
+    violations: list[Violation] = []
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef
+    for function_node in (
+        node
+        for node in ast.walk(module)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ):
+        parameter_names: frozenset[str] = _function_parameter_names(function_node)
+        node: ast.AST
+        for node in ast.walk(function_node):
+            mutated_name: str | None = _parameter_mutated_by_node(
+                node=node,
+                parameter_names=parameter_names,
+            )
+            if mutated_name is None:
+                continue
+            line_number: int = getattr(node, "lineno", function_node.lineno)
+            if _line_allows_parameter_mutation(source_lines=source_lines, line_number=line_number):
+                continue
+            violations.append(
+                Violation(
+                    code="SC067",
+                    path=file_path,
+                    line=line_number,
+                    message=(
+                        f"'{mutated_name}' is a parameter and is mutated here. Helpers should "
+                        "accept inputs and return results; mutating arguments hides dataflow "
+                        "from callers. Return a new/updated value instead, or mark a deliberate "
+                        "builder with '# sc: allow-param-mutation'."
+                    ),
+                )
+            )
     return violations
 
 
@@ -2505,6 +2676,160 @@ def _is_dataclass_class(node: ast.ClassDef) -> bool:
     return any(
         _decorator_name(decorator).endswith("dataclass") for decorator in node.decorator_list
     )
+
+
+def _dataclass_is_frozen(node: ast.ClassDef) -> bool:
+    decorator: ast.expr
+    for decorator in node.decorator_list:
+        if isinstance(decorator, ast.Call) and _decorator_name(decorator.func).endswith(
+            "dataclass"
+        ):
+            keyword: ast.keyword
+            for keyword in decorator.keywords:
+                if keyword.arg == "frozen" and isinstance(keyword.value, ast.Constant):
+                    return keyword.value.value is True
+            return False
+    return False
+
+
+def _is_main_package_module(file_path: Path) -> bool:
+    return (
+        file_path.suffix == ".py"
+        and file_path.name != "__init__.py"
+        and "main" in file_path.parts[:-1]
+    )
+
+
+def _public_top_level_function_nodes(
+    module: ast.Module,
+) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...]:
+    return tuple(
+        node
+        for node in _non_docstring_body(module)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not node.name.startswith("_")
+    )
+
+
+def _distinct_callee_names(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str]:
+    names: set[str] = set()
+    node: ast.AST
+    for node in ast.walk(function_node):
+        if not isinstance(node, ast.Call):
+            continue
+        name: str | None = _call_name(node)
+        if name is not None:
+            names.add(name)
+    return frozenset(names)
+
+
+def _assigned_local_names(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str]:
+    names: set[str] = set()
+    node: ast.AST
+    for node in ast.walk(function_node):
+        if isinstance(node, ast.Assign):
+            target: ast.expr
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return frozenset(names)
+
+
+def _discarded_call_is_allowed(node: ast.Call) -> bool:
+    if not isinstance(node.func, ast.Name):
+        return True
+    name: str = node.func.id.lstrip("_")
+    if name in _DISCARDED_CALL_ALLOWED_NAMES:
+        return True
+    allowed_prefixes: tuple[str, ...] = (
+        *_DISCARDED_CALL_VALIDATOR_PREFIXES,
+        *_DISCARDED_CALL_CALLBACK_PREFIXES,
+        *_DISCARDED_CALL_DIAGNOSTIC_PREFIXES,
+        *_DISCARDED_CALL_WRITER_PREFIXES,
+    )
+    return any(name.startswith(prefix) for prefix in allowed_prefixes)
+
+
+def _call_display_name(node: ast.Call) -> str:
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        base_name: str | None = _base_name(node.func.value)
+        if base_name is None:
+            return node.func.attr
+        return f"{base_name}.{node.func.attr}"
+    return "<call>"
+
+
+def _is_compiler_or_executor_helper_module(*, repo_root: Path, file_path: Path) -> bool:
+    relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
+    return (
+        len(relative_parts) >= 5
+        and relative_parts[:2] == ("src", "sqlbuild")
+        and relative_parts[2] in {"compiler", "executor"}
+        and "helpers" in relative_parts[3:-1]
+        and file_path.suffix == ".py"
+    )
+
+
+def _function_parameter_names(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> frozenset[str]:
+    return frozenset(
+        arg.arg
+        for arg in (
+            *function_node.args.posonlyargs,
+            *function_node.args.args,
+            *function_node.args.kwonlyargs,
+        )
+        if arg.arg not in _PARAMETER_MUTATION_EXEMPT_PARAMETERS
+    )
+
+
+def _parameter_mutated_by_node(*, node: ast.AST, parameter_names: frozenset[str]) -> str | None:
+    if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+        return _parameter_mutated_by_assignment(node=node, parameter_names=parameter_names)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        if node.func.attr not in _PARAMETER_MUTATION_METHODS:
+            return None
+        return _root_parameter_name(node=node.func.value, parameter_names=parameter_names)
+    return None
+
+
+def _parameter_mutated_by_assignment(
+    *, node: ast.Assign | ast.AnnAssign | ast.AugAssign, parameter_names: frozenset[str]
+) -> str | None:
+    targets: tuple[ast.expr, ...]
+    if isinstance(node, ast.Assign):
+        targets = tuple(node.targets)
+    else:
+        targets = (node.target,)
+    target: ast.expr
+    for target in targets:
+        parameter_name: str | None = _root_parameter_name(
+            node=target, parameter_names=parameter_names
+        )
+        if parameter_name is not None and not isinstance(target, ast.Name):
+            return parameter_name
+    return None
+
+
+def _root_parameter_name(*, node: ast.AST, parameter_names: frozenset[str]) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id if node.id in parameter_names else None
+    if isinstance(node, ast.Attribute):
+        return _root_parameter_name(node=node.value, parameter_names=parameter_names)
+    if isinstance(node, ast.Subscript):
+        return _root_parameter_name(node=node.value, parameter_names=parameter_names)
+    return None
+
+
+def _line_allows_parameter_mutation(*, source_lines: list[str], line_number: int) -> bool:
+    if line_number < 1 or line_number > len(source_lines):
+        return False
+    return _PARAMETER_MUTATION_ALLOW_COMMENT in source_lines[line_number - 1]
 
 
 def _inherits_from_base_names(node: ast.ClassDef, base_names: frozenset[str]) -> bool:
