@@ -140,7 +140,6 @@ def run_virtual_build(
             target_dir=project_dir / "target",
             adapter=adapter,
             plan_output=plan_output,
-            manifest={},
         )
         callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
             plan=plan_output,

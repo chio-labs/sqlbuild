@@ -27,6 +27,7 @@ from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.cli.commands.shared.helpers.config.mode import (
     enforce_no_defer_to_in_virtual_mode,
+    enforce_virtual_only_flags_in_virtual_mode,
 )
 from sqlbuild.cli.commands.shared.helpers.config.parsers import (
     parse_cursor_integer,
@@ -156,6 +157,12 @@ def run_build(
         discovered_inputs=discovered_inputs,
         command_name="build",
         defer_to=defer_to,
+    )
+    enforce_virtual_only_flags_in_virtual_mode(
+        discovered_inputs=discovered_inputs,
+        command_name="build",
+        virtual_env=virtual_env,
+        include_stale_upstreams=include_stale_upstreams,
     )
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -310,7 +317,6 @@ def run_build(
             target_dir=effective_project_dir / "target",
             adapter=adapter,
             plan_output=plan_output,
-            manifest=pipeline_result.manifest,
         )
         if not plan_has_executable_work(
             plan_output, python_plan_entries=pipeline_result.python_plan_entries

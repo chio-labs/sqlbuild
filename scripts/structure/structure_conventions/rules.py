@@ -100,6 +100,11 @@ _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
 _SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS: tuple[str, ...] = (
     "src/sqlbuild/compiler/planner/main/planning/selector_expansion.py",
 )
+_SC062_MACRO_LOAD_ALLOWED_PATHS: tuple[str, ...] = (
+    "src/sqlbuild/compiler/compile/main/build_compile_inputs.py",
+    "src/sqlbuild/compiler/compile/main/load_macros.py",
+    "src/sqlbuild/compiler/compile/helpers/render/macros.py",
+)
 _SC056_COMMENT_ALLOWED_PREFIXES: tuple[str, ...] = (
     "#!",
     "# -*-",
@@ -1244,6 +1249,41 @@ def check_no_ad_hoc_selector_plus_parsing(file_path: Path, module: ast.Module) -
                 message=(
                     "planner and dbt selector code must parse + markers with "
                     "sqlbuild.compiler.planner.main.planning.selector_expansion.split_selector_expansion"
+                ),
+            )
+        )
+    return violations
+
+
+def check_single_project_macro_load_site(file_path: Path, module: ast.Module) -> list[Violation]:
+    """Reject load_project_macros usage outside the single compile-input load site."""
+
+    path_text: str = file_path.as_posix()
+    if "src/sqlbuild/" not in path_text:
+        return []
+    if _path_is_allowed(path_text=path_text, allowed_paths=_SC062_MACRO_LOAD_ALLOWED_PATHS):
+        return []
+
+    violations: list[Violation] = []
+    node: ast.AST
+    for node in ast.walk(module):
+        line: int | None = None
+        if isinstance(node, ast.ImportFrom) and any(
+            alias.name == "load_project_macros" for alias in node.names or []
+        ):
+            line = node.lineno
+        if isinstance(node, ast.Call) and _call_base_name(node) == "load_project_macros":
+            line = node.lineno
+        if line is None:
+            continue
+        violations.append(
+            Violation(
+                code="SC062",
+                path=file_path,
+                line=line,
+                message=(
+                    "user macros must be loaded once in build_compile_inputs and passed "
+                    "down as loaded_macros; do not call load_project_macros elsewhere"
                 ),
             )
         )

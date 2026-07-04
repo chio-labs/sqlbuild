@@ -18,8 +18,6 @@ from sqlbuild.compiler.planner.helpers.graph.core import (
 )
 from sqlbuild.compiler.planner.helpers.graph.selectors import resolve_selectors
 from sqlbuild.compiler.planner.helpers.output.plan_entry import (
-    build_path_index,
-    build_tag_index,
     gather_source_columns,
 )
 from sqlbuild.compiler.planner.helpers.output.strategy import get_materialization_type
@@ -41,6 +39,10 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
+)
+from sqlbuild.compiler.shared.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
 )
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -68,8 +70,8 @@ def build_clone_plan_output(
         all_keys=all_keys,
         upstream=upstream_deps,
         downstream=downstream_deps,
-        tag_index=build_tag_index(project),
-        path_index=build_path_index(project),
+        tag_index=build_model_tag_index(project),
+        path_index=build_model_path_index(project),
     )
     return PlanOutput(
         execution_order=topologically_order_keys(upstream_deps),

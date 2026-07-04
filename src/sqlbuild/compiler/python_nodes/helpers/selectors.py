@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
@@ -117,8 +118,7 @@ def _validate_python_path_root(folder: str) -> None:
     if root in {"tasks", "assets", "checks", "loaders", "models"}:
         return
     raise PlannerInputError(
-        "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
-        "'checks/', or 'loaders/'",
+        PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
         code="S012",
     )
 

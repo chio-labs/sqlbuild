@@ -22,9 +22,6 @@ from sqlbuild.compiler.compile.helpers.attachment.references import (
     validate_function_references,
 )
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.helpers.render.macros import (
-    load_project_macros,
-)
 from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -70,12 +67,12 @@ def build_sql_function_inputs(
     target_config: TargetConfig | None,
     adapter_name: str,
     macro_context: MacroContext,
+    loaded_macros: dict[str, LoadedMacro],
     no_sql_validation: bool = False,
     python_functions_inherit_default_namespace: bool = True,
 ) -> tuple[CompileSqlFunctionInput, ...]:
     """Attach and validate SQL function metadata."""
 
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)

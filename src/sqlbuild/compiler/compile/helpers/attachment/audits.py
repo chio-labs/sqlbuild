@@ -19,9 +19,6 @@ from sqlbuild.compiler.compile.helpers.attachment.references import (
     validate_audit_references,
 )
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.helpers.render.macros import (
-    load_project_macros,
-)
 from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -67,12 +64,12 @@ def build_audit_inputs(
     source_inputs: tuple[CompileSourceInput, ...],
     effective_vars: dict[str, object],
     macro_context: MacroContext,
+    loaded_macros: dict[str, LoadedMacro],
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)

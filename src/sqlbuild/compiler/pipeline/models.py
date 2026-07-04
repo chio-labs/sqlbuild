@@ -41,7 +41,6 @@ class CompilePipelineResult:
 
     project: CompiledProject
     plan_output: PlanOutput
-    manifest: dict[str, object] = field(default_factory=dict)
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
     custom_prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = field(
         default_factory=dict

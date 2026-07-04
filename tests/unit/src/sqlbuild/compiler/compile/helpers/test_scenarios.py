@@ -310,6 +310,7 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
         macro_context=MacroContext(
             adapter_name="duckdb", sql_analysis_enabled=True, target_name=None
         ),
+        loaded_macros={},
     )
 
     assert len(scenario_inputs) == 1
@@ -382,4 +383,5 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
             macro_context=MacroContext(
                 adapter_name="duckdb", sql_analysis_enabled=True, target_name=None
             ),
+            loaded_macros={},
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph.core import (
     expand_downstream,
@@ -350,8 +351,7 @@ def _model_path_candidate(folder: str) -> str:
     if folder.startswith("models/"):
         return folder[len("models/") :]
     raise PlannerInputError(
-        "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
-        "'checks/', or 'loaders/'",
+        PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
         code="S012",
     )
 

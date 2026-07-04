@@ -688,56 +688,6 @@ def resolve_cursor_overrides(
     return resolved_start, resolved_end
 
 
-def build_tag_index(
-    project: CompiledProject,
-) -> dict[str, frozenset[CompiledObjectKey]]:
-    """Build a tag-to-keys lookup from compiled model configs."""
-
-    index: dict[str, set[CompiledObjectKey]] = {}
-    model: CompiledModel
-    for model in project.models:
-        raw_tags: object | None = model.config.values.get("tags")
-        tags: list[str] = _as_string_list(raw_tags)
-        tag: str
-        for tag in tags:
-            index.setdefault(tag, set()).add(model.key)
-    return {tag: frozenset(keys) for tag, keys in index.items()}
-
-
-def build_path_index(
-    project: CompiledProject,
-) -> dict[CompiledObjectKey, str]:
-    """Build a key-to-folder lookup from compiled model relative paths."""
-
-    index: dict[CompiledObjectKey, str] = {}
-    model: CompiledModel
-    for model in project.models:
-        parent: str = str(model.relative_path.parent)
-        folder: str = _strip_models_prefix(parent)
-        index[model.key] = folder
-    return index
-
-
-def _strip_models_prefix(path: str) -> str:
-    """Strip leading models/ from a relative path string."""
-
-    if path.startswith(_MODELS_DIR_PREFIX):
-        return path[len(_MODELS_DIR_PREFIX) :]
-    if path == "models":
-        return ""
-    return path
-
-
-def _as_string_list(value: object) -> list[str]:
-    """Coerce a value to a list of strings."""
-
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    if isinstance(value, tuple):
-        return [str(item) for item in value]
-    return []
-
-
 def gather_source_columns(
     *,
     project: CompiledProject,

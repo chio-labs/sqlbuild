@@ -107,6 +107,7 @@ def build_compile_inputs(
         effective_target_name=effective_target_name,
         run_id=resolved_run_id,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
@@ -119,6 +120,7 @@ def build_compile_inputs(
         target_config=effective_target,
         adapter_name=macro_context.adapter_name,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         no_sql_validation=no_sql_validation,
         python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
     )
@@ -127,18 +129,21 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         effective_settings=effective_settings,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
@@ -156,6 +161,7 @@ def build_compile_inputs(
         source_inputs=source_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         generic_audit_definitions=generic_audit_definitions,
     )
     return CompileProjectInputs(

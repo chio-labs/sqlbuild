@@ -26,6 +26,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     SqlAnalysisChainCompileTargetIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
+    build_manifest_for_pipeline_result,
     run_compile_pipeline_for_project,
     validate_manifest_against_dbt_schema,
 )
@@ -192,7 +193,13 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
 
     assert len(result.plan_output.model_entries) == test_case.expected_model_count
     assert len(result.plan_output.seed_entries) == test_case.expected_seed_count
-    manifest_nodes: dict[str, object] = cast(dict[str, object], result.manifest["nodes"])
+    manifest: dict[str, object] = build_manifest_for_pipeline_result(
+        project_dir=tmp_path,
+        result=result,
+        project_name="demo",
+        adapter_type="duckdb",
+    )
+    manifest_nodes: dict[str, object] = cast(dict[str, object], manifest["nodes"])
     assert len(manifest_nodes) == test_case.expected_manifest_node_count
 
     entry_map: dict[str, ModelPlanEntry] = {e.name: e for e in result.plan_output.model_entries}
@@ -207,7 +214,7 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
         compiled_code: str = cast(str, model_node["compiled_code"])
         assert expected.expected_manifest_compiled_code_fragment in compiled_code
 
-    validate_manifest_against_dbt_schema(result.manifest)
+    validate_manifest_against_dbt_schema(manifest)
 
 
 @pytest.mark.parametrize(
@@ -547,7 +554,6 @@ def test_given_sql_analysis_enabled_chain_test_when_writing_compile_target_then_
         target_dir=tmp_path / "target",
         adapter=DuckDbAdapter(),
         plan_output=result.plan_output,
-        manifest=result.manifest,
     )
 
     compiled_test_sql: str = (tmp_path / test_case.compiled_test_path).read_text(encoding="utf-8")

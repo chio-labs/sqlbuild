@@ -161,9 +161,9 @@ Before any model runs, SQLBuild does static analysis of your project - offline, 
 
 Verification tells you the work is right; change detection makes sure you only pay for the work you need.
 
-Every model, seed, function, and Python node has a versioned identity. SQLBuild compares it against state stored in your own warehouse and skips anything unchanged.
+Every model, seed, UDF, and Python node has a versioned identity. SQLBuild compares it against state stored in your own warehouse and skips anything unchanged.
 
-- **Models and functions:** fingerprinted by query hash, config, and upstream function hashes. Unchanged models are skipped entirely.
+- **Models and UDFs:** fingerprinted by query hash, config, and upstream UDF hashes. Unchanged models are skipped entirely.
 - **Seeds:** content and load-affecting config are hashed. Unchanged seeds are not reloaded.
 - **Audits:** audits that already passed for the same model version are not re-run.
 - **Source freshness:** external source data versions are tracked automatically. Models downstream of unchanged sources are skipped, with lag tolerance to avoid jitter.
@@ -483,7 +483,7 @@ All models now show `Normal` instead of `First run`.
 sqb build --select daily_revenue
 
 # Rebuild models under a path
-sqb build --select path:marts
+sqb build --select path:models/marts
 
 # Full refresh of everything
 sqb build --full-refresh
@@ -944,8 +944,8 @@ These selectors match SQLBuild models directly:
 | Both `+` | `+fact_orders+` | Full upstream (including dbt) and downstream expansion. |
 | Tag | `tag:nightly` | Selects all SQLBuild models with that tag. Auto-includes dbt dependencies. |
 | Tag with `+` | `+tag:nightly` | Tag match plus upstream expansion through the combined graph. |
-| Path | `path:marts` | Selects SQLBuild models under that directory. dbt-style `path:models/marts` is translated automatically. |
-| Path with `+` | `+path:marts` | Path match plus upstream/downstream expansion. |
+| Path | `path:models/marts` | Selects SQLBuild models under that project-relative directory - the same syntax as dbt's `path:` selector. |
+| Path with `+` | `+path:models/marts` | Path match plus upstream/downstream expansion. |
 
 When a SQLBuild model is selected, its immediate dbt upstream dependencies are always included so dbt can build the tables that SQLBuild models read from.
 
@@ -988,7 +988,7 @@ sqb dbt build --select state:modified+
 sqb dbt build --select tag:nightly
 
 # Build SQLBuild models under a path
-sqb dbt build --select path:marts
+sqb dbt build --select path:models/marts
 ```
 
 ### Execution order
@@ -5620,13 +5620,12 @@ sqb build --select tag:acceptance
 Select all models under a directory path:
 
 ```bash
-sqb build --select path:marts
-sqb build --select /marts
-sqb build --select marts/
-sqb build --select path:intermediate
+sqb build --select path:models/marts
+sqb build --select models/marts
+sqb build --select path:models/intermediate
 ```
 
-Any name containing `/` is treated as a path selector. `path:marts`, `/marts`, and `marts/` all work the same way. Nested paths work too: `staging/orders`. The `models/` prefix is stripped automatically, so use `path:marts` not `path:models/marts`.
+Any name containing `/` is treated as a path selector, so `path:models/marts` and a bare `models/marts` work the same way. Path selectors require an explicit root directory: `models/`, `tasks/`, `assets/`, `checks/`, or `loaders/`. Nested paths work too: `models/staging/orders`.
 
 #### Seed and source
 
@@ -5663,7 +5662,7 @@ Graph expansion works with all selector types:
 
 ```bash
 sqb build --select +tag:marts
-sqb build --select path:staging+
+sqb build --select path:models/staging+
 ```
 
 ### Path-between selectors
@@ -5692,16 +5691,16 @@ This is useful for rebuilding a specific slice of the DAG without manually listi
 Use commas to intersect selector results:
 
 ```bash
-sqb build --select "tag:staging,path:finance"
+sqb build --select "tag:staging,path:models/finance"
 ```
 
-This selects only models that match *both* conditions - in this case, models tagged `staging` that are also under the `finance` directory.
+This selects only models that match *both* conditions - in this case, models tagged `staging` that are also under the `models/finance` directory.
 
 ### Combining select and exclude
 
 ```bash
 # Build all marts except daily_revenue
-sqb build --select path:marts --exclude daily_revenue
+sqb build --select path:models/marts --exclude daily_revenue
 
 # Build everything upstream of fact_orders, excluding staging models
 sqb build --select +fact_orders --exclude tag:staging
@@ -5712,16 +5711,16 @@ sqb build --select +fact_orders --exclude tag:staging
 Unknown model names, empty paths, and malformed selectors produce clear error messages:
 
 ```
-Unknown selector name 'nonexistent_model'
-No models found under path 'nonexistent'.
-No models found with tag 'nonexistent_tag'
-Path selector 'fact_orders~' requires names on both sides of '~'
+unknown selector name 'nonexistent_model'
+no models found under path 'models/nonexistent'.
+no models found with tag 'nonexistent_tag'
+path selector 'fact_orders~' requires names on both sides of '~'
 ```
 
-If a path selector accidentally includes the `models/` prefix, SQLBuild suggests the correct form:
+If a path selector omits the root directory, SQLBuild asks for the explicit form:
 
 ```
-No models found under path 'models/marts'. (the 'models/' prefix is stripped automatically — try 'path:marts')
+path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', 'checks/', or 'loaders/'
 ```
 
 ## Column Lineage
@@ -6036,7 +6035,7 @@ Diff requires `--select` in the current version. You can use any selector syntax
 sqb diff prod:dev --full --select customer_status_snapshot
 
 # Diff all models in a path
-sqb diff prod:dev --schema-only --select path:marts
+sqb diff prod:dev --schema-only --select path:models/marts
 
 # Diff models with a specific tag
 sqb diff prod:dev --full --select tag:acceptance
@@ -7680,7 +7679,7 @@ sqb build --virtual-env pr_123 --select fact_orders --include-stale-upstreams
 Virtual environment builds are change-aware by default. When combined with `--select`, only models that are both selected and stale are built:
 
 ```bash
-sqb build --virtual-env pr_123 --select path:marts
+sqb build --virtual-env pr_123 --select path:models/marts
 ```
 
 This intersects the user selection with the stale-driven selection, useful when the stale cascade is large and you want to build a coherent subgraph without running unchanged models. Use `--force` to override and build all selected models regardless of state.
@@ -10298,7 +10297,7 @@ sqb --project-dir <path> audit [flags]
 sqb audit
 
 # Run audits for marts only
-sqb audit --select path:marts
+sqb audit --select path:models/marts
 ```
 
 ## freshness
@@ -10557,7 +10556,7 @@ sqb --project-dir <path> clone --from <target> --to <target> [flags]
 sqb clone --from prod --to dev
 
 # Clone only marts to dev
-sqb clone --from prod --to dev --select path:marts
+sqb clone --from prod --to dev --select path:models/marts
 
 # Force physical copies
 sqb clone --from prod --to dev --hard-copy
@@ -10604,7 +10603,7 @@ The first argument is a positional `FROM:TO` range. Exactly one mode is required
 sqb diff prod:dev --full --select customer_status_snapshot
 
 # Schema-only diff of all marts
-sqb diff prod:dev --schema-only --select path:marts
+sqb diff prod:dev --schema-only --select path:models/marts
 
 # Bounded diff of last 14 days
 sqb diff prod:dev --bounded 14d --select hourly_order_activity
@@ -10833,7 +10832,7 @@ sqb lineage fact_orders.order_id --direction downstream
 sqb lineage fact_orders.total_cents --depth 1
 
 # Lineage for all models in a path
-sqb lineage --select path:marts
+sqb lineage --select path:models/marts
 
 # Lineage between two models (path-between)
 sqb lineage --select "stg_orders~daily_activity_rollup"
@@ -11338,7 +11337,7 @@ sqb dbt build --select state:modified+
 sqb dbt build --select tag:nightly
 
 # SQLBuild models by path
-sqb dbt build --select path:marts
+sqb dbt build --select path:models/marts
 
 # Exclude by tag
 sqb dbt build --select fact_orders+ --exclude tag:nightly

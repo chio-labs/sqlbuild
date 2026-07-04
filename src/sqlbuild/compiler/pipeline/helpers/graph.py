@@ -51,26 +51,6 @@ def build_static_downstream_deps(
     }
 
 
-def build_static_tag_index(project: CompiledProject) -> dict[str, frozenset[CompiledObjectKey]]:
-    """Build a tag-to-keys lookup from compiled model configs."""
-
-    index: dict[str, set[CompiledObjectKey]] = {}
-    for model in project.models:
-        for tag in _as_string_list(model.config.values.get("tags")):
-            index.setdefault(tag, set()).add(model.key)
-    return {tag: frozenset(keys) for tag, keys in index.items()}
-
-
-def build_static_path_index(project: CompiledProject) -> dict[CompiledObjectKey, str]:
-    """Build a key-to-folder lookup from compiled model relative paths."""
-
-    index: dict[CompiledObjectKey, str] = {}
-    for model in project.models:
-        parent: str = str(model.relative_path.parent)
-        index[model.key] = _strip_models_prefix(parent)
-    return index
-
-
 def build_static_all_keys(project: CompiledProject) -> dict[str, CompiledObjectKey]:
     """Build selector lookup keys for all named graph resources."""
 
@@ -96,19 +76,3 @@ def _filter_lineage_deps(
         for key, deps in upstream_deps.items()
         if key.resource_type != CompiledResourceType.SQL_TEST
     }
-
-
-def _strip_models_prefix(path: str) -> str:
-    if path.startswith("models/"):
-        return path[len("models/") :]
-    if path == "models":
-        return ""
-    return path
-
-
-def _as_string_list(value: object) -> list[str]:
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    if isinstance(value, tuple):
-        return [str(item) for item in value]
-    return []

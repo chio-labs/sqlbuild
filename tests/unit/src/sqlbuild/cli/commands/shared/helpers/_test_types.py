@@ -19,6 +19,8 @@ class ModeGuardTestCase:
     command_name: str
     expected_error_fragment: str | None
     defer_to: str | None = None
+    virtual_env: str | None = None
+    include_stale_upstreams: bool = False
 
 
 @dataclass(frozen=True)

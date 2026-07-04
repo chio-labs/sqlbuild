@@ -10,15 +10,12 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
-from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
     build_deferred_locations,
     gather_deferred_relations,
@@ -27,8 +24,6 @@ from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
 from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_all_keys,
     build_static_downstream_deps,
-    build_static_path_index,
-    build_static_tag_index,
     build_static_upstream_deps,
 )
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
@@ -57,8 +52,12 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
+from sqlbuild.compiler.shared.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
+)
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.project import TargetConfig, resolve_effective_adapter_name
+from sqlbuild.spec.models.project import TargetConfig
 
 
 def run_compile_pipeline(
@@ -237,20 +236,6 @@ def _build_result(
         source_deferral_enabled=source_deferral_enabled,
         custom_prepare_version_materializations=frozenset(custom_prepare_version_functions.keys()),
     )
-    loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
-    manifest: dict[str, object] = build_manifest(
-        project=project,
-        plan_output=plan_output,
-        loaded_macros=loaded_macros,
-        project_name=discovered_inputs.project_config.name,
-        adapter_type=resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
-        upstream_deps=plan_output.upstream_deps,
-        downstream_deps=plan_output.downstream_deps,
-    )
-
     custom_materializations: dict[str, Any] = load_custom_materializations(
         discovered_inputs.materialization_files
     )
@@ -292,7 +277,6 @@ def _build_result(
     return CompilePipelineResult(
         project=project,
         plan_output=plan_output,
-        manifest=manifest,
         custom_materializations=custom_materializations,
         custom_prepare_version_functions=custom_prepare_version_functions,
         python_node_names=selected_python_node_names,
@@ -308,7 +292,7 @@ def _build_project_graph(*, project: CompiledProject) -> ProjectGraph:
         project=project,
         upstream_deps=upstream_deps,
         downstream_deps=build_static_downstream_deps(upstream_deps),
-        tag_index=build_static_tag_index(project),
-        path_index=build_static_path_index(project),
+        tag_index=build_model_tag_index(project),
+        path_index=build_model_path_index(project),
         all_keys=build_static_all_keys(project),
     )
