@@ -49,6 +49,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineageGraph,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import DbtLineageOutputFormat
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
@@ -71,7 +72,7 @@ def build_dbt_lineage_output(
         dbt_args=lineage_args.dbt_args,
     )
     runner: DbtRunner = DbtRunner()
-    _report_progress(on_progress, "Compiling dbt project...")
+    report_progress(on_progress, "Compiling dbt project...")
     dbt_compile_start: float = time.monotonic()
     compile_result: DbtCommandResult = runner.compile(options=dbt_options)
     if compile_result.returncode != 0:
@@ -79,14 +80,14 @@ def build_dbt_lineage_output(
             "dbt compile failed",
             help=compile_result.stderr or compile_result.stdout,
         )
-    _report_progress(
+    report_progress(
         on_progress, f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
     )
-    _report_progress(on_progress, "Loading dbt manifest...")
+    report_progress(on_progress, "Loading dbt manifest...")
     manifest: DbtManifestIndex = load_dbt_manifest_index(
         manifest_path=resolve_dbt_manifest_path(options=dbt_options)
     )
-    _report_progress(on_progress, "Loaded dbt manifest.")
+    report_progress(on_progress, "Loaded dbt manifest.")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -114,7 +115,7 @@ def build_dbt_lineage_output(
         depth=lineage_args.depth,
     )
     if column_lineage_selected_keys:
-        _report_progress(on_progress, "Inspecting dbt source and seed schemas...")
+        report_progress(on_progress, "Inspecting dbt source and seed schemas...")
     column_trace: DbtColumnLineageTrace | None = select_dbt_column_lineage_target(
         project=project,
         manifest=manifest,
@@ -148,8 +149,3 @@ def build_dbt_lineage_output(
     if lineage_args.output_format == DbtLineageOutputFormat.LIST:
         return "\n" + format_dbt_lineage_list(lineage_graph, use_color=use_color) + "\n"
     return "\n" + format_dbt_lineage_tree(lineage_graph, use_color=use_color) + "\n"
-
-
-def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
-    if on_progress is not None:
-        on_progress(message)

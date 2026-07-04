@@ -55,6 +55,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     dbt_failure_detail,
 )
 from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
+from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_effective_force
@@ -104,25 +105,23 @@ def plan_dbt_interop_from_project(
     )
     runner: DbtRunner = dbt_runner or DbtRunner(dbt_executable=dbt_executable)
     dbt_compile_start: float = time.monotonic()
-    _report_progress(on_progress, "Compiling dbt project...")
+    report_progress(on_progress, "Compiling dbt project...")
     compile_result: DbtCommandResult = runner.compile(options=dbt_options)
     if compile_result.returncode != 0:
         raise DbtInteropRuntimeError(
             "dbt compile failed",
             help=dbt_failure_detail(compile_result),
         )
-    _report_progress(
+    report_progress(
         on_progress, f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
     )
     manifest_start: float = time.monotonic()
-    _report_progress(on_progress, "Loading dbt manifest...")
+    report_progress(on_progress, "Loading dbt manifest...")
     manifest_path: Path = resolve_dbt_manifest_path(options=dbt_options)
     manifest: DbtManifestIndex = load_dbt_manifest_index(manifest_path=manifest_path)
-    _report_progress(
-        on_progress, f"Loaded dbt manifest. ({time.monotonic() - manifest_start:.2f}s)"
-    )
+    report_progress(on_progress, f"Loaded dbt manifest. ({time.monotonic() - manifest_start:.2f}s)")
     sqlbuild_compile_start: float = time.monotonic()
-    _report_progress(on_progress, "Compiling SQLBuild project...")
+    report_progress(on_progress, "Compiling SQLBuild project...")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -144,18 +143,18 @@ def plan_dbt_interop_from_project(
         cli_vars=dbt_vars,
         external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
-    _report_progress(
+    report_progress(
         on_progress,
         f"Compiled SQLBuild project. ({time.monotonic() - sqlbuild_compile_start:.2f}s)",
     )
     graph_start: float = time.monotonic()
-    _report_progress(on_progress, "Building dbt interop graph...")
+    report_progress(on_progress, "Building dbt interop graph...")
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
-    _report_progress(
+    report_progress(
         on_progress, f"Built dbt interop graph. ({time.monotonic() - graph_start:.2f}s)"
     )
     selection_start: float = time.monotonic()
-    _report_progress(on_progress, "Resolving dbt and SQLBuild selection...")
+    report_progress(on_progress, "Resolving dbt and SQLBuild selection...")
     plan: DbtInteropPlan = plan_dbt_interop_command(
         command=DbtInteropCommand.PLAN,
         project=project,
@@ -170,7 +169,7 @@ def plan_dbt_interop_from_project(
         dbt_executable=dbt_executable,
         sqlbuild_executable=sqlbuild_executable,
     )
-    _report_progress(
+    report_progress(
         on_progress,
         f"Resolved dbt and SQLBuild selection. ({time.monotonic() - selection_start:.2f}s)",
     )
@@ -258,13 +257,8 @@ def plan_dbt_interop_from_project(
     )
     if sqlbuild_plan_output is not None:
         plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)
-    _report_progress(
+    report_progress(
         on_progress,
         f"Generated dbt interop plan. ({time.monotonic() - selection_start:.2f}s)",
     )
     return plan
-
-
-def _report_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
-    if on_progress is not None:
-        on_progress(message)
