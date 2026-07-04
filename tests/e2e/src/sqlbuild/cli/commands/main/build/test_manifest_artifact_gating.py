@@ -18,9 +18,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     "test_case",
     [
         ManifestArtifactGatingE2ETestCase(
-            description="build does not write manifest.json; compile --manifest does",
+            description="build does not write manifest.json; --manifest opts in",
             expected_manifest_after_build=False,
             expected_manifest_after_compile_manifest=True,
+            expected_manifest_after_build_manifest=True,
         )
     ],
     ids=lambda case: case.description,
@@ -59,3 +60,14 @@ def test_given_direct_project_when_building_then_manifest_requires_compile_manif
 
     assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
     assert manifest_path.exists() == test_case.expected_manifest_after_compile_manifest
+
+    manifest_path.unlink()
+    build_manifest_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--manifest"),
+        project_dir=project_dir,
+    )
+
+    assert build_manifest_result.returncode == 0, (
+        build_manifest_result.stdout + build_manifest_result.stderr
+    )
+    assert manifest_path.exists() == test_case.expected_manifest_after_build_manifest

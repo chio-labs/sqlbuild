@@ -156,6 +156,7 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     )
     build_parser.add_argument("--no-tests", dest="run_tests", action="store_false", default=True)
     build_parser.add_argument("--no-audits", dest="run_audits", action="store_false", default=True)
+    build_parser.add_argument("--manifest", action="store_true", default=False)
     add_execution_json_output_arg(build_parser)
     add_cursor_override_args(build_parser)
     build_load_group: argparse._MutuallyExclusiveGroup = build_parser.add_mutually_exclusive_group()
@@ -777,6 +778,7 @@ def _main_with_dependencies(
                 args.force,
                 args.run_tests,
                 args.run_audits,
+                args.manifest,
                 args.json,
                 args.json_output,
             )

@@ -226,6 +226,7 @@ class CliEntrypointHandlers:
             bool,
             bool,
             bool,
+            bool,
             Path | None,
         ],
         int,

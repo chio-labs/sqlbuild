@@ -2310,9 +2310,11 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
         force: bool = False,
         run_tests: bool = True,
         run_audits: bool = True,
+        manifest: bool = False,
         json_output: bool = False,
         json_output_path: Path | None = None,
     ) -> int:
+        del manifest
         del project_dir
         del no_sql_validation
         del defer_to

@@ -68,9 +68,11 @@ from sqlbuild.cli.commands.shared.helpers.targets.runtime import (
     write_runtime_target,
 )
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
+from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
+from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
@@ -123,6 +125,7 @@ def run_build(
     force: bool = False,
     run_tests: bool = True,
     run_audits: bool = True,
+    manifest: bool = False,
     json_output: bool = False,
     json_output_path: Path | None = None,
 ) -> int:
@@ -146,6 +149,11 @@ def run_build(
         raise CliUserError(
             "build does not support --defer-clone-from when virtual_environments = true",
             code="C412",
+        )
+    if discovered_inputs.project_config.settings.virtual_environments and manifest:
+        raise CliUserError(
+            "build does not support --manifest when virtual_environments = true",
+            code="C264",
         )
     effective_force: bool = resolve_effective_force(
         project_config=discovered_inputs.project_config,
@@ -313,10 +321,22 @@ def run_build(
             output_stream=sys.stdout,
         )
 
+        manifest_payload: dict[str, object] | None = None
+        if manifest:
+            manifest_payload = build_manifest(
+                project=pipeline_result.project,
+                plan_output=plan_output,
+                loaded_macros=load_macros(discovered_inputs.macro_files),
+                project_name=discovered_inputs.project_config.name,
+                adapter_type=adapter_name,
+                upstream_deps=plan_output.upstream_deps,
+                downstream_deps=plan_output.downstream_deps,
+            )
         write_compile_target(
             target_dir=effective_project_dir / "target",
             adapter=adapter,
             plan_output=plan_output,
+            manifest=manifest_payload,
         )
         if not plan_has_executable_work(
             plan_output, python_plan_entries=pipeline_result.python_plan_entries
