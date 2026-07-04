@@ -30,7 +30,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph.core import (
-    build_upstream_deps,
+    build_execution_upstream_deps,
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.identity.functions import (
@@ -285,8 +285,8 @@ def build_scenario_execution_plan(
         project.functions
     )
     scenario_model_names: frozenset[str] = frozenset(graph_plan.model_names)
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        project
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
     )
     ordered_model_keys: tuple[CompiledObjectKey, ...] = tuple(
         key

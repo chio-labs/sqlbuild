@@ -11,6 +11,10 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.shared.helpers.lineage_graph import (
+    build_lineage_downstream_deps,
+    build_lineage_upstream_deps,
+)
 from sqlbuild.compiler.shared.helpers.selector_indexes import (
     build_model_path_index,
     build_model_tag_index,
@@ -47,11 +51,11 @@ def resolve_diff_model_names(
 ) -> tuple[str, ...]:
     """Resolve diff selectors to model names only."""
 
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = _build_upstream_deps(
-        project
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_lineage_upstream_deps(project)
     )
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        _build_downstream_deps(upstream_deps)
+        build_lineage_downstream_deps(upstream_deps)
     )
     all_keys: dict[str, CompiledObjectKey] = {
         **{model.name: model.key for model in project.models},
@@ -72,33 +76,6 @@ def resolve_diff_model_names(
         for model in project.models
         if model.key in selected_keys and model.key.resource_type == CompiledResourceType.MODEL
     )
-
-
-def _build_upstream_deps(
-    project: CompiledProject,
-) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
-    upstream.update({model.key: model.deps for model in project.models})
-    upstream.update({source.key: source.deps for source in project.sources})
-    upstream.update({seed.key: seed.deps for seed in project.seeds})
-    return upstream
-
-
-def _build_downstream_deps(
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    downstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
-    key: CompiledObjectKey
-    for key in upstream:
-        downstream.setdefault(key, [])
-    for key, dep_keys in upstream.items():
-        dep_key: CompiledObjectKey
-        for dep_key in dep_keys:
-            downstream.setdefault(dep_key, []).append(key)
-    return {
-        key: tuple(sorted(values, key=lambda item: (item.resource_type, item.name)))
-        for key, values in downstream.items()
-    }
 
 
 def _resolve_model_selectors(

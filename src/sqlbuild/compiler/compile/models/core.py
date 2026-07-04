@@ -123,6 +123,16 @@ class CompiledLineageColumnFact:
 
 
 @dataclass(frozen=True)
+class PolyglotAnalysisResult:
+    """Outcome of one Polyglot column and lineage analysis pass."""
+
+    analysis_succeeded: bool
+    columns: tuple[InferredColumn, ...] | None = None
+    lineage_columns: tuple[CompiledLineageColumnFact, ...] = field(default_factory=tuple)
+    has_star: bool = False
+
+
+@dataclass(frozen=True)
 class CompiledObjectKey:
     """Stable logical identity for one compiled resource or external dependency."""
 

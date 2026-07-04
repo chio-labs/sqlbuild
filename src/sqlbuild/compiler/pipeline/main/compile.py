@@ -21,11 +21,7 @@ from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
     gather_deferred_relations,
     resolve_deferred_target_config,
 )
-from sqlbuild.compiler.pipeline.helpers.graph import (
-    build_static_all_keys,
-    build_static_downstream_deps,
-    build_static_upstream_deps,
-)
+from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline.helpers.python_plan_entries import (
     build_python_plan_entries,
@@ -51,6 +47,10 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
+)
+from sqlbuild.compiler.shared.helpers.lineage_graph import (
+    build_lineage_downstream_deps,
+    build_lineage_upstream_deps,
 )
 from sqlbuild.compiler.shared.helpers.selector_indexes import (
     build_model_path_index,
@@ -198,7 +198,7 @@ def _build_result(
             project_graph=_build_project_graph(project=project),
             discovered_inputs=discovered_inputs,
         )
-        selected_sql_keys = run_selection.sql_keys if run_selection.python_node_names else None
+        selected_sql_keys = run_selection.sql_keys
         selected_python_node_names = run_selection.python_node_names
 
     custom_prepare_version_functions: dict[str, Any] = load_custom_prepare_version_functions(
@@ -280,12 +280,12 @@ def _build_result(
 
 def _build_project_graph(*, project: CompiledProject) -> ProjectGraph:
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_static_upstream_deps(project)
+        build_lineage_upstream_deps(project)
     )
     return ProjectGraph(
         project=project,
         upstream_deps=upstream_deps,
-        downstream_deps=build_static_downstream_deps(upstream_deps),
+        downstream_deps=build_lineage_downstream_deps(upstream_deps),
         tag_index=build_model_tag_index(project),
         path_index=build_model_path_index(project),
         all_keys=build_static_all_keys(project),
