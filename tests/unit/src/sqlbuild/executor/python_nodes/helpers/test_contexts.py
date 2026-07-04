@@ -62,7 +62,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
             expected_vars={"batch": "hourly"},
         )
     ],
-    ids=["task context records helper calls and qualifies names"],
+    ids=lambda case: case.description,
 )
 def test_given_task_context_when_using_helpers_then_records_and_qualifies_names(
     test_case: PythonNodeContextHelperTestCase,
@@ -121,7 +121,7 @@ def test_given_task_context_when_using_helpers_then_records_and_qualifies_names(
             expected_vars={"batch": "hourly"},
         )
     ],
-    ids=["asset context returns asset result and skip signal"],
+    ids=lambda case: case.description,
 )
 def test_given_asset_context_when_building_results_then_returns_result_and_skip_models(
     test_case: PythonNodeContextHelperTestCase,
@@ -170,7 +170,7 @@ def test_given_asset_context_when_building_results_then_returns_result_and_skip_
             expected_asset_export=True,
         )
     ],
-    ids=["task and asset modules export skip mode"],
+    ids=lambda case: case.description,
 )
 def test_given_public_task_and_asset_modules_when_importing_skip_mode_then_export_same_enum(
     test_case: PublicSkipModeExportTestCase,
@@ -189,7 +189,7 @@ def test_given_public_task_and_asset_modules_when_importing_skip_mode_then_expor
             expected_mode=SkipMode.SOFT,
         )
     ],
-    ids=["string skip mode normalizes to skip mode enum"],
+    ids=lambda case: case.description,
 )
 def test_given_context_skip_when_mode_is_string_then_normalizes_to_skip_mode(
     test_case: PythonNodeSkipModeInputTestCase,
@@ -224,7 +224,7 @@ def test_given_context_skip_when_mode_is_string_then_normalizes_to_skip_mode(
             expected_error_fragment="materialized",
         )
     ],
-    ids=["task context result omits materialized flag and loader-only fields"],
+    ids=lambda case: case.description,
 )
 def test_given_task_context_when_inspecting_api_then_loader_only_fields_are_absent(
     test_case: PythonNodeContextHelperTestCase,
@@ -277,7 +277,7 @@ def test_given_task_context_when_inspecting_api_then_loader_only_fields_are_abse
             expected_error_fragment="must be declared in depends_on before use",
         )
     ],
-    ids=["returns declared SQL relation and rejects undeclared SQL relation"],
+    ids=lambda case: case.description,
 )
 def test_given_task_context_when_resolving_sql_relations_then_validates_declared_refs(
     test_case: PythonNodeContextHelperTestCase,
@@ -319,7 +319,7 @@ def test_given_task_context_when_resolving_sql_relations_then_validates_declared
             expected_error_fragment="No persisted result found for Python node",
         )
     ],
-    ids=["reads persisted upstream result envelope"],
+    ids=lambda case: case.description,
 )
 def test_given_context_with_result_store_when_reading_upstream_outputs_then_returns_values(
     test_case: PythonNodeRunStateTestCase,
@@ -364,7 +364,7 @@ def test_given_context_with_result_store_when_reading_upstream_outputs_then_retu
             expected_error_fragment="No Python node result store is available",
         )
     ],
-    ids=["raises when no result store is available"],
+    ids=lambda case: case.description,
 )
 def test_given_context_without_result_store_when_reading_result_then_raises_or_returns_default(
     test_case: PythonNodeRunStateTestCase,

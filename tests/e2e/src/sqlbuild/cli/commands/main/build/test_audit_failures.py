@@ -16,12 +16,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
-    AuditFailureBuildE2ETestCase(
-        description="delta audit failure blocks incremental target update",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditFailureBuildE2ETestCase(
+            description="delta audit failure blocks incremental target update",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
             name = "audit_failure_project"
             adapter = "duckdb"
 
@@ -31,10 +34,10 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
             [defaults]
             materialized = "table"
                 """
-            ).strip()
-            + "\n",
-            "seed_raw_data.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": dedent(
+                    """
                 CREATE TABLE IF NOT EXISTS raw_orders (
                   id INTEGER,
                   ordered_at TIMESTAMP,
@@ -53,10 +56,10 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
 
                 INSERT INTO orders VALUES (1, '2025-12-31 00:30:00', 50);
                 """
-            ).strip()
-            + "\n",
-            "models/orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/orders.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy merge,
@@ -73,29 +76,29 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
 
                 SELECT id, ordered_at, amount_cents FROM main.raw_orders
                 """
-            ).strip()
-            + "\n",
-            "audits/generic/expression_is_true.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "audits/generic/expression_is_true.sql": dedent(
+                    """
                 AUDIT ();
 
                 SELECT * FROM __ref("@model") WHERE NOT (@expression)
                 """
-            ).strip()
-            + "\n",
-        },
-        command=("--no-color", "build", "--select", "orders"),
-        expected_exit_code=1,
-        expected_failure_fragment=(
-            "delta audit for 'orders' failed before target update with severity level: error"
+                ).strip()
+                + "\n",
+            },
+            command=("--no-color", "build", "--select", "orders"),
+            expected_exit_code=1,
+            expected_failure_fragment=(
+                "delta audit for 'orders' failed before target update with severity level: error"
+            ),
+            expected_retained_relation_fragment="delta table kept for inspection: main.orders__delta",
         ),
-        expected_retained_relation_fragment="delta table kept for inspection: main.orders__delta",
-    ),
-    AuditFailureBuildE2ETestCase(
-        description="final audit failure reports target already updated for incremental model",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+        AuditFailureBuildE2ETestCase(
+            description="final audit failure reports target already updated for incremental model",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
             name = "audit_failure_project"
             adapter = "duckdb"
 
@@ -105,10 +108,10 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
             [defaults]
             materialized = "table"
                 """
-            ).strip()
-            + "\n",
-            "seed_raw_data.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": dedent(
+                    """
                 CREATE TABLE IF NOT EXISTS raw_orders (
                   id INTEGER,
                   ordered_at TIMESTAMP,
@@ -127,10 +130,10 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
 
                 INSERT INTO orders VALUES (1, '2025-12-31 00:30:00', 50);
                 """
-            ).strip()
-            + "\n",
-            "models/orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/orders.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy merge,
@@ -147,31 +150,26 @@ TEST_CASES: list[AuditFailureBuildE2ETestCase] = [
 
                 SELECT id, ordered_at, amount_cents FROM main.raw_orders
                 """
-            ).strip()
-            + "\n",
-            "audits/generic/expression_is_true.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "audits/generic/expression_is_true.sql": dedent(
+                    """
                 AUDIT ();
 
                 SELECT * FROM __ref("@model") WHERE NOT (@expression)
                 """
-            ).strip()
-            + "\n",
-        },
-        command=("--no-color", "build", "--select", "orders"),
-        expected_exit_code=1,
-        expected_failure_fragment=(
-            "final audit for 'orders' failed after target update with severity level: error"
+                ).strip()
+                + "\n",
+            },
+            command=("--no-color", "build", "--select", "orders"),
+            expected_exit_code=1,
+            expected_failure_fragment=(
+                "final audit for 'orders' failed after target update with severity level: error"
+            ),
+            expected_retained_relation_fragment="delta table kept for inspection: main.orders__delta",
         ),
-        expected_retained_relation_fragment="delta table kept for inspection: main.orders__delta",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_audit_failure_projects_when_running_build_then_cli_reports_failure_phase(
     test_case: AuditFailureBuildE2ETestCase,

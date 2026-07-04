@@ -32,7 +32,7 @@ from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapt
             expected_logger_name="sqlbuild.loader.raw_orders_loader",
         ),
     ],
-    ids=["records helper calls and qualifies names using target namespace"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_context_when_using_helpers_then_records_and_qualifies_names(
     test_case: LoaderContextHelperTestCase,
@@ -97,7 +97,7 @@ def test_given_loader_context_when_using_helpers_then_records_and_qualifies_name
             expected_logger_name="sqlbuild.loader.raw_orders_loader",
         )
     ],
-    ids=["resolves loader and source relation refs"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_context_when_resolving_relation_refs_then_returns_cursor_values(
     test_case: LoaderContextHelperTestCase,

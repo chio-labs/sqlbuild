@@ -15,35 +15,33 @@ from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import (
     PythonNodeContextTestAdapter,
 )
 
-PYTHON_IDENTITY_FINGERPRINT_WRITE_TEST_CASES: list[PythonIdentityFingerprintWriteTestCase] = [
-    PythonIdentityFingerprintWriteTestCase(
-        description="writes identity payloads into fingerprint state",
-        schema="analytics",
-        expected_sql_count=2,
-        expected_fragments=(
-            "_sqlbuild_fingerprints",
-            "task",
-            "build_orders",
-            "definition_b64",
-            "metadata_json_b64",
-            "definition-hash",
-            "version-hash",
-        ),
-    ),
-    PythonIdentityFingerprintWriteTestCase(
-        description="skips write without target schema",
-        schema=None,
-        expected_sql_count=0,
-        expected_fragments=(),
-        unexpected_fragments=("_sqlbuild_fingerprints",),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_IDENTITY_FINGERPRINT_WRITE_TEST_CASES,
-    ids=[case.description for case in PYTHON_IDENTITY_FINGERPRINT_WRITE_TEST_CASES],
+    [
+        PythonIdentityFingerprintWriteTestCase(
+            description="writes identity payloads into fingerprint state",
+            schema="analytics",
+            expected_sql_count=2,
+            expected_fragments=(
+                "_sqlbuild_fingerprints",
+                "task",
+                "build_orders",
+                "definition_b64",
+                "metadata_json_b64",
+                "definition-hash",
+                "version-hash",
+            ),
+        ),
+        PythonIdentityFingerprintWriteTestCase(
+            description="skips write without target schema",
+            schema=None,
+            expected_sql_count=0,
+            expected_fragments=(),
+            unexpected_fragments=("_sqlbuild_fingerprints",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_identity_when_writing_fingerprint_then_uses_fingerprint_state(
     test_case: PythonIdentityFingerprintWriteTestCase,

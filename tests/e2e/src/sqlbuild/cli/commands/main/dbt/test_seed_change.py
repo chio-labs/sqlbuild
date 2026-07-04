@@ -40,7 +40,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_revenue_rows=((1, 40), (2, 60), (3, 30)),
         )
     ],
-    ids=["closure rebuild incorporates a changed seed and cascades downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_changed_seed_in_closure_when_building_then_cascades_and_updates_data(
     test_case: DbtSeedChangeE2ETestCase,
@@ -90,7 +90,7 @@ def test_given_changed_seed_in_closure_when_building_then_cascades_and_updates_d
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
         )
     ],
-    ids=["rebuilt seed closure is current on an immediate second build"],
+    ids=lambda case: case.description,
 )
 def test_given_built_seed_closure_when_rebuilding_then_no_op_proves_identity_round_trip(
     test_case: DbtSeedChangeE2ETestCase,
@@ -139,7 +139,7 @@ def test_given_built_seed_closure_when_rebuilding_then_no_op_proves_identity_rou
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
         )
     ],
-    ids=["changed seed outside selection leaves leaf current with a stale warning"],
+    ids=lambda case: case.description,
 )
 def test_given_changed_seed_out_of_selection_when_building_leaf_then_no_op_with_warning(
     test_case: DbtSeedChangeE2ETestCase,
@@ -186,7 +186,7 @@ def test_given_changed_seed_out_of_selection_when_building_leaf_then_no_op_with_
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
         )
     ],
-    ids=["leaf own-change runs while an unselected changed seed still warns"],
+    ids=lambda case: case.description,
 )
 def test_given_leaf_change_and_out_of_selection_seed_when_building_then_runs_and_warns(
     test_case: DbtSeedChangeE2ETestCase,
@@ -229,7 +229,7 @@ def test_given_leaf_change_and_out_of_selection_seed_when_building_then_runs_and
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
         )
     ],
-    ids=["config-only seed column_types change is detected and cascades"],
+    ids=lambda case: case.description,
 )
 def test_given_config_only_seed_change_when_building_then_seed_is_detected_as_changed(
     test_case: DbtSeedChangeE2ETestCase,
@@ -278,7 +278,7 @@ def test_given_config_only_seed_change_when_building_then_seed_is_detected_as_ch
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
         )
     ],
-    ids=["dropped seed relation reloads the seed and rebuilds dependents"],
+    ids=lambda case: case.description,
 )
 def test_given_dropped_seed_relation_when_building_then_reloads_and_rebuilds(
     test_case: DbtSeedChangeE2ETestCase,
@@ -323,7 +323,7 @@ def test_given_dropped_seed_relation_when_building_then_reloads_and_rebuilds(
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
         )
     ],
-    ids=["config-only seed change is current on an immediate second build"],
+    ids=lambda case: case.description,
 )
 def test_given_config_only_seed_change_when_rebuilding_then_no_op_round_trips(
     test_case: DbtSeedChangeE2ETestCase,
@@ -368,7 +368,7 @@ def test_given_config_only_seed_change_when_rebuilding_then_no_op_round_trips(
             expected_revenue_rows=((1, 40), (2, 60), (3, 30)),
         )
     ],
-    ids=["changing one seed cascades only into its own branch"],
+    ids=lambda case: case.description,
 )
 def test_given_two_seed_branches_when_one_seed_changes_then_only_its_branch_cascades(
     test_case: DbtSeedChangeE2ETestCase,
@@ -423,7 +423,7 @@ def test_given_two_seed_branches_when_one_seed_changes_then_only_its_branch_casc
             expected_revenue_rows=((1, 40), (2, 20), (3, 30)),
         )
     ],
-    ids=["dbt run warns about an out-of-selection changed seed"],
+    ids=lambda case: case.description,
 )
 def test_given_out_of_selection_seed_change_when_running_then_warns(
     test_case: DbtSeedChangeE2ETestCase,

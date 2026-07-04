@@ -31,7 +31,7 @@ from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
             ),
         )
     ],
-    ids=["creates scenario table model from resolved scenario SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_table_model_entry_when_executing_scenario_model_then_creates_table(
     test_case: ExecuteScenarioModelsTestCase,
@@ -66,7 +66,7 @@ def test_given_table_model_entry_when_executing_scenario_model_then_creates_tabl
             ),
         )
     ],
-    ids=["creates scenario view model"],
+    ids=lambda case: case.description,
 )
 def test_given_view_model_entry_when_executing_scenario_model_then_creates_view(
     test_case: ExecuteScenarioModelsTestCase,
@@ -104,7 +104,7 @@ def test_given_view_model_entry_when_executing_scenario_model_then_creates_view(
             ),
         )
     ],
-    ids=["runs incremental model as full refresh scenario table"],
+    ids=lambda case: case.description,
 )
 def test_given_incremental_model_entry_when_executing_scenario_model_then_creates_table(
     test_case: ExecuteScenarioModelsTestCase,
@@ -141,7 +141,7 @@ def test_given_incremental_model_entry_when_executing_scenario_model_then_create
             expected_error_fragment="failed target __sqb_51b385aebe20__model__stg_orders",
         )
     ],
-    ids=["stops scenario model execution after first failure"],
+    ids=lambda case: case.description,
 )
 def test_given_model_failure_when_executing_scenario_models_then_stops_before_next_model(
     test_case: ExecuteScenarioModelsTestCase,

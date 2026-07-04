@@ -542,27 +542,17 @@ def build_dbt_pruned_test_unique_ids(
 def append_stale_out_of_selection_warning(
     *, plan: DbtInteropPlan, dbt_model_plan: DbtModelPlanningResult
 ) -> DbtInteropPlan:
-    """Append a warning when selected models are stale via unselected changed seeds."""
+    """Append shared selection-staleness warnings from dbt planning."""
 
-    if dbt_model_plan.stale_out_of_selection_warning_messages:
-        return replace(
-            plan,
-            warnings=(
-                *plan.warnings,
-                *dbt_model_plan.stale_out_of_selection_warning_messages,
-            ),
-        )
-    stale_seeds: tuple[str, ...] = dbt_model_plan.stale_out_of_selection_seed_unique_ids
-    if not stale_seeds:
+    if not dbt_model_plan.stale_out_of_selection_warning_messages:
         return plan
-    bullet_lines: str = "\n".join(f"    - {seed.split('.')[-1]}" for seed in stale_seeds)
-    warning: str = (
-        f"selected models will build on {len(stale_seeds)} stale seed(s) "
-        "not selected for rebuild:\n"
-        f"{bullet_lines}\n"
-        "    rebuild the closure to refresh them: --select +model"
+    return replace(
+        plan,
+        warnings=(
+            *plan.warnings,
+            *dbt_model_plan.stale_out_of_selection_warning_messages,
+        ),
     )
-    return replace(plan, warnings=(*plan.warnings, warning))
 
 
 def append_manifest_seed_warnings(

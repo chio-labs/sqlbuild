@@ -28,37 +28,6 @@ from tests.unit.src.sqlbuild.provider.helpers.helpers import (
     unannotated_provider,
 )
 
-PROVIDER_INJECTION_TEST_CASES: tuple[ProviderInjectionTestCase, ...] = (
-    ProviderInjectionTestCase(
-        description="provider is injected by parameter name with context",
-        function=context_and_provider,
-        expected_result=("runtime-context", "slack"),
-    ),
-    ProviderInjectionTestCase(
-        description="provider-only function receives provider by name",
-        function=provider_only,
-        expected_result="slack",
-    ),
-)
-
-PROVIDER_INJECTION_ERROR_TEST_CASES: tuple[ProviderInjectionErrorTestCase, ...] = (
-    ProviderInjectionErrorTestCase(
-        description="missing provider parameter errors clearly",
-        function=missing_provider,
-        expected_error_fragment=(
-            "Provider parameter 'alerts' requires provider 'alerts', but it was not found"
-        ),
-    ),
-    ProviderInjectionErrorTestCase(
-        description="annotation mismatch errors clearly",
-        function=mismatched_provider,
-        expected_error_fragment=(
-            "Provider parameter 'slack_provider' expected ClockProvider, "
-            "but provider 'slack_provider' is SlackProvider"
-        ),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -69,7 +38,7 @@ PROVIDER_INJECTION_ERROR_TEST_CASES: tuple[ProviderInjectionErrorTestCase, ...] 
             expected_result="runtime-context",
         )
     ],
-    ids=["context-only function still receives context"],
+    ids=lambda case: case.description,
 )
 def test_given_context_only_function_when_calling_with_provider_injection_then_context_is_preserved(
     test_case: ProviderInjectionTestCase,
@@ -85,8 +54,19 @@ def test_given_context_only_function_when_calling_with_provider_injection_then_c
 
 @pytest.mark.parametrize(
     "test_case",
-    PROVIDER_INJECTION_TEST_CASES,
-    ids=[case.description for case in PROVIDER_INJECTION_TEST_CASES],
+    (
+        ProviderInjectionTestCase(
+            description="provider is injected by parameter name with context",
+            function=context_and_provider,
+            expected_result=("runtime-context", "slack"),
+        ),
+        ProviderInjectionTestCase(
+            description="provider-only function receives provider by name",
+            function=provider_only,
+            expected_result="slack",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_provider_parameter_when_calling_with_provider_injection_then_provider_is_injected(
     test_case: ProviderInjectionTestCase,
@@ -111,7 +91,7 @@ def test_given_provider_parameter_when_calling_with_provider_injection_then_prov
             expected_label="slack",
         )
     ],
-    ids=["unannotated provider parameter uses name-based injection"],
+    ids=lambda case: case.description,
 )
 def test_given_unannotated_provider_parameter_when_name_matches_then_provider_is_injected(
     test_case: ProviderInjectionLabelTestCase,
@@ -130,8 +110,24 @@ def test_given_unannotated_provider_parameter_when_name_matches_then_provider_is
 
 @pytest.mark.parametrize(
     "test_case",
-    PROVIDER_INJECTION_ERROR_TEST_CASES,
-    ids=[case.description for case in PROVIDER_INJECTION_ERROR_TEST_CASES],
+    (
+        ProviderInjectionErrorTestCase(
+            description="missing provider parameter errors clearly",
+            function=missing_provider,
+            expected_error_fragment=(
+                "Provider parameter 'alerts' requires provider 'alerts', but it was not found"
+            ),
+        ),
+        ProviderInjectionErrorTestCase(
+            description="annotation mismatch errors clearly",
+            function=mismatched_provider,
+            expected_error_fragment=(
+                "Provider parameter 'slack_provider' expected ClockProvider, "
+                "but provider 'slack_provider' is SlackProvider"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_provider_parameter_when_calling_then_errors_clearly(
     test_case: ProviderInjectionErrorTestCase,
@@ -157,7 +153,7 @@ def test_given_invalid_provider_parameter_when_calling_then_errors_clearly(
             ),
         )
     ],
-    ids=["provider cannot shadow reserved context parameter"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_name_conflicts_with_context_parameter_when_calling_then_errors_clearly(
     test_case: ProviderInjectionErrorTestCase,
@@ -186,7 +182,7 @@ def test_given_provider_name_conflicts_with_context_parameter_when_calling_then_
             ),
         )
     ],
-    ids=["same provider file imported through alias gives actionable error"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_class_imported_through_alias_when_calling_then_guides_user(
     test_case: ProviderInjectionErrorTestCase,

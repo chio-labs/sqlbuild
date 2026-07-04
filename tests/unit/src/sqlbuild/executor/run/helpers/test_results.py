@@ -15,55 +15,53 @@ from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.run.helpers.helpers import build_result_model_plan_entry
 
-BUILD_FAILED_RESULT_TEST_CASES: list[BuildFailedResultTestCase] = [
-    BuildFailedResultTestCase(
-        description="snapshots recorder statements into failed result",
-        error="materialization failed",
-        recorded_statements=(
-            "DROP TABLE IF EXISTS analytics.orders__staging",
-            "CREATE TABLE analytics.orders__staging AS SELECT 1 AS id",
-        ),
-        warning_messages=("fingerprint write failed",),
-        expected_model_name="orders",
-        expected_error_message="materialization failed",
-        expected_error_code="R002",
-        expected_lifecycle_events=(
-            LifeCycleEvent(
-                kind=LifeCycleEventKind.SQL,
-                content="DROP TABLE IF EXISTS analytics.orders__staging",
-            ),
-            LifeCycleEvent(
-                kind=LifeCycleEventKind.SQL,
-                content="CREATE TABLE analytics.orders__staging AS SELECT 1 AS id",
-            ),
-            LifeCycleEvent(
-                kind=LifeCycleEventKind.LOG,
-                content="model orders failed phase=staging error=materialization failed",
-            ),
-        ),
-    ),
-    BuildFailedResultTestCase(
-        description="preserves structured executor error code",
-        error=ExecutorInputError("contract failed", code="K123"),
-        recorded_statements=(),
-        warning_messages=(),
-        expected_model_name="orders",
-        expected_error_message="contract failed",
-        expected_error_code="K123",
-        expected_lifecycle_events=(
-            LifeCycleEvent(
-                kind=LifeCycleEventKind.LOG,
-                content="model orders failed phase=staging error=contract failed",
-            ),
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_FAILED_RESULT_TEST_CASES,
-    ids=[case.description for case in BUILD_FAILED_RESULT_TEST_CASES],
+    [
+        BuildFailedResultTestCase(
+            description="snapshots recorder statements into failed result",
+            error="materialization failed",
+            recorded_statements=(
+                "DROP TABLE IF EXISTS analytics.orders__staging",
+                "CREATE TABLE analytics.orders__staging AS SELECT 1 AS id",
+            ),
+            warning_messages=("fingerprint write failed",),
+            expected_model_name="orders",
+            expected_error_message="materialization failed",
+            expected_error_code="R002",
+            expected_lifecycle_events=(
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.SQL,
+                    content="DROP TABLE IF EXISTS analytics.orders__staging",
+                ),
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.SQL,
+                    content="CREATE TABLE analytics.orders__staging AS SELECT 1 AS id",
+                ),
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.LOG,
+                    content="model orders failed phase=staging error=materialization failed",
+                ),
+            ),
+        ),
+        BuildFailedResultTestCase(
+            description="preserves structured executor error code",
+            error=ExecutorInputError("contract failed", code="K123"),
+            recorded_statements=(),
+            warning_messages=(),
+            expected_model_name="orders",
+            expected_error_message="contract failed",
+            expected_error_code="K123",
+            expected_lifecycle_events=(
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.LOG,
+                    content="model orders failed phase=staging error=contract failed",
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_statement_recorder_when_building_failed_result_then_snapshots_statements(
     test_case: BuildFailedResultTestCase,

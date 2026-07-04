@@ -106,7 +106,7 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.freshness._test_types import (
             },
         )
     ],
-    ids=["formats observed unknown and error sources"],
+    ids=lambda case: case.description,
 )
 def test_given_freshness_result_when_formatting_then_includes_status_groups(
     test_case: FreshnessOutputTestCase,

@@ -26,38 +26,36 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ValidateModelAttachedAuditRefsTestCase,
 )
 
-SEVERITY_VALID_TEST_CASES: list[ResolveAuditSeverityTestCase] = [
-    ResolveAuditSeverityTestCase(
-        description="instance severity wins over project default",
-        instance_severity="error",
-        default_severity="warn",
-        expected_severity="error",
-    ),
-    ResolveAuditSeverityTestCase(
-        description="project default used when instance is None",
-        instance_severity=None,
-        default_severity="warn",
-        expected_severity="warn",
-    ),
-    ResolveAuditSeverityTestCase(
-        description="falls back to error when instance and project default are None",
-        instance_severity=None,
-        default_severity=None,
-        expected_severity="error",
-    ),
-    ResolveAuditSeverityTestCase(
-        description="instance warn is valid",
-        instance_severity="warn",
-        default_severity=None,
-        expected_severity="warn",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SEVERITY_VALID_TEST_CASES,
-    ids=[case.description for case in SEVERITY_VALID_TEST_CASES],
+    [
+        ResolveAuditSeverityTestCase(
+            description="instance severity wins over project default",
+            instance_severity="error",
+            default_severity="warn",
+            expected_severity="error",
+        ),
+        ResolveAuditSeverityTestCase(
+            description="project default used when instance is None",
+            instance_severity=None,
+            default_severity="warn",
+            expected_severity="warn",
+        ),
+        ResolveAuditSeverityTestCase(
+            description="falls back to error when instance and project default are None",
+            instance_severity=None,
+            default_severity=None,
+            expected_severity="error",
+        ),
+        ResolveAuditSeverityTestCase(
+            description="instance warn is valid",
+            instance_severity="warn",
+            default_severity=None,
+            expected_severity="warn",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_valid_severity_inputs_when_resolving_then_returns_expected(
     test_case: ResolveAuditSeverityTestCase,
@@ -71,26 +69,23 @@ def test_given_valid_severity_inputs_when_resolving_then_returns_expected(
     assert result == test_case.expected_severity
 
 
-SEVERITY_ERROR_TEST_CASES: list[ResolveAuditSeverityTestCase] = [
-    ResolveAuditSeverityTestCase(
-        description="unknown instance severity raises compile error",
-        instance_severity="critical",
-        default_severity=None,
-        expected_error_fragment="unknown severity",
-    ),
-    ResolveAuditSeverityTestCase(
-        description="unknown default severity raises compile error",
-        instance_severity=None,
-        default_severity="critical",
-        expected_error_fragment="unknown value",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SEVERITY_ERROR_TEST_CASES,
-    ids=[case.description for case in SEVERITY_ERROR_TEST_CASES],
+    [
+        ResolveAuditSeverityTestCase(
+            description="unknown instance severity raises compile error",
+            instance_severity="critical",
+            default_severity=None,
+            expected_error_fragment="unknown severity",
+        ),
+        ResolveAuditSeverityTestCase(
+            description="unknown default severity raises compile error",
+            instance_severity=None,
+            default_severity="critical",
+            expected_error_fragment="unknown value",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_severity_inputs_when_resolving_then_raises(
     test_case: ResolveAuditSeverityTestCase,
@@ -105,32 +100,29 @@ def test_given_invalid_severity_inputs_when_resolving_then_raises(
         )
 
 
-RUN_SCOPE_VALID_TEST_CASES: list[ResolveAuditRunScopeTestCase] = [
-    ResolveAuditRunScopeTestCase(
-        description="instance run_scope wins over project default",
-        instance_run_scope="delta_and_final",
-        default_run_scope="final",
-        expected_run_scope="delta_and_final",
-    ),
-    ResolveAuditRunScopeTestCase(
-        description="project default used when instance is None",
-        instance_run_scope=None,
-        default_run_scope="delta_and_final",
-        expected_run_scope="delta_and_final",
-    ),
-    ResolveAuditRunScopeTestCase(
-        description="falls back to delta_and_final when both are None",
-        instance_run_scope=None,
-        default_run_scope=None,
-        expected_run_scope=AuditRunScope.DELTA_AND_FINAL,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RUN_SCOPE_VALID_TEST_CASES,
-    ids=[case.description for case in RUN_SCOPE_VALID_TEST_CASES],
+    [
+        ResolveAuditRunScopeTestCase(
+            description="instance run_scope wins over project default",
+            instance_run_scope="delta_and_final",
+            default_run_scope="final",
+            expected_run_scope="delta_and_final",
+        ),
+        ResolveAuditRunScopeTestCase(
+            description="project default used when instance is None",
+            instance_run_scope=None,
+            default_run_scope="delta_and_final",
+            expected_run_scope="delta_and_final",
+        ),
+        ResolveAuditRunScopeTestCase(
+            description="falls back to delta_and_final when both are None",
+            instance_run_scope=None,
+            default_run_scope=None,
+            expected_run_scope=AuditRunScope.DELTA_AND_FINAL,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_valid_run_scope_inputs_when_resolving_then_returns_expected(
     test_case: ResolveAuditRunScopeTestCase,
@@ -143,26 +135,23 @@ def test_given_valid_run_scope_inputs_when_resolving_then_returns_expected(
     assert result == test_case.expected_run_scope
 
 
-RUN_SCOPE_ERROR_TEST_CASES: list[ResolveAuditRunScopeErrorTestCase] = [
-    ResolveAuditRunScopeErrorTestCase(
-        description="unknown instance run_scope raises compile error",
-        instance_run_scope="delta_only",
-        default_run_scope=None,
-        expected_error_fragment="unknown audit run_scope",
-    ),
-    ResolveAuditRunScopeErrorTestCase(
-        description="unknown default run_scope raises compile error",
-        instance_run_scope=None,
-        default_run_scope="delta_only",
-        expected_error_fragment="unknown value",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RUN_SCOPE_ERROR_TEST_CASES,
-    ids=[case.description for case in RUN_SCOPE_ERROR_TEST_CASES],
+    [
+        ResolveAuditRunScopeErrorTestCase(
+            description="unknown instance run_scope raises compile error",
+            instance_run_scope="delta_only",
+            default_run_scope=None,
+            expected_error_fragment="unknown audit run_scope",
+        ),
+        ResolveAuditRunScopeErrorTestCase(
+            description="unknown default run_scope raises compile error",
+            instance_run_scope=None,
+            default_run_scope="delta_only",
+            expected_error_fragment="unknown value",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_run_scope_inputs_when_resolving_then_raises(
     test_case: ResolveAuditRunScopeErrorTestCase,
@@ -174,35 +163,34 @@ def test_given_invalid_run_scope_inputs_when_resolving_then_raises(
         )
 
 
-ATTACHED_REFS_VALID_TEST_CASES: list[ValidateModelAttachedAuditRefsTestCase] = [
-    ValidateModelAttachedAuditRefsTestCase(
-        description="model-attached audit referencing attached model passes",
-        references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),),
-        attached_target_kind=AttachedAuditTargetKind.MODEL,
-        attached_target_name="orders",
-    ),
-    ValidateModelAttachedAuditRefsTestCase(
-        description="source-attached audit skips model ref check",
-        references=(CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),),
-        attached_target_kind=AttachedAuditTargetKind.SOURCE,
-        attached_target_name="raw_orders",
-    ),
-    ValidateModelAttachedAuditRefsTestCase(
-        description="model-attached audit with multiple refs including attached model passes",
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_data"),
-        ),
-        attached_target_kind=AttachedAuditTargetKind.MODEL,
-        attached_target_name="orders",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ATTACHED_REFS_VALID_TEST_CASES,
-    ids=[case.description for case in ATTACHED_REFS_VALID_TEST_CASES],
+    [
+        ValidateModelAttachedAuditRefsTestCase(
+            description="model-attached audit referencing attached model passes",
+            references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="orders",
+        ),
+        ValidateModelAttachedAuditRefsTestCase(
+            description="source-attached audit skips model ref check",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.SOURCE,
+            attached_target_name="raw_orders",
+        ),
+        ValidateModelAttachedAuditRefsTestCase(
+            description="model-attached audit with multiple refs including attached model passes",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_data"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="orders",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_valid_attached_audit_refs_when_validating_then_passes(
     test_case: ValidateModelAttachedAuditRefsTestCase,
@@ -217,38 +205,37 @@ def test_given_valid_attached_audit_refs_when_validating_then_passes(
     assert test_case.expected_valid
 
 
-ATTACHED_REFS_ERROR_TEST_CASES: list[ValidateModelAttachedAuditRefsTestCase] = [
-    ValidateModelAttachedAuditRefsTestCase(
-        description="model-attached audit without ref to attached model raises",
-        references=(CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),),
-        attached_target_kind=AttachedAuditTargetKind.MODEL,
-        attached_target_name="orders",
-        expected_valid=False,
-        expected_error_fragment="must reference the attached model",
-    ),
-    ValidateModelAttachedAuditRefsTestCase(
-        description="model-attached audit referencing wrong model raises",
-        references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),),
-        attached_target_kind=AttachedAuditTargetKind.MODEL,
-        attached_target_name="orders",
-        expected_valid=False,
-        expected_error_fragment="must reference the attached model",
-    ),
-    ValidateModelAttachedAuditRefsTestCase(
-        description="model-attached audit with no refs at all raises",
-        references=(),
-        attached_target_kind=AttachedAuditTargetKind.MODEL,
-        attached_target_name="orders",
-        expected_valid=False,
-        expected_error_fragment="must reference the attached model",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ATTACHED_REFS_ERROR_TEST_CASES,
-    ids=[case.description for case in ATTACHED_REFS_ERROR_TEST_CASES],
+    [
+        ValidateModelAttachedAuditRefsTestCase(
+            description="model-attached audit without ref to attached model raises",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="orders",
+            expected_valid=False,
+            expected_error_fragment="must reference the attached model",
+        ),
+        ValidateModelAttachedAuditRefsTestCase(
+            description="model-attached audit referencing wrong model raises",
+            references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="orders",
+            expected_valid=False,
+            expected_error_fragment="must reference the attached model",
+        ),
+        ValidateModelAttachedAuditRefsTestCase(
+            description="model-attached audit with no refs at all raises",
+            references=(),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="orders",
+            expected_valid=False,
+            expected_error_fragment="must reference the attached model",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_attached_audit_refs_when_validating_then_raises(
     test_case: ValidateModelAttachedAuditRefsTestCase,
@@ -273,7 +260,7 @@ def test_given_invalid_attached_audit_refs_when_validating_then_raises(
             expected_error_fragment="audit dbt model checks belong in dbt",
         ),
     ],
-    ids=["dbt ref in audit raises compile error"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_audit_refs_when_validating_then_raises(
     test_case: ValidateAuditRefsErrorTestCase,

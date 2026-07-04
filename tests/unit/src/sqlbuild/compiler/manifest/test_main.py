@@ -125,57 +125,54 @@ _SOURCE_FIXTURES: dict[str, Any] = {
 }
 
 
-MANIFEST_TOP_LEVEL_TEST_CASES: list[ManifestTopLevelTestCase] = [
-    ManifestTopLevelTestCase(
-        description="produces correct top-level structure for single model project",
-        project=build_test_project(
-            models=(_MODEL_ORDERS,),
-            sources=(build_test_source(name="raw_src"),),
-        ),
-        plan_output=build_test_plan_output(
-            model_entries=(build_test_plan_entry(name="orders"),),
-        ),
-        loaded_macros={},
-        project_name=_PROJECT,
-        adapter_type=_ADAPTER,
-        upstream_deps={},
-        downstream_deps={},
-        expected_node_count=1,
-        expected_source_count=1,
-        expected_macro_count=0,
-        expected_metadata_project_name=_PROJECT,
-        expected_metadata_adapter_type=_ADAPTER,
-        expected_metadata_schema_version=DBT_MANIFEST_SCHEMA_VERSION,
-    ),
-    ManifestTopLevelTestCase(
-        description="produces correct counts for multi-resource project",
-        project=build_test_project(
-            models=(_MODEL_ORDERS, _MODEL_ORPHAN),
-            sources=(build_test_source(name="raw_src"),),
-            seeds=(build_test_seed(name="codes"),),
-        ),
-        plan_output=build_test_plan_output(
-            model_entries=(build_test_plan_entry(name="orders"),),
-        ),
-        loaded_macros={},
-        project_name=_PROJECT,
-        adapter_type=_ADAPTER,
-        upstream_deps={},
-        downstream_deps={},
-        expected_node_count=3,
-        expected_source_count=1,
-        expected_macro_count=0,
-        expected_metadata_project_name=_PROJECT,
-        expected_metadata_adapter_type=_ADAPTER,
-        expected_metadata_schema_version=DBT_MANIFEST_SCHEMA_VERSION,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    MANIFEST_TOP_LEVEL_TEST_CASES,
-    ids=[case.description for case in MANIFEST_TOP_LEVEL_TEST_CASES],
+    [
+        ManifestTopLevelTestCase(
+            description="produces correct top-level structure for single model project",
+            project=build_test_project(
+                models=(_MODEL_ORDERS,),
+                sources=(build_test_source(name="raw_src"),),
+            ),
+            plan_output=build_test_plan_output(
+                model_entries=(build_test_plan_entry(name="orders"),),
+            ),
+            loaded_macros={},
+            project_name=_PROJECT,
+            adapter_type=_ADAPTER,
+            upstream_deps={},
+            downstream_deps={},
+            expected_node_count=1,
+            expected_source_count=1,
+            expected_macro_count=0,
+            expected_metadata_project_name=_PROJECT,
+            expected_metadata_adapter_type=_ADAPTER,
+            expected_metadata_schema_version=DBT_MANIFEST_SCHEMA_VERSION,
+        ),
+        ManifestTopLevelTestCase(
+            description="produces correct counts for multi-resource project",
+            project=build_test_project(
+                models=(_MODEL_ORDERS, _MODEL_ORPHAN),
+                sources=(build_test_source(name="raw_src"),),
+                seeds=(build_test_seed(name="codes"),),
+            ),
+            plan_output=build_test_plan_output(
+                model_entries=(build_test_plan_entry(name="orders"),),
+            ),
+            loaded_macros={},
+            project_name=_PROJECT,
+            adapter_type=_ADAPTER,
+            upstream_deps={},
+            downstream_deps={},
+            expected_node_count=3,
+            expected_source_count=1,
+            expected_macro_count=0,
+            expected_metadata_project_name=_PROJECT,
+            expected_metadata_adapter_type=_ADAPTER,
+            expected_metadata_schema_version=DBT_MANIFEST_SCHEMA_VERSION,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_project_when_building_manifest_then_produces_correct_structure(
     test_case: ManifestTopLevelTestCase,
@@ -202,113 +199,110 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
     assert result["disabled"] == {}
 
 
-MANIFEST_MODEL_NODE_TEST_CASES: list[ManifestModelNodeTestCase] = [
-    ManifestModelNodeTestCase(
-        description="produces correct model node with plan entry compiled code",
-        model=_MODEL_ORDERS,
-        plan_entry=build_test_plan_entry(
-            name="orders", resolved_sql="SELECT * FROM staging.raw_orders"
-        ),
-        project_name=_PROJECT,
-        expected_unique_id=f"model.{_PROJECT}.orders",
-        expected_resource_type="model",
-        expected_database=None,
-        expected_schema="staging",
-        expected_alias="orders",
-        expected_fqn=[_PROJECT, "models", "staging", "orders"],
-        expected_raw_code="SELECT * FROM raw",
-        expected_compiled_code="SELECT * FROM staging.raw_orders",
-        expected_relation_name="staging.orders",
-        expected_description="Order records",
-        expected_materialized="table",
-        expected_checksum_name="sha256",
-    ),
-    ManifestModelNodeTestCase(
-        description="uses raw_code as compiled_code when no plan entry exists",
-        model=_MODEL_ORPHAN,
-        plan_entry=None,
-        project_name=_PROJECT,
-        expected_unique_id=f"model.{_PROJECT}.orphan",
-        expected_resource_type="model",
-        expected_database=None,
-        expected_schema="public",
-        expected_alias="orphan",
-        expected_fqn=[_PROJECT, "models", "orphan"],
-        expected_raw_code="SELECT 1",
-        expected_compiled_code="SELECT 1",
-        expected_relation_name="public.orphan",
-        expected_description="",
-        expected_materialized="view",
-        expected_checksum_name="sha256",
-    ),
-    ManifestModelNodeTestCase(
-        description="model columns appear in manifest node",
-        model=_MODEL_WITH_COLUMNS,
-        plan_entry=None,
-        project_name=_PROJECT,
-        expected_unique_id=f"model.{_PROJECT}.typed_model",
-        expected_resource_type="model",
-        expected_database=None,
-        expected_schema="public",
-        expected_alias="typed_model",
-        expected_fqn=[_PROJECT, "models", "typed_model"],
-        expected_raw_code="SELECT 1",
-        expected_compiled_code="SELECT 1",
-        expected_relation_name="public.typed_model",
-        expected_description="Has columns",
-        expected_materialized="view",
-        expected_checksum_name="sha256",
-        expected_column_names=("id", "status"),
-        expected_column_types={"id": "INTEGER", "status": "VARCHAR"},
-    ),
-    ManifestModelNodeTestCase(
-        description="depends_on includes upstream model and source ids",
-        model=_MODEL_WITH_DEPS,
-        plan_entry=None,
-        project_name=_PROJECT,
-        expected_unique_id=f"model.{_PROJECT}.joined",
-        expected_resource_type="model",
-        expected_database=None,
-        expected_schema="public",
-        expected_alias="joined",
-        expected_fqn=[_PROJECT, "models", "joined"],
-        expected_raw_code="SELECT 1",
-        expected_compiled_code="SELECT 1",
-        expected_relation_name="public.joined",
-        expected_description="",
-        expected_materialized="view",
-        expected_checksum_name="sha256",
-        expected_depends_on_nodes=(
-            f"model.{_PROJECT}.orders",
-            f"source.{_PROJECT}.raw_customers",
-        ),
-    ),
-    ManifestModelNodeTestCase(
-        description="model with explicit alias database and tags",
-        model=_MODEL_WITH_ALIAS,
-        plan_entry=None,
-        project_name=_PROJECT,
-        expected_unique_id=f"model.{_PROJECT}.orders_aliased",
-        expected_resource_type="model",
-        expected_database="analytics",
-        expected_schema="marts",
-        expected_alias="fact_orders",
-        expected_fqn=[_PROJECT, "models", "marts", "orders_aliased"],
-        expected_raw_code="SELECT 1",
-        expected_compiled_code="SELECT 1",
-        expected_relation_name="analytics.marts.fact_orders",
-        expected_description="",
-        expected_materialized="incremental",
-        expected_checksum_name="sha256",
-        expected_tags=("core", "nightly"),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    MANIFEST_MODEL_NODE_TEST_CASES,
-    ids=[case.description for case in MANIFEST_MODEL_NODE_TEST_CASES],
+    [
+        ManifestModelNodeTestCase(
+            description="produces correct model node with plan entry compiled code",
+            model=_MODEL_ORDERS,
+            plan_entry=build_test_plan_entry(
+                name="orders", resolved_sql="SELECT * FROM staging.raw_orders"
+            ),
+            project_name=_PROJECT,
+            expected_unique_id=f"model.{_PROJECT}.orders",
+            expected_resource_type="model",
+            expected_database=None,
+            expected_schema="staging",
+            expected_alias="orders",
+            expected_fqn=[_PROJECT, "models", "staging", "orders"],
+            expected_raw_code="SELECT * FROM raw",
+            expected_compiled_code="SELECT * FROM staging.raw_orders",
+            expected_relation_name="staging.orders",
+            expected_description="Order records",
+            expected_materialized="table",
+            expected_checksum_name="sha256",
+        ),
+        ManifestModelNodeTestCase(
+            description="uses raw_code as compiled_code when no plan entry exists",
+            model=_MODEL_ORPHAN,
+            plan_entry=None,
+            project_name=_PROJECT,
+            expected_unique_id=f"model.{_PROJECT}.orphan",
+            expected_resource_type="model",
+            expected_database=None,
+            expected_schema="public",
+            expected_alias="orphan",
+            expected_fqn=[_PROJECT, "models", "orphan"],
+            expected_raw_code="SELECT 1",
+            expected_compiled_code="SELECT 1",
+            expected_relation_name="public.orphan",
+            expected_description="",
+            expected_materialized="view",
+            expected_checksum_name="sha256",
+        ),
+        ManifestModelNodeTestCase(
+            description="model columns appear in manifest node",
+            model=_MODEL_WITH_COLUMNS,
+            plan_entry=None,
+            project_name=_PROJECT,
+            expected_unique_id=f"model.{_PROJECT}.typed_model",
+            expected_resource_type="model",
+            expected_database=None,
+            expected_schema="public",
+            expected_alias="typed_model",
+            expected_fqn=[_PROJECT, "models", "typed_model"],
+            expected_raw_code="SELECT 1",
+            expected_compiled_code="SELECT 1",
+            expected_relation_name="public.typed_model",
+            expected_description="Has columns",
+            expected_materialized="view",
+            expected_checksum_name="sha256",
+            expected_column_names=("id", "status"),
+            expected_column_types={"id": "INTEGER", "status": "VARCHAR"},
+        ),
+        ManifestModelNodeTestCase(
+            description="depends_on includes upstream model and source ids",
+            model=_MODEL_WITH_DEPS,
+            plan_entry=None,
+            project_name=_PROJECT,
+            expected_unique_id=f"model.{_PROJECT}.joined",
+            expected_resource_type="model",
+            expected_database=None,
+            expected_schema="public",
+            expected_alias="joined",
+            expected_fqn=[_PROJECT, "models", "joined"],
+            expected_raw_code="SELECT 1",
+            expected_compiled_code="SELECT 1",
+            expected_relation_name="public.joined",
+            expected_description="",
+            expected_materialized="view",
+            expected_checksum_name="sha256",
+            expected_depends_on_nodes=(
+                f"model.{_PROJECT}.orders",
+                f"source.{_PROJECT}.raw_customers",
+            ),
+        ),
+        ManifestModelNodeTestCase(
+            description="model with explicit alias database and tags",
+            model=_MODEL_WITH_ALIAS,
+            plan_entry=None,
+            project_name=_PROJECT,
+            expected_unique_id=f"model.{_PROJECT}.orders_aliased",
+            expected_resource_type="model",
+            expected_database="analytics",
+            expected_schema="marts",
+            expected_alias="fact_orders",
+            expected_fqn=[_PROJECT, "models", "marts", "orders_aliased"],
+            expected_raw_code="SELECT 1",
+            expected_compiled_code="SELECT 1",
+            expected_relation_name="analytics.marts.fact_orders",
+            expected_description="",
+            expected_materialized="incremental",
+            expected_checksum_name="sha256",
+            expected_tags=("core", "nightly"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_model_when_building_manifest_then_produces_correct_node(
     test_case: ManifestModelNodeTestCase,
@@ -357,49 +351,46 @@ def test_given_model_when_building_manifest_then_produces_correct_node(
         assert tag in node["tags"]
 
 
-MANIFEST_SOURCE_NODE_TEST_CASES: list[ManifestSourceNodeTestCase] = [
-    ManifestSourceNodeTestCase(
-        description="produces correct source node fields",
-        project_name=_PROJECT,
-        expected_unique_id=f"source.{_PROJECT}.raw_orders",
-        expected_resource_type="source",
-        expected_database="raw_db",
-        expected_schema="public",
-        expected_identifier="orders_table",
-        expected_description="Raw order data",
-        expected_source_name="raw_orders",
-    ),
-    ManifestSourceNodeTestCase(
-        description="uses source name as identifier when table is absent",
-        project_name=_PROJECT,
-        expected_unique_id=f"source.{_PROJECT}.events",
-        expected_resource_type="source",
-        expected_database=None,
-        expected_schema="analytics",
-        expected_identifier="events",
-        expected_description="",
-        expected_source_name="events",
-    ),
-    ManifestSourceNodeTestCase(
-        description="source columns appear in manifest source node",
-        project_name=_PROJECT,
-        expected_unique_id=f"source.{_PROJECT}.raw_events",
-        expected_resource_type="source",
-        expected_database="raw_db",
-        expected_schema="events",
-        expected_identifier="clicks",
-        expected_description="Raw click events",
-        expected_source_name="raw_events",
-        expected_column_names=("event_id", "ts"),
-        expected_column_types={"event_id": "VARCHAR", "ts": "TIMESTAMP"},
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    MANIFEST_SOURCE_NODE_TEST_CASES,
-    ids=[case.description for case in MANIFEST_SOURCE_NODE_TEST_CASES],
+    [
+        ManifestSourceNodeTestCase(
+            description="produces correct source node fields",
+            project_name=_PROJECT,
+            expected_unique_id=f"source.{_PROJECT}.raw_orders",
+            expected_resource_type="source",
+            expected_database="raw_db",
+            expected_schema="public",
+            expected_identifier="orders_table",
+            expected_description="Raw order data",
+            expected_source_name="raw_orders",
+        ),
+        ManifestSourceNodeTestCase(
+            description="uses source name as identifier when table is absent",
+            project_name=_PROJECT,
+            expected_unique_id=f"source.{_PROJECT}.events",
+            expected_resource_type="source",
+            expected_database=None,
+            expected_schema="analytics",
+            expected_identifier="events",
+            expected_description="",
+            expected_source_name="events",
+        ),
+        ManifestSourceNodeTestCase(
+            description="source columns appear in manifest source node",
+            project_name=_PROJECT,
+            expected_unique_id=f"source.{_PROJECT}.raw_events",
+            expected_resource_type="source",
+            expected_database="raw_db",
+            expected_schema="events",
+            expected_identifier="clicks",
+            expected_description="Raw click events",
+            expected_source_name="raw_events",
+            expected_column_names=("event_id", "ts"),
+            expected_column_types={"event_id": "VARCHAR", "ts": "TIMESTAMP"},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_when_building_manifest_then_produces_correct_node(
     test_case: ManifestSourceNodeTestCase,
@@ -446,7 +437,7 @@ def test_given_source_when_building_manifest_then_produces_correct_node(
             expected_materialized="seed",
         ),
     ],
-    ids=["produces correct seed node with materialized seed"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_when_building_manifest_then_produces_correct_node(
     test_case: ManifestSeedNodeTestCase,
@@ -472,32 +463,29 @@ def test_given_seed_when_building_manifest_then_produces_correct_node(
     assert node["config"]["materialized"] == test_case.expected_materialized
 
 
-FQN_TEST_CASES: list[FqnTestCase] = [
-    FqnTestCase(
-        description="builds fqn from nested relative path",
-        project_name=_PROJECT,
-        relative_path="models/staging/orders.sql",
-        expected_fqn=[_PROJECT, "models", "staging", "orders"],
-    ),
-    FqnTestCase(
-        description="builds fqn from top-level relative path",
-        project_name=_PROJECT,
-        relative_path="models/orders.sql",
-        expected_fqn=[_PROJECT, "models", "orders"],
-    ),
-    FqnTestCase(
-        description="builds fqn from seed path",
-        project_name=_PROJECT,
-        relative_path="seeds/codes.csv",
-        expected_fqn=[_PROJECT, "seeds", "codes"],
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    FQN_TEST_CASES,
-    ids=[case.description for case in FQN_TEST_CASES],
+    [
+        FqnTestCase(
+            description="builds fqn from nested relative path",
+            project_name=_PROJECT,
+            relative_path="models/staging/orders.sql",
+            expected_fqn=[_PROJECT, "models", "staging", "orders"],
+        ),
+        FqnTestCase(
+            description="builds fqn from top-level relative path",
+            project_name=_PROJECT,
+            relative_path="models/orders.sql",
+            expected_fqn=[_PROJECT, "models", "orders"],
+        ),
+        FqnTestCase(
+            description="builds fqn from seed path",
+            project_name=_PROJECT,
+            relative_path="seeds/codes.csv",
+            expected_fqn=[_PROJECT, "seeds", "codes"],
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_relative_path_when_building_fqn_then_returns_expected_parts(
     test_case: FqnTestCase,
@@ -526,7 +514,7 @@ def test_given_relative_path_when_building_fqn_then_returns_expected_parts(
             ),
         ),
     ],
-    ids=["parent_map reflects upstream dependencies"],
+    ids=lambda case: case.description,
 )
 def test_given_deps_when_building_manifest_then_parent_map_correct(
     test_case: ManifestParentMapTestCase,
@@ -581,7 +569,7 @@ def test_given_deps_when_building_manifest_then_parent_map_correct(
             expected_path="macros/helpers.py",
         ),
     ],
-    ids=["macro appears in manifest macros dict"],
+    ids=lambda case: case.description,
 )
 def test_given_macro_when_building_manifest_then_macro_node_present(
     test_case: ManifestMacroNodeTestCase,
@@ -628,7 +616,7 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
             expected_depends_on_nodes=(f"model.{_PROJECT}.orders",),
         ),
     ],
-    ids=["audit plan entry produces dbt test node with test_metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_audit_when_building_manifest_then_produces_test_node(
     test_case: ManifestAuditNodeTestCase,
@@ -683,7 +671,7 @@ def test_given_audit_when_building_manifest_then_produces_test_node(
             expected_depends_on_nodes=(f"model.{_PROJECT}.orders",),
         ),
     ],
-    ids=["sql test plan entry produces dbt test node with chain steps"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_test_when_building_manifest_then_produces_test_node(
     test_case: ManifestSqlTestNodeTestCase,
@@ -739,7 +727,7 @@ def test_given_sql_test_when_building_manifest_then_produces_test_node(
             expected_validation_error_count=0,
         ),
     ],
-    ids=["full manifest validates against dbt v12 json schema"],
+    ids=lambda case: case.description,
 )
 def test_given_full_project_when_building_manifest_then_validates_against_dbt_schema(
     test_case: ManifestSchemaValidationTestCase,

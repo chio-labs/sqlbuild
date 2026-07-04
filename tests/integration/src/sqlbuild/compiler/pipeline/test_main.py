@@ -32,151 +32,151 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
 
 _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
 
-PIPELINE_TEST_CASES: list[RunCompilePipelineIntegrationTestCase] = [
-    RunCompilePipelineIntegrationTestCase(
-        description="single table model with no schema defaults to adapter schema",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_TOML,
-            "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
-        },
-        expected_models={
-            "orders": ExpectedModelEntry(
-                description="table model with adapter default schema",
-                expected_resolved_sql_fragment="SELECT 1 AS order_id",
-                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
-                expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
-            ),
-        },
-        expected_model_count=1,
-        expected_seed_count=0,
-        expected_manifest_node_count=1,
-    ),
-    RunCompilePipelineIntegrationTestCase(
-        description="view materialization produces create or replace view DDL",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_TOML,
-            "models/active_orders.sql": (
-                "MODEL (materialized view);\n\nSELECT order_id FROM orders WHERE status = 'active'"
-            ),
-        },
-        expected_models={
-            "active_orders": ExpectedModelEntry(
-                description="view model with correct DDL",
-                expected_resolved_sql_fragment="SELECT order_id FROM orders",
-                expected_logical_ddl_fragment="CREATE OR REPLACE VIEW",
-                expected_manifest_compiled_code_fragment="SELECT order_id FROM orders",
-            ),
-        },
-        expected_model_count=1,
-        expected_seed_count=0,
-        expected_manifest_node_count=1,
-    ),
-    RunCompilePipelineIntegrationTestCase(
-        description="model with explicit schema and database populates manifest target",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_TOML,
-            "models/orders.sql": (
-                "MODEL (\n  materialized table\n  schema analytics\n"
-                "  database warehouse\n);\n\n"
-                "SELECT 1 AS order_id"
-            ),
-        },
-        expected_models={
-            "orders": ExpectedModelEntry(
-                description="table model with explicit schema and database",
-                expected_resolved_sql_fragment="SELECT 1 AS order_id",
-                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
-                expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
-            ),
-        },
-        expected_model_count=1,
-        expected_seed_count=0,
-        expected_manifest_node_count=1,
-    ),
-    RunCompilePipelineIntegrationTestCase(
-        description="two models with ref dependency resolves ref to qualified name",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_TOML,
-            "models/stg_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
-            "models/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
-            ),
-        },
-        expected_models={
-            "stg_orders": ExpectedModelEntry(
-                description="upstream staging model",
-                expected_resolved_sql_fragment="SELECT 1 AS order_id",
-                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
-                expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
-            ),
-            "fact_orders": ExpectedModelEntry(
-                description="downstream model with resolved ref",
-                expected_resolved_sql_fragment="main.stg_orders",
-                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
-                expected_manifest_compiled_code_fragment="main.stg_orders",
-            ),
-        },
-        expected_model_count=2,
-        expected_seed_count=0,
-        expected_manifest_node_count=2,
-    ),
-    RunCompilePipelineIntegrationTestCase(
-        description="model with source reference resolves source to qualified name",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_TOML,
-            "sources/raw.yml": (
-                "sources:\n  - name: raw_payments\n    schema: main\n    table: payments\n"
-            ),
-            "models/stg_payments.sql": (
-                'MODEL (materialized table);\n\nSELECT payment_id FROM __source("raw_payments")'
-            ),
-        },
-        expected_models={
-            "stg_payments": ExpectedModelEntry(
-                description="model with resolved source reference",
-                expected_resolved_sql_fragment="main.payments",
-                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
-                expected_manifest_compiled_code_fragment="main.payments",
-            ),
-        },
-        expected_model_count=1,
-        expected_seed_count=0,
-        expected_manifest_node_count=1,
-    ),
-    RunCompilePipelineIntegrationTestCase(
-        description="multiple models in subdirectories preserves relative paths",
-        project_files={
-            "sqlbuild_project.toml": _PROJECT_TOML,
-            "models/staging/stg_orders.sql": ("MODEL (materialized view);\n\nSELECT 1 AS order_id"),
-            "models/marts/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
-            ),
-        },
-        expected_models={
-            "stg_orders": ExpectedModelEntry(
-                description="staging view in subdirectory",
-                expected_resolved_sql_fragment="SELECT 1 AS order_id",
-                expected_logical_ddl_fragment="CREATE OR REPLACE VIEW",
-                expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
-            ),
-            "fact_orders": ExpectedModelEntry(
-                description="mart table with ref to staging view",
-                expected_resolved_sql_fragment="main.stg_orders",
-                expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
-                expected_manifest_compiled_code_fragment="main.stg_orders",
-            ),
-        },
-        expected_model_count=2,
-        expected_seed_count=0,
-        expected_manifest_node_count=2,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PIPELINE_TEST_CASES,
-    ids=[case.description for case in PIPELINE_TEST_CASES],
+    [
+        RunCompilePipelineIntegrationTestCase(
+            description="single table model with no schema defaults to adapter schema",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
+            },
+            expected_models={
+                "orders": ExpectedModelEntry(
+                    description="table model with adapter default schema",
+                    expected_resolved_sql_fragment="SELECT 1 AS order_id",
+                    expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
+                    expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
+                ),
+            },
+            expected_model_count=1,
+            expected_seed_count=0,
+            expected_manifest_node_count=1,
+        ),
+        RunCompilePipelineIntegrationTestCase(
+            description="view materialization produces create or replace view DDL",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/active_orders.sql": (
+                    "MODEL (materialized view);\n\nSELECT order_id FROM orders WHERE status = 'active'"
+                ),
+            },
+            expected_models={
+                "active_orders": ExpectedModelEntry(
+                    description="view model with correct DDL",
+                    expected_resolved_sql_fragment="SELECT order_id FROM orders",
+                    expected_logical_ddl_fragment="CREATE OR REPLACE VIEW",
+                    expected_manifest_compiled_code_fragment="SELECT order_id FROM orders",
+                ),
+            },
+            expected_model_count=1,
+            expected_seed_count=0,
+            expected_manifest_node_count=1,
+        ),
+        RunCompilePipelineIntegrationTestCase(
+            description="model with explicit schema and database populates manifest target",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/orders.sql": (
+                    "MODEL (\n  materialized table\n  schema analytics\n"
+                    "  database warehouse\n);\n\n"
+                    "SELECT 1 AS order_id"
+                ),
+            },
+            expected_models={
+                "orders": ExpectedModelEntry(
+                    description="table model with explicit schema and database",
+                    expected_resolved_sql_fragment="SELECT 1 AS order_id",
+                    expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
+                    expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
+                ),
+            },
+            expected_model_count=1,
+            expected_seed_count=0,
+            expected_manifest_node_count=1,
+        ),
+        RunCompilePipelineIntegrationTestCase(
+            description="two models with ref dependency resolves ref to qualified name",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/stg_orders.sql": ("MODEL (materialized table);\n\nSELECT 1 AS order_id"),
+                "models/fact_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
+                ),
+            },
+            expected_models={
+                "stg_orders": ExpectedModelEntry(
+                    description="upstream staging model",
+                    expected_resolved_sql_fragment="SELECT 1 AS order_id",
+                    expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
+                    expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
+                ),
+                "fact_orders": ExpectedModelEntry(
+                    description="downstream model with resolved ref",
+                    expected_resolved_sql_fragment="main.stg_orders",
+                    expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
+                    expected_manifest_compiled_code_fragment="main.stg_orders",
+                ),
+            },
+            expected_model_count=2,
+            expected_seed_count=0,
+            expected_manifest_node_count=2,
+        ),
+        RunCompilePipelineIntegrationTestCase(
+            description="model with source reference resolves source to qualified name",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "sources/raw.yml": (
+                    "sources:\n  - name: raw_payments\n    schema: main\n    table: payments\n"
+                ),
+                "models/stg_payments.sql": (
+                    'MODEL (materialized table);\n\nSELECT payment_id FROM __source("raw_payments")'
+                ),
+            },
+            expected_models={
+                "stg_payments": ExpectedModelEntry(
+                    description="model with resolved source reference",
+                    expected_resolved_sql_fragment="main.payments",
+                    expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
+                    expected_manifest_compiled_code_fragment="main.payments",
+                ),
+            },
+            expected_model_count=1,
+            expected_seed_count=0,
+            expected_manifest_node_count=1,
+        ),
+        RunCompilePipelineIntegrationTestCase(
+            description="multiple models in subdirectories preserves relative paths",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/staging/stg_orders.sql": (
+                    "MODEL (materialized view);\n\nSELECT 1 AS order_id"
+                ),
+                "models/marts/fact_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT order_id FROM __ref("stg_orders")'
+                ),
+            },
+            expected_models={
+                "stg_orders": ExpectedModelEntry(
+                    description="staging view in subdirectory",
+                    expected_resolved_sql_fragment="SELECT 1 AS order_id",
+                    expected_logical_ddl_fragment="CREATE OR REPLACE VIEW",
+                    expected_manifest_compiled_code_fragment="SELECT 1 AS order_id",
+                ),
+                "fact_orders": ExpectedModelEntry(
+                    description="mart table with ref to staging view",
+                    expected_resolved_sql_fragment="main.stg_orders",
+                    expected_logical_ddl_fragment="CREATE OR REPLACE TABLE",
+                    expected_manifest_compiled_code_fragment="main.stg_orders",
+                ),
+            },
+            expected_model_count=2,
+            expected_seed_count=0,
+            expected_manifest_node_count=2,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_project_files_when_running_compile_pipeline_then_produces_valid_output(
     test_case: RunCompilePipelineIntegrationTestCase,
@@ -231,7 +231,7 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
             expected_manifest_node_count=1,
         )
     ],
-    ids=["run selector resolves Python task without SQL-only planning"],
+    ids=lambda case: case.description,
 )
 def test_given_python_run_selector_when_running_compile_pipeline_then_tracks_python_nodes(
     test_case: RunCompilePipelineIntegrationTestCase,
@@ -264,7 +264,7 @@ def test_given_python_run_selector_when_running_compile_pipeline_then_tracks_pyt
             expected_progress_prefixes=("Compiling project...", "Compiled project."),
         )
     ],
-    ids=["reports compile progress from compile pipeline"],
+    ids=lambda case: case.description,
 )
 def test_given_progress_callback_when_running_compile_pipeline_then_reports_compile_progress(
     test_case: CompileProgressIntegrationTestCase,
@@ -297,7 +297,7 @@ def test_given_progress_callback_when_running_compile_pipeline_then_reports_comp
             expected_progress_prefixes=("Compiling project...", "Compiled project."),
         )
     ],
-    ids=["reports compile progress from project graph build"],
+    ids=lambda case: case.description,
 )
 def test_given_progress_callback_when_building_project_graph_then_reports_compile_progress(
     test_case: CompileProgressIntegrationTestCase,
@@ -342,7 +342,7 @@ def test_given_progress_callback_when_building_project_graph_then_reports_compil
             expected_error_fragment="snowflake execution requires explicit target database, schema",
         )
     ],
-    ids=["snowflake compile requires explicit target database and schema"],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_local_override_without_target_namespace_when_compiling_then_it_fails_early(
     test_case: SnowflakeTargetValidationIntegrationTestCase,
@@ -385,7 +385,7 @@ def test_given_snowflake_local_override_without_target_namespace_when_compiling_
             expected_schema="LOCAL_SCHEMA",
         )
     ],
-    ids=["snowflake local target namespace resolves model target"],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_local_target_namespace_when_compiling_then_targets_resolve(
     test_case: SnowflakeTargetValidationIntegrationTestCase,
@@ -438,7 +438,7 @@ def test_given_snowflake_local_target_namespace_when_compiling_then_targets_reso
             },
         ),
     ],
-    ids=["defer-to resolves unselected ref to deferred target schema"],
+    ids=lambda case: case.description,
 )
 def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferred_target(
     test_case: DeferToIntegrationTestCase,
@@ -530,7 +530,7 @@ def test_given_project_with_defer_to_when_compiling_then_resolves_refs_to_deferr
             ),
         )
     ],
-    ids=["chain test compile target uses flat generated ctes"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_analysis_enabled_chain_test_when_writing_compile_target_then_uses_ctes(
     test_case: SqlAnalysisChainCompileTargetIntegrationTestCase,
@@ -560,24 +560,21 @@ def test_given_sql_analysis_enabled_chain_test_when_writing_compile_target_then_
         assert unexpected_fragment not in compiled_test_sql
 
 
-APPEND_CURSOR_PIPELINE_TEST_CASES: list[AppendCursorPipelineIntegrationTestCase] = [
-    AppendCursorPipelineIntegrationTestCase(
-        description="append cursor defaults to inclusive lower bound in resolved sql",
-        append_cursor_inclusive=True,
-        expected_resolved_sql_fragment="WHERE ordered_at >= TIMESTAMP '2026-01-01 00:00:00'",
-    ),
-    AppendCursorPipelineIntegrationTestCase(
-        description="append cursor can use exclusive lower bound in resolved sql",
-        append_cursor_inclusive=False,
-        expected_resolved_sql_fragment="WHERE ordered_at > TIMESTAMP '2026-01-01 00:00:00'",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    APPEND_CURSOR_PIPELINE_TEST_CASES,
-    ids=[case.description for case in APPEND_CURSOR_PIPELINE_TEST_CASES],
+    [
+        AppendCursorPipelineIntegrationTestCase(
+            description="append cursor defaults to inclusive lower bound in resolved sql",
+            append_cursor_inclusive=True,
+            expected_resolved_sql_fragment="WHERE ordered_at >= TIMESTAMP '2026-01-01 00:00:00'",
+        ),
+        AppendCursorPipelineIntegrationTestCase(
+            description="append cursor can use exclusive lower bound in resolved sql",
+            append_cursor_inclusive=False,
+            expected_resolved_sql_fragment="WHERE ordered_at > TIMESTAMP '2026-01-01 00:00:00'",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_append_cursor_model_when_compiling_then_sql_uses_expected_lower_bound(
     test_case: AppendCursorPipelineIntegrationTestCase,

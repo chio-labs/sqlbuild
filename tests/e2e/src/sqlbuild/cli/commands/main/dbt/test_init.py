@@ -55,7 +55,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_dbt_fingerprint_rows=(("dbt", "model.analytics.dbt_orders"),),
         )
     ],
-    ids=["dbt init creates minimal SQLBuild project and dbt_profile build works"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_dbt_project_when_running_dbt_init_then_generated_project_builds_with_profile(
     tmp_path: Path,
@@ -229,7 +229,7 @@ def test_given_duckdb_dbt_project_when_running_dbt_init_then_generated_project_b
             ),
         )
     ],
-    ids=["interactive dbt init prompts and renders colored output"],
+    ids=lambda case: case.description,
 )
 def test_given_tty_when_running_dbt_init_then_prompts_and_renders_color(
     tmp_path: Path,
@@ -282,7 +282,7 @@ def test_given_tty_when_running_dbt_init_then_prompts_and_renders_color(
             ),
         )
     ],
-    ids=["dbt plan auto-inits from raw dbt project and continues"],
+    ids=lambda case: case.description,
 )
 def test_given_raw_dbt_project_when_running_dbt_plan_then_auto_inits_and_continues(
     tmp_path: Path,
@@ -327,7 +327,7 @@ def test_given_raw_dbt_project_when_running_dbt_plan_then_auto_inits_and_continu
             ),
         )
     ],
-    ids=["sqb project dir alias preserves dbt project profiles and target flags"],
+    ids=lambda case: case.description,
 )
 def test_given_sqb_project_dir_alias_when_running_dbt_plan_then_preserves_dbt_flags(
     tmp_path: Path,
@@ -393,7 +393,7 @@ def test_given_sqb_project_dir_alias_when_running_dbt_plan_then_preserves_dbt_fl
             unexpected_stdout_fragments=("Reuse plan", "Reuse (1)", "Blocked (1)", "OK     reuse"),
         )
     ],
-    ids=["plan rebuilds when production table does not exist"],
+    ids=lambda case: case.description,
 )
 def test_given_generated_dbt_init_config_without_prod_table_when_planning_then_reuse_rebuilds(
     tmp_path: Path,
@@ -454,7 +454,7 @@ def test_given_generated_dbt_init_config_without_prod_table_when_planning_then_r
             expected_rows=((1, 900),),
         )
     ],
-    ids=["build runs dbt when production table does not exist"],
+    ids=lambda case: case.description,
 )
 def test_given_generated_dbt_init_config_without_prod_table_when_building_then_runs_dbt(
     tmp_path: Path,
@@ -515,7 +515,7 @@ def test_given_generated_dbt_init_config_without_prod_table_when_building_then_r
             unexpected_stdout_fragments=("was not found",),
         )
     ],
-    ids=["auto-init detects the existing default branch for reuse config"],
+    ids=lambda case: case.description,
 )
 def test_given_auto_init_when_planning_then_detects_existing_default_branch(
     tmp_path: Path,

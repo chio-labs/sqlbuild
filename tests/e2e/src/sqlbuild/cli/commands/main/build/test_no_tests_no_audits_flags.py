@@ -13,25 +13,27 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
-TEST_CASES: tuple[BuildNoTestsNoAuditsFlagE2ETestCase, ...] = (
-    BuildNoTestsNoAuditsFlagE2ETestCase(
-        description="no tests skips SQL tests but runs audits",
-        project_name="build_no_tests_project",
-        command=("--no-color", "build", "--no-tests"),
-        expected_stdout_fragments=("audit     not_null",),
-        unexpected_stdout_fragments=("test      test_orders",),
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BuildNoTestsNoAuditsFlagE2ETestCase(
+            description="no tests skips SQL tests but runs audits",
+            project_name="build_no_tests_project",
+            command=("--no-color", "build", "--no-tests"),
+            expected_stdout_fragments=("audit     not_null",),
+            unexpected_stdout_fragments=("test      test_orders",),
+        ),
+        BuildNoTestsNoAuditsFlagE2ETestCase(
+            description="no audits skips audits but runs SQL tests",
+            project_name="build_no_audits_project",
+            command=("--no-color", "build", "--no-audits"),
+            expected_stdout_fragments=("test      test_orders",),
+            unexpected_stdout_fragments=("audit     not_null",),
+        ),
     ),
-    BuildNoTestsNoAuditsFlagE2ETestCase(
-        description="no audits skips audits but runs SQL tests",
-        project_name="build_no_audits_project",
-        command=("--no-color", "build", "--no-audits"),
-        expected_stdout_fragments=("test      test_orders",),
-        unexpected_stdout_fragments=("audit     not_null",),
-    ),
+    ids=lambda case: case.description,
 )
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
 def test_given_build_test_audit_flag_when_building_then_applies_execution_filter(
     test_case: BuildNoTestsNoAuditsFlagE2ETestCase,
     tmp_path: Path,

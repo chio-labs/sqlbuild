@@ -101,7 +101,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_unchanged_models=("fact_orders", "stg_orders"),
         )
     ],
-    ids=["unchanged source and ref models are not query_changed after build"],
+    ids=lambda case: case.description,
 )
 def test_given_unchanged_project_when_planning_after_build_then_models_are_not_query_changed(
     test_case: QueryChangeTrackingBuildE2ETestCase,

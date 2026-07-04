@@ -76,7 +76,7 @@ SCENARIO_NAME: str = "revenue__customer_refund"
             },
         )
     ],
-    ids=["builds scenario relation locations for fixtures and models"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_targets(
     test_case: ScenarioRelationPlanTestCase,
@@ -124,7 +124,7 @@ def test_given_scenario_graph_when_building_relation_plan_then_returns_scenario_
             expected_source_expressions={},
         )
     ],
-    ids=["renders scenario relation names through the adapter renderer"],
+    ids=lambda case: case.description,
 )
 def test_given_quoting_renderer_when_building_relation_plan_then_renders_through_adapter(
     test_case: ScenarioRelationPlanTestCase,
@@ -189,7 +189,7 @@ def test_given_quoting_renderer_when_building_relation_plan_then_renders_through
             },
         )
     ],
-    ids=["wraps fixture SQL with shared scenario helper CTEs"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_self_contained(
     test_case: ScenarioFixturePlanTestCase,
@@ -218,71 +218,68 @@ def test_given_scenario_helpers_when_building_fixture_plans_then_fixtures_are_se
     } == test_case.expected_fixture_targets
 
 
-PROJECT_SOURCE_REF_FIXTURE_TEST_CASES: list[ScenarioFixturePlanTestCase] = [
-    ScenarioFixturePlanTestCase(
-        description="resolves project source refs in scenario fixture sql",
-        graph_plan=ScenarioGraphPlan(
-            key=build_scenario_relation_test_project().models[0].key,
-            name=SCENARIO_NAME,
-            target_model_names=("daily_revenue",),
-            model_names=("daily_revenue",),
-            source_fixture_names=("raw__orders",),
-        ),
-        expected_fixture_sql={
-            "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
-        },
-        expected_fixture_targets={
-            "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
-        },
-        fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
-    ),
-    ScenarioFixturePlanTestCase(
-        description="resolves project source refs with polyglot without changing literals",
-        graph_plan=ScenarioGraphPlan(
-            key=build_scenario_relation_test_project().models[0].key,
-            name=SCENARIO_NAME,
-            target_model_names=("daily_revenue",),
-            model_names=("daily_revenue",),
-            source_fixture_names=("raw__orders",),
-        ),
-        expected_fixture_sql={
-            "source:raw__orders": (
-                "SELECT '__source(\"raw__orders\")' AS marker_text FROM public.raw__orders AS o"
-            ),
-        },
-        expected_fixture_targets={
-            "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
-        },
-        fixture_sql_body=(
-            "SELECT '__source(\"raw__orders\")' AS marker_text "
-            'FROM __source("raw__orders") o -- __source("raw__orders")'
-        ),
-    ),
-    ScenarioFixturePlanTestCase(
-        description="falls back to regex source resolution when sql_analysis is disabled",
-        graph_plan=ScenarioGraphPlan(
-            key=build_scenario_relation_test_project().models[0].key,
-            name=SCENARIO_NAME,
-            target_model_names=("daily_revenue",),
-            model_names=("daily_revenue",),
-            source_fixture_names=("raw__orders",),
-        ),
-        expected_fixture_sql={
-            "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
-        },
-        expected_fixture_targets={
-            "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
-        },
-        fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
-        sql_analysis_enabled=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PROJECT_SOURCE_REF_FIXTURE_TEST_CASES,
-    ids=[case.description for case in PROJECT_SOURCE_REF_FIXTURE_TEST_CASES],
+    [
+        ScenarioFixturePlanTestCase(
+            description="resolves project source refs in scenario fixture sql",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                source_fixture_names=("raw__orders",),
+            ),
+            expected_fixture_sql={
+                "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
+            },
+            expected_fixture_targets={
+                "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+            },
+            fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
+        ),
+        ScenarioFixturePlanTestCase(
+            description="resolves project source refs with polyglot without changing literals",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                source_fixture_names=("raw__orders",),
+            ),
+            expected_fixture_sql={
+                "source:raw__orders": (
+                    "SELECT '__source(\"raw__orders\")' AS marker_text FROM public.raw__orders AS o"
+                ),
+            },
+            expected_fixture_targets={
+                "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+            },
+            fixture_sql_body=(
+                "SELECT '__source(\"raw__orders\")' AS marker_text "
+                'FROM __source("raw__orders") o -- __source("raw__orders")'
+            ),
+        ),
+        ScenarioFixturePlanTestCase(
+            description="falls back to regex source resolution when sql_analysis is disabled",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                source_fixture_names=("raw__orders",),
+            ),
+            expected_fixture_sql={
+                "source:raw__orders": "SELECT * FROM public.raw__orders WHERE order_id <= 10",
+            },
+            expected_fixture_targets={
+                "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
+            },
+            fixture_sql_body='SELECT * FROM __source("raw__orders") WHERE order_id <= 10',
+            sql_analysis_enabled=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan_then_resolves(
     test_case: ScenarioFixturePlanTestCase,
@@ -391,7 +388,7 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
             expected_hook_names=("notify",),
         )
     ],
-    ids=["builds dry run scenario execution plan with scenario targets"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario_plan(
     test_case: ScenarioExecutionPlanTestCase,
@@ -471,50 +468,47 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
     assert tuple(hook.name for hook in result.hook_functions) == test_case.expected_hook_names
 
 
-UNMOCKED_SEED_EXECUTION_PLAN_TEST_CASES: list[ScenarioUnmockedSeedExecutionPlanTestCase] = [
-    ScenarioUnmockedSeedExecutionPlanTestCase(
-        description="loads required unmocked seed from project seed file",
-        graph_plan=ScenarioGraphPlan(
-            key=build_scenario_relation_test_project().models[0].key,
-            name=SCENARIO_NAME,
-            target_model_names=("daily_revenue",),
-            assertion_target_model_names=("daily_revenue",),
-            model_names=("daily_revenue",),
-            source_fixture_names=("raw__orders",),
-            ref_fixture_names=("stg_customers",),
-            seed_names=("country_codes",),
-        ),
-        include_unrelated_project_seed=False,
-        expected_seed_fixture_names=frozenset(),
-        expected_seed_entry_targets={
-            "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes"
-        },
-    ),
-    ScenarioUnmockedSeedExecutionPlanTestCase(
-        description="ignores project seeds outside the scenario graph",
-        graph_plan=ScenarioGraphPlan(
-            key=build_scenario_relation_test_project().models[0].key,
-            name=SCENARIO_NAME,
-            target_model_names=("daily_revenue",),
-            assertion_target_model_names=("daily_revenue",),
-            model_names=("daily_revenue",),
-            source_fixture_names=("raw__orders",),
-            ref_fixture_names=("stg_customers",),
-            seed_names=("country_codes",),
-        ),
-        include_unrelated_project_seed=True,
-        expected_seed_fixture_names=frozenset(),
-        expected_seed_entry_targets={
-            "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes"
-        },
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    UNMOCKED_SEED_EXECUTION_PLAN_TEST_CASES,
-    ids=[case.description for case in UNMOCKED_SEED_EXECUTION_PLAN_TEST_CASES],
+    [
+        ScenarioUnmockedSeedExecutionPlanTestCase(
+            description="loads required unmocked seed from project seed file",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                assertion_target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                source_fixture_names=("raw__orders",),
+                ref_fixture_names=("stg_customers",),
+                seed_names=("country_codes",),
+            ),
+            include_unrelated_project_seed=False,
+            expected_seed_fixture_names=frozenset(),
+            expected_seed_entry_targets={
+                "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes"
+            },
+        ),
+        ScenarioUnmockedSeedExecutionPlanTestCase(
+            description="ignores project seeds outside the scenario graph",
+            graph_plan=ScenarioGraphPlan(
+                key=build_scenario_relation_test_project().models[0].key,
+                name=SCENARIO_NAME,
+                target_model_names=("daily_revenue",),
+                assertion_target_model_names=("daily_revenue",),
+                model_names=("daily_revenue",),
+                source_fixture_names=("raw__orders",),
+                ref_fixture_names=("stg_customers",),
+                seed_names=("country_codes",),
+            ),
+            include_unrelated_project_seed=True,
+            expected_seed_fixture_names=frozenset(),
+            expected_seed_entry_targets={
+                "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes"
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_project_seed(
     test_case: ScenarioUnmockedSeedExecutionPlanTestCase,
@@ -549,69 +543,66 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
     } == test_case.expected_seed_entry_targets
 
 
-CHECK_SQL_TEST_CASES: list[ScenarioCheckSqlResolutionTestCase] = [
-    ScenarioCheckSqlResolutionTestCase(
-        description="resolves assertion refs to scenario model and ref fixture relations",
-        sql=(
-            "SELECT * FROM __ref(daily_revenue) dr "
-            "JOIN __ref(stg_customers) sc ON dr.customer_id = sc.customer_id"
-        ),
-        expected_sql=(
-            "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue AS dr "
-            "JOIN scenario_schema.__sqb_51b385aebe20__ref__stg_customers AS sc "
-            "ON dr.customer_id = sc.customer_id"
-        ),
-    ),
-    ScenarioCheckSqlResolutionTestCase(
-        description="resolves seed and source markers to scenario fixture relations",
-        sql=(
-            "SELECT * FROM __seed(country_codes) c "
-            "JOIN __source(raw__orders) o ON c.country_code = o.country_code"
-        ),
-        expected_sql=(
-            "SELECT * FROM scenario_schema.__sqb_51b385aebe20__seed__country_codes AS c "
-            "JOIN scenario_schema.__sqb_51b385aebe20__source__raw__orders AS o "
-            "ON c.country_code = o.country_code"
-        ),
-    ),
-    ScenarioCheckSqlResolutionTestCase(
-        description="resolves dbt ref markers to scenario fixture relations",
-        sql='SELECT * FROM __dbt_ref("stripe", "payments") p',
-        expected_sql=(
-            "SELECT * FROM scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments AS p"
-        ),
-    ),
-    ScenarioCheckSqlResolutionTestCase(
-        description="polyglot check sql resolution ignores strings and comments",
-        sql=(
-            "SELECT '__ref(daily_revenue)' AS marker_text "
-            "FROM __ref(daily_revenue) dr -- __source(raw__orders)"
-        ),
-        expected_sql=(
-            "SELECT '__ref(daily_revenue)' AS marker_text "
-            "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue AS dr"
-        ),
-    ),
-    ScenarioCheckSqlResolutionTestCase(
-        description="regex fallback resolves markers when sql_analysis is disabled",
-        sql=(
-            "SELECT * FROM __seed(country_codes) c "
-            "JOIN __source(raw__orders) o ON c.country_code = o.country_code"
-        ),
-        expected_sql=(
-            "SELECT * FROM scenario_schema.__sqb_51b385aebe20__seed__country_codes c "
-            "JOIN scenario_schema.__sqb_51b385aebe20__source__raw__orders o "
-            "ON c.country_code = o.country_code"
-        ),
-        sql_analysis_enabled=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    CHECK_SQL_TEST_CASES,
-    ids=[case.description for case in CHECK_SQL_TEST_CASES],
+    [
+        ScenarioCheckSqlResolutionTestCase(
+            description="resolves assertion refs to scenario model and ref fixture relations",
+            sql=(
+                "SELECT * FROM __ref(daily_revenue) dr "
+                "JOIN __ref(stg_customers) sc ON dr.customer_id = sc.customer_id"
+            ),
+            expected_sql=(
+                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue AS dr "
+                "JOIN scenario_schema.__sqb_51b385aebe20__ref__stg_customers AS sc "
+                "ON dr.customer_id = sc.customer_id"
+            ),
+        ),
+        ScenarioCheckSqlResolutionTestCase(
+            description="resolves seed and source markers to scenario fixture relations",
+            sql=(
+                "SELECT * FROM __seed(country_codes) c "
+                "JOIN __source(raw__orders) o ON c.country_code = o.country_code"
+            ),
+            expected_sql=(
+                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__seed__country_codes AS c "
+                "JOIN scenario_schema.__sqb_51b385aebe20__source__raw__orders AS o "
+                "ON c.country_code = o.country_code"
+            ),
+        ),
+        ScenarioCheckSqlResolutionTestCase(
+            description="resolves dbt ref markers to scenario fixture relations",
+            sql='SELECT * FROM __dbt_ref("stripe", "payments") p',
+            expected_sql=(
+                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__dbt_ref__stripe__payments AS p"
+            ),
+        ),
+        ScenarioCheckSqlResolutionTestCase(
+            description="polyglot check sql resolution ignores strings and comments",
+            sql=(
+                "SELECT '__ref(daily_revenue)' AS marker_text "
+                "FROM __ref(daily_revenue) dr -- __source(raw__orders)"
+            ),
+            expected_sql=(
+                "SELECT '__ref(daily_revenue)' AS marker_text "
+                "FROM scenario_schema.__sqb_51b385aebe20__model__daily_revenue AS dr"
+            ),
+        ),
+        ScenarioCheckSqlResolutionTestCase(
+            description="regex fallback resolves markers when sql_analysis is disabled",
+            sql=(
+                "SELECT * FROM __seed(country_codes) c "
+                "JOIN __source(raw__orders) o ON c.country_code = o.country_code"
+            ),
+            expected_sql=(
+                "SELECT * FROM scenario_schema.__sqb_51b385aebe20__seed__country_codes c "
+                "JOIN scenario_schema.__sqb_51b385aebe20__source__raw__orders o "
+                "ON c.country_code = o.country_code"
+            ),
+            sql_analysis_enabled=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_check_sql_when_resolving_then_uses_scenario_relations(
     test_case: ScenarioCheckSqlResolutionTestCase,
@@ -659,7 +650,7 @@ def test_given_scenario_check_sql_when_resolving_then_uses_scenario_relations(
             expected_error_fragment="missing model artifact 'missing_model'",
         )
     ],
-    ids=["raises when relation map is missing required artifact"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_scenario_artifact_when_building_relation_plan_then_raises(
     test_case: ScenarioRelationPlanErrorTestCase,
@@ -683,7 +674,7 @@ def test_given_missing_scenario_artifact_when_building_relation_plan_then_raises
             expected_sql="could not be parsed with Polyglot",
         )
     ],
-    ids=["raises on polyglot parse failure without regex fallback"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_check_sql_when_sql_analysis_enabled_then_raises_without_regex_fallback(
     test_case: ScenarioCheckSqlResolutionTestCase,

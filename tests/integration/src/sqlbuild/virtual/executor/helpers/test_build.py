@@ -36,7 +36,7 @@ from tests.integration.src.sqlbuild.virtual.executor.helpers._test_types import 
             expected_model_names=("model_01", "model_02", "model_03", "model_04"),
         )
     ],
-    ids=["physical schema exists before concurrent build pipeline starts"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_build_when_pipeline_starts_then_physical_schema_is_prepared(
     test_case: VirtualPhysicalSchemaPreflightTestCase,

@@ -23,7 +23,7 @@ from tests.unit.src.sqlbuild.executor.node_results.main.helpers import (
             expected_metadata={},
         )
     ],
-    ids=["normalizes non dict metadata to empty dict"],
+    ids=lambda case: case.description,
 )
 def test_given_non_dict_metadata_when_reading_node_results_then_returns_empty_metadata(
     test_case: NodeResultReadTestCase,

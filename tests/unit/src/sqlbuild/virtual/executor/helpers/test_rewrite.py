@@ -34,7 +34,7 @@ from tests.unit.src.sqlbuild.virtual.executor.helpers.helpers import (
             expected_name="fact_orders__v_abcdef12",
         )
     ],
-    ids=["builds physical target name from model and version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_model_target_when_building_physical_target_then_it_uses_physical_schema_and_suffix(
     test_case: PhysicalTargetTestCase,
@@ -63,7 +63,7 @@ def test_given_model_target_when_building_physical_target_then_it_uses_physical_
             expected_bound_name="stg_orders__v_11111111",
         )
     ],
-    ids=["selected and bound models resolve to physical targets"],
+    ids=lambda case: case.description,
 )
 def test_given_selected_and_bound_models_when_rewriting_targets_then_it_uses_physical(
     test_case: RewrittenTargetsTestCase,
@@ -98,7 +98,7 @@ def test_given_selected_and_bound_models_when_rewriting_targets_then_it_uses_phy
             expected_rewritten_name="fact_orders__v_abcdef12",
         )
     ],
-    ids=["project rewrite changes only targeted models"],
+    ids=lambda case: case.description,
 )
 def test_given_rewritten_locations_when_rewriting_project_then_only_model_locations_change(
     test_case: RewriteProjectTargetsTestCase,
@@ -121,29 +121,26 @@ def test_given_rewritten_locations_when_rewriting_project_then_only_model_locati
     assert rewritten_project.models[1].destination.name == test_case.expected_rewritten_name
 
 
-RELATION_TYPE_TEST_CASES: list[RelationTypeTestCase] = [
-    RelationTypeTestCase(
-        description="views persist as view relation type",
-        materialized="view",
-        expected_relation_type="view",
-    ),
-    RelationTypeTestCase(
-        description="tables persist as table relation type",
-        materialized="table",
-        expected_relation_type="table",
-    ),
-    RelationTypeTestCase(
-        description="incrementals persist as table relation type",
-        materialized="incremental",
-        expected_relation_type="table",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RELATION_TYPE_TEST_CASES,
-    ids=[case.description for case in RELATION_TYPE_TEST_CASES],
+    [
+        RelationTypeTestCase(
+            description="views persist as view relation type",
+            materialized="view",
+            expected_relation_type="view",
+        ),
+        RelationTypeTestCase(
+            description="tables persist as table relation type",
+            materialized="table",
+            expected_relation_type="table",
+        ),
+        RelationTypeTestCase(
+            description="incrementals persist as table relation type",
+            materialized="incremental",
+            expected_relation_type="table",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_materialization_when_resolving_relation_type_then_it_matches_virtual_state(
     test_case: RelationTypeTestCase,

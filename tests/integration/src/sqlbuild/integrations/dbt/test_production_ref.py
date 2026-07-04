@@ -34,33 +34,6 @@ from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
     set_git_identity,
 )
 
-PRODUCTION_REF_COMPILE_ERROR_TEST_CASES: list[DbtProductionRefCompileErrorTestCase] = [
-    DbtProductionRefCompileErrorTestCase(
-        description="raises when git ref cannot be archived",
-        git_ref="missing-ref",
-        command_returncode=0,
-        command_stdout="",
-        expected_error_type=DbtReuseUnavailableError,
-        expected_error_fragment=(
-            "dbt production_ref git_ref 'missing-ref' does not exist in this repository"
-        ),
-        extra_branch_count=12,
-        expected_help_fragments=(
-            "sqlbuild_project.toml [dbt.production_ref].git_ref",
-            "Available local branches/tags include:",
-        ),
-        expected_available_ref_count=10,
-    ),
-    DbtProductionRefCompileErrorTestCase(
-        description="raises when injected dbt compile fails",
-        git_ref="prod",
-        command_returncode=2,
-        command_stdout="compile exploded",
-        expected_error_type=DbtInteropRuntimeError,
-        expected_error_fragment="dbt production_ref compile failed",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -74,7 +47,7 @@ PRODUCTION_REF_COMPILE_ERROR_TEST_CASES: list[DbtProductionRefCompileErrorTestCa
             expected_manifest_sql_fragment="select 1 as order_id",
         )
     ],
-    ids=["compiles dbt project at git ref with schema macro override"],
+    ids=lambda case: case.description,
 )
 @pytest.mark.dbt
 def test_given_dbt_production_ref_git_ref_when_compiling_then_returns_overridden_manifest(
@@ -113,8 +86,33 @@ def test_given_dbt_production_ref_git_ref_when_compiling_then_returns_overridden
 
 @pytest.mark.parametrize(
     "test_case",
-    PRODUCTION_REF_COMPILE_ERROR_TEST_CASES,
-    ids=[case.description for case in PRODUCTION_REF_COMPILE_ERROR_TEST_CASES],
+    [
+        DbtProductionRefCompileErrorTestCase(
+            description="raises when git ref cannot be archived",
+            git_ref="missing-ref",
+            command_returncode=0,
+            command_stdout="",
+            expected_error_type=DbtReuseUnavailableError,
+            expected_error_fragment=(
+                "dbt production_ref git_ref 'missing-ref' does not exist in this repository"
+            ),
+            extra_branch_count=12,
+            expected_help_fragments=(
+                "sqlbuild_project.toml [dbt.production_ref].git_ref",
+                "Available local branches/tags include:",
+            ),
+            expected_available_ref_count=10,
+        ),
+        DbtProductionRefCompileErrorTestCase(
+            description="raises when injected dbt compile fails",
+            git_ref="prod",
+            command_returncode=2,
+            command_stdout="compile exploded",
+            expected_error_type=DbtInteropRuntimeError,
+            expected_error_fragment="dbt production_ref compile failed",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_production_ref_compile_inputs_when_compiling_then_raises_clear_error(
     test_case: DbtProductionRefCompileErrorTestCase,
@@ -169,7 +167,7 @@ def test_given_invalid_production_ref_compile_inputs_when_compiling_then_raises_
             expected_error_fragment="git_ref must not be the current branch",
         )
     ],
-    ids=["raises when reuse git ref is current branch"],
+    ids=lambda case: case.description,
 )
 def test_given_production_ref_git_ref_is_current_branch_when_compiling_then_raises_clear_error(
     test_case: DbtProductionRefCompileSetupErrorTestCase,
@@ -206,7 +204,7 @@ def test_given_production_ref_git_ref_is_current_branch_when_compiling_then_rais
             expected_error_fragment="requires git to be installed and available on PATH",
         )
     ],
-    ids=["raises when git executable is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_git_is_missing_when_compiling_production_ref_then_raises_clear_error(
     test_case: DbtProductionRefCompileSetupErrorTestCase,
@@ -253,7 +251,7 @@ def test_given_git_is_missing_when_compiling_production_ref_then_raises_clear_er
             expected_error_fragment="did not produce manifest.json",
         )
     ],
-    ids=["raises when compile succeeds without manifest"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_compile_without_manifest_when_compiling_production_ref_then_raises_clear_error(
     test_case: DbtProductionRefCompileErrorTestCase,
@@ -300,7 +298,7 @@ def test_given_dbt_compile_without_manifest_when_compiling_production_ref_then_r
             expected_manifest_sql_fragment="select 3 as order_id",
         )
     ],
-    ids=["refreshes tracked git ref before compiling"],
+    ids=lambda case: case.description,
 )
 def test_given_production_ref_git_ref_tracks_remote_when_compiling_then_fetches_latest_ref(
     test_case: RealDbtProductionRefCompileTestCase,
@@ -379,7 +377,7 @@ def test_given_production_ref_git_ref_tracks_remote_when_compiling_then_fetches_
             expected_manifest_sql_fragment="select 1 as order_id",
         )
     ],
-    ids=["uses local git ref when no upstream is configured"],
+    ids=lambda case: case.description,
 )
 def test_given_production_ref_git_ref_has_no_upstream_when_compiling_then_uses_local_ref(
     test_case: RealDbtProductionRefCompileTestCase,
@@ -430,7 +428,7 @@ def test_given_production_ref_git_ref_has_no_upstream_when_compiling_then_uses_l
             expected_manifest_sql_fragment="select 1 as order_id",
         )
     ],
-    ids=["uses local git ref when tracking config is local only"],
+    ids=lambda case: case.description,
 )
 def test_given_production_ref_git_ref_has_local_tracking_when_compiling_then_uses_local_ref(
     test_case: RealDbtProductionRefCompileTestCase,
@@ -481,7 +479,7 @@ def test_given_production_ref_git_ref_has_local_tracking_when_compiling_then_use
             expected_error_fragment="git_ref could not be refreshed from its remote",
         )
     ],
-    ids=["raises when tracked git ref cannot be refreshed"],
+    ids=lambda case: case.description,
 )
 def test_given_production_ref_git_ref_refresh_fails_when_compiling_then_raises_clear_error(
     test_case: DbtProductionRefCompileSetupErrorTestCase,
@@ -521,7 +519,7 @@ def test_given_production_ref_git_ref_refresh_fails_when_compiling_then_raises_c
             expected_error_fragment="dbt project directory is not configured",
         )
     ],
-    ids=["raises when dbt project directory is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_dbt_project_dir_when_compiling_production_ref_then_raises_clear_error(
     test_case: DbtProductionRefCompileSetupErrorTestCase,
@@ -558,7 +556,7 @@ def test_given_missing_dbt_project_dir_when_compiling_production_ref_then_raises
             expected_error_fragment="generate_schema_name_override was not found",
         )
     ],
-    ids=["raises when macro override file is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_macro_override_when_compiling_production_ref_then_raises_clear_error(
     test_case: DbtProductionRefCompileSetupErrorTestCase,
@@ -596,7 +594,7 @@ def test_given_missing_macro_override_when_compiling_production_ref_then_raises_
             expected_error_fragment="requires the SQLBuild project to be in a git repository",
         )
     ],
-    ids=["raises when SQLBuild project is not in a git repo"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_project_outside_git_repo_when_compiling_production_ref_then_raises(
     test_case: DbtProductionRefCompileSetupErrorTestCase,
@@ -640,7 +638,7 @@ def test_given_sqlbuild_project_outside_git_repo_when_compiling_production_ref_t
             ),
         )
     ],
-    ids=["raises when dbt project is outside git repo"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_project_outside_git_repo_when_compiling_production_ref_then_raises_clear_error(
     test_case: DbtProductionRefCompileSetupErrorTestCase,
@@ -682,7 +680,7 @@ def test_given_dbt_project_outside_git_repo_when_compiling_production_ref_then_r
             expected_manifest_sql_fragment="select 1 as order_id",
         )
     ],
-    ids=["writes manifest to isolated temp target path"],
+    ids=lambda case: case.description,
 )
 def test_given_production_ref_compile_when_running_dbt_then_uses_isolated_target_path(
     test_case: RealDbtProductionRefCompileTestCase,

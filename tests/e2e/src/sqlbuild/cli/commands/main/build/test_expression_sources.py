@@ -92,7 +92,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["blank project builds from inline expression sources"],
+    ids=lambda case: case.description,
 )
 def test_given_expression_source_when_building_then_inline_source_sql_is_used(
     test_case: ExpressionSourceBuildE2ETestCase,

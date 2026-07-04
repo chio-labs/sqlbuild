@@ -32,99 +32,101 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_scheduling_graph,
 )
 
-ATTACHMENT_VALID_TEST_CASES: list[ResolveAttachmentTestCase] = [
-    ResolveAttachmentTestCase(
-        description="source-attached audit returns SOURCE",
-        references=(CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),),
-        attached_target_kind=AttachedAuditTargetKind.SOURCE,
-        attached_target_name="raw_orders",
-        upstream_edges={},
-        expected_attachment_kind=AuditAttachmentKind.SOURCE,
-        expected_attached_name="raw_orders",
-    ),
-    ResolveAttachmentTestCase(
-        description="model-attached audit with upstream refs returns MODEL",
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
-        ),
-        attached_target_kind=AttachedAuditTargetKind.MODEL,
-        attached_target_name="orders",
-        upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
-        expected_attachment_kind=AuditAttachmentKind.MODEL,
-        expected_attached_name="orders",
-    ),
-    ResolveAttachmentTestCase(
-        description="singular audit with only source refs returns SOURCE",
-        references=(CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),),
-        attached_target_kind=None,
-        attached_target_name=None,
-        upstream_edges={},
-        expected_attachment_kind=AuditAttachmentKind.SOURCE,
-        expected_attached_name="raw_orders",
-    ),
-    ResolveAttachmentTestCase(
-        description="singular audit with single model ref returns MODEL",
-        references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),),
-        attached_target_kind=None,
-        attached_target_name=None,
-        upstream_edges={"orders": ()},
-        expected_attachment_kind=AuditAttachmentKind.MODEL,
-        expected_attached_name="orders",
-    ),
-    ResolveAttachmentTestCase(
-        description="singular audit with chain A->B attaches to B as latest",
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-        ),
-        attached_target_kind=None,
-        attached_target_name=None,
-        upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
-        expected_attachment_kind=AuditAttachmentKind.MODEL,
-        expected_attached_name="orders",
-    ),
-    ResolveAttachmentTestCase(
-        description="singular audit with unrelated models attaches to END",
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),
-        ),
-        attached_target_kind=None,
-        attached_target_name=None,
-        upstream_edges={"orders": (), "customers": ()},
-        expected_attachment_kind=AuditAttachmentKind.END,
-        expected_attached_name=None,
-    ),
-    ResolveAttachmentTestCase(
-        description="singular audit with no refs attaches to END",
-        references=(),
-        attached_target_kind=None,
-        attached_target_name=None,
-        upstream_edges={},
-        expected_attachment_kind=AuditAttachmentKind.END,
-        expected_attached_name=None,
-    ),
-    ResolveAttachmentTestCase(
-        description="singular audit with three-model chain attaches to deepest",
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="raw"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="mart"),
-        ),
-        attached_target_kind=None,
-        attached_target_name=None,
-        upstream_edges={"mart": ("stg",), "stg": ("raw",), "raw": ()},
-        expected_attachment_kind=AuditAttachmentKind.MODEL,
-        expected_attached_name="mart",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    ATTACHMENT_VALID_TEST_CASES,
-    ids=[case.description for case in ATTACHMENT_VALID_TEST_CASES],
+    [
+        ResolveAttachmentTestCase(
+            description="source-attached audit returns SOURCE",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.SOURCE,
+            attached_target_name="raw_orders",
+            upstream_edges={},
+            expected_attachment_kind=AuditAttachmentKind.SOURCE,
+            expected_attached_name="raw_orders",
+        ),
+        ResolveAttachmentTestCase(
+            description="model-attached audit with upstream refs returns MODEL",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="orders",
+            upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
+            expected_attachment_kind=AuditAttachmentKind.MODEL,
+            expected_attached_name="orders",
+        ),
+        ResolveAttachmentTestCase(
+            description="singular audit with only source refs returns SOURCE",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
+            ),
+            attached_target_kind=None,
+            attached_target_name=None,
+            upstream_edges={},
+            expected_attachment_kind=AuditAttachmentKind.SOURCE,
+            expected_attached_name="raw_orders",
+        ),
+        ResolveAttachmentTestCase(
+            description="singular audit with single model ref returns MODEL",
+            references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),),
+            attached_target_kind=None,
+            attached_target_name=None,
+            upstream_edges={"orders": ()},
+            expected_attachment_kind=AuditAttachmentKind.MODEL,
+            expected_attached_name="orders",
+        ),
+        ResolveAttachmentTestCase(
+            description="singular audit with chain A->B attaches to B as latest",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+            ),
+            attached_target_kind=None,
+            attached_target_name=None,
+            upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
+            expected_attachment_kind=AuditAttachmentKind.MODEL,
+            expected_attached_name="orders",
+        ),
+        ResolveAttachmentTestCase(
+            description="singular audit with unrelated models attaches to END",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),
+            ),
+            attached_target_kind=None,
+            attached_target_name=None,
+            upstream_edges={"orders": (), "customers": ()},
+            expected_attachment_kind=AuditAttachmentKind.END,
+            expected_attached_name=None,
+        ),
+        ResolveAttachmentTestCase(
+            description="singular audit with no refs attaches to END",
+            references=(),
+            attached_target_kind=None,
+            attached_target_name=None,
+            upstream_edges={},
+            expected_attachment_kind=AuditAttachmentKind.END,
+            expected_attached_name=None,
+        ),
+        ResolveAttachmentTestCase(
+            description="singular audit with three-model chain attaches to deepest",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="raw"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="mart"),
+            ),
+            attached_target_kind=None,
+            attached_target_name=None,
+            upstream_edges={"mart": ("stg",), "stg": ("raw",), "raw": ()},
+            expected_attachment_kind=AuditAttachmentKind.MODEL,
+            expected_attached_name="mart",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_audit_refs_when_resolving_attachment_then_returns_expected(
     test_case: ResolveAttachmentTestCase,
@@ -150,47 +152,44 @@ def test_given_audit_refs_when_resolving_attachment_then_returns_expected(
     assert name == test_case.expected_attached_name
 
 
-ATTACHMENT_ERROR_TEST_CASES: list[ResolveAttachmentErrorTestCase] = [
-    ResolveAttachmentErrorTestCase(
-        description="source-attached audit referencing model raises",
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-        ),
-        attached_target_kind=AttachedAuditTargetKind.SOURCE,
-        attached_target_name="raw_orders",
-        upstream_edges={"orders": ()},
-        expected_error_fragment="must not reference models",
-    ),
-    ResolveAttachmentErrorTestCase(
-        description="model-attached audit referencing downstream model raises",
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-        ),
-        attached_target_kind=AttachedAuditTargetKind.MODEL,
-        attached_target_name="stg_orders",
-        upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
-        expected_error_fragment="not upstream of",
-    ),
-    ResolveAttachmentErrorTestCase(
-        description="model-attached audit referencing unrelated model raises",
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),
-        ),
-        attached_target_kind=AttachedAuditTargetKind.MODEL,
-        attached_target_name="orders",
-        upstream_edges={"orders": (), "customers": ()},
-        expected_error_fragment="not upstream of",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ATTACHMENT_ERROR_TEST_CASES,
-    ids=[case.description for case in ATTACHMENT_ERROR_TEST_CASES],
+    [
+        ResolveAttachmentErrorTestCase(
+            description="source-attached audit referencing model raises",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.SOURCE,
+            attached_target_name="raw_orders",
+            upstream_edges={"orders": ()},
+            expected_error_fragment="must not reference models",
+        ),
+        ResolveAttachmentErrorTestCase(
+            description="model-attached audit referencing downstream model raises",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="stg_orders",
+            upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
+            expected_error_fragment="not upstream of",
+        ),
+        ResolveAttachmentErrorTestCase(
+            description="model-attached audit referencing unrelated model raises",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="orders",
+            upstream_edges={"orders": (), "customers": ()},
+            expected_error_fragment="not upstream of",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_attachment_when_resolving_then_raises(
     test_case: ResolveAttachmentErrorTestCase,
@@ -212,50 +211,47 @@ def test_given_invalid_attachment_when_resolving_then_raises(
         )
 
 
-EFFECTIVE_RUN_SCOPE_TEST_CASES: list[ResolveEffectiveRunScopeTestCase] = [
-    ResolveEffectiveRunScopeTestCase(
-        description="final requested stays final for incremental model",
-        requested_run_scope=AuditRunScope.FINAL,
-        attached_model_materialization=MaterializationType.INCREMENTAL,
-        expected_effective_run_scope=AuditRunScope.FINAL,
-    ),
-    ResolveEffectiveRunScopeTestCase(
-        description="delta_and_final on incremental model stays delta_and_final",
-        requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
-        attached_model_materialization=MaterializationType.INCREMENTAL,
-        expected_effective_run_scope=AuditRunScope.DELTA_AND_FINAL,
-    ),
-    ResolveEffectiveRunScopeTestCase(
-        description="delta_and_final on snapshot model stays delta_and_final",
-        requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
-        attached_model_materialization=MaterializationType.SNAPSHOT,
-        expected_effective_run_scope=AuditRunScope.DELTA_AND_FINAL,
-    ),
-    ResolveEffectiveRunScopeTestCase(
-        description="delta_and_final on table model degrades to final",
-        requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
-        attached_model_materialization=MaterializationType.TABLE,
-        expected_effective_run_scope=AuditRunScope.FINAL,
-    ),
-    ResolveEffectiveRunScopeTestCase(
-        description="delta_and_final on view model degrades to final",
-        requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
-        attached_model_materialization=MaterializationType.VIEW,
-        expected_effective_run_scope=AuditRunScope.FINAL,
-    ),
-    ResolveEffectiveRunScopeTestCase(
-        description="delta_and_final with no materialization degrades to final",
-        requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
-        attached_model_materialization=None,
-        expected_effective_run_scope=AuditRunScope.FINAL,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    EFFECTIVE_RUN_SCOPE_TEST_CASES,
-    ids=[case.description for case in EFFECTIVE_RUN_SCOPE_TEST_CASES],
+    [
+        ResolveEffectiveRunScopeTestCase(
+            description="final requested stays final for incremental model",
+            requested_run_scope=AuditRunScope.FINAL,
+            attached_model_materialization=MaterializationType.INCREMENTAL,
+            expected_effective_run_scope=AuditRunScope.FINAL,
+        ),
+        ResolveEffectiveRunScopeTestCase(
+            description="delta_and_final on incremental model stays delta_and_final",
+            requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
+            attached_model_materialization=MaterializationType.INCREMENTAL,
+            expected_effective_run_scope=AuditRunScope.DELTA_AND_FINAL,
+        ),
+        ResolveEffectiveRunScopeTestCase(
+            description="delta_and_final on snapshot model stays delta_and_final",
+            requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
+            attached_model_materialization=MaterializationType.SNAPSHOT,
+            expected_effective_run_scope=AuditRunScope.DELTA_AND_FINAL,
+        ),
+        ResolveEffectiveRunScopeTestCase(
+            description="delta_and_final on table model degrades to final",
+            requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
+            attached_model_materialization=MaterializationType.TABLE,
+            expected_effective_run_scope=AuditRunScope.FINAL,
+        ),
+        ResolveEffectiveRunScopeTestCase(
+            description="delta_and_final on view model degrades to final",
+            requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
+            attached_model_materialization=MaterializationType.VIEW,
+            expected_effective_run_scope=AuditRunScope.FINAL,
+        ),
+        ResolveEffectiveRunScopeTestCase(
+            description="delta_and_final with no materialization degrades to final",
+            requested_run_scope=AuditRunScope.DELTA_AND_FINAL,
+            attached_model_materialization=None,
+            expected_effective_run_scope=AuditRunScope.FINAL,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_run_scope_and_context_when_resolving_effective_then_returns_expected(
     test_case: ResolveEffectiveRunScopeTestCase,

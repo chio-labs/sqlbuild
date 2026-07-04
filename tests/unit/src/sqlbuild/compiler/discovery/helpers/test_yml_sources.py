@@ -17,10 +17,13 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.discovery.helpers.helpers import expected_or_actual
 
-TEST_CASES: list[ParseSourcesYamlTestCase] = [
-    ParseSourcesYamlTestCase(
-        description="parses sources with quality metadata and columns",
-        contents="""
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSourcesYamlTestCase(
+            description="parses sources with quality metadata and columns",
+            contents="""
         sources:
           - name: raw_orders
             database: raw
@@ -51,18 +54,18 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
             schema: public
             table: customers
         """,
-        expected_source_names=("raw_orders", "raw_customers"),
-        expected_column_names=(("order_id", "created_at"), ()),
-        expected_type_enforcement_values=(True, None),
-        expected_contract_values=("enforced", None),
-        expected_expressions=(None, None),
-        expected_source_audit_names=(("source_freshness",), ()),
-        expected_column_audit_names=((("not_null",), ("recency",)), ()),
-        expected_column_nullables=((False, True), ()),
-    ),
-    ParseSourcesYamlTestCase(
-        description="defaults expression source type enforcement from typed columns",
-        contents="""
+            expected_source_names=("raw_orders", "raw_customers"),
+            expected_column_names=(("order_id", "created_at"), ()),
+            expected_type_enforcement_values=(True, None),
+            expected_contract_values=("enforced", None),
+            expected_expressions=(None, None),
+            expected_source_audit_names=(("source_freshness",), ()),
+            expected_column_audit_names=((("not_null",), ("recency",)), ()),
+            expected_column_nullables=((False, True), ()),
+        ),
+        ParseSourcesYamlTestCase(
+            description="defaults expression source type enforcement from typed columns",
+            contents="""
         sources:
           - name: raw_orders
             expression: |
@@ -73,17 +76,17 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               - name: status
                 type: VARCHAR
         """,
-        expected_source_names=("raw_orders",),
-        expected_column_names=(("order_id", "status"),),
-        expected_type_enforcement_values=(True,),
-        expected_contract_values=(None,),
-        expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
-        expected_source_audit_names=((),),
-        expected_column_audit_names=(((), ()),),
-    ),
-    ParseSourcesYamlTestCase(
-        description="allows expression source type enforcement to opt in explicitly",
-        contents="""
+            expected_source_names=("raw_orders",),
+            expected_column_names=(("order_id", "status"),),
+            expected_type_enforcement_values=(True,),
+            expected_contract_values=(None,),
+            expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
+            expected_source_audit_names=((),),
+            expected_column_audit_names=(((), ()),),
+        ),
+        ParseSourcesYamlTestCase(
+            description="allows expression source type enforcement to opt in explicitly",
+            contents="""
         sources:
           - name: raw_orders
             expression: |
@@ -93,17 +96,17 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               - name: order_id
                 type: INTEGER
         """,
-        expected_source_names=("raw_orders",),
-        expected_column_names=(("order_id",),),
-        expected_type_enforcement_values=(True,),
-        expected_contract_values=(None,),
-        expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
-        expected_source_audit_names=((),),
-        expected_column_audit_names=(((),),),
-    ),
-    ParseSourcesYamlTestCase(
-        description="does not enforce source types for untyped column metadata",
-        contents="""
+            expected_source_names=("raw_orders",),
+            expected_column_names=(("order_id",),),
+            expected_type_enforcement_values=(True,),
+            expected_contract_values=(None,),
+            expected_expressions=("SELECT 1 AS order_id, 'placed' AS status\n",),
+            expected_source_audit_names=((),),
+            expected_column_audit_names=(((),),),
+        ),
+        ParseSourcesYamlTestCase(
+            description="does not enforce source types for untyped column metadata",
+            contents="""
         sources:
           - name: raw_orders
             schema: public
@@ -112,17 +115,17 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               - name: order_id
                 description: Stable order identifier.
         """,
-        expected_source_names=("raw_orders",),
-        expected_column_names=(("order_id",),),
-        expected_type_enforcement_values=(None,),
-        expected_contract_values=(None,),
-        expected_expressions=(None,),
-        expected_source_audit_names=((),),
-        expected_column_audit_names=(((),),),
-    ),
-    ParseSourcesYamlTestCase(
-        description="allows source columns to opt out of default type enforcement",
-        contents="""
+            expected_source_names=("raw_orders",),
+            expected_column_names=(("order_id",),),
+            expected_type_enforcement_values=(None,),
+            expected_contract_values=(None,),
+            expected_expressions=(None,),
+            expected_source_audit_names=((),),
+            expected_column_audit_names=(((),),),
+        ),
+        ParseSourcesYamlTestCase(
+            description="allows source columns to opt out of default type enforcement",
+            contents="""
         sources:
           - name: raw_orders
             schema: public
@@ -132,17 +135,17 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               - name: order_id
                 type: INTEGER
         """,
-        expected_source_names=("raw_orders",),
-        expected_column_names=(("order_id",),),
-        expected_type_enforcement_values=(False,),
-        expected_contract_values=(None,),
-        expected_expressions=(None,),
-        expected_source_audit_names=((),),
-        expected_column_audit_names=(((),),),
-    ),
-    ParseSourcesYamlTestCase(
-        description="parses source loader metadata and write strategies",
-        contents="""
+            expected_source_names=("raw_orders",),
+            expected_column_names=(("order_id",),),
+            expected_type_enforcement_values=(False,),
+            expected_contract_values=(None,),
+            expected_expressions=(None,),
+            expected_source_audit_names=((),),
+            expected_column_audit_names=(((),),),
+        ),
+        ParseSourcesYamlTestCase(
+            description="parses source loader metadata and write strategies",
+            contents="""
         sources:
           - name: raw_events
             managed: true
@@ -162,22 +165,22 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
             write_strategy: append
             cursor_column: received_at
         """,
-        expected_source_names=("raw_events", "raw_customers", "raw_prices", "raw_webhooks"),
-        expected_column_names=((), (), (), ()),
-        expected_type_enforcement_values=(None, None, None, None),
-        expected_contract_values=(None, None, None, None),
-        expected_expressions=(None, None, None, None),
-        expected_loaders=("raw_events", "raw_customers", "raw_prices", "raw_webhooks"),
-        expected_write_strategies=("delete_insert", "merge", "table", "append"),
-        expected_load_batch_sizes=(None, None, 500, None),
-        expected_cursor_columns=("event_at", "updated_at", None, "received_at"),
-        expected_unique_keys=((), ("customer_id", "updated_at"), (), ()),
-        expected_source_audit_names=((), (), (), ()),
-        expected_column_audit_names=((), (), (), ()),
-    ),
-    ParseSourcesYamlTestCase(
-        description="parses ingestr integration loader metadata",
-        contents="""
+            expected_source_names=("raw_events", "raw_customers", "raw_prices", "raw_webhooks"),
+            expected_column_names=((), (), (), ()),
+            expected_type_enforcement_values=(None, None, None, None),
+            expected_contract_values=(None, None, None, None),
+            expected_expressions=(None, None, None, None),
+            expected_loaders=("raw_events", "raw_customers", "raw_prices", "raw_webhooks"),
+            expected_write_strategies=("delete_insert", "merge", "table", "append"),
+            expected_load_batch_sizes=(None, None, 500, None),
+            expected_cursor_columns=("event_at", "updated_at", None, "received_at"),
+            expected_unique_keys=((), ("customer_id", "updated_at"), (), ()),
+            expected_source_audit_names=((), (), (), ()),
+            expected_column_audit_names=((), (), (), ()),
+        ),
+        ParseSourcesYamlTestCase(
+            description="parses ingestr integration loader metadata",
+            contents="""
         sources:
           - name: raw_orders
             table: orders
@@ -190,18 +193,18 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               columns: id,account_id,updated_at
               extra_args: [--debug]
         """,
-        expected_source_names=("raw_orders",),
-        expected_column_names=((),),
-        expected_type_enforcement_values=(None,),
-        expected_contract_values=(None,),
-        expected_expressions=(None,),
-        expected_loaders=("ingestr__raw_orders",),
-        expected_source_audit_names=((),),
-        expected_column_audit_names=((),),
-    ),
-    ParseSourcesYamlTestCase(
-        description="parses source freshness strategies",
-        contents="""
+            expected_source_names=("raw_orders",),
+            expected_column_names=((),),
+            expected_type_enforcement_values=(None,),
+            expected_contract_values=(None,),
+            expected_expressions=(None,),
+            expected_loaders=("ingestr__raw_orders",),
+            expected_source_audit_names=((),),
+            expected_column_audit_names=((),),
+        ),
+        ParseSourcesYamlTestCase(
+            description="parses source freshness strategies",
+            contents="""
         sources:
           - name: raw_orders
             schema: public
@@ -246,58 +249,53 @@ TEST_CASES: list[ParseSourcesYamlTestCase] = [
               age_policy:
                 error_after: 1d
         """,
-        expected_source_names=(
-            "raw_orders",
-            "raw_events",
-            "raw_customers",
-            "raw_clicks",
-            "raw_shipments",
+            expected_source_names=(
+                "raw_orders",
+                "raw_events",
+                "raw_customers",
+                "raw_clicks",
+                "raw_shipments",
+            ),
+            expected_column_names=((), (), (), (), ()),
+            expected_type_enforcement_values=(None, None, None, None, None),
+            expected_contract_values=(None, None, None, None, None),
+            expected_expressions=(None, None, None, None, None),
+            expected_source_audit_names=((), (), (), (), ()),
+            expected_column_audit_names=((), (), (), (), ()),
+            expected_freshness_strategies=("adapter", "column", "sql", "column", "column"),
+            expected_freshness_value_kinds=(None, "timestamp", "integer", "timestamp", "timestamp"),
+            expected_freshness_columns=(None, "updated_at", None, "loaded_at", "loaded_at"),
+            expected_freshness_queries=(
+                None,
+                None,
+                "SELECT MAX(version) FROM raw.public.customers",
+                None,
+                None,
+            ),
+            expected_freshness_filters=(
+                None,
+                "updated_at >= current_date - interval '2 days'",
+                None,
+                None,
+                None,
+            ),
+            expected_freshness_lag_tolerances=(None, "15m", None, None, None),
+            expected_freshness_age_policy_warn_afters=(None, "12h", None, "6h", None),
+            expected_freshness_age_policy_error_afters=(None, "24h", None, None, "1d"),
         ),
-        expected_column_names=((), (), (), (), ()),
-        expected_type_enforcement_values=(None, None, None, None, None),
-        expected_contract_values=(None, None, None, None, None),
-        expected_expressions=(None, None, None, None, None),
-        expected_source_audit_names=((), (), (), (), ()),
-        expected_column_audit_names=((), (), (), (), ()),
-        expected_freshness_strategies=("adapter", "column", "sql", "column", "column"),
-        expected_freshness_value_kinds=(None, "timestamp", "integer", "timestamp", "timestamp"),
-        expected_freshness_columns=(None, "updated_at", None, "loaded_at", "loaded_at"),
-        expected_freshness_queries=(
-            None,
-            None,
-            "SELECT MAX(version) FROM raw.public.customers",
-            None,
-            None,
+        ParseSourcesYamlTestCase(
+            description="allows empty sources files with no declarations",
+            contents="{}\n",
+            expected_source_names=(),
+            expected_column_names=(),
+            expected_type_enforcement_values=(),
+            expected_contract_values=(),
+            expected_expressions=(),
+            expected_source_audit_names=(),
+            expected_column_audit_names=(),
         ),
-        expected_freshness_filters=(
-            None,
-            "updated_at >= current_date - interval '2 days'",
-            None,
-            None,
-            None,
-        ),
-        expected_freshness_lag_tolerances=(None, "15m", None, None, None),
-        expected_freshness_age_policy_warn_afters=(None, "12h", None, "6h", None),
-        expected_freshness_age_policy_error_afters=(None, "24h", None, None, "1d"),
-    ),
-    ParseSourcesYamlTestCase(
-        description="allows empty sources files with no declarations",
-        contents="{}\n",
-        expected_source_names=(),
-        expected_column_names=(),
-        expected_type_enforcement_values=(),
-        expected_contract_values=(),
-        expected_expressions=(),
-        expected_source_audit_names=(),
-        expected_column_audit_names=(),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_metadata(
     test_case: ParseSourcesYamlTestCase,
@@ -449,7 +447,7 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
             expected_extra_args=("--debug",),
         )
     ],
-    ids=["stores typed ingestr integration config"],
+    ids=lambda case: case.description,
 )
 def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_config(
     test_case: ParseSourcesYamlIngestrTestCase,
@@ -501,7 +499,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
             expected_destination_config={"naming_convention": "sql_cs_v1", "create_indexes": True},
         )
     ],
-    ids=["expands dlt sources into managed source entries"],
+    ids=lambda case: case.description,
 )
 def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
     test_case: ParseSourcesYamlDltTestCase,
@@ -538,130 +536,132 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
     ) == (test_case.expected_destination_config, test_case.expected_destination_config)
 
 
-ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
-    ParseSourcesYamlErrorTestCase(
-        description="raises when the file does not contain a top-level mapping",
-        contents="- name: raw_orders\n",
-        expected_error_fragment="must contain a top-level mapping",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source meta is not a mapping",
-        contents="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSourcesYamlErrorTestCase(
+            description="raises when the file does not contain a top-level mapping",
+            contents="- name: raw_orders\n",
+            expected_error_fragment="must contain a top-level mapping",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source meta is not a mapping",
+            contents="""
         sources:
           - name: raw_orders
             meta: []
         """,
-        expected_error_fragment="source 'meta' must be a mapping",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source contract is unknown",
-        contents="""
+            expected_error_fragment="source 'meta' must be a mapping",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source contract is unknown",
+            contents="""
         sources:
           - name: raw_orders
             contract: strict
         """,
-        expected_error_fragment="source 'contract' must be one of",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when sources is not a list",
-        contents="sources: {}\n",
-        expected_error_fragment="sources must be a list",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when one source entry is not a mapping",
-        contents="""
+            expected_error_fragment="source 'contract' must be one of",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when sources is not a list",
+            contents="sources: {}\n",
+            expected_error_fragment="sources must be a list",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when one source entry is not a mapping",
+            contents="""
         sources:
           - raw_orders
         """,
-        expected_error_fragment="sources must contain only mappings",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when a source omits name",
-        contents="""
+            expected_error_fragment="sources must contain only mappings",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when a source omits name",
+            contents="""
         sources:
           - schema: public
         """,
-        expected_error_fragment="source must define non-empty string 'name'",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source database is blank",
-        contents="""
+            expected_error_fragment="source must define non-empty string 'name'",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source database is blank",
+            contents="""
         sources:
           - name: raw_orders
             database: ""
         """,
-        expected_error_fragment="source 'database' must be a non-empty string",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source schema is blank",
-        contents="""
+            expected_error_fragment="source 'database' must be a non-empty string",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source schema is blank",
+            contents="""
         sources:
           - name: raw_orders
             schema: ""
         """,
-        expected_error_fragment="source 'schema' must be a non-empty string",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source table is blank",
-        contents="""
+            expected_error_fragment="source 'schema' must be a non-empty string",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source table is blank",
+            contents="""
         sources:
           - name: raw_orders
             table: ""
         """,
-        expected_error_fragment="source 'table' must be a non-empty string",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source expression is blank",
-        contents="""
+            expected_error_fragment="source 'table' must be a non-empty string",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source expression is blank",
+            contents="""
         sources:
           - name: raw_orders
             expression: ""
         """,
-        expected_error_fragment="source 'expression' must be a non-empty string",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source expression is mixed with relation fields",
-        contents="""
+            expected_error_fragment="source 'expression' must be a non-empty string",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source expression is mixed with relation fields",
+            contents="""
         sources:
           - name: raw_orders
             schema: main
             expression: SELECT 1 AS order_id
         """,
-        expected_error_fragment="source 'raw_orders' cannot define expression with schema",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when expression source enforces types without typed columns",
-        contents="""
+            expected_error_fragment="source 'raw_orders' cannot define expression with schema",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when expression source enforces types without typed columns",
+            contents="""
         sources:
           - name: raw_orders
             expression: SELECT 1 AS order_id
             type_enforcement: true
         """,
-        expected_error_fragment=(
-            "source 'raw_orders' uses expression with type_enforcement but has no typed columns"
+            expected_error_fragment=(
+                "source 'raw_orders' uses expression with type_enforcement but has no typed columns"
+            ),
         ),
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source type enforcement is not a boolean",
-        contents="""
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source type enforcement is not a boolean",
+            contents="""
         sources:
           - name: raw_orders
             type_enforcement: 123
         """,
-        expected_error_fragment="source 'type_enforcement' must be a boolean",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source loader is blank",
-        contents="""
+            expected_error_fragment="source 'type_enforcement' must be a boolean",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source loader is blank",
+            contents="""
         sources:
           - name: raw_orders
             loader: ""
         """,
-        expected_error_fragment="source 'loader' is not supported",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source defines both loader and ingestr",
-        contents="""
+            expected_error_fragment="source 'loader' is not supported",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source defines both loader and ingestr",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
@@ -669,11 +669,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               source_uri: stripe://token
               source_table: charges
         """,
-        expected_error_fragment="cannot override loader for ingestr",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when ingestr strategy is unknown",
-        contents="""
+            expected_error_fragment="cannot override loader for ingestr",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when ingestr strategy is unknown",
+            contents="""
         sources:
           - name: raw_orders
             ingestr:
@@ -681,11 +681,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               source_table: charges
               strategy: nope
         """,
-        expected_error_fragment="ingestr strategy must be one of",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when dlt merge omits primary key",
-        contents="""
+            expected_error_fragment="ingestr strategy must be one of",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when dlt merge omits primary key",
+            contents="""
         dlt_sources:
           - type: sql_database
             config:
@@ -695,11 +695,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
                 table: orders
                 write_disposition: merge
         """,
-        expected_error_fragment="merge requires primary_key",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when dlt uses sqlbuild write strategy",
-        contents="""
+            expected_error_fragment="merge requires primary_key",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when dlt uses sqlbuild write strategy",
+            contents="""
         dlt_sources:
           - type: sql_database
             config:
@@ -709,11 +709,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
                 table: orders
                 write_strategy: table
         """,
-        expected_error_fragment="must use dlt write_disposition",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when dlt destination overrides credentials",
-        contents="""
+            expected_error_fragment="must use dlt write_disposition",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when dlt destination overrides credentials",
+            contents="""
         dlt_sources:
           - type: sql_database
             destination:
@@ -724,105 +724,105 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               - name: raw_orders
                 table: orders
         """,
-        expected_error_fragment="dlt source destination cannot define 'credentials'",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when write strategy is unknown",
-        contents="""
+            expected_error_fragment="dlt source destination cannot define 'credentials'",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when write strategy is unknown",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: replace
         """,
-        expected_error_fragment="write_strategy must be one of",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when write strategy has no loader",
-        contents="""
+            expected_error_fragment="write_strategy must be one of",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when write strategy has no loader",
+            contents="""
         sources:
           - name: raw_orders
             write_strategy: table
         """,
-        expected_error_fragment="defines write_strategy but is not managed",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when load batch size is not positive",
-        contents="""
+            expected_error_fragment="defines write_strategy but is not managed",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when load batch size is not positive",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: table
             load_batch_size: 0
         """,
-        expected_error_fragment="source 'load_batch_size' must be a positive integer",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when load batch size is boolean",
-        contents="""
+            expected_error_fragment="source 'load_batch_size' must be a positive integer",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when load batch size is boolean",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: table
             load_batch_size: true
         """,
-        expected_error_fragment="source 'load_batch_size' must be a positive integer",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when cursor column is used with table strategy",
-        contents="""
+            expected_error_fragment="source 'load_batch_size' must be a positive integer",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when cursor column is used with table strategy",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: table
             cursor_column: event_at
         """,
-        expected_error_fragment="cursor_column is not supported with write_strategy table",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when unique key is used with append strategy",
-        contents="""
+            expected_error_fragment="cursor_column is not supported with write_strategy table",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when unique key is used with append strategy",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: append
             unique_key: order_id
         """,
-        expected_error_fragment="unique_key is not supported with write_strategy append",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when merge has no unique key",
-        contents="""
+            expected_error_fragment="unique_key is not supported with write_strategy append",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when merge has no unique key",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: merge
         """,
-        expected_error_fragment="write_strategy merge requires unique_key",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when unique key is used with table strategy",
-        contents="""
+            expected_error_fragment="write_strategy merge requires unique_key",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when unique key is used with table strategy",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: table
             unique_key: order_id
         """,
-        expected_error_fragment="unique_key is not supported with write_strategy table",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when delete insert has no cursor column",
-        contents="""
+            expected_error_fragment="unique_key is not supported with write_strategy table",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when delete insert has no cursor column",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: delete_insert
         """,
-        expected_error_fragment="write_strategy delete_insert requires cursor_column",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when unique key is used with delete insert strategy",
-        contents="""
+            expected_error_fragment="write_strategy delete_insert requires cursor_column",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when unique key is used with delete insert strategy",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
@@ -830,63 +830,63 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
             cursor_column: event_at
             unique_key: order_id
         """,
-        expected_error_fragment="unique_key is not supported with write_strategy delete_insert",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when unique key is empty list",
-        contents="""
+            expected_error_fragment="unique_key is not supported with write_strategy delete_insert",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when unique key is empty list",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: merge
             unique_key: []
         """,
-        expected_error_fragment="source 'unique_key' must be non-empty",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when unique key list contains non string",
-        contents="""
+            expected_error_fragment="source 'unique_key' must be non-empty",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when unique key list contains non string",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: merge
             unique_key: [order_id, 123]
         """,
-        expected_error_fragment="source 'unique_key' must contain only non-empty strings",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when unique key is wrong type",
-        contents="""
+            expected_error_fragment="source 'unique_key' must contain only non-empty strings",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when unique key is wrong type",
+            contents="""
         sources:
           - name: raw_orders
             managed: true
             write_strategy: merge
             unique_key: {}
         """,
-        expected_error_fragment="source 'unique_key' must be a string or list",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness is not a mapping",
-        contents="""
+            expected_error_fragment="source 'unique_key' must be a string or list",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness is not a mapping",
+            contents="""
         sources:
           - name: raw_orders
             freshness: []
         """,
-        expected_error_fragment="source 'freshness' must be a mapping",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness strategy is unknown",
-        contents="""
+            expected_error_fragment="source 'freshness' must be a mapping",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness strategy is unknown",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
               strategy: latest
         """,
-        expected_error_fragment="source freshness 'strategy' must be one of",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness type is unknown",
-        contents="""
+            expected_error_fragment="source freshness 'strategy' must be one of",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness type is unknown",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -894,35 +894,35 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               column: updated_at
               type: boolean
         """,
-        expected_error_fragment="source freshness 'type' must be one of",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when adapter freshness has column",
-        contents="""
+            expected_error_fragment="source freshness 'type' must be one of",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when adapter freshness has column",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
               strategy: adapter
               column: updated_at
         """,
-        expected_error_fragment=(
-            "source freshness strategy adapter does not support type, column, query, or filter"
+            expected_error_fragment=(
+                "source freshness strategy adapter does not support type, column, query, or filter"
+            ),
         ),
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when column freshness has no column",
-        contents="""
+        ParseSourcesYamlErrorTestCase(
+            description="raises when column freshness has no column",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
               strategy: column
               type: timestamp
         """,
-        expected_error_fragment="source freshness strategy column requires column",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when column freshness has expression column",
-        contents="""
+            expected_error_fragment="source freshness strategy column requires column",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when column freshness has expression column",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -930,44 +930,44 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               column: MAX(updated_at)
               type: timestamp
         """,
-        expected_error_fragment="source freshness column must be a plain column name",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when column freshness has no type",
-        contents="""
+            expected_error_fragment="source freshness column must be a plain column name",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when column freshness has no type",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
               strategy: column
               column: updated_at
         """,
-        expected_error_fragment="source freshness strategy column requires type",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when sql freshness has no query",
-        contents="""
+            expected_error_fragment="source freshness strategy column requires type",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when sql freshness has no query",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
               strategy: sql
               type: string
         """,
-        expected_error_fragment="source freshness strategy sql requires query",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when sql freshness has no type",
-        contents="""
+            expected_error_fragment="source freshness strategy sql requires query",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when sql freshness has no type",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
               strategy: sql
               query: SELECT MAX(version) FROM raw.orders
         """,
-        expected_error_fragment="source freshness strategy sql requires type",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when sql freshness has column",
-        contents="""
+            expected_error_fragment="source freshness strategy sql requires type",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when sql freshness has column",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -976,11 +976,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               column: version
               type: integer
         """,
-        expected_error_fragment="source freshness strategy sql does not support column",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when sql freshness has filter",
-        contents="""
+            expected_error_fragment="source freshness strategy sql does not support column",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when sql freshness has filter",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -989,24 +989,24 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               type: integer
               filter: version > 10
         """,
-        expected_error_fragment="source freshness strategy sql does not support filter",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when adapter freshness has filter",
-        contents="""
+            expected_error_fragment="source freshness strategy sql does not support filter",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when adapter freshness has filter",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
               strategy: adapter
               filter: updated_at > current_date
         """,
-        expected_error_fragment=(
-            "source freshness strategy adapter does not support type, column, query, or filter"
+            expected_error_fragment=(
+                "source freshness strategy adapter does not support type, column, query, or filter"
+            ),
         ),
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness lag tolerance has non-timestamp type",
-        contents="""
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness lag tolerance has non-timestamp type",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -1015,11 +1015,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               type: integer
               lag_tolerance: 10m
         """,
-        expected_error_fragment="source freshness lag_tolerance requires type timestamp",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness lag tolerance is invalid",
-        contents="""
+            expected_error_fragment="source freshness lag_tolerance requires type timestamp",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness lag tolerance is invalid",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -1028,11 +1028,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               type: timestamp
               lag_tolerance: soon
         """,
-        expected_error_fragment="source freshness lag_tolerance must be a positive duration",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness age policy has non-timestamp type",
-        contents="""
+            expected_error_fragment="source freshness lag_tolerance must be a positive duration",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness age policy has non-timestamp type",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -1042,11 +1042,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               age_policy:
                 error_after: 1d
         """,
-        expected_error_fragment="source freshness age_policy requires type timestamp",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness age policy duration is invalid",
-        contents="""
+            expected_error_fragment="source freshness age_policy requires type timestamp",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness age policy duration is invalid",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -1056,11 +1056,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               age_policy:
                 warn_after: soon
         """,
-        expected_error_fragment="source freshness age_policy values must be positive durations",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness age policy warning exceeds error",
-        contents="""
+            expected_error_fragment="source freshness age_policy values must be positive durations",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness age policy warning exceeds error",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -1071,13 +1071,13 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
                 warn_after: 2d
                 error_after: 12h
         """,
-        expected_error_fragment=(
-            "source freshness age_policy warn_after must be less than or equal to error_after"
+            expected_error_fragment=(
+                "source freshness age_policy warn_after must be less than or equal to error_after"
+            ),
         ),
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness age policy is empty",
-        contents="""
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness age policy is empty",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -1086,11 +1086,11 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               type: timestamp
               age_policy: {}
         """,
-        expected_error_fragment="source freshness age_policy requires warn_after or error_after",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source freshness lag tolerance uses seconds",
-        contents="""
+            expected_error_fragment="source freshness age_policy requires warn_after or error_after",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness lag tolerance uses seconds",
+            contents="""
         sources:
           - name: raw_orders
             freshness:
@@ -1099,82 +1099,82 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
               type: timestamp
               lag_tolerance: 30s
         """,
-        expected_error_fragment="source freshness lag_tolerance must be a positive duration",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source audits is not a list",
-        contents="""
+            expected_error_fragment="source freshness lag_tolerance must be a positive duration",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source audits is not a list",
+            contents="""
         sources:
           - name: raw_orders
             audits: {}
         """,
-        expected_error_fragment="source audits must be a list",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source columns is not a list",
-        contents="""
+            expected_error_fragment="source audits must be a list",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source columns is not a list",
+            contents="""
         sources:
           - name: raw_orders
             columns: {}
         """,
-        expected_error_fragment="source columns must be a list",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source column meta is not a mapping",
-        contents="""
+            expected_error_fragment="source columns must be a list",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source column meta is not a mapping",
+            contents="""
         sources:
           - name: raw_orders
             columns:
               - name: order_id
                 meta: []
         """,
-        expected_error_fragment="source column 'meta' must be a mapping",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when a source column entry is not a mapping",
-        contents="""
+            expected_error_fragment="source column 'meta' must be a mapping",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when a source column entry is not a mapping",
+            contents="""
         sources:
           - name: raw_orders
             columns:
               - order_id
         """,
-        expected_error_fragment="source columns must contain only mappings",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source column omits name",
-        contents="""
+            expected_error_fragment="source columns must contain only mappings",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source column omits name",
+            contents="""
         sources:
           - name: raw_orders
             columns:
               - type: VARCHAR
         """,
-        expected_error_fragment="source column must define non-empty string 'name'",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source column audits is not a list",
-        contents="""
+            expected_error_fragment="source column must define non-empty string 'name'",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source column audits is not a list",
+            contents="""
         sources:
           - name: raw_orders
             columns:
               - name: order_id
                 audits: {}
         """,
-        expected_error_fragment="source column audits must be a list",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source column nullable is not a boolean",
-        contents="""
+            expected_error_fragment="source column audits must be a list",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source column nullable is not a boolean",
+            contents="""
         sources:
           - name: raw_orders
             columns:
               - name: order_id
                 nullable: 123
         """,
-        expected_error_fragment="source column 'nullable' must be a boolean",
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source column allows nulls and uses not null audit",
-        contents="""
+            expected_error_fragment="source column 'nullable' must be a boolean",
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source column allows nulls and uses not null audit",
+            contents="""
         sources:
           - name: raw_orders
             columns:
@@ -1183,26 +1183,23 @@ ERROR_TEST_CASES: list[ParseSourcesYamlErrorTestCase] = [
                 audits:
                   - not_null
         """,
-        expected_error_fragment=("column 'order_id' cannot set nullable = true and audit not_null"),
-    ),
-    ParseSourcesYamlErrorTestCase(
-        description="raises when source column type is blank",
-        contents="""
+            expected_error_fragment=(
+                "column 'order_id' cannot set nullable = true and audit not_null"
+            ),
+        ),
+        ParseSourcesYamlErrorTestCase(
+            description="raises when source column type is blank",
+            contents="""
         sources:
           - name: raw_orders
             columns:
               - name: order_id
                 type: ""
         """,
-        expected_error_fragment="source column 'type' must be a non-empty string",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    ERROR_TEST_CASES,
-    ids=[case.description for case in ERROR_TEST_CASES],
+            expected_error_fragment="source column 'type' must be a non-empty string",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_sources_yaml_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSourcesYamlErrorTestCase,

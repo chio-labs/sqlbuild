@@ -17,80 +17,78 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_cli_overrides
 
-CONFIG_RESOLUTION_TEST_CASES: list[DbtConfigResolutionTestCase] = [
-    DbtConfigResolutionTestCase(
-        description="uses project config when cli values are absent",
-        config=DbtConfig(
-            project_dir="dbt",
-            profiles_dir="profiles",
-            target="dev",
-            target_path="target/dbt",
-        ),
-        cli_project_dir=None,
-        cli_profiles_dir=None,
-        cli_target=None,
-        cli_target_path=None,
-        require_project_dir=True,
-        expected_project_dir=Path("/repo/dbt"),
-        expected_profiles_dir=Path("/repo/profiles"),
-        expected_target="dev",
-        expected_target_path=Path("/repo/target/dbt"),
-    ),
-    DbtConfigResolutionTestCase(
-        description="cli values override project config",
-        config=DbtConfig(
-            project_dir="dbt",
-            profiles_dir="profiles",
-            target="dev",
-            target_path="target/dbt",
-        ),
-        cli_project_dir="../analytics",
-        cli_profiles_dir="../profiles",
-        cli_target="prod",
-        cli_target_path="../dbt-target",
-        require_project_dir=True,
-        expected_project_dir=Path("/analytics"),
-        expected_profiles_dir=Path("/profiles"),
-        expected_target="prod",
-        expected_target_path=Path("/dbt-target"),
-    ),
-    DbtConfigResolutionTestCase(
-        description="local target overrides project target when cli target is absent",
-        config=DbtConfig(
-            project_dir="dbt",
-            target="dev",
-        ),
-        local_config=LocalDbtConfig(target="pat"),
-        cli_project_dir=None,
-        cli_profiles_dir=None,
-        cli_target=None,
-        cli_target_path=None,
-        require_project_dir=True,
-        expected_project_dir=Path("/repo/dbt"),
-        expected_profiles_dir=None,
-        expected_target="pat",
-        expected_target_path=None,
-    ),
-    DbtConfigResolutionTestCase(
-        description="normal sqb commands can omit project dir when dbt is not required",
-        config=DbtConfig(),
-        cli_project_dir=None,
-        cli_profiles_dir=None,
-        cli_target=None,
-        cli_target_path=None,
-        require_project_dir=False,
-        expected_project_dir=None,
-        expected_profiles_dir=None,
-        expected_target=None,
-        expected_target_path=None,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    CONFIG_RESOLUTION_TEST_CASES,
-    ids=[case.description for case in CONFIG_RESOLUTION_TEST_CASES],
+    [
+        DbtConfigResolutionTestCase(
+            description="uses project config when cli values are absent",
+            config=DbtConfig(
+                project_dir="dbt",
+                profiles_dir="profiles",
+                target="dev",
+                target_path="target/dbt",
+            ),
+            cli_project_dir=None,
+            cli_profiles_dir=None,
+            cli_target=None,
+            cli_target_path=None,
+            require_project_dir=True,
+            expected_project_dir=Path("/repo/dbt"),
+            expected_profiles_dir=Path("/repo/profiles"),
+            expected_target="dev",
+            expected_target_path=Path("/repo/target/dbt"),
+        ),
+        DbtConfigResolutionTestCase(
+            description="cli values override project config",
+            config=DbtConfig(
+                project_dir="dbt",
+                profiles_dir="profiles",
+                target="dev",
+                target_path="target/dbt",
+            ),
+            cli_project_dir="../analytics",
+            cli_profiles_dir="../profiles",
+            cli_target="prod",
+            cli_target_path="../dbt-target",
+            require_project_dir=True,
+            expected_project_dir=Path("/analytics"),
+            expected_profiles_dir=Path("/profiles"),
+            expected_target="prod",
+            expected_target_path=Path("/dbt-target"),
+        ),
+        DbtConfigResolutionTestCase(
+            description="local target overrides project target when cli target is absent",
+            config=DbtConfig(
+                project_dir="dbt",
+                target="dev",
+            ),
+            local_config=LocalDbtConfig(target="pat"),
+            cli_project_dir=None,
+            cli_profiles_dir=None,
+            cli_target=None,
+            cli_target_path=None,
+            require_project_dir=True,
+            expected_project_dir=Path("/repo/dbt"),
+            expected_profiles_dir=None,
+            expected_target="pat",
+            expected_target_path=None,
+        ),
+        DbtConfigResolutionTestCase(
+            description="normal sqb commands can omit project dir when dbt is not required",
+            config=DbtConfig(),
+            cli_project_dir=None,
+            cli_profiles_dir=None,
+            cli_target=None,
+            cli_target_path=None,
+            require_project_dir=False,
+            expected_project_dir=None,
+            expected_profiles_dir=None,
+            expected_target=None,
+            expected_target_path=None,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_config_when_resolving_then_returns_expected_values(
     test_case: DbtConfigResolutionTestCase,
@@ -133,7 +131,7 @@ def test_given_dbt_config_when_resolving_then_returns_expected_values(
             },
         )
     ],
-    ids=["merges project local and cli vars with later values winning"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_vars_sources_when_resolving_then_vars_are_merged(
     test_case: DbtVarsResolutionTestCase,
@@ -160,7 +158,7 @@ def test_given_dbt_vars_sources_when_resolving_then_vars_are_merged(
             expected_help_fragment="Add [dbt].project_dir",
         )
     ],
-    ids=["requires project dir when dbt interop command needs dbt"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_required_dbt_project_when_resolving_then_raises_value_error(
     test_case: DbtConfigErrorTestCase,

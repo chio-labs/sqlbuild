@@ -22,7 +22,7 @@ from tests.integration.src.sqlbuild.executor.run.view.helpers import build_view_
             expected_resolved_sql="SELECT id FROM test_schema.dim_customers WHERE id IS NULL",
         )
     ],
-    ids=["resolves logical ref to schema-qualified view target"],
+    ids=lambda case: case.description,
 )
 def test_given_manual_view_audit_entry_when_building_then_resolved_sql_uses_qualified_target(
     test_case: ViewAuditSqlResolutionTestCase,

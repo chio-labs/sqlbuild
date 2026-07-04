@@ -10,28 +10,26 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_types import
     DetectQueryChangeTestCase,
 )
 
-DETECT_QUERY_CHANGE_TEST_CASES: list[DetectQueryChangeTestCase] = [
-    DetectQueryChangeTestCase(
-        description="detects no change when query hashes match",
-        compiled_query_hash="abc",
-        fingerprint_query_hash="abc",
-        expected_changed=False,
-    ),
-    DetectQueryChangeTestCase(
-        description="detects change when query hashes differ",
-        compiled_query_hash="abc",
-        fingerprint_query_hash="def",
-        expected_changed=True,
-    ),
-]
-
 _STUB_TS: datetime = datetime(2026, 1, 15, 12, 0, 0)
 
 
 @pytest.mark.parametrize(
     "test_case",
-    DETECT_QUERY_CHANGE_TEST_CASES,
-    ids=[case.description for case in DETECT_QUERY_CHANGE_TEST_CASES],
+    [
+        DetectQueryChangeTestCase(
+            description="detects no change when query hashes match",
+            compiled_query_hash="abc",
+            fingerprint_query_hash="abc",
+            expected_changed=False,
+        ),
+        DetectQueryChangeTestCase(
+            description="detects change when query hashes differ",
+            compiled_query_hash="abc",
+            fingerprint_query_hash="def",
+            expected_changed=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_hashes_when_detecting_query_change_then_returns_expected(
     test_case: DetectQueryChangeTestCase,

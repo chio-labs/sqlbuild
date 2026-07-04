@@ -11,39 +11,6 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtLineageArgsTestCase,
 )
 
-LINEAGE_ARGS_ERROR_TEST_CASES: tuple[DbtLineageArgsErrorTestCase, ...] = (
-    DbtLineageArgsErrorTestCase(
-        description="rejects missing target",
-        args=("--format", "json"),
-        expected_error_fragment="requires a lineage target resource",
-        expected_code="C333",
-    ),
-    DbtLineageArgsErrorTestCase(
-        description="rejects multiple targets",
-        args=("orders", "customers"),
-        expected_error_fragment="exactly one lineage target resource",
-        expected_code="C332",
-    ),
-    DbtLineageArgsErrorTestCase(
-        description="rejects invalid format",
-        args=("orders", "--format", "yaml"),
-        expected_error_fragment="--format must be tree, json, or list",
-        expected_code="C334",
-    ),
-    DbtLineageArgsErrorTestCase(
-        description="rejects invalid direction",
-        args=("orders", "--direction", "sideways"),
-        expected_error_fragment="--direction must be upstream, downstream, or both",
-        expected_code="C335",
-    ),
-    DbtLineageArgsErrorTestCase(
-        description="rejects invalid depth",
-        args=("orders", "--depth", "nope"),
-        expected_error_fragment="--depth must be a non-negative integer or 'all'",
-        expected_code="C304",
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -70,7 +37,7 @@ LINEAGE_ARGS_ERROR_TEST_CASES: tuple[DbtLineageArgsErrorTestCase, ...] = (
             expected_dbt_args=("--project-dir", "dbt_project"),
         )
     ],
-    ids=["parses full lineage arguments"],
+    ids=lambda case: case.description,
 )
 def test_given_lineage_args_when_parsing_then_returns_expected_values(
     test_case: DbtLineageArgsTestCase,
@@ -87,8 +54,39 @@ def test_given_lineage_args_when_parsing_then_returns_expected_values(
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_ARGS_ERROR_TEST_CASES,
-    ids=[case.description for case in LINEAGE_ARGS_ERROR_TEST_CASES],
+    (
+        DbtLineageArgsErrorTestCase(
+            description="rejects missing target",
+            args=("--format", "json"),
+            expected_error_fragment="requires a lineage target resource",
+            expected_code="C333",
+        ),
+        DbtLineageArgsErrorTestCase(
+            description="rejects multiple targets",
+            args=("orders", "customers"),
+            expected_error_fragment="exactly one lineage target resource",
+            expected_code="C332",
+        ),
+        DbtLineageArgsErrorTestCase(
+            description="rejects invalid format",
+            args=("orders", "--format", "yaml"),
+            expected_error_fragment="--format must be tree, json, or list",
+            expected_code="C334",
+        ),
+        DbtLineageArgsErrorTestCase(
+            description="rejects invalid direction",
+            args=("orders", "--direction", "sideways"),
+            expected_error_fragment="--direction must be upstream, downstream, or both",
+            expected_code="C335",
+        ),
+        DbtLineageArgsErrorTestCase(
+            description="rejects invalid depth",
+            args=("orders", "--depth", "nope"),
+            expected_error_fragment="--depth must be a non-negative integer or 'all'",
+            expected_code="C304",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_lineage_args_when_parsing_then_raises_clear_error(
     test_case: DbtLineageArgsErrorTestCase,

@@ -44,35 +44,33 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     emit_connection_progress,
 )
 
-DBT_DEFER_CLONE_RESOLUTION_TEST_CASES: list[DbtDeferCloneResolutionTestCase] = [
-    DbtDeferCloneResolutionTestCase(
-        description="uses project config when cli and local are absent",
-        cli_defer_clone_from=None,
-        project_defer_clone_from=True,
-        local_defer_clone_from=None,
-        expected_defer_clone_from=True,
-    ),
-    DbtDeferCloneResolutionTestCase(
-        description="uses local override before project config",
-        cli_defer_clone_from=None,
-        project_defer_clone_from=True,
-        local_defer_clone_from=False,
-        expected_defer_clone_from=False,
-    ),
-    DbtDeferCloneResolutionTestCase(
-        description="uses cli flag before local override",
-        cli_defer_clone_from=True,
-        project_defer_clone_from=False,
-        local_defer_clone_from=False,
-        expected_defer_clone_from=True,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_DEFER_CLONE_RESOLUTION_TEST_CASES,
-    ids=[case.description for case in DBT_DEFER_CLONE_RESOLUTION_TEST_CASES],
+    [
+        DbtDeferCloneResolutionTestCase(
+            description="uses project config when cli and local are absent",
+            cli_defer_clone_from=None,
+            project_defer_clone_from=True,
+            local_defer_clone_from=None,
+            expected_defer_clone_from=True,
+        ),
+        DbtDeferCloneResolutionTestCase(
+            description="uses local override before project config",
+            cli_defer_clone_from=None,
+            project_defer_clone_from=True,
+            local_defer_clone_from=False,
+            expected_defer_clone_from=False,
+        ),
+        DbtDeferCloneResolutionTestCase(
+            description="uses cli flag before local override",
+            cli_defer_clone_from=True,
+            project_defer_clone_from=False,
+            local_defer_clone_from=False,
+            expected_defer_clone_from=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_defer_clone_sources_when_resolving_then_precedence_is_applied(
     test_case: DbtDeferCloneResolutionTestCase,
@@ -96,7 +94,7 @@ def test_given_dbt_defer_clone_sources_when_resolving_then_precedence_is_applied
             expected_completion_fragment="Resolved dbt execution selection.",
         )
     ],
-    ids=["prints dbt execution selection status for non tty streams"],
+    ids=lambda case: case.description,
 )
 def test_given_non_tty_stream_when_resolving_dbt_execution_total_then_prints_status(
     test_case: DbtExecutionSelectionStatusTestCase,
@@ -144,7 +142,7 @@ def test_given_non_tty_stream_when_resolving_dbt_execution_total_then_prints_sta
             "No SQLBuild work selected.",
         )
     ],
-    ids=["keeps one blank line between connection and plan output"],
+    ids=lambda case: case.description,
 )
 def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_one_blank_line(
     test_case: DbtExecutionSpacingTestCase,
@@ -265,7 +263,7 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
             expected_full_refresh_values=(True,),
         )
     ],
-    ids=["dbt test compiles with full refresh"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
     test_case: DbtCompileFullRefreshPipelineTestCase,
@@ -376,38 +374,35 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
     assert "dbt reuse" not in output_stream.getvalue()
 
 
-SUMMARY_FOOTER_TEST_CASES: list[DbtExecutionSummaryFooterTestCase] = [
-    DbtExecutionSummaryFooterTestCase(
-        description="counts mixed dbt node statuses with errors into footer",
-        node_statuses=("ok", "success", "warn", "error", "skipped"),
-        expected_footer=(
-            "Completed with errors.\nPASS=2  WARN=1  FAIL=1  SKIP=1  TOTAL=5  (0.00s)"
-        ),
-    ),
-    DbtExecutionSummaryFooterTestCase(
-        description="reports warnings status when a node warns without failing",
-        node_statuses=("ok", "warn"),
-        expected_footer=(
-            "Completed with warnings.\nPASS=1  WARN=1  FAIL=0  SKIP=0  TOTAL=2  (0.00s)"
-        ),
-    ),
-    DbtExecutionSummaryFooterTestCase(
-        description="reports success status when all nodes pass",
-        node_statuses=("ok", "success"),
-        expected_footer="Completed successfully.\nPASS=2  WARN=0  FAIL=0  SKIP=0  TOTAL=2  (0.00s)",
-    ),
-    DbtExecutionSummaryFooterTestCase(
-        description="returns no footer when there are no dbt node results",
-        node_statuses=(),
-        expected_footer=None,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SUMMARY_FOOTER_TEST_CASES,
-    ids=[case.description for case in SUMMARY_FOOTER_TEST_CASES],
+    [
+        DbtExecutionSummaryFooterTestCase(
+            description="counts mixed dbt node statuses with errors into footer",
+            node_statuses=("ok", "success", "warn", "error", "skipped"),
+            expected_footer=(
+                "Completed with errors.\nPASS=2  WARN=1  FAIL=1  SKIP=1  TOTAL=5  (0.00s)"
+            ),
+        ),
+        DbtExecutionSummaryFooterTestCase(
+            description="reports warnings status when a node warns without failing",
+            node_statuses=("ok", "warn"),
+            expected_footer=(
+                "Completed with warnings.\nPASS=1  WARN=1  FAIL=0  SKIP=0  TOTAL=2  (0.00s)"
+            ),
+        ),
+        DbtExecutionSummaryFooterTestCase(
+            description="reports success status when all nodes pass",
+            node_statuses=("ok", "success"),
+            expected_footer="Completed successfully.\nPASS=2  WARN=0  FAIL=0  SKIP=0  TOTAL=2  (0.00s)",
+        ),
+        DbtExecutionSummaryFooterTestCase(
+            description="returns no footer when there are no dbt node results",
+            node_statuses=(),
+            expected_footer=None,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_node_results_when_rendering_summary_footer_then_counts_statuses(
     test_case: DbtExecutionSummaryFooterTestCase,

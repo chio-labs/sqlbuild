@@ -16,29 +16,27 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-DEBUG_CLI_TEST_CASES: list[DebugCliTestCase] = [
-    DebugCliTestCase(
-        description="checks duckdb connection by default",
-        command=("debug",),
-        expected_stdout_fragment=(
-            "  connection test: [OK connected]\n  query test: [OK SELECT 1]\n"
-        ),
-    ),
-    DebugCliTestCase(
-        description="skips connection when requested",
-        command=("debug", "--no-connection"),
-        expected_stdout_fragment=(
-            "  connection test: [SKIP skipped by --no-connection]\n"
-            "  query test: [SKIP connection skipped]\n"
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DEBUG_CLI_TEST_CASES,
-    ids=[case.description for case in DEBUG_CLI_TEST_CASES],
+    [
+        DebugCliTestCase(
+            description="checks duckdb connection by default",
+            command=("debug",),
+            expected_stdout_fragment=(
+                "  connection test: [OK connected]\n  query test: [OK SELECT 1]\n"
+            ),
+        ),
+        DebugCliTestCase(
+            description="skips connection when requested",
+            command=("debug", "--no-connection"),
+            expected_stdout_fragment=(
+                "  connection test: [SKIP skipped by --no-connection]\n"
+                "  query test: [SKIP connection skipped]\n"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_debug_command_when_running_then_outputs_checks(
     tmp_path: Path,
@@ -93,7 +91,7 @@ def test_given_debug_command_when_running_then_outputs_checks(
             ],
         )
     ],
-    ids=["outputs machine readable skipped connection checks"],
+    ids=lambda case: case.description,
 )
 def test_given_debug_json_when_running_then_outputs_machine_readable_checks(
     tmp_path: Path,
@@ -135,7 +133,7 @@ def test_given_debug_json_when_running_then_outputs_machine_readable_checks(
             ),
         )
     ],
-    ids=["reports discovered providers"],
+    ids=lambda case: case.description,
 )
 def test_given_debug_command_with_providers_when_running_then_outputs_provider_summary(
     tmp_path: Path,
@@ -194,7 +192,7 @@ def test_given_debug_command_with_providers_when_running_then_outputs_provider_s
             ],
         )
     ],
-    ids=["reports discovered providers in json"],
+    ids=lambda case: case.description,
 )
 def test_given_debug_json_with_providers_when_running_then_outputs_provider_summary(
     tmp_path: Path,

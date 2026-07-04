@@ -52,7 +52,7 @@ rs: Any = pytest.importorskip("rivers")
             expected_asset_group="exports",
         )
     ],
-    ids=["rivers consumes real Python-node dag artifact"],
+    ids=lambda case: case.description,
 )
 def test_given_python_nodes_project_when_loading_rivers_assets_then_maps_real_artifact(
     test_case: RiversPythonNodesArtifactE2ETestCase,
@@ -100,7 +100,7 @@ def test_given_python_nodes_project_when_loading_rivers_assets_then_maps_real_ar
             expected_table_names=("raw_customers", "raw_orders", "fact_orders", "dim_customers"),
         )
     ],
-    ids=["rivers loads generated dag artifact and executes sqlbuild build"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_executing_sqlbuild_assets_then_rivers_run_succeeds(
     tmp_path: Path,
@@ -157,7 +157,7 @@ def test_given_waffle_shop_when_executing_sqlbuild_assets_then_rivers_run_succee
             expected_schema="dev",
         )
     ],
-    ids=["generated rivers playground materializes loader-backed waffle shop"],
+    ids=lambda case: case.description,
 )
 def test_given_generated_rivers_playground_when_materializing_assets_then_build_succeeds(
     test_case: RiversPlaygroundE2ETestCase,

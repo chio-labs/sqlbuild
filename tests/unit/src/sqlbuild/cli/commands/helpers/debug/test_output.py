@@ -75,7 +75,7 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.debug._test_types import (
             ),
         )
     ],
-    ids=["renders aligned text and json checks"],
+    ids=lambda case: case.description,
 )
 def test_given_debug_result_when_formatting_then_renders_expected_outputs(
     test_case: DebugOutputTestCase,

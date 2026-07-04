@@ -14,42 +14,40 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_microbatch_lookback_model,
 )
 
-TEST_CASES: list[MicrobatchLookbackTestCase] = [
-    MicrobatchLookbackTestCase(
-        description="delete_insert defaults to batch_size",
-        incremental_strategy=IncrementalStrategy.DELETE_INSERT,
-        batch_size="1d",
-        lookback=None,
-        expected_lookback="1d",
-    ),
-    MicrobatchLookbackTestCase(
-        description="merge defaults to batch_size",
-        incremental_strategy=IncrementalStrategy.MERGE,
-        batch_size="6h",
-        lookback=None,
-        expected_lookback="6h",
-    ),
-    MicrobatchLookbackTestCase(
-        description="append does not default to batch_size",
-        incremental_strategy=IncrementalStrategy.APPEND,
-        batch_size="1d",
-        lookback=None,
-        expected_lookback=None,
-    ),
-    MicrobatchLookbackTestCase(
-        description="explicit lookback wins over batch_size",
-        incremental_strategy=IncrementalStrategy.DELETE_INSERT,
-        batch_size="1d",
-        lookback="2d",
-        expected_lookback="2d",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        MicrobatchLookbackTestCase(
+            description="delete_insert defaults to batch_size",
+            incremental_strategy=IncrementalStrategy.DELETE_INSERT,
+            batch_size="1d",
+            lookback=None,
+            expected_lookback="1d",
+        ),
+        MicrobatchLookbackTestCase(
+            description="merge defaults to batch_size",
+            incremental_strategy=IncrementalStrategy.MERGE,
+            batch_size="6h",
+            lookback=None,
+            expected_lookback="6h",
+        ),
+        MicrobatchLookbackTestCase(
+            description="append does not default to batch_size",
+            incremental_strategy=IncrementalStrategy.APPEND,
+            batch_size="1d",
+            lookback=None,
+            expected_lookback=None,
+        ),
+        MicrobatchLookbackTestCase(
+            description="explicit lookback wins over batch_size",
+            incremental_strategy=IncrementalStrategy.DELETE_INSERT,
+            batch_size="1d",
+            lookback="2d",
+            expected_lookback="2d",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_microbatch_model_when_resolving_lookback_then_returns_expected_value(
     test_case: MicrobatchLookbackTestCase,

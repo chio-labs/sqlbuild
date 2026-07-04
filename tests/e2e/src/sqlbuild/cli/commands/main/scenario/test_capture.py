@@ -18,74 +18,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
-SCENARIO_CAPTURE_SAFETY_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
-    ScenarioCliE2ETestCase(
-        description="capture fails before writing snapshot when row limit is exceeded",
-        command=(
-            "--no-color",
-            "scenario",
-            "capture",
-            "order_totals_pass",
-            "--max-snapshot-rows",
-            "1",
-        ),
-        expected_exit_code=1,
-        expected_stdout_fragments=(
-            "Review captured scenario snapshots before committing",
-            "error[X512]:",
-            "exceeding the per-relation capture limit of 1 rows",
-            "PASS=0  FAIL=1  TOTAL=1",
-        ),
-    ),
-    ScenarioCliE2ETestCase(
-        description="capture force bypasses row limit",
-        command=(
-            "--no-color",
-            "scenario",
-            "capture",
-            "order_totals_pass",
-            "--max-snapshot-rows",
-            "1",
-            "--force",
-        ),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "Review captured scenario snapshots before committing",
-            "Size limits are bypassed.",
-            "order_totals_pass",
-            "1 relation, 2 rows",
-            "PASS=1  FAIL=0  TOTAL=1",
-        ),
-    ),
-    ScenarioCliE2ETestCase(
-        description="capture uses project snapshot row limit",
-        command=("--no-color", "scenario", "capture", "order_totals_pass"),
-        expected_exit_code=1,
-        expected_stdout_fragments=(
-            "error[X512]:",
-            "exceeding the per-relation capture limit of 1 rows",
-            "PASS=0  FAIL=1  TOTAL=1",
-        ),
-    ),
-    ScenarioCliE2ETestCase(
-        description="capture CLI row limit overrides project snapshot row limit",
-        command=(
-            "--no-color",
-            "scenario",
-            "capture",
-            "order_totals_pass",
-            "--max-snapshot-rows",
-            "2",
-        ),
-        expected_exit_code=0,
-        expected_stdout_fragments=(
-            "order_totals_pass",
-            "1 relation, 2 rows",
-            "PASS=1  FAIL=0  TOTAL=1",
-        ),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -106,7 +38,7 @@ SCENARIO_CAPTURE_SAFETY_TEST_CASES: tuple[ScenarioCliE2ETestCase, ...] = (
             ),
         ),
     ],
-    ids=["capture rejects disabled sql_analysis"],
+    ids=lambda case: case.description,
 )
 def test_given_capture_command_when_sql_validation_disabled_then_fails_clearly(
     test_case: ScenarioCliE2ETestCase,
@@ -161,7 +93,7 @@ def test_given_capture_command_when_sql_validation_disabled_then_fails_clearly(
             expected_retained_prefix_count=0,
         ),
     ],
-    ids=["captures multiple selected scenarios by name and path"],
+    ids=lambda case: case.description,
 )
 def test_given_selected_scenarios_when_running_capture_then_writes_snapshots(
     test_case: ScenarioCliE2ETestCase,
@@ -220,7 +152,7 @@ def test_given_selected_scenarios_when_running_capture_then_writes_snapshots(
             expected_retained_prefix_count=1,
         ),
     ],
-    ids=["captures scenario folder selector and retains materialized input"],
+    ids=lambda case: case.description,
 )
 def test_given_folder_selector_when_running_capture_with_retain_then_keeps_input_artifacts(
     test_case: ScenarioCliE2ETestCase,
@@ -271,7 +203,7 @@ def test_given_folder_selector_when_running_capture_with_retain_then_keeps_input
             expected_retained_prefix_count=0,
         ),
     ],
-    ids=["capture applies local type overrides from project config"],
+    ids=lambda case: case.description,
 )
 def test_given_local_type_override_when_running_capture_then_manifest_uses_override(
     test_case: ScenarioCliE2ETestCase,
@@ -328,8 +260,74 @@ def test_given_local_type_override_when_running_capture_then_manifest_uses_overr
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_CAPTURE_SAFETY_TEST_CASES,
-    ids=[case.description for case in SCENARIO_CAPTURE_SAFETY_TEST_CASES],
+    (
+        ScenarioCliE2ETestCase(
+            description="capture fails before writing snapshot when row limit is exceeded",
+            command=(
+                "--no-color",
+                "scenario",
+                "capture",
+                "order_totals_pass",
+                "--max-snapshot-rows",
+                "1",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "Review captured scenario snapshots before committing",
+                "error[X512]:",
+                "exceeding the per-relation capture limit of 1 rows",
+                "PASS=0  FAIL=1  TOTAL=1",
+            ),
+        ),
+        ScenarioCliE2ETestCase(
+            description="capture force bypasses row limit",
+            command=(
+                "--no-color",
+                "scenario",
+                "capture",
+                "order_totals_pass",
+                "--max-snapshot-rows",
+                "1",
+                "--force",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Review captured scenario snapshots before committing",
+                "Size limits are bypassed.",
+                "order_totals_pass",
+                "1 relation, 2 rows",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+        ),
+        ScenarioCliE2ETestCase(
+            description="capture uses project snapshot row limit",
+            command=("--no-color", "scenario", "capture", "order_totals_pass"),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "error[X512]:",
+                "exceeding the per-relation capture limit of 1 rows",
+                "PASS=0  FAIL=1  TOTAL=1",
+            ),
+        ),
+        ScenarioCliE2ETestCase(
+            description="capture CLI row limit overrides project snapshot row limit",
+            command=(
+                "--no-color",
+                "scenario",
+                "capture",
+                "order_totals_pass",
+                "--max-snapshot-rows",
+                "2",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "order_totals_pass",
+                "1 relation, 2 rows",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_capture_safety_options_when_running_capture_then_enforces_limits(
     test_case: ScenarioCliE2ETestCase,

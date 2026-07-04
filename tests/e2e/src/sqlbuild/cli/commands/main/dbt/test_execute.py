@@ -64,7 +64,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             ),
         )
     ],
-    ids=["dbt-only build records direct source watermark"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_model_reads_source_when_build_runs_then_records_node_source_watermark(
     test_case: DbtNodeSourceWatermarkE2ETestCase,
@@ -100,44 +100,39 @@ def test_given_dbt_model_reads_source_when_build_runs_then_records_node_source_w
     assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
 
 
-DBT_NODE_SOURCE_WATERMARK_WARNING_TEST_CASES: tuple[
-    DbtNodeSourceWatermarkWarningE2ETestCase, ...
-] = (
-    DbtNodeSourceWatermarkWarningE2ETestCase(
-        description="dbt plan warns when selected model depends on stale frontier table",
-        setup_command=("--no-color", "dbt", "build", "--select", "b"),
-        command=("--no-color", "dbt", "plan", "--select", "a"),
-        expected_stdout_fragments=(
-            "Warnings (1)",
-            "Stale inputs detected",
-            "Affected selected models:",
-            "model.analytics.a",
-            "Stale frontier tables:",
-            "model.analytics.b",
-            "Changed sources:",
-            "source.analytics.raw.raw_orders",
-        ),
-    ),
-    DbtNodeSourceWatermarkWarningE2ETestCase(
-        description="dbt plan does not warn when selected model reads advanced source directly",
-        setup_command=("--no-color", "dbt", "build", "--select", "b"),
-        command=("--no-color", "dbt", "plan", "--select", "b"),
-        expected_stdout_fragments=(
-            "Plan ready",
-            "model.analytics.b",
-        ),
-        unexpected_stdout_fragments=(
-            "Stale inputs detected",
-            "Stale frontier tables:",
-        ),
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DBT_NODE_SOURCE_WATERMARK_WARNING_TEST_CASES,
-    ids=[case.description for case in DBT_NODE_SOURCE_WATERMARK_WARNING_TEST_CASES],
+    (
+        DbtNodeSourceWatermarkWarningE2ETestCase(
+            description="dbt plan warns when selected model depends on stale frontier table",
+            setup_command=("--no-color", "dbt", "build", "--select", "b"),
+            command=("--no-color", "dbt", "plan", "--select", "a"),
+            expected_stdout_fragments=(
+                "Warnings (1)",
+                "Stale inputs detected",
+                "Affected selected models:",
+                "model.analytics.a",
+                "Stale frontier tables:",
+                "model.analytics.b",
+                "Changed sources:",
+                "source.analytics.raw.raw_orders",
+            ),
+        ),
+        DbtNodeSourceWatermarkWarningE2ETestCase(
+            description="dbt plan does not warn when selected model reads advanced source directly",
+            setup_command=("--no-color", "dbt", "build", "--select", "b"),
+            command=("--no-color", "dbt", "plan", "--select", "b"),
+            expected_stdout_fragments=(
+                "Plan ready",
+                "model.analytics.b",
+            ),
+            unexpected_stdout_fragments=(
+                "Stale inputs detected",
+                "Stale frontier tables:",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_dbt_watermark_frontier_when_planning_then_renders_expected_warning(
     test_case: DbtNodeSourceWatermarkWarningE2ETestCase,
@@ -188,7 +183,7 @@ def test_given_dbt_watermark_frontier_when_planning_then_renders_expected_warnin
             expected_data_version="2026-06-29T15:45:00",
         )
     ],
-    ids=["dbt downstream inherits stale upstream watermark"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_upstream_table_stale_when_downstream_runs_then_records_inherited_watermark(
     test_case: DbtInheritedNodeSourceWatermarkE2ETestCase,
@@ -249,7 +244,7 @@ def test_given_dbt_upstream_table_stale_when_downstream_runs_then_records_inheri
             unexpected_stdout_fragments=("Stale frontier tables:",),
         )
     ],
-    ids=["dbt plan reports unknown missing frontier watermark"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_frontier_table_without_watermark_when_planning_then_reports_unknown(
     test_case: DbtNodeSourceWatermarkWarningE2ETestCase,
@@ -292,7 +287,7 @@ def test_given_dbt_frontier_table_without_watermark_when_planning_then_reports_u
             ),
         )
     ],
-    ids=["SQLBuild model inherits dbt source watermark"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_model_depends_on_dbt_model_when_build_runs_then_inherits_watermark(
     test_case: DbtSqlbuildNodeSourceWatermarkE2ETestCase,
@@ -339,7 +334,7 @@ def test_given_sqlbuild_model_depends_on_dbt_model_when_build_runs_then_inherits
             expected_watermark_kind="direct",
         )
     ],
-    ids=["dbt defer-clone records cloned production source watermark"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_boundary_defer_cloned_when_build_runs_then_records_production_watermark(
     tmp_path: Path,
@@ -385,366 +380,273 @@ def test_given_dbt_boundary_defer_cloned_when_build_runs_then_records_production
     assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
 
 
-EXECUTION_TEST_CASES: list[DbtExecutionCliTestCase] = [
-    DbtExecutionCliTestCase(
-        description="run executes mixed dbt and sqlbuild work",
-        command=("dbt", "run", "--select", "+fact_orders+"),
-        expected_row_counts=(
-            ("stg_orders", 1),
-            ("fact_orders", 1),
-            ("downstream_orders", 1),
-            ("event_time_orders", 1),
-            ("mart_orders", 1),
-        ),
-        expected_stdout_fragments=(
-            "Plan ready",
-            "dbt execution",
-            "SQLBuild execution",
-            "Completed successfully.",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="mixed run materializes downstream orders row",
-                sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
-                expected_rows=((1,),),
-            ),
-            DbtExecutionQueryAssertion(
-                description="mixed run materializes mart orders row",
-                sql="SELECT order_id FROM main.mart_orders ORDER BY order_id",
-                expected_rows=((1,),),
-            ),
-        ),
-    ),
-    DbtExecutionCliTestCase(
-        description="run executes dbt only work",
-        command=("dbt", "run", "--select", "dbt_only"),
-        expected_row_counts=(("dbt_only", 1),),
-        unexpected_relations=("local_only",),
-    ),
-    DbtExecutionCliTestCase(
-        description="run executes sqlbuild only work",
-        command=("dbt", "run", "--select", "local_only"),
-        expected_row_counts=(("local_only", 1),),
-        unexpected_relations=("dbt_only",),
-        expected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="sqlbuild only run materializes local row",
-                sql="SELECT order_id FROM main.local_only",
-                expected_rows=((10,),),
-            ),
-        ),
-    ),
-    DbtExecutionCliTestCase(
-        description="build executes mixed dbt and sqlbuild work",
-        command=("dbt", "build", "--select", "+fact_orders+"),
-        expected_row_counts=(
-            ("stg_orders", 1),
-            ("fact_orders", 1),
-            ("downstream_orders", 1),
-            ("event_time_orders", 1),
-            ("mart_orders", 1),
-        ),
-        expected_stdout_fragments=(
-            "Plan ready",
-            "dbt execution",
-            "SQLBuild execution",
-            "Completed successfully.",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="mixed build materializes downstream orders row",
-                sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
-                expected_rows=((1,),),
-            ),
-            DbtExecutionQueryAssertion(
-                description="mixed build materializes mart orders row",
-                sql="SELECT order_id FROM main.mart_orders ORDER BY order_id",
-                expected_rows=((1,),),
-            ),
-        ),
-        expected_planned_sqlbuild_models=(
-            "downstream_orders",
-            "+event_time_orders",
-            "mart_orders",
-        ),
-    ),
-    DbtExecutionCliTestCase(
-        description="build executes explicit upstream mixed tag selector",
-        command=("dbt", "build", "--select", "+tag:nightly"),
-        expected_row_counts=(
-            ("stg_orders", 1),
-            ("fact_orders", 1),
-            ("downstream_orders", 1),
-        ),
-        unexpected_relations=("mart_orders",),
-        expected_stdout_fragments=(
-            "dbt execution",
-            "SQLBuild execution",
-            "Completed successfully.",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="direct mixed tag materializes fact orders upstream row",
-                sql="SELECT order_id FROM main.fact_orders",
-                expected_rows=((1,),),
-            ),
-            DbtExecutionQueryAssertion(
-                description="direct mixed tag materializes downstream row",
-                sql="SELECT order_id FROM main.downstream_orders",
-                expected_rows=((1,),),
-            ),
-        ),
-        expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
-    ),
-    DbtExecutionCliTestCase(
-        description="build executes dbt only work",
-        command=("dbt", "build", "--select", "dbt_only"),
-        expected_row_counts=(("dbt_only", 1),),
-        unexpected_relations=("local_only",),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="dbt only build materializes dbt row",
-                sql="SELECT order_id FROM main.dbt_only",
-                expected_rows=((2,),),
-            ),
-        ),
-    ),
-    DbtExecutionCliTestCase(
-        description="build executes sqlbuild only work",
-        command=("dbt", "build", "--select", "local_only"),
-        expected_row_counts=(("local_only", 1),),
-        unexpected_relations=("dbt_only",),
-        expected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="sqlbuild only build materializes local row",
-                sql="SELECT order_id FROM main.local_only",
-                expected_rows=((10,),),
-            ),
-        ),
-        rerun_count=2,
-    ),
-    DbtExecutionCliTestCase(
-        description="run executes event time incremental sqlbuild work",
-        command=(
-            "dbt",
-            "run",
-            "--select",
-            "+event_time_orders",
-            "--event-time-start",
-            "2025-12-31",
-            "--event-time-end",
-            "2026-01-02",
-        ),
-        expected_row_counts=(
-            ("stg_orders", 1),
-            ("fact_orders", 1),
-            ("event_time_orders", 1),
-        ),
-        expected_stdout_fragments=(
-            "event_time_orders",
-            "--event-time-start 2025-12-31",
-            "--event-time-end 2026-01-02",
-            "SQLBuild execution",
-            "Completed successfully.",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="event time row preserves timestamp value",
-                sql="SELECT order_id, CAST(ordered_at AS VARCHAR) FROM main.event_time_orders",
-                expected_rows=((1, "2026-01-01 00:00:00"),),
-            ),
-        ),
-        expected_planned_sqlbuild_models=("event_time_orders",),
-    ),
-    DbtExecutionCliTestCase(
-        description="run executes full refresh sqlbuild work",
-        command=("dbt", "run", "--full-refresh", "--select", "+event_time_orders"),
-        expected_row_counts=(
-            ("stg_orders", 1),
-            ("fact_orders", 1),
-            ("event_time_orders", 1),
-        ),
-        expected_stdout_fragments=(
-            "--full-refresh",
-            "event_time_orders",
-            "SQLBuild execution",
-            "Completed successfully.",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="full refresh materializes event time row",
-                sql="SELECT order_id, CAST(ordered_at AS VARCHAR) FROM main.event_time_orders",
-                expected_rows=((1, "2026-01-01 00:00:00"),),
-            ),
-        ),
-    ),
-    DbtExecutionCliTestCase(
-        description="run executes explicit upstream sqlbuild model with package qualified dbt ref",
-        command=("dbt", "run", "--select", "+downstream_orders"),
-        expected_row_counts=(
-            ("fact_orders", 1),
-            ("downstream_orders", 1),
-        ),
-        unexpected_relations=("mart_orders",),
-        expected_stdout_fragments=(
-            "dbt execution",
-            "SQLBuild execution",
-            "Completed successfully.",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="package qualified dbt ref materializes downstream row",
-                sql="SELECT order_id FROM main.downstream_orders",
-                expected_rows=((1,),),
-            ),
-        ),
-        expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
-    ),
-    DbtExecutionCliTestCase(
-        description="build executes path translation scope",
-        command=(
-            "dbt",
-            "build",
-            "--select",
-            "+path:models/marts",
-            "--exclude",
-            "deprecated_orders",
-            "mart_orders",
-            "event_time_orders",
-        ),
-        expected_row_counts=(
-            ("fact_orders", 1),
-            ("downstream_orders", 1),
-        ),
-        unexpected_relations=("deprecated_orders", "mart_orders", "event_time_orders"),
-        expected_stdout_fragments=(
-            "downstream_orders",
-            "downstream_orders",
-            "Completed successfully.",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="path translation materializes downstream row",
-                sql="SELECT order_id FROM main.downstream_orders",
-                expected_rows=((1,),),
-            ),
-        ),
-        expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
-    ),
-    DbtExecutionCliTestCase(
-        description="build executes exclude scope correctly",
-        command=("dbt", "build", "--select", "tag:sqb_only", "--exclude", "tag:deprecated"),
-        expected_row_counts=(("local_only", 1),),
-        unexpected_relations=("deprecated_orders",),
-        expected_stdout_fragments=("local_only", "Completed successfully."),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="exclude leaves local only row",
-                sql="SELECT order_id FROM main.local_only",
-                expected_rows=((10,),),
-            ),
-        ),
-        expected_planned_sqlbuild_models=("local_only",),
-    ),
-]
-
-EXECUTION_FAILURE_TEST_CASES: list[DbtExecutionFailureCliTestCase] = [
-    DbtExecutionFailureCliTestCase(
-        description="run skips dependent sqlbuild work when dbt model fails",
-        command=("dbt", "run", "--select", "fact_orders+"),
-        expected_stdout_fragments=(
-            "dbt execution",
-            "fact_orders",
-            "skip: external_upstream_failed",
-        ),
-        expected_absent_stdout_fragments=(),
-        expected_returncode=1,
-        expected_absent_relations=("downstream_orders", "mart_orders"),
-        setup=break_dbt_interop_fact_orders_model,
-    ),
-    DbtExecutionFailureCliTestCase(
-        description="build skips dependent sqlbuild work when dbt model fails",
-        command=("dbt", "build", "--select", "fact_orders+"),
-        expected_stdout_fragments=(
-            "dbt execution",
-            "fact_orders",
-            "skip: external_upstream_failed",
-        ),
-        expected_absent_stdout_fragments=(),
-        expected_returncode=1,
-        expected_absent_relations=("downstream_orders", "mart_orders"),
-        setup=break_dbt_interop_fact_orders_model,
-    ),
-]
-
-PLAN_CONSISTENCY_TEST_CASES: list[DbtExecutionCliTestCase] = [
-    DbtExecutionCliTestCase(
-        description="plan consistency for mixed build case",
-        command=("dbt", "build", "--select", "+fact_orders+"),
-        expected_row_counts=(),
-        expected_planned_sqlbuild_models=(
-            "downstream_orders",
-            "event_time_orders",
-            "mart_orders",
-        ),
-    ),
-    DbtExecutionCliTestCase(
-        description="plan consistency for explicit upstream mixed tag case",
-        command=("dbt", "build", "--select", "+tag:nightly"),
-        expected_row_counts=(),
-        expected_planned_sqlbuild_models=("downstream_orders",),
-    ),
-    DbtExecutionCliTestCase(
-        description="plan consistency for event time case",
-        command=(
-            "dbt",
-            "run",
-            "--select",
-            "event_time_orders",
-            "--event-time-start",
-            "2025-12-31",
-            "--event-time-end",
-            "2026-01-02",
-        ),
-        expected_row_counts=(),
-        expected_planned_sqlbuild_models=("event_time_orders",),
-    ),
-    DbtExecutionCliTestCase(
-        description="plan consistency for explicit upstream package qualified ref case",
-        command=("dbt", "run", "--select", "+downstream_orders"),
-        expected_row_counts=(),
-        expected_planned_sqlbuild_models=("downstream_orders",),
-    ),
-    DbtExecutionCliTestCase(
-        description="plan consistency for path translation case",
-        command=(
-            "dbt",
-            "build",
-            "--select",
-            "+path:models/marts",
-            "--exclude",
-            "deprecated_orders",
-            "mart_orders",
-            "event_time_orders",
-        ),
-        expected_row_counts=(),
-        expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
-    ),
-    DbtExecutionCliTestCase(
-        description="plan consistency for exclude case",
-        command=("dbt", "build", "--select", "tag:sqb_only", "--exclude", "tag:deprecated"),
-        expected_row_counts=(),
-        expected_planned_sqlbuild_models=("local_only",),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    EXECUTION_TEST_CASES,
-    ids=[case.description for case in EXECUTION_TEST_CASES],
+    [
+        DbtExecutionCliTestCase(
+            description="run executes mixed dbt and sqlbuild work",
+            command=("dbt", "run", "--select", "+fact_orders+"),
+            expected_row_counts=(
+                ("stg_orders", 1),
+                ("fact_orders", 1),
+                ("downstream_orders", 1),
+                ("event_time_orders", 1),
+                ("mart_orders", 1),
+            ),
+            expected_stdout_fragments=(
+                "Plan ready",
+                "dbt execution",
+                "SQLBuild execution",
+                "Completed successfully.",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="mixed run materializes downstream orders row",
+                    sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
+                    expected_rows=((1,),),
+                ),
+                DbtExecutionQueryAssertion(
+                    description="mixed run materializes mart orders row",
+                    sql="SELECT order_id FROM main.mart_orders ORDER BY order_id",
+                    expected_rows=((1,),),
+                ),
+            ),
+        ),
+        DbtExecutionCliTestCase(
+            description="run executes dbt only work",
+            command=("dbt", "run", "--select", "dbt_only"),
+            expected_row_counts=(("dbt_only", 1),),
+            unexpected_relations=("local_only",),
+        ),
+        DbtExecutionCliTestCase(
+            description="run executes sqlbuild only work",
+            command=("dbt", "run", "--select", "local_only"),
+            expected_row_counts=(("local_only", 1),),
+            unexpected_relations=("dbt_only",),
+            expected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="sqlbuild only run materializes local row",
+                    sql="SELECT order_id FROM main.local_only",
+                    expected_rows=((10,),),
+                ),
+            ),
+        ),
+        DbtExecutionCliTestCase(
+            description="build executes mixed dbt and sqlbuild work",
+            command=("dbt", "build", "--select", "+fact_orders+"),
+            expected_row_counts=(
+                ("stg_orders", 1),
+                ("fact_orders", 1),
+                ("downstream_orders", 1),
+                ("event_time_orders", 1),
+                ("mart_orders", 1),
+            ),
+            expected_stdout_fragments=(
+                "Plan ready",
+                "dbt execution",
+                "SQLBuild execution",
+                "Completed successfully.",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="mixed build materializes downstream orders row",
+                    sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
+                    expected_rows=((1,),),
+                ),
+                DbtExecutionQueryAssertion(
+                    description="mixed build materializes mart orders row",
+                    sql="SELECT order_id FROM main.mart_orders ORDER BY order_id",
+                    expected_rows=((1,),),
+                ),
+            ),
+            expected_planned_sqlbuild_models=(
+                "downstream_orders",
+                "+event_time_orders",
+                "mart_orders",
+            ),
+        ),
+        DbtExecutionCliTestCase(
+            description="build executes explicit upstream mixed tag selector",
+            command=("dbt", "build", "--select", "+tag:nightly"),
+            expected_row_counts=(
+                ("stg_orders", 1),
+                ("fact_orders", 1),
+                ("downstream_orders", 1),
+            ),
+            unexpected_relations=("mart_orders",),
+            expected_stdout_fragments=(
+                "dbt execution",
+                "SQLBuild execution",
+                "Completed successfully.",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="direct mixed tag materializes fact orders upstream row",
+                    sql="SELECT order_id FROM main.fact_orders",
+                    expected_rows=((1,),),
+                ),
+                DbtExecutionQueryAssertion(
+                    description="direct mixed tag materializes downstream row",
+                    sql="SELECT order_id FROM main.downstream_orders",
+                    expected_rows=((1,),),
+                ),
+            ),
+            expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
+        ),
+        DbtExecutionCliTestCase(
+            description="build executes dbt only work",
+            command=("dbt", "build", "--select", "dbt_only"),
+            expected_row_counts=(("dbt_only", 1),),
+            unexpected_relations=("local_only",),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="dbt only build materializes dbt row",
+                    sql="SELECT order_id FROM main.dbt_only",
+                    expected_rows=((2,),),
+                ),
+            ),
+        ),
+        DbtExecutionCliTestCase(
+            description="build executes sqlbuild only work",
+            command=("dbt", "build", "--select", "local_only"),
+            expected_row_counts=(("local_only", 1),),
+            unexpected_relations=("dbt_only",),
+            expected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="sqlbuild only build materializes local row",
+                    sql="SELECT order_id FROM main.local_only",
+                    expected_rows=((10,),),
+                ),
+            ),
+            rerun_count=2,
+        ),
+        DbtExecutionCliTestCase(
+            description="run executes event time incremental sqlbuild work",
+            command=(
+                "dbt",
+                "run",
+                "--select",
+                "+event_time_orders",
+                "--event-time-start",
+                "2025-12-31",
+                "--event-time-end",
+                "2026-01-02",
+            ),
+            expected_row_counts=(
+                ("stg_orders", 1),
+                ("fact_orders", 1),
+                ("event_time_orders", 1),
+            ),
+            expected_stdout_fragments=(
+                "event_time_orders",
+                "--event-time-start 2025-12-31",
+                "--event-time-end 2026-01-02",
+                "SQLBuild execution",
+                "Completed successfully.",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="event time row preserves timestamp value",
+                    sql="SELECT order_id, CAST(ordered_at AS VARCHAR) FROM main.event_time_orders",
+                    expected_rows=((1, "2026-01-01 00:00:00"),),
+                ),
+            ),
+            expected_planned_sqlbuild_models=("event_time_orders",),
+        ),
+        DbtExecutionCliTestCase(
+            description="run executes full refresh sqlbuild work",
+            command=("dbt", "run", "--full-refresh", "--select", "+event_time_orders"),
+            expected_row_counts=(
+                ("stg_orders", 1),
+                ("fact_orders", 1),
+                ("event_time_orders", 1),
+            ),
+            expected_stdout_fragments=(
+                "--full-refresh",
+                "event_time_orders",
+                "SQLBuild execution",
+                "Completed successfully.",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="full refresh materializes event time row",
+                    sql="SELECT order_id, CAST(ordered_at AS VARCHAR) FROM main.event_time_orders",
+                    expected_rows=((1, "2026-01-01 00:00:00"),),
+                ),
+            ),
+        ),
+        DbtExecutionCliTestCase(
+            description="run executes explicit upstream sqlbuild model with package qualified dbt ref",
+            command=("dbt", "run", "--select", "+downstream_orders"),
+            expected_row_counts=(
+                ("fact_orders", 1),
+                ("downstream_orders", 1),
+            ),
+            unexpected_relations=("mart_orders",),
+            expected_stdout_fragments=(
+                "dbt execution",
+                "SQLBuild execution",
+                "Completed successfully.",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="package qualified dbt ref materializes downstream row",
+                    sql="SELECT order_id FROM main.downstream_orders",
+                    expected_rows=((1,),),
+                ),
+            ),
+            expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
+        ),
+        DbtExecutionCliTestCase(
+            description="build executes path translation scope",
+            command=(
+                "dbt",
+                "build",
+                "--select",
+                "+path:models/marts",
+                "--exclude",
+                "deprecated_orders",
+                "mart_orders",
+                "event_time_orders",
+            ),
+            expected_row_counts=(
+                ("fact_orders", 1),
+                ("downstream_orders", 1),
+            ),
+            unexpected_relations=("deprecated_orders", "mart_orders", "event_time_orders"),
+            expected_stdout_fragments=(
+                "downstream_orders",
+                "downstream_orders",
+                "Completed successfully.",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="path translation materializes downstream row",
+                    sql="SELECT order_id FROM main.downstream_orders",
+                    expected_rows=((1,),),
+                ),
+            ),
+            expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
+        ),
+        DbtExecutionCliTestCase(
+            description="build executes exclude scope correctly",
+            command=("dbt", "build", "--select", "tag:sqb_only", "--exclude", "tag:deprecated"),
+            expected_row_counts=(("local_only", 1),),
+            unexpected_relations=("deprecated_orders",),
+            expected_stdout_fragments=("local_only", "Completed successfully."),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="exclude leaves local only row",
+                    sql="SELECT order_id FROM main.local_only",
+                    expected_rows=((10,),),
+                ),
+            ),
+            expected_planned_sqlbuild_models=("local_only",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_interop_project_when_running_execution_command_then_outputs_expected_relations(
     test_case: DbtExecutionCliTestCase,
@@ -799,7 +701,7 @@ def test_given_dbt_interop_project_when_running_execution_command_then_outputs_e
             expected_absent_relations=("fact_orders", "downstream_orders"),
         )
     ],
-    ids=["plain SQLBuild selection blocks when dbt upstream relation is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_plain_sqlbuild_selection_with_missing_dbt_ref_when_running_then_blocks_before_build(
     tmp_path: Path,
@@ -836,7 +738,7 @@ def test_given_plain_sqlbuild_selection_with_missing_dbt_ref_when_running_then_b
             expected_rows=((1,),),
         )
     ],
-    ids=["plain SQLBuild selection builds when dbt upstream relation already exists"],
+    ids=lambda case: case.description,
 )
 def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_builds_downstream(
     tmp_path: Path,
@@ -870,8 +772,67 @@ def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_
 
 @pytest.mark.parametrize(
     "test_case",
-    PLAN_CONSISTENCY_TEST_CASES,
-    ids=[case.description for case in PLAN_CONSISTENCY_TEST_CASES],
+    [
+        DbtExecutionCliTestCase(
+            description="plan consistency for mixed build case",
+            command=("dbt", "build", "--select", "+fact_orders+"),
+            expected_row_counts=(),
+            expected_planned_sqlbuild_models=(
+                "downstream_orders",
+                "event_time_orders",
+                "mart_orders",
+            ),
+        ),
+        DbtExecutionCliTestCase(
+            description="plan consistency for explicit upstream mixed tag case",
+            command=("dbt", "build", "--select", "+tag:nightly"),
+            expected_row_counts=(),
+            expected_planned_sqlbuild_models=("downstream_orders",),
+        ),
+        DbtExecutionCliTestCase(
+            description="plan consistency for event time case",
+            command=(
+                "dbt",
+                "run",
+                "--select",
+                "event_time_orders",
+                "--event-time-start",
+                "2025-12-31",
+                "--event-time-end",
+                "2026-01-02",
+            ),
+            expected_row_counts=(),
+            expected_planned_sqlbuild_models=("event_time_orders",),
+        ),
+        DbtExecutionCliTestCase(
+            description="plan consistency for explicit upstream package qualified ref case",
+            command=("dbt", "run", "--select", "+downstream_orders"),
+            expected_row_counts=(),
+            expected_planned_sqlbuild_models=("downstream_orders",),
+        ),
+        DbtExecutionCliTestCase(
+            description="plan consistency for path translation case",
+            command=(
+                "dbt",
+                "build",
+                "--select",
+                "+path:models/marts",
+                "--exclude",
+                "deprecated_orders",
+                "mart_orders",
+                "event_time_orders",
+            ),
+            expected_row_counts=(),
+            expected_planned_sqlbuild_models=("downstream_orders", "local_only"),
+        ),
+        DbtExecutionCliTestCase(
+            description="plan consistency for exclude case",
+            command=("dbt", "build", "--select", "tag:sqb_only", "--exclude", "tag:deprecated"),
+            expected_row_counts=(),
+            expected_planned_sqlbuild_models=("local_only",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_interop_execution_case_when_planning_then_selected_models_match_expectation(
     test_case: DbtExecutionCliTestCase,
@@ -899,8 +860,35 @@ def test_given_dbt_interop_execution_case_when_planning_then_selected_models_mat
 
 @pytest.mark.parametrize(
     "test_case",
-    EXECUTION_FAILURE_TEST_CASES,
-    ids=[case.description for case in EXECUTION_FAILURE_TEST_CASES],
+    [
+        DbtExecutionFailureCliTestCase(
+            description="run skips dependent sqlbuild work when dbt model fails",
+            command=("dbt", "run", "--select", "fact_orders+"),
+            expected_stdout_fragments=(
+                "dbt execution",
+                "fact_orders",
+                "skip: external_upstream_failed",
+            ),
+            expected_absent_stdout_fragments=(),
+            expected_returncode=1,
+            expected_absent_relations=("downstream_orders", "mart_orders"),
+            setup=break_dbt_interop_fact_orders_model,
+        ),
+        DbtExecutionFailureCliTestCase(
+            description="build skips dependent sqlbuild work when dbt model fails",
+            command=("dbt", "build", "--select", "fact_orders+"),
+            expected_stdout_fragments=(
+                "dbt execution",
+                "fact_orders",
+                "skip: external_upstream_failed",
+            ),
+            expected_absent_stdout_fragments=(),
+            expected_returncode=1,
+            expected_absent_relations=("downstream_orders", "mart_orders"),
+            setup=break_dbt_interop_fact_orders_model,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is_skipped(
     test_case: DbtExecutionFailureCliTestCase,
@@ -958,7 +946,7 @@ def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is
             ),
         )
     ],
-    ids=["dbt build defer-clones dbt boundary before sqlbuild downstream build"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_downstream_when_dbt_building_with_defer_clone_then_clones_dbt_boundary(
     tmp_path: Path,
@@ -1034,7 +1022,7 @@ def test_given_sqlbuild_downstream_when_dbt_building_with_defer_clone_then_clone
             rows_sql="SELECT order_id, bias_amount_cents FROM main.dbt_bias ORDER BY order_id",
         )
     ],
-    ids=["dbt build defer-clones dbt boundary for pure dbt selection"],
+    ids=lambda case: case.description,
 )
 def test_given_pure_dbt_selection_when_building_with_defer_clone_then_clones_dbt_boundary(
     tmp_path: Path,

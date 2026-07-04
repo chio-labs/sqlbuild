@@ -42,7 +42,7 @@ from tests.unit.src.sqlbuild.executor.shared.helpers.helpers import (
             expected_skip_reasons=(None, None, None),
         )
     ],
-    ids=["runs mixed nodes in topological order"],
+    ids=lambda case: case.description,
 )
 def test_given_mixed_lifecycle_nodes_when_running_scheduler_then_runs_in_topological_order(
     test_case: LifecycleSchedulerTestCase,
@@ -85,7 +85,7 @@ def test_given_mixed_lifecycle_nodes_when_running_scheduler_then_runs_in_topolog
             expected_skip_reasons=(None, None, "Upstream node did not succeed: summarize_pages"),
         )
     ],
-    ids=["skips downstream after failed upstream"],
+    ids=lambda case: case.description,
 )
 def test_given_failed_lifecycle_node_when_running_scheduler_then_skips_downstream(
     test_case: LifecycleSchedulerTestCase,
@@ -129,7 +129,7 @@ def test_given_failed_lifecycle_node_when_running_scheduler_then_skips_downstrea
             expected_downstream_skip_mode=None,
         )
     ],
-    ids=["runs downstream with soft-skipped upstream and successful sibling"],
+    ids=lambda case: case.description,
 )
 def test_given_soft_skip_and_successful_sibling_when_running_scheduler_then_runs_downstream(
     test_case: LifecycleSchedulerFanInTestCase,
@@ -169,7 +169,7 @@ def test_given_soft_skip_and_successful_sibling_when_running_scheduler_then_runs
             expected_downstream_skip_mode=SkipMode.SOFT,
         )
     ],
-    ids=["soft-skips downstream when all upstreams soft-skipped"],
+    ids=lambda case: case.description,
 )
 def test_given_all_upstreams_soft_skipped_when_running_scheduler_then_soft_skips_downstream(
     test_case: LifecycleSchedulerFanInTestCase,
@@ -210,7 +210,7 @@ def test_given_all_upstreams_soft_skipped_when_running_scheduler_then_soft_skips
             expected_downstream_skip_mode=SkipMode.HARD,
         )
     ],
-    ids=["skips downstream with hard-skipped upstream and successful sibling"],
+    ids=lambda case: case.description,
 )
 def test_given_hard_skip_and_successful_sibling_when_running_scheduler_then_skips_downstream(
     test_case: LifecycleSchedulerFanInTestCase,
@@ -243,7 +243,7 @@ def test_given_hard_skip_and_successful_sibling_when_running_scheduler_then_skip
             expected_error_fragment="depends on unknown node 'missing'",
         )
     ],
-    ids=["raises for unknown dependency"],
+    ids=lambda case: case.description,
 )
 def test_given_unknown_dependency_when_running_scheduler_then_raises_input_error(
     test_case: LifecycleSchedulerErrorTestCase,

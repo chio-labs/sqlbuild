@@ -40,18 +40,6 @@ class PostgresLikeBaseAdapter(ConcreteBaseAdapter):
     sql_analysis_dialect_name: ClassVar[str | None] = "postgres"
 
 
-BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES: list[BaseAdapterSqlAnalysisDialectTestCase] = [
-    BaseAdapterSqlAnalysisDialectTestCase(
-        description="returns none by default",
-        expected_sql_analysis_dialect=None,
-    ),
-    BaseAdapterSqlAnalysisDialectTestCase(
-        description="returns class configured dialect",
-        expected_sql_analysis_dialect="postgres",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -60,7 +48,7 @@ BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES: list[BaseAdapterSqlAnalysisDialectTestC
             expected_error_fragment="does not support Python UDFs",
         )
     ],
-    ids=["raises clear error for Python UDFs by default"],
+    ids=lambda case: case.description,
 )
 def test_given_python_function_when_rendering_with_base_adapter_then_raises_clear_error(
     test_case: BaseAdapterPythonFunctionSupportTestCase,
@@ -90,7 +78,7 @@ def test_given_python_function_when_rendering_with_base_adapter_then_raises_clea
             expected_function_rules_count=0,
         )
     ],
-    ids=["returns portable inference profile by default"],
+    ids=lambda case: case.description,
 )
 def test_given_base_adapter_when_getting_inference_profile_then_returns_portable_defaults(
     test_case: BaseAdapterExpressionInferenceProfileTestCase,
@@ -105,8 +93,17 @@ def test_given_base_adapter_when_getting_inference_profile_then_returns_portable
 
 @pytest.mark.parametrize(
     "test_case",
-    BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES,
-    ids=[case.description for case in BASE_ADAPTER_SQLGLOT_DIALECT_TEST_CASES],
+    [
+        BaseAdapterSqlAnalysisDialectTestCase(
+            description="returns none by default",
+            expected_sql_analysis_dialect=None,
+        ),
+        BaseAdapterSqlAnalysisDialectTestCase(
+            description="returns class configured dialect",
+            expected_sql_analysis_dialect="postgres",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_base_adapter_subclass_when_getting_sql_analysis_dialect_then_uses_class_setting(
     test_case: BaseAdapterSqlAnalysisDialectTestCase,
@@ -131,7 +128,7 @@ def test_given_base_adapter_subclass_when_getting_sql_analysis_dialect_then_uses
             expected_identifier_limit=63,
         )
     ],
-    ids=["returns postgres-compatible identifier limit by default"],
+    ids=lambda case: case.description,
 )
 def test_given_base_adapter_when_getting_identifier_limit_then_returns_portable_default(
     test_case: BaseAdapterIdentifierLimitTestCase,
@@ -154,7 +151,7 @@ def test_given_base_adapter_when_getting_identifier_limit_then_returns_portable_
             ),
         )
     ],
-    ids=["renders durable clone as CTAS fallback by default"],
+    ids=lambda case: case.description,
 )
 def test_given_base_adapter_when_rendering_durable_clone_then_uses_copy_fallback(
     test_case: BaseAdapterDurableCloneTestCase,
@@ -170,30 +167,27 @@ def test_given_base_adapter_when_rendering_durable_clone_then_uses_copy_fallback
     assert result == test_case.expected_statements
 
 
-BASE_ADAPTER_RELATION_MAX_CURSOR_TEST_CASES: tuple[BaseAdapterRelationMaxCursorTestCase, ...] = (
-    BaseAdapterRelationMaxCursorTestCase(
-        description="queries max cursor with quoted identifier",
-        rows=((42,),),
-        relation="analytics.events",
-        cursor_column='event"time',
-        expected_value=42,
-        expected_sql='SELECT max("event""time") FROM analytics.events',
-    ),
-    BaseAdapterRelationMaxCursorTestCase(
-        description="returns none when query returns no rows",
-        rows=(),
-        relation="analytics.empty_events",
-        cursor_column="event_time",
-        expected_value=None,
-        expected_sql='SELECT max("event_time") FROM analytics.empty_events',
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    BASE_ADAPTER_RELATION_MAX_CURSOR_TEST_CASES,
-    ids=[case.description for case in BASE_ADAPTER_RELATION_MAX_CURSOR_TEST_CASES],
+    (
+        BaseAdapterRelationMaxCursorTestCase(
+            description="queries max cursor with quoted identifier",
+            rows=((42,),),
+            relation="analytics.events",
+            cursor_column='event"time',
+            expected_value=42,
+            expected_sql='SELECT max("event""time") FROM analytics.events',
+        ),
+        BaseAdapterRelationMaxCursorTestCase(
+            description="returns none when query returns no rows",
+            rows=(),
+            relation="analytics.empty_events",
+            cursor_column="event_time",
+            expected_value=None,
+            expected_sql='SELECT max("event_time") FROM analytics.empty_events',
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_relation_when_getting_max_cursor_then_base_adapter_queries_quoted_cursor(
     test_case: BaseAdapterRelationMaxCursorTestCase,
@@ -245,7 +239,7 @@ def test_given_relation_when_getting_max_cursor_then_base_adapter_queries_quoted
             ),
         )
     ],
-    ids=["escapes single quotes in metadata SQL literals"],
+    ids=lambda case: case.description,
 )
 def test_given_metadata_names_with_quotes_when_querying_then_base_adapter_escapes_literals(
     test_case: BaseAdapterMetadataSqlTestCase,

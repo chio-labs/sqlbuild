@@ -21,7 +21,7 @@ from tests.unit.src.sqlbuild.executor.node_results.main._test_types import (
             expected_encoded="eyJ2YWx1ZSI6NDJ9",
         )
     ],
-    ids=["encodes JSON payload deterministically"],
+    ids=lambda case: case.description,
 )
 def test_given_json_value_when_encoding_result_storage_then_returns_base64_json(
     test_case: NodeResultSerializationTestCase,
@@ -44,7 +44,7 @@ def test_given_json_value_when_encoding_result_storage_then_returns_base64_json(
             expected_error_fragment="non-JSON-serializable payload",
         )
     ],
-    ids=["rejects non JSON serializable payload"],
+    ids=lambda case: case.description,
 )
 def test_given_non_json_value_when_encoding_result_storage_then_raises_input_error(
     test_case: NodeResultSerializationErrorTestCase,

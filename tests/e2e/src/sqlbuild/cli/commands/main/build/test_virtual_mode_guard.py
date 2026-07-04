@@ -11,11 +11,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
-TEST_CASES: list[VirtualModeGuardBuildE2ETestCase] = [
-    VirtualModeGuardBuildE2ETestCase(
-        description="plan blocks defer-to in virtual mode",
-        project_toml=dedent(
-            """
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualModeGuardBuildE2ETestCase(
+            description="plan blocks defer-to in virtual mode",
+            project_toml=dedent(
+                """
             name = "virtual_plan_project"
             adapter = "duckdb"
             default_target = "dev"
@@ -29,18 +32,18 @@ TEST_CASES: list[VirtualModeGuardBuildE2ETestCase] = [
             [targets.prod]
             schema = "prod"
             """
-        ).strip()
-        + "\n",
-        command=("--no-color", "plan", "--defer-to", "prod"),
-        expected_exit_code=1,
-        expected_error_fragment=(
-            "plan does not support --defer-to when virtual_environments = true"
+            ).strip()
+            + "\n",
+            command=("--no-color", "plan", "--defer-to", "prod"),
+            expected_exit_code=1,
+            expected_error_fragment=(
+                "plan does not support --defer-to when virtual_environments = true"
+            ),
         ),
-    ),
-    VirtualModeGuardBuildE2ETestCase(
-        description="build blocks defer-to in virtual mode",
-        project_toml=dedent(
-            """
+        VirtualModeGuardBuildE2ETestCase(
+            description="build blocks defer-to in virtual mode",
+            project_toml=dedent(
+                """
             name = "virtual_build_project"
             adapter = "duckdb"
             default_target = "dev"
@@ -54,18 +57,17 @@ TEST_CASES: list[VirtualModeGuardBuildE2ETestCase] = [
             [targets.prod]
             schema = "prod"
             """
-        ).strip()
-        + "\n",
-        command=("--no-color", "build", "--defer-to", "prod"),
-        expected_exit_code=1,
-        expected_error_fragment=(
-            "build does not support --defer-to when virtual_environments = true"
+            ).strip()
+            + "\n",
+            command=("--no-color", "build", "--defer-to", "prod"),
+            expected_exit_code=1,
+            expected_error_fragment=(
+                "build does not support --defer-to when virtual_environments = true"
+            ),
         ),
-    ),
-]
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_virtual_mode_defer_to_when_running_cli_then_blocks_cleanly(
     test_case: VirtualModeGuardBuildE2ETestCase,
     tmp_path: Path,

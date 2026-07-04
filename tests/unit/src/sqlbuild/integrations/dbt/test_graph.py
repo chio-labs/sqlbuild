@@ -22,100 +22,98 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     graph_key_stable_ids,
 )
 
-COMBINED_GRAPH_TEST_CASES: tuple[DbtCombinedGraphTestCase, ...] = (
-    DbtCombinedGraphTestCase(
-        description="builds dbt dbt-to-sqb and sqb-to-sqb graph",
-        manifest_data=build_manifest_data(
-            nodes=(
-                build_manifest_model_node(
-                    unique_id="model.analytics.stg_orders",
-                    package_name="analytics",
-                    name="stg_orders",
-                    relation_name="analytics.stg_orders",
-                ),
-                build_manifest_model_node(
-                    unique_id="model.analytics.int_orders",
-                    package_name="analytics",
-                    name="int_orders",
-                    relation_name="analytics.int_orders",
-                    depends_on_nodes=("model.analytics.stg_orders",),
-                ),
-            )
-        ),
-        sqlbuild_model_sql_by_name={
-            "fact_orders": 'select * from __dbt_ref("int_orders")',
-            "mart_orders": 'select * from __ref("fact_orders")',
-        },
-        expected_upstream_edges=(
-            ("dbt:model:model.analytics.stg_orders", ()),
-            (
-                "dbt:model:model.analytics.int_orders",
-                ("dbt:model:model.analytics.stg_orders",),
-            ),
-            ("sqb:model:fact_orders", ("dbt:model:model.analytics.int_orders",)),
-            ("sqb:model:mart_orders", ("sqb:model:fact_orders",)),
-        ),
-        expected_downstream_from="dbt:model:model.analytics.stg_orders",
-        expected_downstream_keys=(
-            "dbt:model:model.analytics.int_orders",
-            "sqb:model:fact_orders",
-            "sqb:model:mart_orders",
-        ),
-        expected_upstream_from="sqb:model:mart_orders",
-        expected_upstream_keys=(
-            "dbt:model:model.analytics.int_orders",
-            "dbt:model:model.analytics.stg_orders",
-            "sqb:model:fact_orders",
-        ),
-    ),
-    DbtCombinedGraphTestCase(
-        description="builds dbt source to dbt model graph edges",
-        manifest_data=build_manifest_data(
-            nodes=(
-                build_manifest_model_node(
-                    unique_id="model.analytics.stg_orders",
-                    package_name="analytics",
-                    name="stg_orders",
-                    relation_name="analytics.stg_orders",
-                    depends_on_nodes=("source.analytics.raw.orders",),
-                ),
-            ),
-            sources=(
-                build_manifest_source_node(
-                    unique_id="source.analytics.raw.orders",
-                    relation_name="raw.orders",
-                ),
-            ),
-        ),
-        sqlbuild_model_sql_by_name={
-            "fact_orders": 'select * from __dbt_ref("stg_orders")',
-        },
-        expected_upstream_edges=(
-            ("dbt:source:source.analytics.raw.orders", ()),
-            (
-                "dbt:model:model.analytics.stg_orders",
-                ("dbt:source:source.analytics.raw.orders",),
-            ),
-            ("sqb:model:fact_orders", ("dbt:model:model.analytics.stg_orders",)),
-        ),
-        expected_downstream_from="dbt:source:source.analytics.raw.orders",
-        expected_downstream_keys=(
-            "dbt:model:model.analytics.stg_orders",
-            "sqb:model:fact_orders",
-        ),
-        expected_upstream_from="sqb:model:fact_orders",
-        expected_upstream_keys=(
-            "dbt:model:model.analytics.stg_orders",
-            "dbt:source:source.analytics.raw.orders",
-        ),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    COMBINED_GRAPH_TEST_CASES,
-    ids=[case.description for case in COMBINED_GRAPH_TEST_CASES],
+    (
+        DbtCombinedGraphTestCase(
+            description="builds dbt dbt-to-sqb and sqb-to-sqb graph",
+            manifest_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id="model.analytics.stg_orders",
+                        package_name="analytics",
+                        name="stg_orders",
+                        relation_name="analytics.stg_orders",
+                    ),
+                    build_manifest_model_node(
+                        unique_id="model.analytics.int_orders",
+                        package_name="analytics",
+                        name="int_orders",
+                        relation_name="analytics.int_orders",
+                        depends_on_nodes=("model.analytics.stg_orders",),
+                    ),
+                )
+            ),
+            sqlbuild_model_sql_by_name={
+                "fact_orders": 'select * from __dbt_ref("int_orders")',
+                "mart_orders": 'select * from __ref("fact_orders")',
+            },
+            expected_upstream_edges=(
+                ("dbt:model:model.analytics.stg_orders", ()),
+                (
+                    "dbt:model:model.analytics.int_orders",
+                    ("dbt:model:model.analytics.stg_orders",),
+                ),
+                ("sqb:model:fact_orders", ("dbt:model:model.analytics.int_orders",)),
+                ("sqb:model:mart_orders", ("sqb:model:fact_orders",)),
+            ),
+            expected_downstream_from="dbt:model:model.analytics.stg_orders",
+            expected_downstream_keys=(
+                "dbt:model:model.analytics.int_orders",
+                "sqb:model:fact_orders",
+                "sqb:model:mart_orders",
+            ),
+            expected_upstream_from="sqb:model:mart_orders",
+            expected_upstream_keys=(
+                "dbt:model:model.analytics.int_orders",
+                "dbt:model:model.analytics.stg_orders",
+                "sqb:model:fact_orders",
+            ),
+        ),
+        DbtCombinedGraphTestCase(
+            description="builds dbt source to dbt model graph edges",
+            manifest_data=build_manifest_data(
+                nodes=(
+                    build_manifest_model_node(
+                        unique_id="model.analytics.stg_orders",
+                        package_name="analytics",
+                        name="stg_orders",
+                        relation_name="analytics.stg_orders",
+                        depends_on_nodes=("source.analytics.raw.orders",),
+                    ),
+                ),
+                sources=(
+                    build_manifest_source_node(
+                        unique_id="source.analytics.raw.orders",
+                        relation_name="raw.orders",
+                    ),
+                ),
+            ),
+            sqlbuild_model_sql_by_name={
+                "fact_orders": 'select * from __dbt_ref("stg_orders")',
+            },
+            expected_upstream_edges=(
+                ("dbt:source:source.analytics.raw.orders", ()),
+                (
+                    "dbt:model:model.analytics.stg_orders",
+                    ("dbt:source:source.analytics.raw.orders",),
+                ),
+                ("sqb:model:fact_orders", ("dbt:model:model.analytics.stg_orders",)),
+            ),
+            expected_downstream_from="dbt:source:source.analytics.raw.orders",
+            expected_downstream_keys=(
+                "dbt:model:model.analytics.stg_orders",
+                "sqb:model:fact_orders",
+            ),
+            expected_upstream_from="sqb:model:fact_orders",
+            expected_upstream_keys=(
+                "dbt:model:model.analytics.stg_orders",
+                "dbt:source:source.analytics.raw.orders",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_manifest_and_compiled_project_when_building_graph_then_returns_expected_edges(
     test_case: DbtCombinedGraphTestCase,

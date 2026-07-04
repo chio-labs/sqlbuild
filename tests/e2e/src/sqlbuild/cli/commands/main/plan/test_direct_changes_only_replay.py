@@ -24,32 +24,30 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-TEST_CASES: list[DirectChangesOnlyReplayE2ETestCase] = [
-    DirectChangesOnlyReplayE2ETestCase(
-        description="default forward replay policy",
-        policy_fragment="",
-        expected_backfill_action="forward",
-        expected_backfill_duration=None,
-    ),
-    DirectChangesOnlyReplayE2ETestCase(
-        description="full replay policy",
-        policy_fragment=", replay_on_change full",
-        expected_backfill_action="full",
-        expected_backfill_duration=None,
-    ),
-    DirectChangesOnlyReplayE2ETestCase(
-        description="bounded replay policy",
-        policy_fragment=", replay_on_change bounded-14d",
-        expected_backfill_action="bounded",
-        expected_backfill_duration="14d",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        DirectChangesOnlyReplayE2ETestCase(
+            description="default forward replay policy",
+            policy_fragment="",
+            expected_backfill_action="forward",
+            expected_backfill_duration=None,
+        ),
+        DirectChangesOnlyReplayE2ETestCase(
+            description="full replay policy",
+            policy_fragment=", replay_on_change full",
+            expected_backfill_action="full",
+            expected_backfill_duration=None,
+        ),
+        DirectChangesOnlyReplayE2ETestCase(
+            description="bounded replay policy",
+            policy_fragment=", replay_on_change bounded-14d",
+            expected_backfill_action="bounded",
+            expected_backfill_duration="14d",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_direct_query_change_when_planning_changes_only_json_then_reports_replay_policy(
     test_case: DirectChangesOnlyReplayE2ETestCase,
@@ -98,7 +96,7 @@ def test_given_direct_query_change_when_planning_changes_only_json_then_reports_
             expected_backfill_duration=None,
         )
     ],
-    ids=["schema change uses full replay policy"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_schema_change_when_planning_changes_only_json_then_uses_replay_on_change(
     test_case: DirectChangesOnlySchemaReplayE2ETestCase,
@@ -150,7 +148,7 @@ def test_given_direct_schema_change_when_planning_changes_only_json_then_uses_re
             expected_backfill_duration="14d",
         )
     ],
-    ids=["function change uses bounded replay policy"],
+    ids=lambda case: case.description,
 )
 def test_given_function_change_when_planning_json_then_uses_function_replay_on_change(
     test_case: DirectChangesOnlyFunctionReplayE2ETestCase,

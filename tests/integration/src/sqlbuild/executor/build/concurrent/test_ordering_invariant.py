@@ -72,7 +72,7 @@ _PROJECT_YML: str = (
             ),
         ),
     ],
-    ids=["diamond DAG never dispatches a node before all upstream model deps complete"],
+    ids=lambda case: case.description,
 )
 def test_given_dag_when_building_concurrently_then_no_node_starts_before_deps_complete(
     test_case: OrderingInvariantTestCase,

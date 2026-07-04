@@ -10,27 +10,25 @@ from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.run.helpers.helpers import FakeRelationReuseAdapter
 
-RELATION_REUSE_ORIGIN_EXECUTION_TEST_CASES: tuple[RelationReuseOriginExecutionTestCase, ...] = (
-    RelationReuseOriginExecutionTestCase(
-        description="hard copy uses CTAS without cheap support probe",
-        hard_copy=True,
-        supports_zero_copy_clone=True,
-        expected_calls=("create_table_as",),
-        expected_sql="SELECT * FROM prod.orders",
-    ),
-    RelationReuseOriginExecutionTestCase(
-        description="cheap reuse uses clone when adapter supports zero copy",
-        hard_copy=False,
-        supports_zero_copy_clone=True,
-        expected_calls=("supports_zero_copy_clone", "clone"),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    RELATION_REUSE_ORIGIN_EXECUTION_TEST_CASES,
-    ids=[case.description for case in RELATION_REUSE_ORIGIN_EXECUTION_TEST_CASES],
+    (
+        RelationReuseOriginExecutionTestCase(
+            description="hard copy uses CTAS without cheap support probe",
+            hard_copy=True,
+            supports_zero_copy_clone=True,
+            expected_calls=("create_table_as",),
+            expected_sql="SELECT * FROM prod.orders",
+        ),
+        RelationReuseOriginExecutionTestCase(
+            description="cheap reuse uses clone when adapter supports zero copy",
+            hard_copy=False,
+            supports_zero_copy_clone=True,
+            expected_calls=("supports_zero_copy_clone", "clone"),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_relation_reuse_origin_when_creating_relation_then_uses_expected_copy_mode(
     test_case: RelationReuseOriginExecutionTestCase,
@@ -71,7 +69,7 @@ def test_given_relation_reuse_origin_when_creating_relation_then_uses_expected_c
             ),
         )
     ],
-    ids=["cheap reuse fails clearly when adapter does not support zero copy"],
+    ids=lambda case: case.description,
 )
 def test_given_relation_reuse_origin_when_cheap_reuse_is_unsupported_then_it_raises(
     test_case: RelationReuseOriginExecutionTestCase,

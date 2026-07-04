@@ -17,59 +17,57 @@ from tests.unit.src.sqlbuild.executor.clone.helpers.helpers import (
     build_clone_model_entry,
 )
 
-CLONE_RELATION_EXECUTION_TEST_CASES: list[CloneRelationExecutionTestCase] = [
-    CloneRelationExecutionTestCase(
-        description="uses zero copy clone action and SQL by default when adapter supports it",
-        hard_copy=False,
-        supports_zero_copy_clone=True,
-        expected_action=CloneAction.CLONED,
-        expected_status=CloneStatus.SUCCESS,
-        expected_statements=(
-            "DROP TABLE IF EXISTS dev.fact_orders",
-            "CREATE TABLE dev.fact_orders CLONE prod.fact_orders",
-        ),
-    ),
-    CloneRelationExecutionTestCase(
-        description="uses hard copy action and CTAS SQL when requested",
-        hard_copy=True,
-        supports_zero_copy_clone=True,
-        expected_action=CloneAction.COPIED,
-        expected_status=CloneStatus.SUCCESS,
-        expected_statements=(
-            "DROP TABLE IF EXISTS dev.fact_orders",
-            "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
-        ),
-    ),
-    CloneRelationExecutionTestCase(
-        description="uses copied action when adapter lacks zero copy clone support",
-        hard_copy=False,
-        supports_zero_copy_clone=False,
-        expected_action=CloneAction.COPIED,
-        expected_status=CloneStatus.SUCCESS,
-        expected_statements=(
-            "DROP TABLE IF EXISTS dev.fact_orders",
-            "CREATE TABLE dev.fact_orders CLONE prod.fact_orders",
-        ),
-    ),
-    CloneRelationExecutionTestCase(
-        description="mirrors transient origin into a transient clone statement",
-        hard_copy=False,
-        supports_zero_copy_clone=True,
-        origin_is_transient=True,
-        expected_action=CloneAction.CLONED,
-        expected_status=CloneStatus.SUCCESS,
-        expected_statements=(
-            "DROP TABLE IF EXISTS dev.fact_orders",
-            "CREATE TRANSIENT TABLE dev.fact_orders CLONE prod.fact_orders",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    CLONE_RELATION_EXECUTION_TEST_CASES,
-    ids=[case.description for case in CLONE_RELATION_EXECUTION_TEST_CASES],
+    [
+        CloneRelationExecutionTestCase(
+            description="uses zero copy clone action and SQL by default when adapter supports it",
+            hard_copy=False,
+            supports_zero_copy_clone=True,
+            expected_action=CloneAction.CLONED,
+            expected_status=CloneStatus.SUCCESS,
+            expected_statements=(
+                "DROP TABLE IF EXISTS dev.fact_orders",
+                "CREATE TABLE dev.fact_orders CLONE prod.fact_orders",
+            ),
+        ),
+        CloneRelationExecutionTestCase(
+            description="uses hard copy action and CTAS SQL when requested",
+            hard_copy=True,
+            supports_zero_copy_clone=True,
+            expected_action=CloneAction.COPIED,
+            expected_status=CloneStatus.SUCCESS,
+            expected_statements=(
+                "DROP TABLE IF EXISTS dev.fact_orders",
+                "CREATE OR REPLACE TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+            ),
+        ),
+        CloneRelationExecutionTestCase(
+            description="uses copied action when adapter lacks zero copy clone support",
+            hard_copy=False,
+            supports_zero_copy_clone=False,
+            expected_action=CloneAction.COPIED,
+            expected_status=CloneStatus.SUCCESS,
+            expected_statements=(
+                "DROP TABLE IF EXISTS dev.fact_orders",
+                "CREATE TABLE dev.fact_orders CLONE prod.fact_orders",
+            ),
+        ),
+        CloneRelationExecutionTestCase(
+            description="mirrors transient origin into a transient clone statement",
+            hard_copy=False,
+            supports_zero_copy_clone=True,
+            origin_is_transient=True,
+            expected_action=CloneAction.CLONED,
+            expected_status=CloneStatus.SUCCESS,
+            expected_statements=(
+                "DROP TABLE IF EXISTS dev.fact_orders",
+                "CREATE TRANSIENT TABLE dev.fact_orders CLONE prod.fact_orders",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_clone_relation_when_executing_then_records_sql_and_reports_copy_mode(
     test_case: CloneRelationExecutionTestCase,

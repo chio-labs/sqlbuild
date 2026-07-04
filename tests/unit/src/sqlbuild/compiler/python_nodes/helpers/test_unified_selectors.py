@@ -25,98 +25,96 @@ from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
     source_ref,
 )
 
-PYTHON_SQL_SELECTOR_TEST_CASES: list[PythonSqlSelectorTestCase] = [
-    PythonSqlSelectorTestCase(
-        description="selects SQL resource by bare name",
-        select=("orders",),
-        exclude=(),
-        expected_sql_names=frozenset({"orders"}),
-        expected_python_node_names=frozenset(),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects Python node by bare name",
-        select=("prepare_orders",),
-        exclude=(),
-        expected_sql_names=frozenset(),
-        expected_python_node_names=frozenset({"prepare_orders"}),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects expanded Python node by typed selector",
-        select=("+asset:export_orders",),
-        exclude=(),
-        expected_sql_names=frozenset(),
-        expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects tag across SQL models and Python nodes",
-        select=("tag:daily",),
-        exclude=(),
-        expected_sql_names=frozenset({"orders"}),
-        expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects explicit models root path as SQL models",
-        select=("path:models",),
-        exclude=(),
-        expected_sql_names=frozenset({"orders"}),
-        expected_python_node_names=frozenset(),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects explicit Python task path",
-        select=("path:tasks",),
-        exclude=(),
-        expected_sql_names=frozenset(),
-        expected_python_node_names=frozenset({"prepare_orders"}),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects expanded explicit Python asset path",
-        select=("+path:assets",),
-        exclude=(),
-        expected_sql_names=frozenset(),
-        expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects expanded explicit Python asset slash path",
-        select=("+assets/",),
-        exclude=(),
-        expected_sql_names=frozenset(),
-        expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects expanded explicit Python asset leading slash path",
-        select=("+/assets",),
-        exclude=(),
-        expected_sql_names=frozenset(),
-        expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects expanded managed source by source identity",
-        select=("+source:raw_orders",),
-        exclude=(),
-        expected_sql_names=frozenset({"raw_orders"}),
-        expected_python_node_names=frozenset(),
-    ),
-    PythonSqlSelectorTestCase(
-        description="selects source and intermediate loader without duplicate source names",
-        select=("+source:raw_orders +loader:load_events",),
-        exclude=(),
-        expected_sql_names=frozenset({"raw_orders"}),
-        expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
-    ),
-    PythonSqlSelectorTestCase(
-        description="excludes Python node from unified selection",
-        select=("tag:daily",),
-        exclude=("asset:export_orders",),
-        expected_sql_names=frozenset({"orders"}),
-        expected_python_node_names=frozenset({"prepare_orders"}),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_SQL_SELECTOR_TEST_CASES,
-    ids=[case.description for case in PYTHON_SQL_SELECTOR_TEST_CASES],
+    [
+        PythonSqlSelectorTestCase(
+            description="selects SQL resource by bare name",
+            select=("orders",),
+            exclude=(),
+            expected_sql_names=frozenset({"orders"}),
+            expected_python_node_names=frozenset(),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects Python node by bare name",
+            select=("prepare_orders",),
+            exclude=(),
+            expected_sql_names=frozenset(),
+            expected_python_node_names=frozenset({"prepare_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects expanded Python node by typed selector",
+            select=("+asset:export_orders",),
+            exclude=(),
+            expected_sql_names=frozenset(),
+            expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects tag across SQL models and Python nodes",
+            select=("tag:daily",),
+            exclude=(),
+            expected_sql_names=frozenset({"orders"}),
+            expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects explicit models root path as SQL models",
+            select=("path:models",),
+            exclude=(),
+            expected_sql_names=frozenset({"orders"}),
+            expected_python_node_names=frozenset(),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects explicit Python task path",
+            select=("path:tasks",),
+            exclude=(),
+            expected_sql_names=frozenset(),
+            expected_python_node_names=frozenset({"prepare_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects expanded explicit Python asset path",
+            select=("+path:assets",),
+            exclude=(),
+            expected_sql_names=frozenset(),
+            expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects expanded explicit Python asset slash path",
+            select=("+assets/",),
+            exclude=(),
+            expected_sql_names=frozenset(),
+            expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects expanded explicit Python asset leading slash path",
+            select=("+/assets",),
+            exclude=(),
+            expected_sql_names=frozenset(),
+            expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects expanded managed source by source identity",
+            select=("+source:raw_orders",),
+            exclude=(),
+            expected_sql_names=frozenset({"raw_orders"}),
+            expected_python_node_names=frozenset(),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects source and intermediate loader without duplicate source names",
+            select=("+source:raw_orders +loader:load_events",),
+            exclude=(),
+            expected_sql_names=frozenset({"raw_orders"}),
+            expected_python_node_names=frozenset({"prepare_orders", "load_events"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="excludes Python node from unified selection",
+            select=("tag:daily",),
+            exclude=("asset:export_orders",),
+            expected_sql_names=frozenset({"orders"}),
+            expected_python_node_names=frozenset({"prepare_orders"}),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_unified_selectors_when_resolving_then_returns_sql_and_python_selection(
     test_case: PythonSqlSelectorTestCase,
@@ -135,35 +133,32 @@ def test_given_unified_selectors_when_resolving_then_returns_sql_and_python_sele
     assert result.python_node_names == test_case.expected_python_node_names
 
 
-PYTHON_SQL_SELECTOR_ERROR_TEST_CASES: list[PythonSqlSelectorErrorTestCase] = [
-    PythonSqlSelectorErrorTestCase(
-        description="raises when selector matches no SQL resource or Python node",
-        select=("missing",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="unknown selector name 'missing'",
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="raises when path selector omits explicit root",
-        select=("path:marts",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="path selectors require an explicit root",
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="raises when slash path selector omits explicit root",
-        select=("/marts",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="path selectors require an explicit root",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_SQL_SELECTOR_ERROR_TEST_CASES,
-    ids=[case.description for case in PYTHON_SQL_SELECTOR_ERROR_TEST_CASES],
+    [
+        PythonSqlSelectorErrorTestCase(
+            description="raises when selector matches no SQL resource or Python node",
+            select=("missing",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="unknown selector name 'missing'",
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="raises when path selector omits explicit root",
+            select=("path:marts",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="path selectors require an explicit root",
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="raises when slash path selector omits explicit root",
+            select=("/marts",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="path selectors require an explicit root",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_unknown_unified_selector_when_resolving_then_raises_clear_error(
     test_case: PythonSqlSelectorErrorTestCase,
@@ -180,38 +175,35 @@ def test_given_unknown_unified_selector_when_resolving_then_raises_clear_error(
         )
 
 
-PYTHON_SQL_REF_ERROR_TEST_CASES: list[PythonSqlSelectorErrorTestCase] = [
-    PythonSqlSelectorErrorTestCase(
-        description="raises when model ref is unknown",
-        select=("profile_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="Python node 'profile_orders' depends on unknown SQL resource",
-        sql_ref_dependency=model_ref("missing_orders"),
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="raises when source ref names a model",
-        select=("profile_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="declares source.*orders.*but.*orders.*is a model",
-        sql_ref_dependency=source_ref("orders"),
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="raises when model ref names a source",
-        select=("profile_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment="declares model.*raw_orders.*but.*raw_orders.*is a source",
-        sql_ref_dependency=model_ref("raw_orders"),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_SQL_REF_ERROR_TEST_CASES,
-    ids=[case.description for case in PYTHON_SQL_REF_ERROR_TEST_CASES],
+    [
+        PythonSqlSelectorErrorTestCase(
+            description="raises when model ref is unknown",
+            select=("profile_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="Python node 'profile_orders' depends on unknown SQL resource",
+            sql_ref_dependency=model_ref("missing_orders"),
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="raises when source ref names a model",
+            select=("profile_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="declares source.*orders.*but.*orders.*is a model",
+            sql_ref_dependency=source_ref("orders"),
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="raises when model ref names a source",
+            select=("profile_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="declares model.*raw_orders.*but.*raw_orders.*is a source",
+            sql_ref_dependency=model_ref("raw_orders"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_typed_sql_ref_when_resolving_then_raises_clear_error(
     test_case: PythonSqlSelectorErrorTestCase,
@@ -231,47 +223,44 @@ def test_given_invalid_typed_sql_ref_when_resolving_then_raises_clear_error(
         )
 
 
-PYTHON_SQL_TERMINAL_LOADER_BOUNDARY_ERROR_TEST_CASES: list[PythonSqlSelectorErrorTestCase] = [
-    PythonSqlSelectorErrorTestCase(
-        description="raises when task depends on terminal source loader",
-        select=("summarize_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment=(
-            "Python node 'summarize_orders' depends on terminal loader 'raw_orders'; "
-            "depend on source 'raw_orders' instead"
-        ),
-        python_graph_case="terminal_loader_task_dependency",
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="raises when asset depends on terminal source loader",
-        select=("export_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment=(
-            "Python node 'export_orders' depends on terminal loader 'raw_orders'; "
-            "depend on source 'raw_orders' instead"
-        ),
-        python_graph_case="terminal_loader_asset_dependency",
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="raises when check depends on terminal source loader",
-        select=("check_loaded_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment=(
-            "Check 'check_loaded_orders' depends on terminal loader 'raw_orders'; "
-            "use source audits for source 'raw_orders' instead"
-        ),
-        python_graph_case="terminal_loader_check_dependency",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_SQL_TERMINAL_LOADER_BOUNDARY_ERROR_TEST_CASES,
-    ids=[case.description for case in PYTHON_SQL_TERMINAL_LOADER_BOUNDARY_ERROR_TEST_CASES],
+    [
+        PythonSqlSelectorErrorTestCase(
+            description="raises when task depends on terminal source loader",
+            select=("summarize_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment=(
+                "Python node 'summarize_orders' depends on terminal loader 'raw_orders'; "
+                "depend on source 'raw_orders' instead"
+            ),
+            python_graph_case="terminal_loader_task_dependency",
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="raises when asset depends on terminal source loader",
+            select=("export_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment=(
+                "Python node 'export_orders' depends on terminal loader 'raw_orders'; "
+                "depend on source 'raw_orders' instead"
+            ),
+            python_graph_case="terminal_loader_asset_dependency",
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="raises when check depends on terminal source loader",
+            select=("check_loaded_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment=(
+                "Check 'check_loaded_orders' depends on terminal loader 'raw_orders'; "
+                "use source audits for source 'raw_orders' instead"
+            ),
+            python_graph_case="terminal_loader_check_dependency",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_terminal_loader_dependency_when_validating_boundaries_then_raises(
     test_case: PythonSqlSelectorErrorTestCase,
@@ -303,7 +292,7 @@ def test_given_invalid_terminal_loader_dependency_when_validating_boundaries_the
             python_graph_case="default",
         )
     ],
-    ids=["raises when SQL model depends on intermediate loader"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_sql_model_dependency_when_validating_boundaries_then_raises(
     test_case: PythonSqlSelectorErrorTestCase,
@@ -333,7 +322,7 @@ def test_given_invalid_sql_model_dependency_when_validating_boundaries_then_rais
             ),
         )
     ],
-    ids=["raises when SQL downstream task feeds loader"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_downstream_task_feeds_loader_when_validating_then_raises(
     test_case: PythonSqlSelectorErrorTestCase,
@@ -350,38 +339,35 @@ def test_given_sql_downstream_task_feeds_loader_when_validating_then_raises(
         )
 
 
-PYTHON_SQL_INTERMEDIATE_LOADER_BOUNDARY_TEST_CASES: list[PythonSqlSelectorErrorTestCase] = [
-    PythonSqlSelectorErrorTestCase(
-        description="allows task dependency on intermediate loader",
-        select=("summarize_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment=None,
-        python_graph_case="intermediate_loader_task_dependency",
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="allows asset dependency on intermediate loader",
-        select=("export_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment=None,
-        python_graph_case="intermediate_loader_asset_dependency",
-    ),
-    PythonSqlSelectorErrorTestCase(
-        description="allows check dependency on intermediate loader",
-        select=("check_loaded_orders",),
-        exclude=(),
-        expected_error_type=ValueError,
-        expected_error_fragment=None,
-        python_graph_case="intermediate_loader_check_dependency",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PYTHON_SQL_INTERMEDIATE_LOADER_BOUNDARY_TEST_CASES,
-    ids=[case.description for case in PYTHON_SQL_INTERMEDIATE_LOADER_BOUNDARY_TEST_CASES],
+    [
+        PythonSqlSelectorErrorTestCase(
+            description="allows task dependency on intermediate loader",
+            select=("summarize_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment=None,
+            python_graph_case="intermediate_loader_task_dependency",
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="allows asset dependency on intermediate loader",
+            select=("export_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment=None,
+            python_graph_case="intermediate_loader_asset_dependency",
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="allows check dependency on intermediate loader",
+            select=("check_loaded_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment=None,
+            python_graph_case="intermediate_loader_check_dependency",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_intermediate_loader_dependency_when_validating_boundaries_then_it_is_allowed(
     test_case: PythonSqlSelectorErrorTestCase,

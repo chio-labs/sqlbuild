@@ -47,7 +47,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_absent_relations=("fact_orders",),
         )
     ],
-    ids=["scenario runs with mocked package-qualified dbt refs"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_interop_project_when_running_scenario_then_mocks_dbt_refs(
     test_case: DbtScenarioCliTestCase,
@@ -90,7 +90,7 @@ def test_given_dbt_interop_project_when_running_scenario_then_mocks_dbt_refs(
             ),
         )
     ],
-    ids=["dbt scenario test targets a dbt model with a source mock"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_scenario_target_when_running_dbt_scenario_then_validates_dbt_model(
     test_case: DbtScenarioCliTestCase,
@@ -125,7 +125,7 @@ def test_given_dbt_scenario_target_when_running_dbt_scenario_then_validates_dbt_
             ),
         )
     ],
-    ids=["dbt scenario test resolves a chained dbt model graph"],
+    ids=lambda case: case.description,
 )
 def test_given_chained_dbt_scenario_when_running_dbt_scenario_then_resolves_chain(
     test_case: DbtScenarioCliTestCase,
@@ -161,7 +161,7 @@ def test_given_chained_dbt_scenario_when_running_dbt_scenario_then_resolves_chai
             expected_returncode=1,
         )
     ],
-    ids=["dbt scenario test reports a violated assertion as a failure"],
+    ids=lambda case: case.description,
 )
 def test_given_failing_assertion_when_running_dbt_scenario_then_fails(
     test_case: DbtScenarioCliTestCase,
@@ -197,7 +197,7 @@ def test_given_failing_assertion_when_running_dbt_scenario_then_fails(
             expected_returncode=1,
         )
     ],
-    ids=["dbt scenario test reports a mismatched expected output as a failure"],
+    ids=lambda case: case.description,
 )
 def test_given_failing_expected_when_running_dbt_scenario_then_fails(
     test_case: DbtScenarioCliTestCase,
@@ -232,7 +232,7 @@ def test_given_failing_expected_when_running_dbt_scenario_then_fails(
             ),
         )
     ],
-    ids=["dbt scenario test targets a dbt model with a seed mock"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_dbt_scenario_when_running_dbt_scenario_then_validates_dbt_model(
     test_case: DbtScenarioCliTestCase,
@@ -267,7 +267,7 @@ def test_given_seed_dbt_scenario_when_running_dbt_scenario_then_validates_dbt_mo
             ),
         )
     ],
-    ids=["dbt scenario test mocks an upstream dbt model as a ref boundary"],
+    ids=lambda case: case.description,
 )
 def test_given_ref_boundary_dbt_scenario_when_running_dbt_scenario_then_uses_boundary(
     test_case: DbtScenarioCliTestCase,
@@ -302,7 +302,7 @@ def test_given_ref_boundary_dbt_scenario_when_running_dbt_scenario_then_uses_bou
             ),
         )
     ],
-    ids=["dbt scenario test mocks a snapshot boundary"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_boundary_dbt_scenario_when_running_dbt_scenario_then_uses_boundary(
     test_case: DbtScenarioCliTestCase,
@@ -337,7 +337,7 @@ def test_given_snapshot_boundary_dbt_scenario_when_running_dbt_scenario_then_use
             ),
         )
     ],
-    ids=["dbt scenario test uses a package-qualified dbt source fixture"],
+    ids=lambda case: case.description,
 )
 def test_given_qualified_source_dbt_scenario_when_running_dbt_scenario_then_validates_dbt_model(
     test_case: DbtScenarioCliTestCase,
@@ -371,7 +371,7 @@ def test_given_qualified_source_dbt_scenario_when_running_dbt_scenario_then_vali
             expected_stdout_fragments=('"status": "success"', '"name": "dbt_stg_scenario_orders"'),
         )
     ],
-    ids=["dbt scenario test json output reports a passing scenario"],
+    ids=lambda case: case.description,
 )
 def test_given_json_flag_when_running_dbt_scenario_then_emits_json(
     test_case: DbtScenarioCliTestCase,
@@ -413,7 +413,7 @@ def test_given_json_flag_when_running_dbt_scenario_then_emits_json(
             ),
         )
     ],
-    ids=["dbt scenario capture then test --local replays on DuckDB"],
+    ids=lambda case: case.description,
 )
 def test_given_captured_snapshot_when_running_dbt_scenario_local_then_replays_on_duckdb(
     test_case: DbtScenarioCliTestCase,
@@ -476,7 +476,7 @@ def test_given_captured_snapshot_when_running_dbt_scenario_local_then_replays_on
             ),
         )
     ],
-    ids=["dbt scenario test --local --sync-snapshots captures then replays"],
+    ids=lambda case: case.description,
 )
 def test_given_sync_snapshots_when_running_dbt_scenario_local_then_captures_and_replays(
     test_case: DbtScenarioCliTestCase,
@@ -497,49 +497,46 @@ def test_given_sync_snapshots_when_running_dbt_scenario_local_then_captures_and_
         assert expected_stdout_fragment in result.stdout
 
 
-DBT_SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES: list[DbtScenarioCliTestCase] = [
-    DbtScenarioCliTestCase(
-        description="dbt scenario test --local skips when no snapshot exists",
-        command=(
-            "--no-color",
-            "dbt",
-            "scenario",
-            "test",
-            "dbt_stg_scenario_orders",
-            "--local",
-        ),
-        expected_returncode=0,
-        expected_stdout_fragments=(
-            "dbt_stg_scenario_orders",
-            "SKIP",
-            "PASS=0  FAIL=0  ERROR=0  SKIP=1  TOTAL=1",
-        ),
-    ),
-    DbtScenarioCliTestCase(
-        description="dbt scenario test --local --strict errors when no snapshot exists",
-        command=(
-            "--no-color",
-            "dbt",
-            "scenario",
-            "test",
-            "dbt_stg_scenario_orders",
-            "--local",
-            "--strict",
-        ),
-        expected_returncode=1,
-        expected_stdout_fragments=(
-            "dbt_stg_scenario_orders",
-            "ERROR",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DBT_SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES,
-    ids=[case.description for case in DBT_SCENARIO_LOCAL_MISSING_SNAPSHOT_TEST_CASES],
+    [
+        DbtScenarioCliTestCase(
+            description="dbt scenario test --local skips when no snapshot exists",
+            command=(
+                "--no-color",
+                "dbt",
+                "scenario",
+                "test",
+                "dbt_stg_scenario_orders",
+                "--local",
+            ),
+            expected_returncode=0,
+            expected_stdout_fragments=(
+                "dbt_stg_scenario_orders",
+                "SKIP",
+                "PASS=0  FAIL=0  ERROR=0  SKIP=1  TOTAL=1",
+            ),
+        ),
+        DbtScenarioCliTestCase(
+            description="dbt scenario test --local --strict errors when no snapshot exists",
+            command=(
+                "--no-color",
+                "dbt",
+                "scenario",
+                "test",
+                "dbt_stg_scenario_orders",
+                "--local",
+                "--strict",
+            ),
+            expected_returncode=1,
+            expected_stdout_fragments=(
+                "dbt_stg_scenario_orders",
+                "ERROR",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_missing_snapshot_when_running_dbt_scenario_local_then_reports_expected_status(
     test_case: DbtScenarioCliTestCase,
@@ -580,7 +577,7 @@ def test_given_missing_snapshot_when_running_dbt_scenario_local_then_reports_exp
             ),
         )
     ],
-    ids=["dbt scenario test retain keeps scenario-owned relations"],
+    ids=lambda case: case.description,
 )
 def test_given_retain_flag_when_running_dbt_scenario_then_keeps_relations(
     test_case: DbtScenarioCliTestCase,
@@ -615,7 +612,7 @@ def test_given_retain_flag_when_running_dbt_scenario_then_keeps_relations(
             ),
         )
     ],
-    ids=["dbt scenario fixture reads a real dbt source to build fixture data"],
+    ids=lambda case: case.description,
 )
 def test_given_real_source_fixture_when_running_dbt_scenario_then_reads_live_source(
     test_case: DbtScenarioCliTestCase,
@@ -653,7 +650,7 @@ def test_given_real_source_fixture_when_running_dbt_scenario_then_reads_live_sou
             expected_absent_relations=("fact_orders",),
         )
     ],
-    ids=["scenario over a SQLBuild model whose chain crosses a dbt ref boundary"],
+    ids=lambda case: case.description,
 )
 def test_given_spanning_sqlbuild_dbt_graph_when_running_scenario_then_resolves_chain(
     test_case: DbtScenarioCliTestCase,
@@ -702,7 +699,7 @@ def test_given_spanning_sqlbuild_dbt_graph_when_running_scenario_then_resolves_c
             ),
         )
     ],
-    ids=["mocked dbt ref scenario captures and replays on local DuckDB"],
+    ids=lambda case: case.description,
 )
 def test_given_mocked_dbt_ref_scenario_when_capturing_then_replays_dbt_ref_on_local_duckdb(
     test_case: DbtScenarioCliTestCase,
@@ -767,7 +764,7 @@ def test_given_mocked_dbt_ref_scenario_when_capturing_then_replays_dbt_ref_on_lo
             expected_absent_stdout_fragments=("mart_orders_spanning",),
         )
     ],
-    ids=["dbt scenario test selects a single scenario via --select flag"],
+    ids=lambda case: case.description,
 )
 def test_given_select_flag_when_running_dbt_scenario_then_selects_named_scenario(
     test_case: DbtScenarioCliTestCase,
@@ -812,7 +809,7 @@ def test_given_select_flag_when_running_dbt_scenario_then_selects_named_scenario
             expected_absent_stdout_fragments=("mart_orders_spanning",),
         )
     ],
-    ids=["dbt scenario test excludes a scenario via --exclude flag"],
+    ids=lambda case: case.description,
 )
 def test_given_exclude_flag_when_running_dbt_scenario_then_drops_excluded_scenario(
     test_case: DbtScenarioCliTestCase,
@@ -847,7 +844,7 @@ def test_given_exclude_flag_when_running_dbt_scenario_then_drops_excluded_scenar
             expected_json_command="scenario test",
         )
     ],
-    ids=["dbt scenario test writes results to --json-output path"],
+    ids=lambda case: case.description,
 )
 def test_given_json_output_path_when_running_dbt_scenario_then_writes_results_file(
     test_case: DbtScenarioCliTestCase,

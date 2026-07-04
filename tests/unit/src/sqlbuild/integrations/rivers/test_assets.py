@@ -47,7 +47,7 @@ from tests.unit.src.sqlbuild.integrations.rivers.helpers import FakeRiversModule
             ),
         )
     ],
-    ids=["maps Python DAG artifact additions into asset defs"],
+    ids=lambda case: case.description,
 )
 def test_given_python_augmented_dag_when_building_asset_defs_then_maps_python_nodes(
     test_case: RiversPythonArtifactCompatibilityTestCase,

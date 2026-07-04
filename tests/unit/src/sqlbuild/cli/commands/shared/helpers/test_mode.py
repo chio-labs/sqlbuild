@@ -22,7 +22,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared.helpers._test_types import Mode
             expected_error_fragment=None,
         )
     ],
-    ids=["allows run in standard mode"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_mode_command_when_enforcing_support_then_allows_execution(
     test_case: ModeGuardTestCase,
@@ -53,7 +53,7 @@ def test_given_direct_mode_command_when_enforcing_support_then_allows_execution(
             expected_error_fragment="clone is not supported when virtual_environments = true",
         )
     ],
-    ids=["blocks clone in virtual mode"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_mode_command_when_enforcing_support_then_raises_cli_user_error(
     test_case: ModeGuardTestCase,
@@ -90,7 +90,7 @@ def test_given_virtual_mode_command_when_enforcing_support_then_raises_cli_user_
             ),
         )
     ],
-    ids=["blocks defer-to in virtual mode plan"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_mode_defer_to_when_enforcing_flag_support_then_raises_cli_user_error(
     test_case: ModeGuardTestCase,

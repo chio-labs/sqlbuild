@@ -27,24 +27,22 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.helpers import (
     source_freshness_record,
 )
 
-SOURCE_FRESHNESS_APPEND_ELIGIBILITY_TEST_CASES: list[SourceFreshnessAppendEligibilityTestCase] = [
-    SourceFreshnessAppendEligibilityTestCase(
-        description="appends when all affected selected models succeed",
-        model_statuses={"orders": ExecutionStatus.SUCCESS},
-        expected_insert_count=1,
-    ),
-    SourceFreshnessAppendEligibilityTestCase(
-        description="does not append when affected selected model fails",
-        model_statuses={"orders": ExecutionStatus.FAILED},
-        expected_insert_count=0,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_FRESHNESS_APPEND_ELIGIBILITY_TEST_CASES,
-    ids=[case.description for case in SOURCE_FRESHNESS_APPEND_ELIGIBILITY_TEST_CASES],
+    [
+        SourceFreshnessAppendEligibilityTestCase(
+            description="appends when all affected selected models succeed",
+            model_statuses={"orders": ExecutionStatus.SUCCESS},
+            expected_insert_count=1,
+        ),
+        SourceFreshnessAppendEligibilityTestCase(
+            description="does not append when affected selected model fails",
+            model_statuses={"orders": ExecutionStatus.FAILED},
+            expected_insert_count=0,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_observation_when_appending_then_requires_successful_models(
     test_case: SourceFreshnessAppendEligibilityTestCase,
@@ -87,7 +85,7 @@ def test_given_source_freshness_observation_when_appending_then_requires_success
             expected_insert_count=1,
         )
     ],
-    ids=["uses adapter-rendered source freshness state relation"],
+    ids=lambda case: case.description,
 )
 def test_given_eligible_source_freshness_when_appending_then_uses_adapter_rendered_state_relation(
     test_case: SourceFreshnessAppendEligibilityTestCase,
@@ -131,7 +129,7 @@ def test_given_eligible_source_freshness_when_appending_then_uses_adapter_render
             expected_insert_count=1,
         )
     ],
-    ids=["persists plan-time observation with successful build run id"],
+    ids=lambda case: case.description,
 )
 def test_given_eligible_source_freshness_when_appending_then_reuses_plan_time_observation(
     test_case: SourceFreshnessAppendEligibilityTestCase,

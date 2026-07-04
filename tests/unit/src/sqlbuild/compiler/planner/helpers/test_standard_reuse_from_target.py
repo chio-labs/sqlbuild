@@ -28,26 +28,6 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_from_target_scope,
 )
 
-STANDARD_REUSE_FROM_TARGET_SNAPSHOT_ERROR_TEST_CASES: list[
-    StandardReuseFromTargetSnapshotErrorTestCase
-] = [
-    StandardReuseFromTargetSnapshotErrorTestCase(
-        description="raises when reuse_from fingerprint table is missing",
-        fingerprint_table_exists=False,
-        expected_error_fragment=(
-            "cannot read fingerprint state for reuse origin schema 'prod_schema'"
-        ),
-    ),
-    StandardReuseFromTargetSnapshotErrorTestCase(
-        description="raises when reuse_from fingerprint rows cannot be read",
-        fingerprint_table_exists=True,
-        fingerprint_read_fails=True,
-        expected_error_fragment=(
-            "cannot read fingerprint state for reuse origin schema 'prod_schema'"
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -88,7 +68,7 @@ STANDARD_REUSE_FROM_TARGET_SNAPSHOT_ERROR_TEST_CASES: list[
             },
         )
     ],
-    ids=["reads reuse_from fingerprints and relation existence"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_target_when_building_snapshot_then_reads_fingerprints_and_relations(
     test_case: StandardReuseFromTargetSnapshotTestCase,
@@ -138,8 +118,24 @@ def test_given_reuse_from_target_when_building_snapshot_then_reads_fingerprints_
 
 @pytest.mark.parametrize(
     "test_case",
-    STANDARD_REUSE_FROM_TARGET_SNAPSHOT_ERROR_TEST_CASES,
-    ids=[case.description for case in STANDARD_REUSE_FROM_TARGET_SNAPSHOT_ERROR_TEST_CASES],
+    [
+        StandardReuseFromTargetSnapshotErrorTestCase(
+            description="raises when reuse_from fingerprint table is missing",
+            fingerprint_table_exists=False,
+            expected_error_fragment=(
+                "cannot read fingerprint state for reuse origin schema 'prod_schema'"
+            ),
+        ),
+        StandardReuseFromTargetSnapshotErrorTestCase(
+            description="raises when reuse_from fingerprint rows cannot be read",
+            fingerprint_table_exists=True,
+            fingerprint_read_fails=True,
+            expected_error_fragment=(
+                "cannot read fingerprint state for reuse origin schema 'prod_schema'"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_missing_reuse_origin_fingerprint_state_when_building_snapshot_then_it_raises(
     test_case: StandardReuseFromTargetSnapshotErrorTestCase,
@@ -208,7 +204,7 @@ def test_given_missing_reuse_origin_fingerprint_state_when_building_snapshot_the
             },
         )
     ],
-    ids=["resolves templated reuse_from target namespace"],
+    ids=lambda case: case.description,
 )
 def test_given_templated_reuse_from_target_when_building_snapshot_then_resolves_namespace(
     test_case: StandardReuseFromTargetSnapshotTestCase,
@@ -265,7 +261,7 @@ def test_given_templated_reuse_from_target_when_building_snapshot_then_resolves_
             ),
         )
     ],
-    ids=["raises when reuse_from target uses shorthand schema CTX"],
+    ids=lambda case: case.description,
 )
 def test_given_shorthand_ctx_in_reuse_from_target_when_building_snapshot_then_it_raises(
     test_case: StandardReuseFromTargetSnapshotErrorTestCase,
@@ -310,7 +306,7 @@ def test_given_shorthand_ctx_in_reuse_from_target_when_building_snapshot_then_it
             expected_origin_fingerprint_databases={"orders": None, "customers": None},
         )
     ],
-    ids=["tracks per-model origin fingerprint schemas"],
+    ids=lambda case: case.description,
 )
 def test_given_multi_schema_reuse_from_when_building_snapshot_then_tracks_origin_state(
     test_case: StandardReuseFromTargetMultiSchemaTestCase,
@@ -408,7 +404,7 @@ def test_given_multi_schema_reuse_from_when_building_snapshot_then_tracks_origin
             selected_model_names=frozenset({"orders"}),
         )
     ],
-    ids=["includes only selected models"],
+    ids=lambda case: case.description,
 )
 def test_given_scoped_plan_when_building_snapshot_then_includes_only_selected_models(
     test_case: StandardReuseFromTargetSnapshotTestCase,
@@ -455,7 +451,7 @@ def test_given_scoped_plan_when_building_snapshot_then_includes_only_selected_mo
             ),
         )
     ],
-    ids=["raises when reuse_from target resolves no fingerprint schema"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_without_resolved_schema_when_building_snapshot_then_it_raises(
     test_case: StandardReuseFromTargetSnapshotErrorTestCase,
@@ -512,7 +508,7 @@ def test_given_reuse_from_without_resolved_schema_when_building_snapshot_then_it
             expected_snapshot=None,
         )
     ],
-    ids=["returns none when active target has no reuse_from"],
+    ids=lambda case: case.description,
 )
 def test_given_no_reuse_from_when_building_snapshot_then_it_returns_none(
     test_case: StandardReuseFromTargetNoConfigTestCase,

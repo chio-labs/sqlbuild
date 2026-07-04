@@ -41,7 +41,7 @@ from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact
             expected_loader_asset_key=("shared_order_feed",),
         )
     ],
-    ids=["builds static dag nodes edges and checks"],
+    ids=lambda case: case.description,
 )
 def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edges_and_checks(
     test_case: DagArtifactTestCase,
@@ -88,7 +88,7 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
             ),
         )
     ],
-    ids=["serializes dag artifact as compact public json"],
+    ids=lambda case: case.description,
 )
 def test_given_dag_artifact_when_formatting_json_then_serializes_public_shape(
     test_case: DagJsonTestCase,

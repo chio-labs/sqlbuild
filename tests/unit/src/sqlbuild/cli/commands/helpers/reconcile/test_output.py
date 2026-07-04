@@ -7,49 +7,47 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.reconcile._test_types import (
     ReconcileOutputTestCase,
 )
 
-TEST_CASES: list[ReconcileOutputTestCase] = [
-    ReconcileOutputTestCase(
-        description="formats clean reconcile report",
-        message="Reconcile report for dev: no issues.",
-        expected_text=("\nVirtual reconcile\n\nReconcile report for dev: no issues.\n"),
-        expected_color_fragments=(
-            "\033[32m\033[1mVirtual reconcile\033[0m",
-            "\033[34m\033[1mReconcile report for dev: no issues.\033[0m",
-        ),
-    ),
-    ReconcileOutputTestCase(
-        description="formats repair result rows",
-        message=(
-            "Repair\n"
-            "model   fact_orders\n"
-            "VDE     dev\n"
-            "action  recreate logical view from state\n"
-            "result  repaired"
-        ),
-        expected_text=(
-            "\n"
-            "Virtual reconcile\n"
-            "\n"
-            "Repair\n"
-            "model   fact_orders\n"
-            "VDE     dev\n"
-            "action  recreate logical view from state\n"
-            "result  repaired\n"
-        ),
-        expected_color_fragments=(
-            "\033[32mRepair\033[0m",
-            "  \033[2mmodel   \033[0m \033[34m\033[1mfact_orders\033[0m",
-            "  \033[2mVDE     \033[0m \033[34m\033[1mdev\033[0m",
-            "  \033[2mresult  \033[0m \033[32mrepaired\033[0m",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        ReconcileOutputTestCase(
+            description="formats clean reconcile report",
+            message="Reconcile report for dev: no issues.",
+            expected_text=("\nVirtual reconcile\n\nReconcile report for dev: no issues.\n"),
+            expected_color_fragments=(
+                "\033[32m\033[1mVirtual reconcile\033[0m",
+                "\033[34m\033[1mReconcile report for dev: no issues.\033[0m",
+            ),
+        ),
+        ReconcileOutputTestCase(
+            description="formats repair result rows",
+            message=(
+                "Repair\n"
+                "model   fact_orders\n"
+                "VDE     dev\n"
+                "action  recreate logical view from state\n"
+                "result  repaired"
+            ),
+            expected_text=(
+                "\n"
+                "Virtual reconcile\n"
+                "\n"
+                "Repair\n"
+                "model   fact_orders\n"
+                "VDE     dev\n"
+                "action  recreate logical view from state\n"
+                "result  repaired\n"
+            ),
+            expected_color_fragments=(
+                "\033[32mRepair\033[0m",
+                "  \033[2mmodel   \033[0m \033[34m\033[1mfact_orders\033[0m",
+                "  \033[2mVDE     \033[0m \033[34m\033[1mdev\033[0m",
+                "  \033[2mresult  \033[0m \033[32mrepaired\033[0m",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_reconcile_message_when_formatting_then_returns_expected_output(
     test_case: ReconcileOutputTestCase,

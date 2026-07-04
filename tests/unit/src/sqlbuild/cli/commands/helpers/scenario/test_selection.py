@@ -15,23 +15,6 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.scenario.helpers import (
     build_project_with_scenarios,
 )
 
-SCENARIO_SELECTION_ERROR_TEST_CASES: list[SelectScenariosErrorTestCase] = [
-    SelectScenariosErrorTestCase(
-        description="rejects upstream graph selector",
-        selectors=("+orders_paid",),
-        exclude=(),
-        expected_error_fragment="uses graph operators, which are not supported",
-        expected_error_code="C457",
-    ),
-    SelectScenariosErrorTestCase(
-        description="rejects path graph selector",
-        selectors=("orders_paid~orders_refund",),
-        exclude=(),
-        expected_error_fragment="uses graph operators, which are not supported",
-        expected_error_code="C457",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -43,7 +26,7 @@ SCENARIO_SELECTION_ERROR_TEST_CASES: list[SelectScenariosErrorTestCase] = [
             expected_scenario_names=("orders_paid",),
         )
     ],
-    ids=["excludes scenarios from explicit selection"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_selectors_when_excluding_then_returns_remaining_scenarios(
     test_case: SelectScenariosTestCase,
@@ -64,8 +47,23 @@ def test_given_scenario_selectors_when_excluding_then_returns_remaining_scenario
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_SELECTION_ERROR_TEST_CASES,
-    ids=[case.description for case in SCENARIO_SELECTION_ERROR_TEST_CASES],
+    [
+        SelectScenariosErrorTestCase(
+            description="rejects upstream graph selector",
+            selectors=("+orders_paid",),
+            exclude=(),
+            expected_error_fragment="uses graph operators, which are not supported",
+            expected_error_code="C457",
+        ),
+        SelectScenariosErrorTestCase(
+            description="rejects path graph selector",
+            selectors=("orders_paid~orders_refund",),
+            exclude=(),
+            expected_error_fragment="uses graph operators, which are not supported",
+            expected_error_code="C457",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_graph_scenario_selector_when_selecting_then_raises_clear_error(
     test_case: SelectScenariosErrorTestCase,

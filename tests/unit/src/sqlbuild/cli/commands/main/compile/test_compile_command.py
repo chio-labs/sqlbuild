@@ -26,74 +26,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     prepare_static_compile_project,
 )
 
-CONTRACT_DIAGNOSTIC_TEST_CASES: tuple[CompileCommandTestCase, ...] = (
-    CompileCommandTestCase(
-        description="returns one when contract diagnostics have errors",
-        expected_exit_code=1,
-        expected_stdout_fragments=(
-            "Compile ready (1 model)",
-            "  orders                   FAIL 1 columns",
-            "error[K001]: required column 'customer_id' missing from model output",
-            "  model: orders",
-            "  --> models/orders.sql:5:5",
-            "  5 |     customer_id (),",
-            "    |     ^^^^^^^^^^^",
-            "  = help: add customer_id to the SELECT list or remove it from MODEL(columns)",
-            "  Compiled: 1 model, 0 seeds, 0 functions, 1 error, 0 warnings",
-            "  Wrote: target/compiled/",
-        ),
-        model_sql=(
-            "MODEL (\n"
-            "  materialized view,\n"
-            "  columns (\n"
-            "    order_id (),\n"
-            "    customer_id (),\n"
-            "  ),\n"
-            ");\n\n"
-            "SELECT 1 AS order_id\n"
-        ),
-    ),
-    CompileCommandTestCase(
-        description="reports contract and output locations for type diagnostics",
-        expected_exit_code=1,
-        expected_stdout_fragments=(
-            "error[K002]: column 'amount_cents' inferred as TEXT but contract declares INTEGER",
-            "  --> models/orders.sql:4:5",
-            "  4 |     amount_cents (type INTEGER),",
-            "    |     ^^^^^^^^^^^^",
-            "  output:",
-            "  --> models/orders.sql:9:3",
-            "  9 |   CAST('1' AS VARCHAR) AS amount_cents",
-            "inferred TEXT",
-            "  = help: change the declared type or cast the expression explicitly",
-        ),
-        model_sql=(
-            "MODEL (\n"
-            "  materialized view,\n"
-            "  columns (\n"
-            "    amount_cents (type INTEGER),\n"
-            "  ),\n"
-            ");\n\n"
-            "SELECT\n"
-            "  CAST('1' AS VARCHAR) AS amount_cents\n"
-            "FROM (SELECT 1) AS source\n"
-        ),
-    ),
-)
-
-LINEAGE_ANALYSIS_MODE_TEST_CASES: tuple[CompileLineageModeTestCase, ...] = (
-    CompileLineageModeTestCase(
-        description="uses fast lineage by default",
-        lineage_mode=CompileLineageMode.FAST,
-        expected_lineage_mode_values=(ColumnLineageMode.FAST.value,),
-    ),
-    CompileLineageModeTestCase(
-        description="uses rich lineage when requested",
-        lineage_mode=CompileLineageMode.RICH,
-        expected_lineage_mode_values=(ColumnLineageMode.RICH.value,),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -109,7 +41,7 @@ LINEAGE_ANALYSIS_MODE_TEST_CASES: tuple[CompileLineageModeTestCase, ...] = (
             ),
         )
     ],
-    ids=["compiles local project without connecting"],
+    ids=lambda case: case.description,
 )
 def test_given_local_project_when_running_compile_then_it_does_not_connect(
     test_case: CompileCommandTestCase,
@@ -149,7 +81,7 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
             ),
         )
     ],
-    ids=["persists phase timings for tty stdout"],
+    ids=lambda case: case.description,
 )
 def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
     test_case: CompileCommandTestCase,
@@ -220,7 +152,7 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
             expected_node_ids=("model:orders",),
         )
     ],
-    ids=["writes dag artifact to default target path"],
+    ids=lambda case: case.description,
 )
 def test_given_dag_flag_when_running_compile_then_writes_dag_artifact(
     test_case: CompileDagArtifactTestCase,
@@ -275,7 +207,7 @@ def test_given_dag_flag_when_running_compile_then_writes_dag_artifact(
             },
         )
     ],
-    ids=["writes Python nodes to default dag artifact path"],
+    ids=lambda case: case.description,
 )
 def test_given_python_project_dag_flag_when_running_compile_then_writes_python_dag_artifact(
     test_case: CompilePythonDagArtifactTestCase,
@@ -312,8 +244,61 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
 
 @pytest.mark.parametrize(
     "test_case",
-    CONTRACT_DIAGNOSTIC_TEST_CASES,
-    ids=[case.description for case in CONTRACT_DIAGNOSTIC_TEST_CASES],
+    (
+        CompileCommandTestCase(
+            description="returns one when contract diagnostics have errors",
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "Compile ready (1 model)",
+                "  orders                   FAIL 1 columns",
+                "error[K001]: required column 'customer_id' missing from model output",
+                "  model: orders",
+                "  --> models/orders.sql:5:5",
+                "  5 |     customer_id (),",
+                "    |     ^^^^^^^^^^^",
+                "  = help: add customer_id to the SELECT list or remove it from MODEL(columns)",
+                "  Compiled: 1 model, 0 seeds, 0 functions, 1 error, 0 warnings",
+                "  Wrote: target/compiled/",
+            ),
+            model_sql=(
+                "MODEL (\n"
+                "  materialized view,\n"
+                "  columns (\n"
+                "    order_id (),\n"
+                "    customer_id (),\n"
+                "  ),\n"
+                ");\n\n"
+                "SELECT 1 AS order_id\n"
+            ),
+        ),
+        CompileCommandTestCase(
+            description="reports contract and output locations for type diagnostics",
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "error[K002]: column 'amount_cents' inferred as TEXT but contract declares INTEGER",
+                "  --> models/orders.sql:4:5",
+                "  4 |     amount_cents (type INTEGER),",
+                "    |     ^^^^^^^^^^^^",
+                "  output:",
+                "  --> models/orders.sql:9:3",
+                "  9 |   CAST('1' AS VARCHAR) AS amount_cents",
+                "inferred TEXT",
+                "  = help: change the declared type or cast the expression explicitly",
+            ),
+            model_sql=(
+                "MODEL (\n"
+                "  materialized view,\n"
+                "  columns (\n"
+                "    amount_cents (type INTEGER),\n"
+                "  ),\n"
+                ");\n\n"
+                "SELECT\n"
+                "  CAST('1' AS VARCHAR) AS amount_cents\n"
+                "FROM (SELECT 1) AS source\n"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
     test_case: CompileCommandTestCase,
@@ -366,7 +351,7 @@ def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
             ),
         )
     ],
-    ids=["serializes contract diagnostics in compile json"],
+    ids=lambda case: case.description,
 )
 def test_given_contract_errors_when_running_compile_json_then_serializes_diagnostics(
     test_case: CompileJsonDiagnosticsTestCase,
@@ -414,8 +399,19 @@ def test_given_contract_errors_when_running_compile_json_then_serializes_diagnos
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_ANALYSIS_MODE_TEST_CASES,
-    ids=[case.description for case in LINEAGE_ANALYSIS_MODE_TEST_CASES],
+    (
+        CompileLineageModeTestCase(
+            description="uses fast lineage by default",
+            lineage_mode=CompileLineageMode.FAST,
+            expected_lineage_mode_values=(ColumnLineageMode.FAST.value,),
+        ),
+        CompileLineageModeTestCase(
+            description="uses rich lineage when requested",
+            lineage_mode=CompileLineageMode.RICH,
+            expected_lineage_mode_values=(ColumnLineageMode.RICH.value,),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_lineage_mode_when_resolving_compile_analysis_then_returns_expected_mode(
     test_case: CompileLineageModeTestCase,
@@ -434,7 +430,7 @@ def test_given_lineage_mode_when_resolving_compile_analysis_then_returns_expecte
             expected_lineage_mode_values=(),
         )
     ],
-    ids=["skips lineage when disabled"],
+    ids=lambda case: case.description,
 )
 def test_given_lineage_disabled_when_building_compile_lineage_then_skips_analyzer(
     test_case: CompileLineageModeTestCase,

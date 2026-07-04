@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
-from sqlbuild.compiler.planner.models import GraphNodeKey
+from sqlbuild.compiler.planner.models import GraphNodeKey, SelectionStalenessNodeKey
 from sqlbuild.integrations.dbt.helpers.graph.core import dbt_model_graph_key
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtCombinedGraphKey
@@ -46,6 +46,52 @@ def dbt_graph_node_upstream_deps(
         for key, upstream_keys in graph.upstream_deps.items()
         if key.owner == DbtCombinedGraphOwner.DBT
     }
+
+
+def dbt_selection_staleness_upstream_deps(
+    *, manifest: DbtManifestIndex, graph: DbtCombinedGraph
+) -> dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]:
+    """Project dbt-owned combined graph edges to neutral selection-staleness edges."""
+
+    upstream_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]] = {}
+    key: DbtCombinedGraphKey
+    upstream_keys: tuple[DbtCombinedGraphKey, ...]
+    for key, upstream_keys in graph.upstream_deps.items():
+        neutral_key: SelectionStalenessNodeKey | None = dbt_selection_staleness_key(
+            manifest=manifest, key=key
+        )
+        if neutral_key is None:
+            continue
+        upstream_deps[neutral_key] = tuple(
+            neutral_upstream_key
+            for upstream_key in upstream_keys
+            if (
+                neutral_upstream_key := dbt_selection_staleness_key(
+                    manifest=manifest, key=upstream_key
+                )
+            )
+            is not None
+        )
+    return upstream_deps
+
+
+def dbt_selection_staleness_key(
+    *, manifest: DbtManifestIndex, key: DbtCombinedGraphKey
+) -> SelectionStalenessNodeKey | None:
+    """Return the neutral selection-staleness key for one dbt-owned graph node."""
+
+    if key.owner != DbtCombinedGraphOwner.DBT:
+        return None
+    if key.resource_type == DbtCombinedGraphResourceType.MODEL:
+        if (model := manifest.models_by_unique_id.get(key.name)) is None:
+            return None
+        return SelectionStalenessNodeKey(resource_type="model", name=model.name)
+    if key.resource_type == DbtCombinedGraphResourceType.SOURCE:
+        if (seed := manifest.seeds_by_unique_id.get(key.name)) is not None:
+            return SelectionStalenessNodeKey(resource_type="seed", name=seed.name)
+        if (source := manifest.sources_by_unique_id.get(key.name)) is not None:
+            return SelectionStalenessNodeKey(resource_type="source", name=source.name)
+    return None
 
 
 def dbt_identity_upstream_keys(

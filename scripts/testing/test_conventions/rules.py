@@ -389,6 +389,18 @@ def _check_top_level_test_module_shape(file_path: Path, module: ast.Module) -> l
             and first_test_function_line is None
         ):
             first_test_function_line = node.lineno
+        if _is_test_case_list_assignment(node):
+            violations.append(
+                Violation(
+                    code="TC015",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "module-level TEST_CASES and *_TEST_CASES lists are not allowed; "
+                        "inline dataclass cases in @pytest.mark.parametrize"
+                    ),
+                )
+            )
         if first_test_function_line is not None and _is_private_assignment(node):
             violations.append(
                 Violation(
@@ -413,6 +425,19 @@ def _is_private_assignment(node: ast.stmt) -> bool:
     if isinstance(node, ast.Assign):
         return any(
             isinstance(target, ast.Name) and target.id.startswith("_") for target in node.targets
+        )
+    return False
+
+
+def _is_test_case_list_assignment(node: ast.stmt) -> bool:
+    """Return whether a node assigns a module-level test case list."""
+
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return _is_multi_case_list_name(node.target.id)
+    if isinstance(node, ast.Assign):
+        return any(
+            isinstance(target, ast.Name) and _is_multi_case_list_name(target.id)
+            for target in node.targets
         )
     return False
 
@@ -567,100 +592,43 @@ def _check_parametrize_shape(
 
     values_expression = decorator.args[1]
     if isinstance(values_expression, ast.Name):
-        if not _is_multi_case_list_name(values_expression.id):
-            violations.append(
-                Violation(
-                    code="TC015",
-                    path=file_path,
-                    line=function_node.lineno,
-                    message=(
-                        "multi-case parametrization must use a module-level TEST_CASES "
-                        "or *_TEST_CASES constant"
-                    ),
-                )
+        violations.append(
+            Violation(
+                code="TC016",
+                path=file_path,
+                line=function_node.lineno,
+                message=(
+                    "@pytest.mark.parametrize values must be inline local test case "
+                    "dataclass instances"
+                ),
             )
-            return violations
-
-        assigned_cases = context.module_level_case_lists.get(values_expression.id)
-        if assigned_cases is None:
-            violations.append(
-                Violation(
-                    code="TC016",
-                    path=file_path,
-                    line=function_node.lineno,
-                    message=(
-                        "multi-case test case lists must be defined at module scope using "
-                        "TEST_CASES or *_TEST_CASES"
-                    ),
-                )
-            )
-            return violations
-
-        generated_case_list_allowed: bool = _is_allowed_generated_case_list(
-            assigned_cases,
-            context=context,
-            file_path=file_path,
         )
+        return violations
 
-        if not generated_case_list_allowed and not isinstance(
-            assigned_cases, (ast.List, ast.Tuple)
-        ):
+    if isinstance(values_expression, ast.ListComp):
+        if not _is_local_test_case_constructor(values_expression.elt, context):
             violations.append(
                 Violation(
-                    code="TC017",
+                    code="TC024",
                     path=file_path,
-                    line=function_node.lineno,
+                    line=getattr(values_expression.elt, "lineno", function_node.lineno),
                     message=(
-                        "TEST_CASES or *_TEST_CASES must be assigned to a list "
-                        "of local test case dataclass instances"
+                        "inline generated test cases must construct dataclasses imported "
+                        "from the local _test_types.py"
                     ),
                 )
             )
-            return violations
-
-        if not generated_case_list_allowed and len(assigned_cases.elts) < 2:
+        if not _is_description_lambda_ids(ids_expression):
             violations.append(
                 Violation(
-                    code="TC018",
+                    code="TC025",
                     path=file_path,
                     line=function_node.lineno,
                     message=(
-                        "single-case tests may inline one case; "
-                        "TEST_CASES and *_TEST_CASES are reserved for two or more cases"
+                        "@pytest.mark.parametrize ids must be ids=lambda case: case.description"
                     ),
                 )
             )
-
-        if not generated_case_list_allowed:
-            for element in assigned_cases.elts:
-                if not _is_local_test_case_constructor(element, context):
-                    violations.append(
-                        Violation(
-                            code="TC019",
-                            path=file_path,
-                            line=getattr(element, "lineno", function_node.lineno),
-                            message=(
-                                "TEST_CASES or *_TEST_CASES entries must be constructor calls "
-                                "to dataclasses imported from the local _test_types.py"
-                            ),
-                        )
-                    )
-
-        if not _is_description_ids_for_test_cases(
-            ids_expression, case_list_name=values_expression.id
-        ):
-            violations.append(
-                Violation(
-                    code="TC020",
-                    path=file_path,
-                    line=function_node.lineno,
-                    message=(
-                        "multi-case parametrization ids must be "
-                        "ids=[case.description for case in <CASE_LIST_NAME>]"
-                    ),
-                )
-            )
-
         return violations
 
     if not isinstance(values_expression, (ast.List, ast.Tuple)):
@@ -670,27 +638,23 @@ def _check_parametrize_shape(
                 path=file_path,
                 line=function_node.lineno,
                 message=(
-                    "single-case tests must inline a one-item list, "
-                    "and multi-case tests must use TEST_CASES or *_TEST_CASES"
+                    "@pytest.mark.parametrize values must be inline local test case "
+                    "dataclass instances"
                 ),
             )
         )
         return violations
 
-    if len(values_expression.elts) != 1:
+    if not values_expression.elts:
         violations.append(
             Violation(
                 code="TC022",
                 path=file_path,
                 line=function_node.lineno,
-                message=(
-                    "inline parametrization is only allowed for a single test case; "
-                    "use TEST_CASES or *_TEST_CASES for two or more cases"
-                ),
+                message="inline parametrization must include at least one test case",
             )
         )
-    else:
-        element = values_expression.elts[0]
+    for element in values_expression.elts:
         if isinstance(element, ast.Dict):
             violations.append(
                 Violation(
@@ -713,16 +677,13 @@ def _check_parametrize_shape(
                 )
             )
 
-    if not _is_single_case_ids(ids_expression):
+    if not _is_description_lambda_ids(ids_expression):
         violations.append(
             Violation(
                 code="TC025",
                 path=file_path,
                 line=function_node.lineno,
-                message=(
-                    "single-case parametrization ids must be an explicit "
-                    "one-item list of descriptive strings"
-                ),
+                message=("@pytest.mark.parametrize ids must be ids=lambda case: case.description"),
             )
         )
 
@@ -753,55 +714,11 @@ def _is_multi_case_list_name(name: str) -> bool:
     return name == "TEST_CASES" or name.endswith("_TEST_CASES")
 
 
-def _is_allowed_generated_case_list(
-    expression: ast.expr,
-    *,
-    context: ModuleContext,
-    file_path: Path,
-) -> bool:
-    allowed_path: tuple[str, ...] = (
-        "tests",
-        "e2e",
-        "src",
-        "sqlbuild",
-        "cli",
-        "commands",
-        "main",
-        "selection_staleness",
-        "test_selection_staleness.py",
-    )
-    if file_path.parts[-len(allowed_path) :] != allowed_path:
+def _is_description_lambda_ids(expression: ast.expr | None) -> bool:
+    if not isinstance(expression, ast.Lambda):
         return False
-    if not isinstance(expression, ast.ListComp):
+    if len(expression.args.args) != 1:
         return False
-    return _is_local_test_case_constructor(expression.elt, context)
-
-
-def _is_description_ids_for_test_cases(
-    expression: ast.expr | None,
-    case_list_name: str,
-) -> bool:
-    if not isinstance(expression, ast.ListComp):
+    if expression.args.args[0].arg != "case":
         return False
-    if len(expression.generators) != 1:
-        return False
-
-    generator = expression.generators[0]
-    if not isinstance(generator.target, ast.Name) or generator.target.id != "case":
-        return False
-    if not isinstance(generator.iter, ast.Name) or generator.iter.id != case_list_name:
-        return False
-
-    chain = attribute_chain(expression.elt)
-    return chain == ("case", "description")
-
-
-def _is_single_case_ids(expression: ast.expr | None) -> bool:
-    if not isinstance(expression, (ast.List, ast.Tuple)):
-        return False
-    if len(expression.elts) != 1:
-        return False
-    return all(
-        isinstance(element, ast.Constant) and isinstance(element.value, str)
-        for element in expression.elts
-    )
+    return attribute_chain(expression.body) == ("case", "description")

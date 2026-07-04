@@ -23,43 +23,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-SQL_ANALYSIS_CHAIN_TEST_CASES: list[SqlAnalysisChainSqlTestE2ETestCase] = [
-    SqlAnalysisChainSqlTestE2ETestCase(
-        description="sql_analysis enabled chain test runs and writes generated ctes",
-        sql_analysis_enabled=True,
-        expected_artifact_fragments=(
-            "__source__raw AS (",
-            "__ref__stg_orders AS (",
-            "__actual__fact_orders AS (",
-            "FROM __ref__stg_orders",
-            "'US' AS country",
-            "' + x + ' AS literal_text",
-            "'active' AS status",
-            "'fact_orders' AS model_name",
-        ),
-        unexpected_artifact_fragments=(
-            "__actual_0",
-            "__actual__fact_orders AS (\n  SELECT\n    id,\n    amount + 1 AS adjusted\n  FROM (",
-        ),
-    ),
-    SqlAnalysisChainSqlTestE2ETestCase(
-        description="sql_analysis disabled chain test runs and keeps nested fallback sql",
-        sql_analysis_enabled=False,
-        expected_artifact_fragments=(
-            "__actual__fact_orders AS (",
-            "FROM (",
-            "'US' AS country",
-            "' + x + ' AS literal_text",
-            "'active' AS status",
-            "'fact_orders' AS model_name",
-        ),
-        unexpected_artifact_fragments=(
-            "__ref__stg_orders AS (",
-            "__actual_0",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -94,7 +57,7 @@ SQL_ANALYSIS_CHAIN_TEST_CASES: list[SqlAnalysisChainSqlTestE2ETestCase] = [
             ),
         ),
     ],
-    ids=["test runs SQL unit tests and all pass"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
     test_case: SqlTestE2ETestCase,
@@ -121,8 +84,43 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
 
 @pytest.mark.parametrize(
     "test_case",
-    SQL_ANALYSIS_CHAIN_TEST_CASES,
-    ids=[case.description for case in SQL_ANALYSIS_CHAIN_TEST_CASES],
+    [
+        SqlAnalysisChainSqlTestE2ETestCase(
+            description="sql_analysis enabled chain test runs and writes generated ctes",
+            sql_analysis_enabled=True,
+            expected_artifact_fragments=(
+                "__source__raw AS (",
+                "__ref__stg_orders AS (",
+                "__actual__fact_orders AS (",
+                "FROM __ref__stg_orders",
+                "'US' AS country",
+                "' + x + ' AS literal_text",
+                "'active' AS status",
+                "'fact_orders' AS model_name",
+            ),
+            unexpected_artifact_fragments=(
+                "__actual_0",
+                "__actual__fact_orders AS (\n  SELECT\n    id,\n    amount + 1 AS adjusted\n  FROM (",
+            ),
+        ),
+        SqlAnalysisChainSqlTestE2ETestCase(
+            description="sql_analysis disabled chain test runs and keeps nested fallback sql",
+            sql_analysis_enabled=False,
+            expected_artifact_fragments=(
+                "__actual__fact_orders AS (",
+                "FROM (",
+                "'US' AS country",
+                "' + x + ' AS literal_text",
+                "'active' AS status",
+                "'fact_orders' AS model_name",
+            ),
+            unexpected_artifact_fragments=(
+                "__ref__stg_orders AS (",
+                "__actual_0",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
     test_case: SqlAnalysisChainSqlTestE2ETestCase,
@@ -192,7 +190,7 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
             ),
         )
     ],
-    ids=["macro SQL unit test passes and writes direct comparison artifact"],
+    ids=lambda case: case.description,
 )
 def test_given_macro_sql_test_when_running_test_then_actual_and_expected_are_compared(
     test_case: SqlTestE2ETestCase,
@@ -245,7 +243,7 @@ def test_given_macro_sql_test_when_running_test_then_actual_and_expected_are_com
             expected_stdout_fragments=("orders_assert", "expect  assertion no_negative_orders"),
         )
     ],
-    ids=["assertion-only SQL unit test passes when assertion returns zero rows"],
+    ids=lambda case: case.description,
 )
 def test_given_assertion_only_sql_test_when_assertion_returns_zero_rows_then_it_passes(
     test_case: SqlTestE2ETestCase,
@@ -289,7 +287,7 @@ def test_given_assertion_only_sql_test_when_assertion_returns_zero_rows_then_it_
             ),
         )
     ],
-    ids=["assertion-only SQL unit test fails when assertion returns rows"],
+    ids=lambda case: case.description,
 )
 def test_given_assertion_only_sql_test_when_assertion_returns_rows_then_it_fails(
     test_case: SqlTestE2ETestCase,

@@ -26,7 +26,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
             expected_output={"type": "duckdb", "path": "/tmp/example.duckdb", "threads": 2},
         )
     ],
-    ids=["renders env vars and preserves native numeric filter values"],
+    ids=lambda case: case.description,
 )
 def test_given_selected_dbt_output_when_rendering_then_returns_expected_native_values(
     test_case: DbtProfileRenderTestCase,
@@ -59,7 +59,7 @@ def test_given_selected_dbt_output_when_rendering_then_returns_expected_native_v
             expected_error_fragment="MISSING_DUCKDB_PATH",
         )
     ],
-    ids=["missing env var raises clear error"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_env_var_when_rendering_then_raises_clear_error(
     tmp_path: Path,

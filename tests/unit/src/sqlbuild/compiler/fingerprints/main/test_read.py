@@ -53,7 +53,7 @@ from tests.unit.src.sqlbuild.compiler.fingerprints.main.helpers import (
             expected_metadata_json='{"config":{"materialized":"table"}}',
         )
     ],
-    ids=["decodes query SQL and metadata JSON from latest fingerprint row"],
+    ids=lambda case: case.description,
 )
 def test_given_encoded_fingerprint_row_when_reading_then_decodes_query_and_metadata(
     test_case: ReadLatestFingerprintsTestCase,
@@ -87,7 +87,7 @@ def test_given_encoded_fingerprint_row_when_reading_then_decodes_query_and_metad
             expected_executed_sql="SELECT 'sentinel latest fingerprint sql'",
         )
     ],
-    ids=["uses injected latest-read SQL renderer"],
+    ids=lambda case: case.description,
 )
 def test_given_latest_sql_renderer_when_reading_then_executes_renderer_sql(
     test_case: ReadLatestFingerprintsRendererTestCase,
@@ -116,7 +116,7 @@ def test_given_latest_sql_renderer_when_reading_then_executes_renderer_sql(
             expected_insert_prefix="INSERT INTO main._sqlbuild_fingerprints",
         )
     ],
-    ids=["creates index before inserting fingerprint row"],
+    ids=lambda case: case.description,
 )
 def test_given_index_renderer_when_writing_fingerprint_then_executes_index_before_insert(
     test_case: WriteFingerprintIndexTestCase,
@@ -161,7 +161,7 @@ def test_given_index_renderer_when_writing_fingerprint_then_executes_index_befor
             expected_message_fragment="delete or rebuild the SQLBuild fingerprint table",
         )
     ],
-    ids=["old fingerprint table schema read failure gives operator guidance"],
+    ids=lambda case: case.description,
 )
 def test_given_read_failure_when_reading_fingerprints_then_raises_operator_guidance(
     test_case: ReadLatestFingerprintsErrorTestCase,

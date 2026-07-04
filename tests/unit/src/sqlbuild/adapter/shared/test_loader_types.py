@@ -27,59 +27,56 @@ _DEFAULT_EXPECTED_TYPES: dict[LoaderLogicalType, str] = {
 }
 
 
-ADAPTER_LOADER_TYPE_MAPPING_TEST_CASES: list[AdapterLoaderTypeMappingTestCase] = [
-    AdapterLoaderTypeMappingTestCase(
-        description="duckdb maps every loader logical type",
-        adapter_name=BuiltinAdapter.DUCKDB.value,
-        expected_types=_DEFAULT_EXPECTED_TYPES,
-    ),
-    AdapterLoaderTypeMappingTestCase(
-        description="motherduck maps every loader logical type",
-        adapter_name=BuiltinAdapter.MOTHERDUCK.value,
-        expected_types=_DEFAULT_EXPECTED_TYPES,
-    ),
-    AdapterLoaderTypeMappingTestCase(
-        description="bigquery maps every loader logical type",
-        adapter_name=BuiltinAdapter.BIGQUERY.value,
-        expected_types={
-            **_DEFAULT_EXPECTED_TYPES,
-            LoaderLogicalType.BOOLEAN: "BOOL",
-            LoaderLogicalType.INTEGER: "INT64",
-            LoaderLogicalType.FLOAT: "FLOAT64",
-            LoaderLogicalType.STRING: "STRING",
-        },
-    ),
-    AdapterLoaderTypeMappingTestCase(
-        description="snowflake maps json to variant",
-        adapter_name=BuiltinAdapter.SNOWFLAKE.value,
-        expected_types={**_DEFAULT_EXPECTED_TYPES, LoaderLogicalType.JSON: "VARIANT"},
-    ),
-    AdapterLoaderTypeMappingTestCase(
-        description="databricks maps strings and json to string",
-        adapter_name=BuiltinAdapter.DATABRICKS.value,
-        expected_types={
-            **_DEFAULT_EXPECTED_TYPES,
-            LoaderLogicalType.STRING: "STRING",
-            LoaderLogicalType.JSON: "STRING",
-        },
-    ),
-    AdapterLoaderTypeMappingTestCase(
-        description="postgres maps text float and json to postgres types",
-        adapter_name=BuiltinAdapter.POSTGRES.value,
-        expected_types={
-            **_DEFAULT_EXPECTED_TYPES,
-            LoaderLogicalType.FLOAT: "DOUBLE PRECISION",
-            LoaderLogicalType.STRING: "TEXT",
-            LoaderLogicalType.JSON: "JSONB",
-        },
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ADAPTER_LOADER_TYPE_MAPPING_TEST_CASES,
-    ids=[case.description for case in ADAPTER_LOADER_TYPE_MAPPING_TEST_CASES],
+    [
+        AdapterLoaderTypeMappingTestCase(
+            description="duckdb maps every loader logical type",
+            adapter_name=BuiltinAdapter.DUCKDB.value,
+            expected_types=_DEFAULT_EXPECTED_TYPES,
+        ),
+        AdapterLoaderTypeMappingTestCase(
+            description="motherduck maps every loader logical type",
+            adapter_name=BuiltinAdapter.MOTHERDUCK.value,
+            expected_types=_DEFAULT_EXPECTED_TYPES,
+        ),
+        AdapterLoaderTypeMappingTestCase(
+            description="bigquery maps every loader logical type",
+            adapter_name=BuiltinAdapter.BIGQUERY.value,
+            expected_types={
+                **_DEFAULT_EXPECTED_TYPES,
+                LoaderLogicalType.BOOLEAN: "BOOL",
+                LoaderLogicalType.INTEGER: "INT64",
+                LoaderLogicalType.FLOAT: "FLOAT64",
+                LoaderLogicalType.STRING: "STRING",
+            },
+        ),
+        AdapterLoaderTypeMappingTestCase(
+            description="snowflake maps json to variant",
+            adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+            expected_types={**_DEFAULT_EXPECTED_TYPES, LoaderLogicalType.JSON: "VARIANT"},
+        ),
+        AdapterLoaderTypeMappingTestCase(
+            description="databricks maps strings and json to string",
+            adapter_name=BuiltinAdapter.DATABRICKS.value,
+            expected_types={
+                **_DEFAULT_EXPECTED_TYPES,
+                LoaderLogicalType.STRING: "STRING",
+                LoaderLogicalType.JSON: "STRING",
+            },
+        ),
+        AdapterLoaderTypeMappingTestCase(
+            description="postgres maps text float and json to postgres types",
+            adapter_name=BuiltinAdapter.POSTGRES.value,
+            expected_types={
+                **_DEFAULT_EXPECTED_TYPES,
+                LoaderLogicalType.FLOAT: "DOUBLE PRECISION",
+                LoaderLogicalType.STRING: "TEXT",
+                LoaderLogicalType.JSON: "JSONB",
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_builtin_adapter_when_rendering_loader_types_then_maps_every_logical_type(
     test_case: AdapterLoaderTypeMappingTestCase,
@@ -95,103 +92,47 @@ def test_given_builtin_adapter_when_rendering_loader_types_then_maps_every_logic
         )
 
 
-ADAPTER_LOADER_VALUE_LITERAL_TEST_CASES: list[AdapterLoaderValueLiteralTestCase] = [
-    AdapterLoaderValueLiteralTestCase(
-        description="duckdb renders json as quoted string literal",
-        adapter_name=BuiltinAdapter.DUCKDB.value,
-        value={"source": "loader's api"},
-        logical_type=LoaderLogicalType.JSON,
-        expected_literal="'{\"source\": \"loader''s api\"}'",
-    ),
-    AdapterLoaderValueLiteralTestCase(
-        description="motherduck renders json as quoted string literal",
-        adapter_name=BuiltinAdapter.MOTHERDUCK.value,
-        value={"source": "loader's api"},
-        logical_type=LoaderLogicalType.JSON,
-        expected_literal="'{\"source\": \"loader''s api\"}'",
-    ),
-    AdapterLoaderValueLiteralTestCase(
-        description="snowflake renders json with parse_json",
-        adapter_name=BuiltinAdapter.SNOWFLAKE.value,
-        value={"source": "loader's api"},
-        logical_type=LoaderLogicalType.JSON,
-        expected_literal="PARSE_JSON('{\"source\": \"loader''s api\"}')",
-    ),
-    AdapterLoaderValueLiteralTestCase(
-        description="postgres renders json with jsonb cast",
-        adapter_name=BuiltinAdapter.POSTGRES.value,
-        value={"source": "loader's api"},
-        logical_type=LoaderLogicalType.JSON,
-        expected_literal="'{\"source\": \"loader''s api\"}'::JSONB",
-    ),
-    AdapterLoaderValueLiteralTestCase(
-        description="bigquery renders json with json literal prefix",
-        adapter_name=BuiltinAdapter.BIGQUERY.value,
-        value={"source": "loader's api"},
-        logical_type=LoaderLogicalType.JSON,
-        expected_literal="JSON '{\"source\": \"loader''s api\"}'",
-    ),
-    AdapterLoaderValueLiteralTestCase(
-        description="databricks renders json as quoted string literal",
-        adapter_name=BuiltinAdapter.DATABRICKS.value,
-        value={"source": "loader's api"},
-        logical_type=LoaderLogicalType.JSON,
-        expected_literal="'{\"source\": \"loader''s api\"}'",
-    ),
-    AdapterLoaderValueLiteralTestCase(
-        description="duckdb escapes string literals",
-        adapter_name=BuiltinAdapter.DUCKDB.value,
-        value="customer's order",
-        logical_type=LoaderLogicalType.STRING,
-        expected_literal="'customer''s order'",
-    ),
-]
-
-
-ADAPTER_IDENTIFIER_RENDERING_TEST_CASES: list[AdapterIdentifierRenderingTestCase] = [
-    AdapterIdentifierRenderingTestCase(
-        description="duckdb renders double-quoted loader identifiers",
-        adapter_name=BuiltinAdapter.DUCKDB.value,
-        raw_identifier='order "id"',
-        expected_identifier='"order ""id"""',
-    ),
-    AdapterIdentifierRenderingTestCase(
-        description="motherduck renders double-quoted loader identifiers",
-        adapter_name=BuiltinAdapter.MOTHERDUCK.value,
-        raw_identifier='order "id"',
-        expected_identifier='"order ""id"""',
-    ),
-    AdapterIdentifierRenderingTestCase(
-        description="postgres renders double-quoted loader identifiers",
-        adapter_name=BuiltinAdapter.POSTGRES.value,
-        raw_identifier='order "id"',
-        expected_identifier='"order ""id"""',
-    ),
-    AdapterIdentifierRenderingTestCase(
-        description="snowflake renders double-quoted loader identifiers",
-        adapter_name=BuiltinAdapter.SNOWFLAKE.value,
-        raw_identifier='order "id"',
-        expected_identifier='"ORDER ""ID"""',
-    ),
-    AdapterIdentifierRenderingTestCase(
-        description="bigquery renders backtick-quoted loader identifiers",
-        adapter_name=BuiltinAdapter.BIGQUERY.value,
-        raw_identifier="order `id`",
-        expected_identifier="`order ``id```",
-    ),
-    AdapterIdentifierRenderingTestCase(
-        description="databricks renders backtick-quoted loader identifiers",
-        adapter_name=BuiltinAdapter.DATABRICKS.value,
-        raw_identifier="order `id`",
-        expected_identifier="`order ``id```",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ADAPTER_IDENTIFIER_RENDERING_TEST_CASES,
-    ids=[case.description for case in ADAPTER_IDENTIFIER_RENDERING_TEST_CASES],
+    [
+        AdapterIdentifierRenderingTestCase(
+            description="duckdb renders double-quoted loader identifiers",
+            adapter_name=BuiltinAdapter.DUCKDB.value,
+            raw_identifier='order "id"',
+            expected_identifier='"order ""id"""',
+        ),
+        AdapterIdentifierRenderingTestCase(
+            description="motherduck renders double-quoted loader identifiers",
+            adapter_name=BuiltinAdapter.MOTHERDUCK.value,
+            raw_identifier='order "id"',
+            expected_identifier='"order ""id"""',
+        ),
+        AdapterIdentifierRenderingTestCase(
+            description="postgres renders double-quoted loader identifiers",
+            adapter_name=BuiltinAdapter.POSTGRES.value,
+            raw_identifier='order "id"',
+            expected_identifier='"order ""id"""',
+        ),
+        AdapterIdentifierRenderingTestCase(
+            description="snowflake renders double-quoted loader identifiers",
+            adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+            raw_identifier='order "id"',
+            expected_identifier='"ORDER ""ID"""',
+        ),
+        AdapterIdentifierRenderingTestCase(
+            description="bigquery renders backtick-quoted loader identifiers",
+            adapter_name=BuiltinAdapter.BIGQUERY.value,
+            raw_identifier="order `id`",
+            expected_identifier="`order ``id```",
+        ),
+        AdapterIdentifierRenderingTestCase(
+            description="databricks renders backtick-quoted loader identifiers",
+            adapter_name=BuiltinAdapter.DATABRICKS.value,
+            raw_identifier="order `id`",
+            expected_identifier="`order ``id```",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_builtin_adapter_when_rendering_identifier_then_uses_adapter_quotes(
     test_case: AdapterIdentifierRenderingTestCase,
@@ -204,8 +145,58 @@ def test_given_builtin_adapter_when_rendering_identifier_then_uses_adapter_quote
 
 @pytest.mark.parametrize(
     "test_case",
-    ADAPTER_LOADER_VALUE_LITERAL_TEST_CASES,
-    ids=[case.description for case in ADAPTER_LOADER_VALUE_LITERAL_TEST_CASES],
+    [
+        AdapterLoaderValueLiteralTestCase(
+            description="duckdb renders json as quoted string literal",
+            adapter_name=BuiltinAdapter.DUCKDB.value,
+            value={"source": "loader's api"},
+            logical_type=LoaderLogicalType.JSON,
+            expected_literal="'{\"source\": \"loader''s api\"}'",
+        ),
+        AdapterLoaderValueLiteralTestCase(
+            description="motherduck renders json as quoted string literal",
+            adapter_name=BuiltinAdapter.MOTHERDUCK.value,
+            value={"source": "loader's api"},
+            logical_type=LoaderLogicalType.JSON,
+            expected_literal="'{\"source\": \"loader''s api\"}'",
+        ),
+        AdapterLoaderValueLiteralTestCase(
+            description="snowflake renders json with parse_json",
+            adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+            value={"source": "loader's api"},
+            logical_type=LoaderLogicalType.JSON,
+            expected_literal="PARSE_JSON('{\"source\": \"loader''s api\"}')",
+        ),
+        AdapterLoaderValueLiteralTestCase(
+            description="postgres renders json with jsonb cast",
+            adapter_name=BuiltinAdapter.POSTGRES.value,
+            value={"source": "loader's api"},
+            logical_type=LoaderLogicalType.JSON,
+            expected_literal="'{\"source\": \"loader''s api\"}'::JSONB",
+        ),
+        AdapterLoaderValueLiteralTestCase(
+            description="bigquery renders json with json literal prefix",
+            adapter_name=BuiltinAdapter.BIGQUERY.value,
+            value={"source": "loader's api"},
+            logical_type=LoaderLogicalType.JSON,
+            expected_literal="JSON '{\"source\": \"loader''s api\"}'",
+        ),
+        AdapterLoaderValueLiteralTestCase(
+            description="databricks renders json as quoted string literal",
+            adapter_name=BuiltinAdapter.DATABRICKS.value,
+            value={"source": "loader's api"},
+            logical_type=LoaderLogicalType.JSON,
+            expected_literal="'{\"source\": \"loader''s api\"}'",
+        ),
+        AdapterLoaderValueLiteralTestCase(
+            description="duckdb escapes string literals",
+            adapter_name=BuiltinAdapter.DUCKDB.value,
+            value="customer's order",
+            logical_type=LoaderLogicalType.STRING,
+            expected_literal="'customer''s order'",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_builtin_adapter_when_rendering_loader_value_then_returns_expected_literal(
     test_case: AdapterLoaderValueLiteralTestCase,
@@ -222,49 +213,46 @@ def test_given_builtin_adapter_when_rendering_loader_value_then_returns_expected
     )
 
 
-ADAPTER_LOADER_ROWS_SELECT_TEST_CASES: list[AdapterLoaderRowsSelectTestCase] = [
-    AdapterLoaderRowsSelectTestCase(
-        description="duckdb renders values row select",
-        adapter_name=BuiltinAdapter.DUCKDB.value,
-        expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
-    ),
-    AdapterLoaderRowsSelectTestCase(
-        description="motherduck renders values row select",
-        adapter_name=BuiltinAdapter.MOTHERDUCK.value,
-        expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
-    ),
-    AdapterLoaderRowsSelectTestCase(
-        description="postgres renders values row select",
-        adapter_name=BuiltinAdapter.POSTGRES.value,
-        expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
-    ),
-    AdapterLoaderRowsSelectTestCase(
-        description="snowflake renders values row select",
-        adapter_name=BuiltinAdapter.SNOWFLAKE.value,
-        expected_fragments=("FROM (VALUES", 'AS __loader_rows("ID", "STATUS")'),
-    ),
-    AdapterLoaderRowsSelectTestCase(
-        description="databricks renders values row select",
-        adapter_name=BuiltinAdapter.DATABRICKS.value,
-        expected_fragments=("FROM (VALUES", "AS __loader_rows(`id`, `status`)"),
-    ),
-    AdapterLoaderRowsSelectTestCase(
-        description="bigquery renders union row select",
-        adapter_name=BuiltinAdapter.BIGQUERY.value,
-        expected_fragments=(
-            "SELECT CAST(1 AS INT64) AS `id`, CAST('placed' AS STRING) AS `status`",
-            "UNION ALL",
-            "SELECT CAST(2 AS INT64) AS `id`, CAST('shipped' AS STRING) AS `status`",
-        ),
-        forbidden_fragments=("FROM (VALUES", "__loader_rows"),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ADAPTER_LOADER_ROWS_SELECT_TEST_CASES,
-    ids=[case.description for case in ADAPTER_LOADER_ROWS_SELECT_TEST_CASES],
+    [
+        AdapterLoaderRowsSelectTestCase(
+            description="duckdb renders values row select",
+            adapter_name=BuiltinAdapter.DUCKDB.value,
+            expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
+        ),
+        AdapterLoaderRowsSelectTestCase(
+            description="motherduck renders values row select",
+            adapter_name=BuiltinAdapter.MOTHERDUCK.value,
+            expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
+        ),
+        AdapterLoaderRowsSelectTestCase(
+            description="postgres renders values row select",
+            adapter_name=BuiltinAdapter.POSTGRES.value,
+            expected_fragments=("FROM (VALUES", 'AS __loader_rows("id", "status")'),
+        ),
+        AdapterLoaderRowsSelectTestCase(
+            description="snowflake renders values row select",
+            adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+            expected_fragments=("FROM (VALUES", 'AS __loader_rows("ID", "STATUS")'),
+        ),
+        AdapterLoaderRowsSelectTestCase(
+            description="databricks renders values row select",
+            adapter_name=BuiltinAdapter.DATABRICKS.value,
+            expected_fragments=("FROM (VALUES", "AS __loader_rows(`id`, `status`)"),
+        ),
+        AdapterLoaderRowsSelectTestCase(
+            description="bigquery renders union row select",
+            adapter_name=BuiltinAdapter.BIGQUERY.value,
+            expected_fragments=(
+                "SELECT CAST(1 AS INT64) AS `id`, CAST('placed' AS STRING) AS `status`",
+                "UNION ALL",
+                "SELECT CAST(2 AS INT64) AS `id`, CAST('shipped' AS STRING) AS `status`",
+            ),
+            forbidden_fragments=("FROM (VALUES", "__loader_rows"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_builtin_adapter_when_rendering_loader_rows_then_returns_adapter_sql(
     test_case: AdapterLoaderRowsSelectTestCase,
@@ -295,7 +283,7 @@ def test_given_builtin_adapter_when_rendering_loader_rows_then_returns_adapter_s
             expected_sql="SELECT CAST(NULL AS STRING) AS `all_null` WHERE 1 = 0",
         )
     ],
-    ids=["bigquery renders empty loader rows with string default"],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sql(
     test_case: AdapterLoaderRowsEmptySelectTestCase,
@@ -313,80 +301,77 @@ def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sq
     assert sql == test_case.expected_sql
 
 
-ADAPTER_SOURCE_EXPRESSION_RENDERING_TEST_CASES: list[AdapterSourceExpressionRenderingTestCase] = [
-    AdapterSourceExpressionRenderingTestCase(
-        description="duckdb renders source expression shape explicitly",
-        adapter_name=BuiltinAdapter.DUCKDB.value,
-        expected_relation="(SELECT 1 AS id)",
-        expected_cast_subquery=(
-            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
-        ),
-        expected_relation_cast_subquery=(
-            "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
-        ),
-    ),
-    AdapterSourceExpressionRenderingTestCase(
-        description="motherduck renders source expression shape explicitly",
-        adapter_name=BuiltinAdapter.MOTHERDUCK.value,
-        expected_relation="(SELECT 1 AS id)",
-        expected_cast_subquery=(
-            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
-        ),
-        expected_relation_cast_subquery=(
-            "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
-        ),
-    ),
-    AdapterSourceExpressionRenderingTestCase(
-        description="postgres renders source expression shape explicitly",
-        adapter_name=BuiltinAdapter.POSTGRES.value,
-        expected_relation="(SELECT 1 AS id)",
-        expected_cast_subquery=(
-            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
-        ),
-        expected_relation_cast_subquery=(
-            "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
-        ),
-    ),
-    AdapterSourceExpressionRenderingTestCase(
-        description="snowflake renders source expression shape explicitly",
-        adapter_name=BuiltinAdapter.SNOWFLAKE.value,
-        expected_relation="(SELECT 1 AS id)",
-        expected_cast_subquery=(
-            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
-        ),
-        expected_relation_cast_subquery=(
-            "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
-        ),
-    ),
-    AdapterSourceExpressionRenderingTestCase(
-        description="databricks renders source expression shape explicitly",
-        adapter_name=BuiltinAdapter.DATABRICKS.value,
-        expected_relation="(SELECT 1 AS id)",
-        expected_cast_subquery=(
-            "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
-        ),
-        expected_relation_cast_subquery=(
-            "(SELECT * EXCEPT (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
-        ),
-    ),
-    AdapterSourceExpressionRenderingTestCase(
-        description="bigquery renders source expression shape and normalized cast types",
-        adapter_name=BuiltinAdapter.BIGQUERY.value,
-        expected_relation="(SELECT 1 AS id)",
-        expected_cast_subquery=(
-            "(SELECT CAST(id AS INT64) AS id FROM (SELECT 1 AS id) AS __source_expression)"
-        ),
-        expected_relation_cast_subquery=(
-            "(SELECT * EXCEPT (id), CAST(id AS INT64) AS id FROM raw.orders)"
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ADAPTER_SOURCE_EXPRESSION_RENDERING_TEST_CASES,
-    ids=[case.description for case in ADAPTER_SOURCE_EXPRESSION_RENDERING_TEST_CASES],
+    [
+        AdapterSourceExpressionRenderingTestCase(
+            description="duckdb renders source expression shape explicitly",
+            adapter_name=BuiltinAdapter.DUCKDB.value,
+            expected_relation="(SELECT 1 AS id)",
+            expected_cast_subquery=(
+                "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+            ),
+            expected_relation_cast_subquery=(
+                "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+            ),
+        ),
+        AdapterSourceExpressionRenderingTestCase(
+            description="motherduck renders source expression shape explicitly",
+            adapter_name=BuiltinAdapter.MOTHERDUCK.value,
+            expected_relation="(SELECT 1 AS id)",
+            expected_cast_subquery=(
+                "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+            ),
+            expected_relation_cast_subquery=(
+                "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+            ),
+        ),
+        AdapterSourceExpressionRenderingTestCase(
+            description="postgres renders source expression shape explicitly",
+            adapter_name=BuiltinAdapter.POSTGRES.value,
+            expected_relation="(SELECT 1 AS id)",
+            expected_cast_subquery=(
+                "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+            ),
+            expected_relation_cast_subquery=(
+                "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+            ),
+        ),
+        AdapterSourceExpressionRenderingTestCase(
+            description="snowflake renders source expression shape explicitly",
+            adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+            expected_relation="(SELECT 1 AS id)",
+            expected_cast_subquery=(
+                "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+            ),
+            expected_relation_cast_subquery=(
+                "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+            ),
+        ),
+        AdapterSourceExpressionRenderingTestCase(
+            description="databricks renders source expression shape explicitly",
+            adapter_name=BuiltinAdapter.DATABRICKS.value,
+            expected_relation="(SELECT 1 AS id)",
+            expected_cast_subquery=(
+                "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+            ),
+            expected_relation_cast_subquery=(
+                "(SELECT * EXCEPT (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+            ),
+        ),
+        AdapterSourceExpressionRenderingTestCase(
+            description="bigquery renders source expression shape and normalized cast types",
+            adapter_name=BuiltinAdapter.BIGQUERY.value,
+            expected_relation="(SELECT 1 AS id)",
+            expected_cast_subquery=(
+                "(SELECT CAST(id AS INT64) AS id FROM (SELECT 1 AS id) AS __source_expression)"
+            ),
+            expected_relation_cast_subquery=(
+                "(SELECT * EXCEPT (id), CAST(id AS INT64) AS id FROM raw.orders)"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_builtin_adapter_when_rendering_source_expression_then_returns_adapter_sql(
     test_case: AdapterSourceExpressionRenderingTestCase,

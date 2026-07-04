@@ -22,46 +22,44 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_cursor_ref,
 )
 
-TEST_CASES: list[CursorUpstreamResolutionTestCase] = [
-    CursorUpstreamResolutionTestCase(
-        description="non-deferred ref resolves to model target",
-        ref_name="orders",
-        model_qualified_name="staging.orders",
-        deferred_qualified_name=None,
-        selected_names=None,
-        expected_qualified_name="staging.orders",
-    ),
-    CursorUpstreamResolutionTestCase(
-        description="deferred non-selected ref resolves to deferred target",
-        ref_name="orders",
-        model_qualified_name="dev.orders",
-        deferred_qualified_name="prod.orders",
-        selected_names=frozenset({"fact_orders"}),
-        expected_qualified_name="prod.orders",
-    ),
-    CursorUpstreamResolutionTestCase(
-        description="deferred selected ref resolves to current target not deferred",
-        ref_name="orders",
-        model_qualified_name="dev.orders",
-        deferred_qualified_name="prod.orders",
-        selected_names=frozenset({"orders", "fact_orders"}),
-        expected_qualified_name="dev.orders",
-    ),
-    CursorUpstreamResolutionTestCase(
-        description="deferred with no selected_names uses deferred target",
-        ref_name="orders",
-        model_qualified_name="dev.orders",
-        deferred_qualified_name="prod.orders",
-        selected_names=None,
-        expected_qualified_name="prod.orders",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        CursorUpstreamResolutionTestCase(
+            description="non-deferred ref resolves to model target",
+            ref_name="orders",
+            model_qualified_name="staging.orders",
+            deferred_qualified_name=None,
+            selected_names=None,
+            expected_qualified_name="staging.orders",
+        ),
+        CursorUpstreamResolutionTestCase(
+            description="deferred non-selected ref resolves to deferred target",
+            ref_name="orders",
+            model_qualified_name="dev.orders",
+            deferred_qualified_name="prod.orders",
+            selected_names=frozenset({"fact_orders"}),
+            expected_qualified_name="prod.orders",
+        ),
+        CursorUpstreamResolutionTestCase(
+            description="deferred selected ref resolves to current target not deferred",
+            ref_name="orders",
+            model_qualified_name="dev.orders",
+            deferred_qualified_name="prod.orders",
+            selected_names=frozenset({"orders", "fact_orders"}),
+            expected_qualified_name="dev.orders",
+        ),
+        CursorUpstreamResolutionTestCase(
+            description="deferred with no selected_names uses deferred target",
+            ref_name="orders",
+            model_qualified_name="dev.orders",
+            deferred_qualified_name="prod.orders",
+            selected_names=None,
+            expected_qualified_name="prod.orders",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_ref_and_deferred_locations_when_resolving_upstream_then_returns_expected(
     test_case: CursorUpstreamResolutionTestCase,

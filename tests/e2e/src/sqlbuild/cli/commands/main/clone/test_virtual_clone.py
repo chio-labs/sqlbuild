@@ -46,7 +46,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["hydrates workspace hashes from origin warehouse without destination refs"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_clone_when_source_has_workspace_versions_then_target_is_hydrated(
     test_case: VirtualCloneE2ETestCase,
@@ -109,7 +109,7 @@ def test_given_virtual_clone_when_source_has_workspace_versions_then_target_is_h
             ),
         )
     ],
-    ids=["hydrates destination VDE refs and leaves refs/views unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_clone_vde_mode_when_target_artifact_missing_then_only_physical_is_restored(
     test_case: VirtualCloneE2ETestCase,
@@ -175,7 +175,7 @@ def test_given_virtual_clone_vde_mode_when_target_artifact_missing_then_only_phy
             ),
         )
     ],
-    ids=["missing origin artifact reports missing and exits nonzero"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_clone_when_source_artifact_missing_then_it_reports_missing(
     test_case: VirtualCloneE2ETestCase,
@@ -221,7 +221,7 @@ def test_given_virtual_clone_when_source_artifact_missing_then_it_reports_missin
             expected_stdout_fragments=("model version 'stg_orders:", "is locked"),
         )
     ],
-    ids=["active model-version lock blocks by default"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_clone_when_target_model_version_locked_then_it_blocks(
     test_case: VirtualCloneE2ETestCase,
@@ -269,7 +269,7 @@ def test_given_virtual_clone_when_target_model_version_locked_then_it_blocks(
             ),
         )
     ],
-    ids=["skip locked hydrates other model versions"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_clone_skip_locked_when_one_version_locked_then_it_hydrates_other_models(
     test_case: VirtualCloneE2ETestCase,

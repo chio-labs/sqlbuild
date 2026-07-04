@@ -28,32 +28,30 @@ from tests.unit.src.sqlbuild.adapters.postgres.helpers import (
     FakePostgresCursor,
 )
 
-RENDER_CREATE_TABLE_AS_TEST_CASES: list[PostgresRenderCreateTableAsTestCase] = [
-    PostgresRenderCreateTableAsTestCase(
-        description="renders DROP then CREATE because Postgres has no CREATE OR REPLACE TABLE",
-        target="public.fact_orders",
-        sql="SELECT * FROM staging.fact_orders",
-        expected_statements=(
-            "DROP TABLE IF EXISTS public.fact_orders",
-            "CREATE TABLE public.fact_orders AS SELECT * FROM staging.fact_orders",
-        ),
-    ),
-    PostgresRenderCreateTableAsTestCase(
-        description="renders DROP then CREATE for unqualified target",
-        target="fact_orders",
-        sql="SELECT id FROM src",
-        expected_statements=(
-            "DROP TABLE IF EXISTS fact_orders",
-            "CREATE TABLE fact_orders AS SELECT id FROM src",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    RENDER_CREATE_TABLE_AS_TEST_CASES,
-    ids=[case.description for case in RENDER_CREATE_TABLE_AS_TEST_CASES],
+    [
+        PostgresRenderCreateTableAsTestCase(
+            description="renders DROP then CREATE because Postgres has no CREATE OR REPLACE TABLE",
+            target="public.fact_orders",
+            sql="SELECT * FROM staging.fact_orders",
+            expected_statements=(
+                "DROP TABLE IF EXISTS public.fact_orders",
+                "CREATE TABLE public.fact_orders AS SELECT * FROM staging.fact_orders",
+            ),
+        ),
+        PostgresRenderCreateTableAsTestCase(
+            description="renders DROP then CREATE for unqualified target",
+            target="fact_orders",
+            sql="SELECT id FROM src",
+            expected_statements=(
+                "DROP TABLE IF EXISTS fact_orders",
+                "CREATE TABLE fact_orders AS SELECT id FROM src",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_table_target_when_rendering_create_then_postgres_drops_before_create(
     test_case: PostgresRenderCreateTableAsTestCase,
@@ -82,7 +80,7 @@ def test_given_table_target_when_rendering_create_then_postgres_drops_before_cre
             ),
         )
     ],
-    ids=["renders SQL function with explicit language"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_function_when_rendering_create_then_postgres_declares_language(
     test_case: PostgresRenderCreateFunctionTestCase,
@@ -112,7 +110,7 @@ def test_given_sql_function_when_rendering_create_then_postgres_declares_languag
             ),
         )
     ],
-    ids=["renders latest-read index for fingerprint table"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_indexes_then_postgres_uses_latest_read_keys(
     test_case: PostgresIndexSqlTestCase,
@@ -142,7 +140,7 @@ def test_given_fingerprint_table_when_rendering_indexes_then_postgres_uses_lates
             ),
         )
     ],
-    ids=["renders latest-read index for source freshness table"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_table_when_rendering_indexes_then_postgres_uses_latest_read_keys(
     test_case: PostgresIndexSqlTestCase,
@@ -175,7 +173,7 @@ def test_given_source_freshness_table_when_rendering_indexes_then_postgres_uses_
             ),
         )
     ],
-    ids=["renders lookup indexes for node result table"],
+    ids=lambda case: case.description,
 )
 def test_given_node_result_table_when_rendering_indexes_then_postgres_uses_lookup_keys(
     test_case: PostgresIndexSqlTestCase,
@@ -205,7 +203,7 @@ def test_given_node_result_table_when_rendering_indexes_then_postgres_uses_looku
             ),
         )
     ],
-    ids=["renders windowed fingerprint latest read"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_latest_read_then_postgres_uses_window_query(
     test_case: PostgresLatestReadSqlTestCase,
@@ -237,7 +235,7 @@ def test_given_fingerprint_table_when_rendering_latest_read_then_postgres_uses_w
             ),
         )
     ],
-    ids=["renders windowed source freshness latest read"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_when_rendering_latest_read_then_postgres_uses_window_query(
     test_case: PostgresLatestReadSqlTestCase,
@@ -271,7 +269,7 @@ def test_given_source_freshness_when_rendering_latest_read_then_postgres_uses_wi
             ),
         )
     ],
-    ids=["renders fingerprint pruning with ctid window delete"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_prune_then_postgres_uses_history_rank(
     test_case: PostgresPruneSqlTestCase,
@@ -305,7 +303,7 @@ def test_given_fingerprint_table_when_rendering_prune_then_postgres_uses_history
             ),
         )
     ],
-    ids=["renders source freshness pruning with full identity"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_table_when_rendering_prune_then_postgres_uses_history_rank(
     test_case: PostgresPruneSqlTestCase,
@@ -322,32 +320,29 @@ def test_given_source_freshness_table_when_rendering_prune_then_postgres_uses_hi
         assert fragment in sql
 
 
-RENDER_RENAME_TEST_CASES: list[PostgresRenderRenameTestCase] = [
-    PostgresRenderRenameTestCase(
-        description="strips schema prefix from target — Postgres RENAME TO is unqualified",
-        source="public.orders__staging",
-        target="public.orders",
-        expected_statement="ALTER TABLE public.orders__staging RENAME TO orders",
-    ),
-    PostgresRenderRenameTestCase(
-        description="strips three-part prefix leaving bare table name",
-        source="mydb.public.orders",
-        target="mydb.public.orders_new",
-        expected_statement="ALTER TABLE mydb.public.orders RENAME TO orders_new",
-    ),
-    PostgresRenderRenameTestCase(
-        description="passes through unqualified source and target unchanged",
-        source="orders",
-        target="orders_new",
-        expected_statement="ALTER TABLE orders RENAME TO orders_new",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RENDER_RENAME_TEST_CASES,
-    ids=[case.description for case in RENDER_RENAME_TEST_CASES],
+    [
+        PostgresRenderRenameTestCase(
+            description="strips schema prefix from target — Postgres RENAME TO is unqualified",
+            source="public.orders__staging",
+            target="public.orders",
+            expected_statement="ALTER TABLE public.orders__staging RENAME TO orders",
+        ),
+        PostgresRenderRenameTestCase(
+            description="strips three-part prefix leaving bare table name",
+            source="mydb.public.orders",
+            target="mydb.public.orders_new",
+            expected_statement="ALTER TABLE mydb.public.orders RENAME TO orders_new",
+        ),
+        PostgresRenderRenameTestCase(
+            description="passes through unqualified source and target unchanged",
+            source="orders",
+            target="orders_new",
+            expected_statement="ALTER TABLE orders RENAME TO orders_new",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_qualified_names_when_renaming_then_postgres_uses_unqualified_target(
     test_case: PostgresRenderRenameTestCase,
@@ -359,29 +354,26 @@ def test_given_qualified_names_when_renaming_then_postgres_uses_unqualified_targ
     assert statement == test_case.expected_statement
 
 
-POSTGRES_MOVE_OR_COPY_RELATION_TEST_CASES: list[PostgresMoveOrCopyRelationTestCase] = [
-    PostgresMoveOrCopyRelationTestCase(
-        description="moves table across schemas with rename before set schema",
-        source="public.fact_orders",
-        target="public__sqb_physical.fact_orders__v_abc123",
-        expected_statements=(
-            "ALTER TABLE public.fact_orders RENAME TO fact_orders__v_abc123",
-            "ALTER TABLE public.fact_orders__v_abc123 SET SCHEMA public__sqb_physical",
-        ),
-    ),
-    PostgresMoveOrCopyRelationTestCase(
-        description="moves table across schemas without renaming when names match",
-        source="public.fact_orders",
-        target="public__sqb_physical.fact_orders",
-        expected_statements=("ALTER TABLE public.fact_orders SET SCHEMA public__sqb_physical",),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_MOVE_OR_COPY_RELATION_TEST_CASES,
-    ids=[case.description for case in POSTGRES_MOVE_OR_COPY_RELATION_TEST_CASES],
+    [
+        PostgresMoveOrCopyRelationTestCase(
+            description="moves table across schemas with rename before set schema",
+            source="public.fact_orders",
+            target="public__sqb_physical.fact_orders__v_abc123",
+            expected_statements=(
+                "ALTER TABLE public.fact_orders RENAME TO fact_orders__v_abc123",
+                "ALTER TABLE public.fact_orders__v_abc123 SET SCHEMA public__sqb_physical",
+            ),
+        ),
+        PostgresMoveOrCopyRelationTestCase(
+            description="moves table across schemas without renaming when names match",
+            source="public.fact_orders",
+            target="public__sqb_physical.fact_orders",
+            expected_statements=("ALTER TABLE public.fact_orders SET SCHEMA public__sqb_physical",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_cross_schema_table_move_when_moving_then_postgres_uses_native_move(
     test_case: PostgresMoveOrCopyRelationTestCase,
@@ -420,7 +412,7 @@ def test_given_cross_schema_table_move_when_moving_then_postgres_uses_native_mov
             ),
         )
     ],
-    ids=["renders three-rename swap with unqualified intermediate target names"],
+    ids=lambda case: case.description,
 )
 def test_given_two_relations_when_swapping_then_postgres_uses_three_rename_approach(
     test_case: PostgresRenderSwapTestCase,
@@ -432,30 +424,27 @@ def test_given_two_relations_when_swapping_then_postgres_uses_three_rename_appro
     assert statements == test_case.expected_statements
 
 
-DESCRIBE_RELATION_TEST_CASES: list[PostgresDescribeRelationTestCase] = [
-    PostgresDescribeRelationTestCase(
-        description="returns columns from information_schema for a schema-qualified relation",
-        relation="public.fact_orders",
-        cursor_rows=(("id", "integer"), ("total", "numeric"), ("created_at", "timestamp")),
-        expected_columns=(
-            ColumnInfo(name="id", type="integer"),
-            ColumnInfo(name="total", type="numeric"),
-            ColumnInfo(name="created_at", type="timestamp"),
-        ),
-    ),
-    PostgresDescribeRelationTestCase(
-        description="returns columns for an unqualified relation name",
-        relation="fact_orders",
-        cursor_rows=(("id", "integer"),),
-        expected_columns=(ColumnInfo(name="id", type="integer"),),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DESCRIBE_RELATION_TEST_CASES,
-    ids=[case.description for case in DESCRIBE_RELATION_TEST_CASES],
+    [
+        PostgresDescribeRelationTestCase(
+            description="returns columns from information_schema for a schema-qualified relation",
+            relation="public.fact_orders",
+            cursor_rows=(("id", "integer"), ("total", "numeric"), ("created_at", "timestamp")),
+            expected_columns=(
+                ColumnInfo(name="id", type="integer"),
+                ColumnInfo(name="total", type="numeric"),
+                ColumnInfo(name="created_at", type="timestamp"),
+            ),
+        ),
+        PostgresDescribeRelationTestCase(
+            description="returns columns for an unqualified relation name",
+            relation="fact_orders",
+            cursor_rows=(("id", "integer"),),
+            expected_columns=(ColumnInfo(name="id", type="integer"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_relation_when_describing_then_postgres_queries_information_schema(
     test_case: PostgresDescribeRelationTestCase,
@@ -482,7 +471,7 @@ def test_given_relation_when_describing_then_postgres_queries_information_schema
             expected_identifier_length=63,
         )
     ],
-    ids=["returns expected Postgres adapter defaults and dialect settings"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_adapter_when_checking_defaults_then_returns_expected_values(
     test_case: PostgresAdapterDefaultsTestCase,
@@ -495,37 +484,21 @@ def test_given_postgres_adapter_when_checking_defaults_then_returns_expected_val
     assert adapter.maximum_identifier_length() == test_case.expected_identifier_length
 
 
-LOAD_SEED_TEST_CASES: list[PostgresLoadSeedTestCase] = [
-    PostgresLoadSeedTestCase(
-        description="loads CSV rows via executemany with correct column order",
-        csv_text='id,name\n1,"Liege waffle"\n2,Stroopwafel\n',
-        expected_rows=[("1", "Liege waffle"), ("2", "Stroopwafel")],
-    ),
-    PostgresLoadSeedTestCase(
-        description="handles empty CSV by skipping executemany",
-        csv_text="id,name\n",
-        expected_rows=[],
-    ),
-]
-
-POSTGRES_RENDER_IDENTIFIER_TEST_CASES: list[PostgresRenderIdentifierTestCase] = [
-    PostgresRenderIdentifierTestCase(
-        description="quotes lowercase identifiers without changing case",
-        name="event_id",
-        expected_identifier='"event_id"',
-    ),
-    PostgresRenderIdentifierTestCase(
-        description="escapes embedded double quotes",
-        name='event"id',
-        expected_identifier='"event""id"',
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_RENDER_IDENTIFIER_TEST_CASES,
-    ids=[case.description for case in POSTGRES_RENDER_IDENTIFIER_TEST_CASES],
+    [
+        PostgresRenderIdentifierTestCase(
+            description="quotes lowercase identifiers without changing case",
+            name="event_id",
+            expected_identifier='"event_id"',
+        ),
+        PostgresRenderIdentifierTestCase(
+            description="escapes embedded double quotes",
+            name='event"id',
+            expected_identifier='"event""id"',
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_identifier_when_rendering_then_postgres_quotes_identifier(
     test_case: PostgresRenderIdentifierTestCase,
@@ -539,8 +512,19 @@ def test_given_identifier_when_rendering_then_postgres_quotes_identifier(
 
 @pytest.mark.parametrize(
     "test_case",
-    LOAD_SEED_TEST_CASES,
-    ids=[case.description for case in LOAD_SEED_TEST_CASES],
+    [
+        PostgresLoadSeedTestCase(
+            description="loads CSV rows via executemany with correct column order",
+            csv_text='id,name\n1,"Liege waffle"\n2,Stroopwafel\n',
+            expected_rows=[("1", "Liege waffle"), ("2", "Stroopwafel")],
+        ),
+        PostgresLoadSeedTestCase(
+            description="handles empty CSV by skipping executemany",
+            csv_text="id,name\n",
+            expected_rows=[],
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_seed_csv_when_loading_then_postgres_uses_executemany(
     test_case: PostgresLoadSeedTestCase,
@@ -575,7 +559,7 @@ def test_given_seed_csv_when_loading_then_postgres_uses_executemany(
             expected_result=SchemaDiffResult(),
         )
     ],
-    ids=["treats semantically equivalent numeric types as unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_equivalent_types_when_diffing_schema_then_postgres_ignores_alias_only_changes(
     test_case: PostgresSchemaDiffTestCase,
@@ -603,33 +587,30 @@ def test_given_equivalent_types_when_diffing_schema_then_postgres_ignores_alias_
     assert result == test_case.expected_result
 
 
-SOURCE_FRESHNESS_QUERY_TEST_CASES: list[PostgresRenderSourceFreshnessQueryTestCase] = [
-    PostgresRenderSourceFreshnessQueryTestCase(
-        description="subquery source is given a derived-table alias",
-        column="event_ts",
-        source_relation="(SELECT 1 AS event_ts)",
-        source_is_subquery=True,
-        where_sql="",
-        expected_sql=(
-            'SELECT MAX("event_ts") AS data_version '
-            "FROM (SELECT 1 AS event_ts) AS __source_freshness"
-        ),
-    ),
-    PostgresRenderSourceFreshnessQueryTestCase(
-        description="table source omits the derived-table alias",
-        column="event_ts",
-        source_relation="raw.orders",
-        source_is_subquery=False,
-        where_sql=" WHERE active",
-        expected_sql='SELECT MAX("event_ts") AS data_version FROM raw.orders WHERE active',
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_FRESHNESS_QUERY_TEST_CASES,
-    ids=[case.description for case in SOURCE_FRESHNESS_QUERY_TEST_CASES],
+    [
+        PostgresRenderSourceFreshnessQueryTestCase(
+            description="subquery source is given a derived-table alias",
+            column="event_ts",
+            source_relation="(SELECT 1 AS event_ts)",
+            source_is_subquery=True,
+            where_sql="",
+            expected_sql=(
+                'SELECT MAX("event_ts") AS data_version '
+                "FROM (SELECT 1 AS event_ts) AS __source_freshness"
+            ),
+        ),
+        PostgresRenderSourceFreshnessQueryTestCase(
+            description="table source omits the derived-table alias",
+            column="event_ts",
+            source_relation="raw.orders",
+            source_is_subquery=False,
+            where_sql=" WHERE active",
+            expected_sql='SELECT MAX("event_ts") AS data_version FROM raw.orders WHERE active',
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_source_when_rendering_freshness_query_then_postgres_aliases_subqueries(
     test_case: PostgresRenderSourceFreshnessQueryTestCase,

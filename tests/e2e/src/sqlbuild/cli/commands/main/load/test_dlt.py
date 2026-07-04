@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_model_rows=((2, 20), (3, 30)),
         )
     ],
-    ids=["loads sqlite sql_database source into duckdb"],
+    ids=lambda case: case.description,
 )
 def test_given_dlt_sql_database_source_when_loading_then_table_is_materialized_and_queryable(
     tmp_path: Path, test_case: DltSqlDatabaseE2ETestCase
@@ -103,7 +103,7 @@ def test_given_dlt_sql_database_source_when_loading_then_table_is_materialized_a
             expected_model_rows=((2, 20), (3, 30)),
         )
     ],
-    ids=["loads local jsonl filesystem source into duckdb"],
+    ids=lambda case: case.description,
 )
 def test_given_dlt_filesystem_source_when_loading_then_table_is_materialized_and_queryable(
     tmp_path: Path, test_case: DltLocalSourceE2ETestCase
@@ -181,7 +181,7 @@ def test_given_dlt_filesystem_source_when_loading_then_table_is_materialized_and
             expected_model_rows=((2, 20), (3, 30)),
         )
     ],
-    ids=["loads local rest api source into duckdb"],
+    ids=lambda case: case.description,
 )
 def test_given_dlt_rest_api_source_when_loading_then_table_is_materialized_and_queryable(
     tmp_path: Path, test_case: DltLocalSourceE2ETestCase

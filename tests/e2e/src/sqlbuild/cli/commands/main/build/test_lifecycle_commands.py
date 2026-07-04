@@ -74,7 +74,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["waffle shop core lifecycle commands remain consistent"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_running_core_lifecycle_commands_then_outputs_are_consistent(
     test_case: LifecycleCommandsBuildE2ETestCase,

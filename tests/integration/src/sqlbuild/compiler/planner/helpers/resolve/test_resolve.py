@@ -23,99 +23,41 @@ from tests.integration.src.sqlbuild.compiler.planner.helpers.resolve.helpers imp
     resolve_and_execute,
 )
 
-REF_TEST_CASES: list[ResolveAndExecuteTestCase] = [
-    ResolveAndExecuteTestCase(
-        description="resolves ref to qualified name and returns all rows",
-        setup_sql=(
-            "CREATE TABLE staging.raw_orders (order_id INTEGER, status VARCHAR)",
-            "INSERT INTO staging.raw_orders VALUES (1, 'paid'), (2, 'shipped'), (3, 'cancelled')",
-        ),
-        query_sql='SELECT order_id, status FROM __ref("raw_orders")',
-        model_config={"materialized": "table", "schema": "staging"},
-        ref_names=("raw_orders",),
-        expected_row_count=3,
-        expected_column_types={"order_id": "INTEGER", "status": "VARCHAR"},
-    ),
-    ResolveAndExecuteTestCase(
-        description="resolves multiple refs in a join and returns matched rows",
-        setup_sql=(
-            "CREATE TABLE staging.orders (order_id INTEGER, customer_id INTEGER)",
-            "INSERT INTO staging.orders VALUES (1, 10), (2, 20)",
-            "CREATE TABLE staging.customers (customer_id INTEGER, name VARCHAR)",
-            "INSERT INTO staging.customers VALUES (10, 'alice'), (20, 'bob'), (30, 'charlie')",
-        ),
-        query_sql=(
-            'SELECT o.order_id, c.name FROM __ref("orders") o '
-            'JOIN __ref("customers") c ON o.customer_id = c.customer_id'
-        ),
-        model_config={"materialized": "table", "schema": "staging"},
-        ref_names=("orders", "customers"),
-        expected_row_count=2,
-        expected_column_types={"order_id": "INTEGER", "name": "VARCHAR"},
-    ),
-]
-
-SOURCE_TEST_CASES: list[ResolveSourceTestCase] = [
-    ResolveSourceTestCase(
-        description="resolves source with type enforcement CAST producing enforced column types",
-        setup_sql=(
-            "CREATE TABLE raw.payments (payment_id INTEGER, amount VARCHAR, note VARCHAR)",
-            "INSERT INTO raw.payments VALUES (1, '99.50', 'tip'), (2, '200.00', 'refund')",
-        ),
-        query_sql='SELECT payment_id, amount, note FROM __source("raw_payments")',
-        model_config={"materialized": "table", "schema": "staging"},
-        source_map={
-            "raw_payments": SourceEntry(
-                name="raw_payments",
-                schema="raw",
-                table="payments",
-                type_enforcement=True,
-                columns=(
-                    SourceColumnEntry(name="payment_id", type="BIGINT"),
-                    SourceColumnEntry(name="amount", type="DECIMAL"),
-                ),
-            ),
-        },
-        source_warehouse_columns={
-            "raw_payments": (
-                ColumnInfo(name="payment_id", type="INTEGER"),
-                ColumnInfo(name="amount", type="VARCHAR"),
-                ColumnInfo(name="note", type="VARCHAR"),
-            ),
-        },
-        expected_row_count=2,
-        expected_column_types={
-            "payment_id": "BIGINT",
-            "amount": "DECIMAL(18,3)",
-            "note": "VARCHAR",
-        },
-    ),
-    ResolveSourceTestCase(
-        description="resolves source without enforcement preserving original column types",
-        setup_sql=(
-            "CREATE TABLE raw.events (event_id INTEGER, payload VARCHAR)",
-            "INSERT INTO raw.events VALUES (1, 'click'), (2, 'view')",
-        ),
-        query_sql='SELECT event_id, payload FROM __source("raw_events")',
-        model_config={"materialized": "table", "schema": "staging"},
-        source_map={
-            "raw_events": SourceEntry(
-                name="raw_events",
-                schema="raw",
-                table="events",
-            ),
-        },
-        source_warehouse_columns={},
-        expected_row_count=2,
-        expected_column_types={"event_id": "INTEGER", "payload": "VARCHAR"},
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    REF_TEST_CASES,
-    ids=[case.description for case in REF_TEST_CASES],
+    [
+        ResolveAndExecuteTestCase(
+            description="resolves ref to qualified name and returns all rows",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, status VARCHAR)",
+                "INSERT INTO staging.raw_orders VALUES (1, 'paid'), (2, 'shipped'), (3, 'cancelled')",
+            ),
+            query_sql='SELECT order_id, status FROM __ref("raw_orders")',
+            model_config={"materialized": "table", "schema": "staging"},
+            ref_names=("raw_orders",),
+            expected_row_count=3,
+            expected_column_types={"order_id": "INTEGER", "status": "VARCHAR"},
+        ),
+        ResolveAndExecuteTestCase(
+            description="resolves multiple refs in a join and returns matched rows",
+            setup_sql=(
+                "CREATE TABLE staging.orders (order_id INTEGER, customer_id INTEGER)",
+                "INSERT INTO staging.orders VALUES (1, 10), (2, 20)",
+                "CREATE TABLE staging.customers (customer_id INTEGER, name VARCHAR)",
+                "INSERT INTO staging.customers VALUES (10, 'alice'), (20, 'bob'), (30, 'charlie')",
+            ),
+            query_sql=(
+                'SELECT o.order_id, c.name FROM __ref("orders") o '
+                'JOIN __ref("customers") c ON o.customer_id = c.customer_id'
+            ),
+            model_config={"materialized": "table", "schema": "staging"},
+            ref_names=("orders", "customers"),
+            expected_row_count=2,
+            expected_column_types={"order_id": "INTEGER", "name": "VARCHAR"},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_refs_when_resolving_and_executing_then_returns_expected_rows(
     test_case: ResolveAndExecuteTestCase,
@@ -182,7 +124,7 @@ def test_given_refs_when_resolving_and_executing_then_returns_expected_rows(
             expected_column_types={"event_id": "INTEGER", "event_time": "TIMESTAMP"},
         ),
     ],
-    ids=["resolves incremental source with cursor filter and returns bounded rows"],
+    ids=lambda case: case.description,
 )
 def test_given_incremental_source_when_resolving_and_executing_then_returns_cursor_bounded_rows(
     test_case: ResolveAndExecuteTestCase,
@@ -229,8 +171,62 @@ def test_given_incremental_source_when_resolving_and_executing_then_returns_curs
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_TEST_CASES,
-    ids=[case.description for case in SOURCE_TEST_CASES],
+    [
+        ResolveSourceTestCase(
+            description="resolves source with type enforcement CAST producing enforced column types",
+            setup_sql=(
+                "CREATE TABLE raw.payments (payment_id INTEGER, amount VARCHAR, note VARCHAR)",
+                "INSERT INTO raw.payments VALUES (1, '99.50', 'tip'), (2, '200.00', 'refund')",
+            ),
+            query_sql='SELECT payment_id, amount, note FROM __source("raw_payments")',
+            model_config={"materialized": "table", "schema": "staging"},
+            source_map={
+                "raw_payments": SourceEntry(
+                    name="raw_payments",
+                    schema="raw",
+                    table="payments",
+                    type_enforcement=True,
+                    columns=(
+                        SourceColumnEntry(name="payment_id", type="BIGINT"),
+                        SourceColumnEntry(name="amount", type="DECIMAL"),
+                    ),
+                ),
+            },
+            source_warehouse_columns={
+                "raw_payments": (
+                    ColumnInfo(name="payment_id", type="INTEGER"),
+                    ColumnInfo(name="amount", type="VARCHAR"),
+                    ColumnInfo(name="note", type="VARCHAR"),
+                ),
+            },
+            expected_row_count=2,
+            expected_column_types={
+                "payment_id": "BIGINT",
+                "amount": "DECIMAL(18,3)",
+                "note": "VARCHAR",
+            },
+        ),
+        ResolveSourceTestCase(
+            description="resolves source without enforcement preserving original column types",
+            setup_sql=(
+                "CREATE TABLE raw.events (event_id INTEGER, payload VARCHAR)",
+                "INSERT INTO raw.events VALUES (1, 'click'), (2, 'view')",
+            ),
+            query_sql='SELECT event_id, payload FROM __source("raw_events")',
+            model_config={"materialized": "table", "schema": "staging"},
+            source_map={
+                "raw_events": SourceEntry(
+                    name="raw_events",
+                    schema="raw",
+                    table="events",
+                ),
+            },
+            source_warehouse_columns={},
+            expected_row_count=2,
+            expected_column_types={"event_id": "INTEGER", "payload": "VARCHAR"},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sources_when_resolving_and_executing_then_returns_expected_rows_and_types(
     test_case: ResolveSourceTestCase,

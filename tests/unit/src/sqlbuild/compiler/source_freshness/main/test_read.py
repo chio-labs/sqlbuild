@@ -52,7 +52,7 @@ from tests.unit.src.sqlbuild.compiler.source_freshness.main.helpers import (
             expected_observed_at_iso="2026-01-15T12:05:00",
         )
     ],
-    ids=["parses observed_at from string rows"],
+    ids=lambda case: case.description,
 )
 def test_given_string_timestamp_row_when_reading_source_freshness_then_parses_timestamp(
     test_case: ReadLatestSourceFreshnessTestCase,
@@ -82,7 +82,7 @@ def test_given_string_timestamp_row_when_reading_source_freshness_then_parses_ti
             expected_executed_sql="SELECT 'sentinel latest source freshness sql'",
         )
     ],
-    ids=["uses injected latest-read SQL renderer"],
+    ids=lambda case: case.description,
 )
 def test_given_latest_sql_renderer_when_reading_source_freshness_then_executes_renderer_sql(
     test_case: ReadLatestSourceFreshnessRendererTestCase,
@@ -115,7 +115,7 @@ def test_given_latest_sql_renderer_when_reading_source_freshness_then_executes_r
             expected_values_separator="), (",
         )
     ],
-    ids=["creates index once before inserting source freshness rows in one statement"],
+    ids=lambda case: case.description,
 )
 def test_given_index_renderer_when_writing_source_freshness_then_batches_inserts_after_index(
     test_case: WriteSourceFreshnessIndexTestCase,
@@ -175,7 +175,7 @@ def test_given_index_renderer_when_writing_source_freshness_then_batches_inserts
             expected_message_fragment="delete or rebuild the SQLBuild source freshness table",
         )
     ],
-    ids=["old source freshness table schema read failure gives operator guidance"],
+    ids=lambda case: case.description,
 )
 def test_given_read_failure_when_reading_source_freshness_then_raises_operator_guidance(
     test_case: ReadLatestSourceFreshnessErrorTestCase,

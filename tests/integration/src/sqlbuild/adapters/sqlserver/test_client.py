@@ -38,7 +38,7 @@ from tests.integration.src.sqlbuild.adapters.sqlserver.helpers import (
             ),
         )
     ],
-    ids=["describes columns in ordinal position order"],
+    ids=lambda case: case.description,
 )
 def test_given_table_when_describing_then_sqlserver_returns_columns_in_order(
     test_case: SqlServerSchemaIntrospectionTestCase,
@@ -63,7 +63,7 @@ def test_given_table_when_describing_then_sqlserver_returns_columns_in_order(
             expected_result=QueryResult(columns=("id", "name"), rows=((1, "hello"),)),
         )
     ],
-    ids=["returns inline query result with column names and rows"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_when_querying_then_sqlserver_returns_named_rows(
     test_case: SqlServerQueryTestCase,
@@ -85,7 +85,7 @@ def test_given_sql_when_querying_then_sqlserver_returns_named_rows(
             expected_row_count=3,
         )
     ],
-    ids=["creates table from query and promotes via swap"],
+    ids=lambda case: case.description,
 )
 def test_given_model_sql_when_building_then_sqlserver_creates_and_promotes_table(
     test_case: SqlServerBuildFlowTestCase,
@@ -120,7 +120,7 @@ def test_given_model_sql_when_building_then_sqlserver_creates_and_promotes_table
             expected_recorded_fragment="SELECT * INTO",
         )
     ],
-    ids=["hard copy reuse uses select into fallback"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_origin_when_creating_hard_copy_then_sqlserver_copies_rows(
     test_case: SqlServerRelationReuseCopyTestCase,
@@ -169,7 +169,7 @@ def test_given_reuse_origin_when_creating_hard_copy_then_sqlserver_copies_rows(
             expected_rows=((1, "Alice Updated"), (2, "Bob")),
         )
     ],
-    ids=["upserts rows without requiring a database unique constraint"],
+    ids=lambda case: case.description,
 )
 def test_given_merge_sql_when_merging_then_sqlserver_upserts_without_constraint(
     test_case: SqlServerMergeTestCase,
@@ -205,7 +205,7 @@ def test_given_merge_sql_when_merging_then_sqlserver_upserts_without_constraint(
             expected_rows=((1, "Liege waffle"), (2, "Stroopwafel")),
         )
     ],
-    ids=["inserts all CSV rows into the target table"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_csv_when_loading_then_sqlserver_inserts_all_rows(
     test_case: SqlServerSeedTestCase,

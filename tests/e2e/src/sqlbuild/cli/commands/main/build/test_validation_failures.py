@@ -16,23 +16,26 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-TEST_CASES: list[CliFailureBuildE2ETestCase] = [
-    CliFailureBuildE2ETestCase(
-        description="invalid typed pre hook fails at compile time",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CliFailureBuildE2ETestCase(
+            description="invalid typed pre hook fails at compile time",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
             name = "hook_validation_project"
             adapter = "duckdb"
 
             [connection]
             database = "validation.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "seed_raw_data.sql": "",
-            "models/orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": "",
+                "models/orders.sql": dedent(
+                    """
                 MODEL (
                   materialized table,
                   pre_hooks [sql('THIS IS NOT VALID SQL')]
@@ -40,22 +43,22 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
 
                 SELECT 1 AS id
                 """
-            ).strip()
-            + "\n",
-        },
-        command=("--no-color", "build"),
-        expected_exit_code=1,
-        expected_stderr_fragments=(
-            "model 'orders' pre_hooks[0] sql(\"...\") has invalid SQL",
-            "hook SQL must be a valid executable SQL statement",
-            "settings.sql_validation: false",
+                ).strip()
+                + "\n",
+            },
+            command=("--no-color", "build"),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "model 'orders' pre_hooks[0] sql(\"...\") has invalid SQL",
+                "hook SQL must be a valid executable SQL statement",
+                "settings.sql_validation: false",
+            ),
         ),
-    ),
-    CliFailureBuildE2ETestCase(
-        description="unknown cursor_inputs key fails at compile time",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+        CliFailureBuildE2ETestCase(
+            description="unknown cursor_inputs key fails at compile time",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
             name = "cursor_inputs_validation_project"
             adapter = "duckdb"
 
@@ -65,10 +68,10 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
             [defaults]
             materialized = "table"
                 """
-            ).strip()
-            + "\n",
-            "seed_raw_data.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": dedent(
+                    """
                 CREATE TABLE IF NOT EXISTS raw_orders (
                   id INTEGER,
                   ordered_at TIMESTAMP
@@ -77,19 +80,19 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
                 INSERT INTO raw_orders VALUES
                   (1, '2026-01-01 00:30:00');
                 """
-            ).strip()
-            + "\n",
-            "sources/raw.yml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
                 sources:
                   - name: raw_orders
                     schema: main
                     table: raw_orders
                 """
-            ).strip()
-            + "\n",
-            "models/staging/stg_orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/staging/stg_orders.sql": dedent(
+                    """
                 MODEL (materialized view);
 
                 SELECT
@@ -97,18 +100,18 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
                   ordered_at
                 FROM __source("raw_orders")
                 """
-            ).strip()
-            + "\n",
-            "models/marts/fact_orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/marts/fact_orders.sql": dedent(
+                    """
                 MODEL (materialized table);
 
                 SELECT order_id, ordered_at FROM __ref("stg_orders")
                 """
-            ).strip()
-            + "\n",
-            "models/marts/customer_status_snapshot.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/marts/customer_status_snapshot.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy merge,
@@ -123,62 +126,57 @@ TEST_CASES: list[CliFailureBuildE2ETestCase] = [
 
                 SELECT order_id, ordered_at FROM __ref("fact_orders")
                 """
-            ).strip()
-            + "\n",
-        },
-        command=("--no-color", "build"),
-        expected_exit_code=1,
-        expected_stderr_fragments=(
-            "cursor_inputs references unknown input 'missing_relation'",
-            "expected one of: fact_orders",
+                ).strip()
+                + "\n",
+            },
+            command=("--no-color", "build"),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "cursor_inputs references unknown input 'missing_relation'",
+                "expected one of: fact_orders",
+            ),
         ),
-    ),
-    CliFailureBuildE2ETestCase(
-        description="invalid source expression fails with sql validation enabled",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+        CliFailureBuildE2ETestCase(
+            description="invalid source expression fails with sql validation enabled",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
             name = "source_expression_validation_project"
             adapter = "duckdb"
 
             [connection]
             database = "validation.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "seed_raw_data.sql": "",
-            "sources/raw.yml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": "",
+                "sources/raw.yml": dedent(
+                    """
                 sources:
                   - name: raw_orders
                     expression: SELECT FROM
                 """
-            ).strip()
-            + "\n",
-            "models/orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/orders.sql": dedent(
+                    """
                 MODEL (materialized table);
 
                 SELECT * FROM __source("raw_orders")
                 """
-            ).strip()
-            + "\n",
-        },
-        command=("--no-color", "build"),
-        expected_exit_code=1,
-        expected_stderr_fragments=(
-            "SQL syntax error in source expression 'raw_orders'",
-            "To disable project-wide, set `settings.sql_validation: false`",
-            "To skip for this run, use `--no-sql-validation`.",
+                ).strip()
+                + "\n",
+            },
+            command=("--no-color", "build"),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "SQL syntax error in source expression 'raw_orders'",
+                "To disable project-wide, set `settings.sql_validation: false`",
+                "To skip for this run, use `--no-sql-validation`.",
+            ),
         ),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_cli_project_when_running_build_then_it_fails_clearly(
     test_case: CliFailureBuildE2ETestCase,

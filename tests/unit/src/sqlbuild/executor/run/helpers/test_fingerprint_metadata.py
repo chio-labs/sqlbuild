@@ -37,28 +37,26 @@ from tests.unit.src.sqlbuild.executor.run.helpers.helpers import (
     build_result_model_plan_entry,
 )
 
-FINGERPRINT_AUDIT_GATE_METADATA_TEST_CASES: list[FingerprintAuditGateMetadataTestCase] = [
-    FingerprintAuditGateMetadataTestCase(
-        description="pass result writes reusable audit gate proof",
-        audit_outcome="pass",
-        expected_status=AuditGateStatus.PASSED,
-        expected_result_count=1,
-        expected_existing_field="kept",
-    ),
-    FingerprintAuditGateMetadataTestCase(
-        description="error result writes failed audit gate proof",
-        audit_outcome="error",
-        expected_status=AuditGateStatus.FAILED,
-        expected_result_count=1,
-        expected_existing_field="kept",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    FINGERPRINT_AUDIT_GATE_METADATA_TEST_CASES,
-    ids=[case.description for case in FINGERPRINT_AUDIT_GATE_METADATA_TEST_CASES],
+    [
+        FingerprintAuditGateMetadataTestCase(
+            description="pass result writes reusable audit gate proof",
+            audit_outcome="pass",
+            expected_status=AuditGateStatus.PASSED,
+            expected_result_count=1,
+            expected_existing_field="kept",
+        ),
+        FingerprintAuditGateMetadataTestCase(
+            description="error result writes failed audit gate proof",
+            audit_outcome="error",
+            expected_status=AuditGateStatus.FAILED,
+            expected_result_count=1,
+            expected_existing_field="kept",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_audit_results_when_building_fingerprint_metadata_then_audit_gate_is_recorded(
     test_case: FingerprintAuditGateMetadataTestCase,
@@ -94,7 +92,7 @@ def test_given_audit_results_when_building_fingerprint_metadata_then_audit_gate_
             expected_existing_field="kept",
         )
     ],
-    ids=["no model audits leaves metadata unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_no_model_audits_when_building_fingerprint_metadata_then_metadata_is_unchanged(
     test_case: FingerprintAuditGateNoAuditsTestCase,
@@ -111,41 +109,38 @@ def test_given_no_model_audits_when_building_fingerprint_metadata_then_metadata_
     assert "audit_gate" not in metadata
 
 
-FINGERPRINT_AUDIT_GATE_EDGE_TEST_CASES: list[FingerprintAuditGateEdgeTestCase] = [
-    FingerprintAuditGateEdgeTestCase(
-        description="warn-only result writes passed proof",
-        plan_severity=AuditSeverity.WARN.value,
-        result_outcome=AuditOutcome.WARN.value,
-        result_audit_name="not_null_orders",
-        result_column_name="order_id",
-        expected_status=AuditGateStatus.PASSED,
-        expected_result_count=1,
-    ),
-    FingerprintAuditGateEdgeTestCase(
-        description="mismatched result writes incomplete proof",
-        plan_severity=AuditSeverity.ERROR.value,
-        result_outcome=AuditOutcome.PASS.value,
-        result_audit_name="other_audit",
-        result_column_name="order_id",
-        expected_status=AuditGateStatus.INCOMPLETE,
-        expected_result_count=0,
-    ),
-    FingerprintAuditGateEdgeTestCase(
-        description="mismatched column writes incomplete proof",
-        plan_severity=AuditSeverity.ERROR.value,
-        result_outcome=AuditOutcome.PASS.value,
-        result_audit_name="not_null_orders",
-        result_column_name="other_column",
-        expected_status=AuditGateStatus.INCOMPLETE,
-        expected_result_count=0,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    FINGERPRINT_AUDIT_GATE_EDGE_TEST_CASES,
-    ids=[case.description for case in FINGERPRINT_AUDIT_GATE_EDGE_TEST_CASES],
+    [
+        FingerprintAuditGateEdgeTestCase(
+            description="warn-only result writes passed proof",
+            plan_severity=AuditSeverity.WARN.value,
+            result_outcome=AuditOutcome.WARN.value,
+            result_audit_name="not_null_orders",
+            result_column_name="order_id",
+            expected_status=AuditGateStatus.PASSED,
+            expected_result_count=1,
+        ),
+        FingerprintAuditGateEdgeTestCase(
+            description="mismatched result writes incomplete proof",
+            plan_severity=AuditSeverity.ERROR.value,
+            result_outcome=AuditOutcome.PASS.value,
+            result_audit_name="other_audit",
+            result_column_name="order_id",
+            expected_status=AuditGateStatus.INCOMPLETE,
+            expected_result_count=0,
+        ),
+        FingerprintAuditGateEdgeTestCase(
+            description="mismatched column writes incomplete proof",
+            plan_severity=AuditSeverity.ERROR.value,
+            result_outcome=AuditOutcome.PASS.value,
+            result_audit_name="not_null_orders",
+            result_column_name="other_column",
+            expected_status=AuditGateStatus.INCOMPLETE,
+            expected_result_count=0,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_edge_audit_results_when_building_fingerprint_metadata_then_status_is_conservative(
     test_case: FingerprintAuditGateEdgeTestCase,
@@ -177,70 +172,67 @@ def test_given_edge_audit_results_when_building_fingerprint_metadata_then_status
     assert len(audit_gate["results"]) == test_case.expected_result_count  # type: ignore[arg-type]
 
 
-AUDIT_GATE_REUSE_DECISION_TEST_CASES: list[AuditGateReuseDecisionTestCase] = [
-    AuditGateReuseDecisionTestCase(
-        description="matching passed proof is reusable",
-        metadata_mode="written",
-        status=AuditGateStatus.PASSED,
-        planned_attached_column_name="order_id",
-        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
-        expected_reusable=True,
-        expected_reason=AuditGateReuseReason.REUSABLE,
-        expected_reusable_count=1,
-        expected_missing_count=0,
-    ),
-    AuditGateReuseDecisionTestCase(
-        description="failed proof is not reusable",
-        metadata_mode="written",
-        status=AuditGateStatus.FAILED,
-        planned_attached_column_name="order_id",
-        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
-        expected_reusable=False,
-        expected_reason=AuditGateReuseReason.NON_PASSING,
-        expected_reusable_count=0,
-        expected_missing_count=0,
-    ),
-    AuditGateReuseDecisionTestCase(
-        description="binding set change is not reusable",
-        metadata_mode="written",
-        status=AuditGateStatus.PASSED,
-        planned_attached_column_name="customer_id",
-        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
-        expected_reusable=False,
-        expected_reason=AuditGateReuseReason.BINDING_SET_CHANGED,
-        expected_reusable_count=0,
-        expected_missing_count=1,
-    ),
-    AuditGateReuseDecisionTestCase(
-        description="same binding with changed execution SQL is not reusable",
-        metadata_mode="written",
-        status=AuditGateStatus.PASSED,
-        planned_attached_column_name="order_id",
-        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id < 0",
-        expected_reusable=False,
-        expected_reason=AuditGateReuseReason.AUDIT_CHANGED,
-        expected_reusable_count=0,
-        expected_missing_count=1,
-    ),
-    AuditGateReuseDecisionTestCase(
-        description="always_run audit is not reusable",
-        metadata_mode="written",
-        status=AuditGateStatus.PASSED,
-        planned_attached_column_name="order_id",
-        planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
-        expected_reusable=False,
-        expected_reason=AuditGateReuseReason.ALWAYS_RUN,
-        expected_reusable_count=0,
-        expected_missing_count=0,
-        planned_always_run=True,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    AUDIT_GATE_REUSE_DECISION_TEST_CASES,
-    ids=[case.description for case in AUDIT_GATE_REUSE_DECISION_TEST_CASES],
+    [
+        AuditGateReuseDecisionTestCase(
+            description="matching passed proof is reusable",
+            metadata_mode="written",
+            status=AuditGateStatus.PASSED,
+            planned_attached_column_name="order_id",
+            planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+            expected_reusable=True,
+            expected_reason=AuditGateReuseReason.REUSABLE,
+            expected_reusable_count=1,
+            expected_missing_count=0,
+        ),
+        AuditGateReuseDecisionTestCase(
+            description="failed proof is not reusable",
+            metadata_mode="written",
+            status=AuditGateStatus.FAILED,
+            planned_attached_column_name="order_id",
+            planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.NON_PASSING,
+            expected_reusable_count=0,
+            expected_missing_count=0,
+        ),
+        AuditGateReuseDecisionTestCase(
+            description="binding set change is not reusable",
+            metadata_mode="written",
+            status=AuditGateStatus.PASSED,
+            planned_attached_column_name="customer_id",
+            planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.BINDING_SET_CHANGED,
+            expected_reusable_count=0,
+            expected_missing_count=1,
+        ),
+        AuditGateReuseDecisionTestCase(
+            description="same binding with changed execution SQL is not reusable",
+            metadata_mode="written",
+            status=AuditGateStatus.PASSED,
+            planned_attached_column_name="order_id",
+            planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id < 0",
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.AUDIT_CHANGED,
+            expected_reusable_count=0,
+            expected_missing_count=1,
+        ),
+        AuditGateReuseDecisionTestCase(
+            description="always_run audit is not reusable",
+            metadata_mode="written",
+            status=AuditGateStatus.PASSED,
+            planned_attached_column_name="order_id",
+            planned_resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.ALWAYS_RUN,
+            expected_reusable_count=0,
+            expected_missing_count=0,
+            planned_always_run=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_prior_audit_gate_when_deciding_same_target_reuse_then_returns_decision(
     test_case: AuditGateReuseDecisionTestCase,
@@ -292,7 +284,7 @@ def test_given_prior_audit_gate_when_deciding_same_target_reuse_then_returns_dec
             expected_missing_count=0,
         )
     ],
-    ids=["missing proof is not reusable"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_audit_gate_when_deciding_same_target_reuse_then_returns_missing(
     test_case: AuditGateReuseDecisionTestCase,
@@ -328,7 +320,7 @@ def test_given_missing_audit_gate_when_deciding_same_target_reuse_then_returns_m
             expected_missing_count=0,
         )
     ],
-    ids=["malformed results are not reusable"],
+    ids=lambda case: case.description,
 )
 def test_given_malformed_audit_gate_when_deciding_same_target_reuse_then_returns_malformed(
     test_case: AuditGateReuseDecisionTestCase,
@@ -375,7 +367,7 @@ def test_given_malformed_audit_gate_when_deciding_same_target_reuse_then_returns
             expected_missing_count=1,
         )
     ],
-    ids=["one changed audit reports reusable and missing binding keys"],
+    ids=lambda case: case.description,
 )
 def test_given_one_changed_audit_when_deciding_same_target_reuse_then_returns_partial_keys(
     test_case: AuditGatePartialReuseDecisionTestCase,
@@ -424,63 +416,60 @@ def test_given_one_changed_audit_when_deciding_same_target_reuse_then_returns_pa
     assert len(decision.missing_binding_keys) == test_case.expected_missing_count
 
 
-REUSE_FROM_AUDIT_GATE_DECISION_TEST_CASES: list[ReuseFromAuditGateDecisionTestCase] = [
-    ReuseFromAuditGateDecisionTestCase(
-        description="prod dev resolved SQL difference keeps target-neutral proof reusable",
-        origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
-        planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        severity=AuditSeverity.ERROR.value,
-        expected_reusable=True,
-        expected_reason=AuditGateReuseReason.REUSABLE,
-        expected_reusable_count=1,
-        expected_missing_count=0,
-    ),
-    ReuseFromAuditGateDecisionTestCase(
-        description="changed unresolved SQL rejects origin proof",
-        origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
-        planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id < 0',
-        planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id < 0",
-        severity=AuditSeverity.ERROR.value,
-        expected_reusable=False,
-        expected_reason=AuditGateReuseReason.AUDIT_CHANGED,
-        expected_reusable_count=0,
-        expected_missing_count=1,
-    ),
-    ReuseFromAuditGateDecisionTestCase(
-        description="always_run rejects origin proof",
-        origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
-        planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        severity=AuditSeverity.ERROR.value,
-        expected_reusable=False,
-        expected_reason=AuditGateReuseReason.ALWAYS_RUN,
-        expected_reusable_count=0,
-        expected_missing_count=0,
-        planned_always_run=True,
-    ),
-    ReuseFromAuditGateDecisionTestCase(
-        description="warn-only audit requires no blocking proof",
-        origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
-        planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-        planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
-        severity=AuditSeverity.WARN.value,
-        expected_reusable=True,
-        expected_reason=AuditGateReuseReason.REUSABLE,
-        expected_reusable_count=0,
-        expected_missing_count=0,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    REUSE_FROM_AUDIT_GATE_DECISION_TEST_CASES,
-    ids=[case.description for case in REUSE_FROM_AUDIT_GATE_DECISION_TEST_CASES],
+    [
+        ReuseFromAuditGateDecisionTestCase(
+            description="prod dev resolved SQL difference keeps target-neutral proof reusable",
+            origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+            planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            severity=AuditSeverity.ERROR.value,
+            expected_reusable=True,
+            expected_reason=AuditGateReuseReason.REUSABLE,
+            expected_reusable_count=1,
+            expected_missing_count=0,
+        ),
+        ReuseFromAuditGateDecisionTestCase(
+            description="changed unresolved SQL rejects origin proof",
+            origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+            planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id < 0',
+            planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id < 0",
+            severity=AuditSeverity.ERROR.value,
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.AUDIT_CHANGED,
+            expected_reusable_count=0,
+            expected_missing_count=1,
+        ),
+        ReuseFromAuditGateDecisionTestCase(
+            description="always_run rejects origin proof",
+            origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+            planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            severity=AuditSeverity.ERROR.value,
+            expected_reusable=False,
+            expected_reason=AuditGateReuseReason.ALWAYS_RUN,
+            expected_reusable_count=0,
+            expected_missing_count=0,
+            planned_always_run=True,
+        ),
+        ReuseFromAuditGateDecisionTestCase(
+            description="warn-only audit requires no blocking proof",
+            origin_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            origin_resolved_sql="SELECT order_id FROM prod.orders WHERE order_id IS NULL",
+            planned_unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+            planned_resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+            severity=AuditSeverity.WARN.value,
+            expected_reusable=True,
+            expected_reason=AuditGateReuseReason.REUSABLE,
+            expected_reusable_count=0,
+            expected_missing_count=0,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_origin_audit_gate_when_deciding_reuse_from_proof_then_uses_definition_identity(
     test_case: ReuseFromAuditGateDecisionTestCase,
@@ -534,7 +523,7 @@ def test_given_origin_audit_gate_when_deciding_reuse_from_proof_then_uses_defini
             expected_result_count=0,
         )
     ],
-    ids=["missing result writes incomplete proof"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_audit_result_when_building_fingerprint_metadata_then_status_is_incomplete(
     test_case: FingerprintAuditGateEdgeTestCase,
@@ -567,7 +556,7 @@ def test_given_missing_audit_result_when_building_fingerprint_metadata_then_stat
             expected_result_count=1,
         )
     ],
-    ids=["fingerprint write receives audit gate metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_audit_gate_when_writing_fingerprint_then_metadata_json_contains_audit_proof(
     test_case: TryWriteFingerprintAuditGateTestCase,

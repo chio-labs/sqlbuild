@@ -55,46 +55,23 @@ class CapturingQueryDuckDbAdapter(DuckDbAdapter):
         return QueryResult(columns=("data_version",), rows=((1,),))
 
 
-OBSERVED_AT_TEST_CASES: list[SharedSourceFreshnessObservationTestCase] = [
-    SharedSourceFreshnessObservationTestCase(
-        description="uses adapter metadata observed_at when present",
-        adapter_observed_at=datetime(2026, 1, 15, 12, 1, 0),
-        fallback_observed_at=datetime(2026, 1, 15, 12, 5, 0),
-        expected_observed_at=datetime(2026, 1, 15, 12, 1, 0),
-    ),
-    SharedSourceFreshnessObservationTestCase(
-        description="falls back to caller observed_at when adapter omits observed_at",
-        adapter_observed_at=None,
-        fallback_observed_at=datetime(2026, 1, 15, 12, 5, 0),
-        expected_observed_at=datetime(2026, 1, 15, 12, 5, 0),
-    ),
-]
-
-COLUMN_SQL_TEST_CASES: list[SharedSourceFreshnessColumnSqlTestCase] = [
-    SharedSourceFreshnessColumnSqlTestCase(
-        description="renders database schema table and filter for column freshness",
-        source_database="warehouse",
-        source_schema="raw",
-        source_table="orders",
-        expected_sql_fragment="FROM warehouse.raw.orders",
-        freshness_filter="updated_at >= current_date - interval '2 days'",
-        expected_filter_fragment="WHERE updated_at >= current_date - interval '2 days'",
-    ),
-    SharedSourceFreshnessColumnSqlTestCase(
-        description="omits where clause when column freshness has no filter",
-        source_database="warehouse",
-        source_schema="raw",
-        source_table="orders",
-        expected_sql_fragment="FROM warehouse.raw.orders",
-        unexpected_sql_fragment=" WHERE ",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    OBSERVED_AT_TEST_CASES,
-    ids=[case.description for case in OBSERVED_AT_TEST_CASES],
+    [
+        SharedSourceFreshnessObservationTestCase(
+            description="uses adapter metadata observed_at when present",
+            adapter_observed_at=datetime(2026, 1, 15, 12, 1, 0),
+            fallback_observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            expected_observed_at=datetime(2026, 1, 15, 12, 1, 0),
+        ),
+        SharedSourceFreshnessObservationTestCase(
+            description="falls back to caller observed_at when adapter omits observed_at",
+            adapter_observed_at=None,
+            fallback_observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            expected_observed_at=datetime(2026, 1, 15, 12, 5, 0),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_freshness_metadata_when_observing_then_uses_expected_observed_at(
     test_case: SharedSourceFreshnessObservationTestCase,
@@ -122,8 +99,26 @@ def test_given_adapter_freshness_metadata_when_observing_then_uses_expected_obse
 
 @pytest.mark.parametrize(
     "test_case",
-    COLUMN_SQL_TEST_CASES,
-    ids=[case.description for case in COLUMN_SQL_TEST_CASES],
+    [
+        SharedSourceFreshnessColumnSqlTestCase(
+            description="renders database schema table and filter for column freshness",
+            source_database="warehouse",
+            source_schema="raw",
+            source_table="orders",
+            expected_sql_fragment="FROM warehouse.raw.orders",
+            freshness_filter="updated_at >= current_date - interval '2 days'",
+            expected_filter_fragment="WHERE updated_at >= current_date - interval '2 days'",
+        ),
+        SharedSourceFreshnessColumnSqlTestCase(
+            description="omits where clause when column freshness has no filter",
+            source_database="warehouse",
+            source_schema="raw",
+            source_table="orders",
+            expected_sql_fragment="FROM warehouse.raw.orders",
+            unexpected_sql_fragment=" WHERE ",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_column_freshness_source_when_observing_then_renders_full_relation(
     test_case: SharedSourceFreshnessColumnSqlTestCase,
@@ -163,7 +158,7 @@ def test_given_column_freshness_source_when_observing_then_renders_full_relation
             expected_sql_fragment="FROM (SELECT 1 AS id, 2 AS batch_id)",
         )
     ],
-    ids=["column freshness wraps an expression source as a subquery"],
+    ids=lambda case: case.description,
 )
 def test_given_column_freshness_expression_source_when_observing_then_uses_subquery(
     test_case: SharedSourceFreshnessExpressionSubqueryTestCase,

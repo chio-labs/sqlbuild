@@ -9,62 +9,60 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage._test_types import LineageCliTestCase
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop, run_sqb
 
-LINEAGE_CLI_TEST_CASES: list[LineageCliTestCase] = [
-    LineageCliTestCase(
-        description="renders upstream fact orders lineage json without warehouse tables",
-        command=("lineage", "fact_orders", "--format", "json"),
-        expected_exit_code=0,
-        expected_node_ids=(
-            "model:fact_orders",
-            "model:stg_orders",
-            "model:stg_payments",
-            "seed:waffle_types",
-            "source:raw_orders",
-            "source:raw_payments",
-            "udf:is_completed_order",
-            "udf:is_completed_order_py",
-        ),
-        expected_edge_ids=(
-            "udf:is_completed_order->model:fact_orders",
-            "udf:is_completed_order_py->model:fact_orders",
-            "model:stg_orders->model:fact_orders",
-            "seed:waffle_types->model:fact_orders",
-            "model:stg_payments->model:fact_orders",
-            "source:raw_orders->model:stg_orders",
-            "source:raw_payments->model:stg_payments",
-        ),
-    ),
-    LineageCliTestCase(
-        description="renders path-between selector lineage as json",
-        command=(
-            "lineage",
-            "--select",
-            "fact_orders~daily_activity_rollup",
-            "--format",
-            "json",
-        ),
-        expected_exit_code=0,
-        expected_node_ids=(
-            "model:daily_activity_rollup",
-            "model:fact_orders",
-            "model:hourly_order_activity",
-            "udf:is_completed_order",
-            "udf:is_completed_order_py",
-        ),
-        expected_edge_ids=(
-            "model:hourly_order_activity->model:daily_activity_rollup",
-            "udf:is_completed_order->model:fact_orders",
-            "udf:is_completed_order_py->model:fact_orders",
-            "model:fact_orders->model:hourly_order_activity",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_CLI_TEST_CASES,
-    ids=[case.description for case in LINEAGE_CLI_TEST_CASES],
+    [
+        LineageCliTestCase(
+            description="renders upstream fact orders lineage json without warehouse tables",
+            command=("lineage", "fact_orders", "--format", "json"),
+            expected_exit_code=0,
+            expected_node_ids=(
+                "model:fact_orders",
+                "model:stg_orders",
+                "model:stg_payments",
+                "seed:waffle_types",
+                "source:raw_orders",
+                "source:raw_payments",
+                "udf:is_completed_order",
+                "udf:is_completed_order_py",
+            ),
+            expected_edge_ids=(
+                "udf:is_completed_order->model:fact_orders",
+                "udf:is_completed_order_py->model:fact_orders",
+                "model:stg_orders->model:fact_orders",
+                "seed:waffle_types->model:fact_orders",
+                "model:stg_payments->model:fact_orders",
+                "source:raw_orders->model:stg_orders",
+                "source:raw_payments->model:stg_payments",
+            ),
+        ),
+        LineageCliTestCase(
+            description="renders path-between selector lineage as json",
+            command=(
+                "lineage",
+                "--select",
+                "fact_orders~daily_activity_rollup",
+                "--format",
+                "json",
+            ),
+            expected_exit_code=0,
+            expected_node_ids=(
+                "model:daily_activity_rollup",
+                "model:fact_orders",
+                "model:hourly_order_activity",
+                "udf:is_completed_order",
+                "udf:is_completed_order_py",
+            ),
+            expected_edge_ids=(
+                "model:hourly_order_activity->model:daily_activity_rollup",
+                "udf:is_completed_order->model:fact_orders",
+                "udf:is_completed_order_py->model:fact_orders",
+                "model:fact_orders->model:hourly_order_activity",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_lineage_command_when_running_then_outputs_expected_json_graph(
     test_case: LineageCliTestCase,

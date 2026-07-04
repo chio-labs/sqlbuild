@@ -10,62 +10,60 @@ from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.run.helpers.helpers import build_name_test_adapter
 
-QUALIFIED_NAME_TEST_CASES: list[BuildQualifiedNameTestCase] = [
-    BuildQualifiedNameTestCase(
-        description="database and schema and name produces three-part name",
-        adapter_name="duckdb",
-        database="analytics",
-        schema="staging",
-        name="orders",
-        expected_qualified="analytics.staging.orders",
-    ),
-    BuildQualifiedNameTestCase(
-        description="schema and name without database produces two-part name",
-        adapter_name="duckdb",
-        database=None,
-        schema="staging",
-        name="orders",
-        expected_qualified="staging.orders",
-    ),
-    BuildQualifiedNameTestCase(
-        description="name only produces unqualified name",
-        adapter_name="duckdb",
-        database=None,
-        schema=None,
-        name="orders",
-        expected_qualified="orders",
-    ),
-    BuildQualifiedNameTestCase(
-        description="database without schema produces two-part name",
-        adapter_name="duckdb",
-        database="analytics",
-        schema=None,
-        name="orders",
-        expected_qualified="orders",
-    ),
-    BuildQualifiedNameTestCase(
-        description="bigquery quotes delta relation names with project and dataset",
-        adapter_name="bigquery",
-        database="example-project",
-        schema="dev",
-        name="orders__delta",
-        expected_qualified="`example-project.dev.orders__delta`",
-    ),
-    BuildQualifiedNameTestCase(
-        description="bigquery quotes fingerprint table names separately from model locations",
-        adapter_name="bigquery",
-        database="example-project",
-        schema="dev",
-        name="_sqlbuild_fingerprints",
-        expected_qualified="`example-project.dev._sqlbuild_fingerprints`",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    QUALIFIED_NAME_TEST_CASES,
-    ids=[case.description for case in QUALIFIED_NAME_TEST_CASES],
+    [
+        BuildQualifiedNameTestCase(
+            description="database and schema and name produces three-part name",
+            adapter_name="duckdb",
+            database="analytics",
+            schema="staging",
+            name="orders",
+            expected_qualified="analytics.staging.orders",
+        ),
+        BuildQualifiedNameTestCase(
+            description="schema and name without database produces two-part name",
+            adapter_name="duckdb",
+            database=None,
+            schema="staging",
+            name="orders",
+            expected_qualified="staging.orders",
+        ),
+        BuildQualifiedNameTestCase(
+            description="name only produces unqualified name",
+            adapter_name="duckdb",
+            database=None,
+            schema=None,
+            name="orders",
+            expected_qualified="orders",
+        ),
+        BuildQualifiedNameTestCase(
+            description="database without schema produces two-part name",
+            adapter_name="duckdb",
+            database="analytics",
+            schema=None,
+            name="orders",
+            expected_qualified="orders",
+        ),
+        BuildQualifiedNameTestCase(
+            description="bigquery quotes delta relation names with project and dataset",
+            adapter_name="bigquery",
+            database="example-project",
+            schema="dev",
+            name="orders__delta",
+            expected_qualified="`example-project.dev.orders__delta`",
+        ),
+        BuildQualifiedNameTestCase(
+            description="bigquery quotes fingerprint table names separately from model locations",
+            adapter_name="bigquery",
+            database="example-project",
+            schema="dev",
+            name="_sqlbuild_fingerprints",
+            expected_qualified="`example-project.dev._sqlbuild_fingerprints`",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_relation_parts_when_resolving_qualified_name_then_returns_expected(
     test_case: BuildQualifiedNameTestCase,

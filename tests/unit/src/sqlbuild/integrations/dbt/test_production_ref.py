@@ -34,7 +34,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
             expected_error_fragment="timed out after 7s",
         )
     ],
-    ids=["raises reuse unavailable when git command times out"],
+    ids=lambda case: case.description,
 )
 def test_given_git_command_timeout_when_running_git_text_then_raises_reuse_unavailable(
     test_case: DbtReuseGitTimeoutTestCase,
@@ -60,7 +60,7 @@ def test_given_git_command_timeout_when_running_git_text_then_raises_reuse_unava
             expected_run_calls=0,
         )
     ],
-    ids=["refresh false archives configured local ref without fetching"],
+    ids=lambda case: case.description,
 )
 def test_given_refresh_disabled_when_refreshing_git_ref_then_skips_fetch(
     test_case: DbtReuseGitRefreshTestCase,
@@ -94,7 +94,7 @@ def test_given_refresh_disabled_when_refreshing_git_ref_then_skips_fetch(
             expected_manifest_contents='{"metadata": {}}',
         )
     ],
-    ids=["runs dbt deps before compile when archived project declares packages"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_checkout_with_packages_when_compiling_then_runs_deps_before_compile(
     test_case: DbtReuseCompileDepsTestCase,
@@ -165,7 +165,7 @@ def test_given_reuse_checkout_with_packages_when_compiling_then_runs_deps_before
             expected_manifest_contents="",
         )
     ],
-    ids=["precomputes seed content hashes before temp checkout is deleted"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_manifest_with_seed_when_indexing_after_compile_then_has_no_seed_warning(
     test_case: DbtReuseCompileDepsTestCase,
@@ -253,7 +253,7 @@ def test_given_reuse_manifest_with_seed_when_indexing_after_compile_then_has_no_
             expected_manifest_contents='{"metadata": {}}',
         )
     ],
-    ids=["uses cached manifest on second compile for same reuse inputs"],
+    ids=lambda case: case.description,
 )
 def test_given_cached_reuse_manifest_when_compiling_same_inputs_then_skips_deps_and_compile(
     test_case: DbtReuseManifestCacheTestCase,

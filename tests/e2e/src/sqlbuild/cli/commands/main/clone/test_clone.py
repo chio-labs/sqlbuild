@@ -122,7 +122,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["clone copies tables recreates views and warns on missing source"],
+    ids=lambda case: case.description,
 )
 def test_given_clone_command_when_running_then_managed_relations_sync_as_expected(
     test_case: CloneE2ETestCase,

@@ -46,7 +46,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["run executes discovered Python lifecycle hooks"],
+    ids=lambda case: case.description,
 )
 def test_given_project_with_python_hooks_when_running_run_then_hooks_execute(
     test_case: RunE2ETestCase,
@@ -136,7 +136,7 @@ def test_given_project_with_python_hooks_when_running_run_then_hooks_execute(
             ),
         ),
     ],
-    ids=["run materializes tables and views with correct data"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_project_when_running_run_then_warehouse_state_matches_expected(
     test_case: RunE2ETestCase,
@@ -184,7 +184,7 @@ def test_given_waffle_shop_project_when_running_run_then_warehouse_state_matches
             expected_view_names=(),
         )
     ],
-    ids=["run changes-only prunes unchanged selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_running_changes_only_then_prunes_unchanged_model(
     test_case: RunE2ETestCase,
@@ -235,7 +235,7 @@ def test_given_built_direct_project_when_running_changes_only_then_prunes_unchan
             expected_view_names=(),
         )
     ],
-    ids=["run changes-only executes table configured duration despite unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_run_despite_unchanged_duration_when_running_changes_only_then_executes_downstream(
     test_case: RunE2ETestCase,
@@ -300,7 +300,7 @@ def test_given_run_despite_unchanged_duration_when_running_changes_only_then_exe
             expected_view_names=(),
         )
     ],
-    ids=["run changes-only reads normal-run source freshness state"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_state(
     test_case: RunE2ETestCase,
@@ -384,7 +384,7 @@ def test_given_source_freshness_when_running_changes_only_then_reads_normal_run_
             expected_view_names=(),
         )
     ],
-    ids=["run changes-only respects timestamp source freshness lag tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_within_tolerance(
     test_case: RunE2ETestCase,
@@ -468,7 +468,7 @@ def test_given_timestamp_lag_tolerance_when_running_changes_only_then_skips_with
             expected_view_names=(),
         )
     ],
-    ids=["run changes-only source freshness does not append after model failure"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_failure_when_running_changes_only_then_does_not_append(
     test_case: RunE2ETestCase,
@@ -555,7 +555,7 @@ def test_given_source_freshness_failure_when_running_changes_only_then_does_not_
             expected_view_names=("stg_orders",),
         )
     ],
-    ids=["run changes-only skips view chain when source freshness is unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_view_chain_when_running_changes_only_then_skips_downstream(
     test_case: RunE2ETestCase,
@@ -622,7 +622,7 @@ def test_given_source_freshness_view_chain_when_running_changes_only_then_skips_
             expected_view_names=(),
         )
     ],
-    ids=["generated factory nodes participate in run build and check lifecycle"],
+    ids=lambda case: case.description,
 )
 def test_given_factory_generated_nodes_when_running_commands_then_lifecycle_succeeds(
     test_case: RunE2ETestCase,
@@ -781,7 +781,7 @@ def generated_pipeline():
             expected_view_names=(),
         )
     ],
-    ids=["run reuses existing intermediate target for source-only selection"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_intermediate_target_when_running_source_only_then_reuses_target(
     test_case: RunE2ETestCase,
@@ -843,7 +843,7 @@ def test_given_existing_intermediate_target_when_running_source_only_then_reuses
             expected_view_names=(),
         )
     ],
-    ids=["run executes selected task node"],
+    ids=lambda case: case.description,
 )
 def test_given_task_selector_when_running_run_then_task_executes(
     test_case: RunE2ETestCase,
@@ -898,7 +898,7 @@ def test_given_task_selector_when_running_run_then_task_executes(
             expected_view_names=(),
         )
     ],
-    ids=["run executes selected asset node"],
+    ids=lambda case: case.description,
 )
 def test_given_asset_selector_when_running_run_then_asset_executes(
     test_case: RunE2ETestCase,
@@ -953,7 +953,7 @@ def test_given_asset_selector_when_running_run_then_asset_executes(
             expected_view_names=(),
         )
     ],
-    ids=["run json output includes selected task node"],
+    ids=lambda case: case.description,
 )
 def test_given_task_selector_with_json_output_when_running_run_then_json_includes_task(
     test_case: RunE2ETestCase,
@@ -1023,7 +1023,7 @@ def test_given_task_selector_with_json_output_when_running_run_then_json_include
             expected_view_names=(),
         )
     ],
-    ids=["run fails when selected task fails"],
+    ids=lambda case: case.description,
 )
 def test_given_failing_task_selector_when_running_run_then_command_fails(
     test_case: RunE2ETestCase,
@@ -1092,7 +1092,7 @@ def test_given_failing_task_selector_when_running_run_then_command_fails(
             expected_view_names=(),
         )
     ],
-    ids=["run executes upstream task before source loader and model"],
+    ids=lambda case: case.description,
 )
 def test_given_task_loader_source_model_chain_when_running_model_then_task_runs_before_loader(
     test_case: RunE2ETestCase,
@@ -1170,7 +1170,7 @@ def test_given_task_loader_source_model_chain_when_running_model_then_task_runs_
             expected_view_names=(),
         )
     ],
-    ids=["run executes selected task after selected model for read-only SQL access"],
+    ids=lambda case: case.description,
 )
 def test_given_model_and_task_selector_when_running_run_then_task_can_read_built_model(
     test_case: RunE2ETestCase,
@@ -1244,7 +1244,7 @@ def test_given_model_and_task_selector_when_running_run_then_task_can_read_built
             expected_view_names=(),
         )
     ],
-    ids=["run executes selected asset after selected terminal model"],
+    ids=lambda case: case.description,
 )
 def test_given_asset_depends_on_terminal_model_when_running_run_then_asset_reads_model(
     test_case: RunE2ETestCase,
@@ -1315,7 +1315,7 @@ def test_given_asset_depends_on_terminal_model_when_running_run_then_asset_reads
             expected_view_names=(),
         )
     ],
-    ids=["run expands and executes task asset task chain"],
+    ids=lambda case: case.description,
 )
 def test_given_task_asset_task_chain_when_running_final_task_then_chain_executes_in_order(
     test_case: RunE2ETestCase,
@@ -1380,7 +1380,7 @@ def test_given_task_asset_task_chain_when_running_final_task_then_chain_executes
             expected_view_names=(),
         )
     ],
-    ids=["run executes source task asset chain after source load"],
+    ids=lambda case: case.description,
 )
 def test_given_source_task_asset_selection_when_running_run_then_task_reads_loaded_source(
     test_case: RunE2ETestCase,
@@ -1464,7 +1464,7 @@ def test_given_source_task_asset_selection_when_running_run_then_task_reads_load
             expected_view_names=(),
         )
     ],
-    ids=["run json includes skipped task and asset materialization fields"],
+    ids=lambda case: case.description,
 )
 def test_given_skip_and_asset_selection_with_json_when_running_run_then_json_records_fields(
     test_case: RunE2ETestCase,
@@ -1542,7 +1542,7 @@ def test_given_skip_and_asset_selection_with_json_when_running_run_then_json_rec
             expected_view_names=(),
         )
     ],
-    ids=["run executes independent Python branches and SQL branch"],
+    ids=lambda case: case.description,
 )
 def test_given_independent_python_and_sql_selectors_when_running_run_then_all_branches_run(
     test_case: RunE2ETestCase,
@@ -1614,7 +1614,7 @@ def test_given_independent_python_and_sql_selectors_when_running_run_then_all_br
             expected_view_names=(),
         )
     ],
-    ids=["run executes SQL-ready Python before downstream SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_task_depends_on_model_when_running_run_then_task_runs_before_downstream_sql(
     test_case: RunE2ETestCase,
@@ -1688,7 +1688,7 @@ def test_given_task_depends_on_model_when_running_run_then_task_runs_before_down
             expected_view_names=(),
         )
     ],
-    ids=["run executes task after typed source dependency"],
+    ids=lambda case: case.description,
 )
 def test_given_task_depends_on_source_when_running_run_then_task_runs_after_source_load(
     test_case: RunE2ETestCase,
@@ -1762,7 +1762,7 @@ def test_given_task_depends_on_source_when_running_run_then_task_runs_after_sour
             expected_view_names=(),
         )
     ],
-    ids=["run fails when SQL-ready Python task fails"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_ready_task_fails_when_running_run_then_footer_json_and_exit_fail(
     test_case: RunE2ETestCase,
@@ -1843,7 +1843,7 @@ def test_given_sql_ready_task_fails_when_running_run_then_footer_json_and_exit_f
             expected_view_names=(),
         )
     ],
-    ids=["run rejects Python dependency on terminal loader"],
+    ids=lambda case: case.description,
 )
 def test_given_task_depends_on_terminal_loader_when_running_run_then_command_rejects_boundary(
     test_case: RunE2ETestCase,
@@ -1911,7 +1911,7 @@ def test_given_task_depends_on_terminal_loader_when_running_run_then_command_rej
             expected_view_names=(),
         )
     ],
-    ids=["run executes intermediate loader before dependent task and asset"],
+    ids=lambda case: case.description,
 )
 def test_given_task_asset_depend_on_intermediate_loader_when_running_run_then_loader_runs_first(
     test_case: RunE2ETestCase,
@@ -1992,7 +1992,7 @@ def test_given_task_asset_depend_on_intermediate_loader_when_running_run_then_lo
             expected_view_names=(),
         )
     ],
-    ids=["run executes loader task loader chain before model"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_task_loader_chain_when_running_model_then_ingress_orders_chain(
     test_case: RunE2ETestCase,
@@ -2078,7 +2078,7 @@ def test_given_loader_task_loader_chain_when_running_model_then_ingress_orders_c
             expected_view_names=(),
         )
     ],
-    ids=["run executes task asset loader chain before model"],
+    ids=lambda case: case.description,
 )
 def test_given_task_asset_loader_chain_when_running_model_then_ingress_orders_chain(
     test_case: RunE2ETestCase,
@@ -2161,7 +2161,7 @@ def test_given_task_asset_loader_chain_when_running_model_then_ingress_orders_ch
             expected_view_names=(),
         )
     ],
-    ids=["run executes loader asset loader chain before model"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_asset_loader_chain_when_running_model_then_ingress_orders_chain(
     test_case: RunE2ETestCase,
@@ -2247,7 +2247,7 @@ def test_given_loader_asset_loader_chain_when_running_model_then_ingress_orders_
             expected_view_names=(),
         )
     ],
-    ids=["run executes loader loader chain before model"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_loader_chain_when_running_model_then_ingress_orders_chain(
     test_case: RunE2ETestCase,
@@ -2320,7 +2320,7 @@ def test_given_loader_loader_chain_when_running_model_then_ingress_orders_chain(
             expected_view_names=(),
         )
     ],
-    ids=["run executes full Python SQL Python spine in lifecycle order"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running_run_then_orders(
     test_case: RunE2ETestCase,
@@ -2463,7 +2463,7 @@ def test_given_loader_task_asset_loader_model_task_asset_task_spine_when_running
             expected_view_names=(),
         )
     ],
-    ids=["run rejects source downstream task feeding loader"],
+    ids=lambda case: case.description,
 )
 def test_given_source_task_loader_chain_when_running_run_then_command_rejects_boundary(
     test_case: RunE2ETestCase,
@@ -2537,7 +2537,7 @@ def test_given_source_task_loader_chain_when_running_run_then_command_rejects_bo
             expected_view_names=(),
         )
     ],
-    ids=["run rejects model downstream task feeding loader"],
+    ids=lambda case: case.description,
 )
 def test_given_model_task_loader_chain_when_running_run_then_command_rejects_boundary(
     test_case: RunE2ETestCase,
@@ -2614,7 +2614,7 @@ def test_given_model_task_loader_chain_when_running_run_then_command_rejects_bou
             expected_view_names=(),
         )
     ],
-    ids=["run rejects selected check node"],
+    ids=lambda case: case.description,
 )
 def test_given_check_selector_when_running_run_then_command_rejects_check(
     test_case: RunE2ETestCase,

@@ -34,7 +34,7 @@ from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
             ),
         )
     ],
-    ids=["drops only current scenario plan targets"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_plan_when_cleaning_up_then_drops_only_planned_targets(
     test_case: ExecuteScenarioCleanupTestCase,
@@ -68,7 +68,7 @@ def test_given_scenario_plan_when_cleaning_up_then_drops_only_planned_targets(
             expected_drop_targets=("scenario_schema.__sqb_51b385aebe20__model__daily_revenue",),
         )
     ],
-    ids=["drops scenario view models as views"],
+    ids=lambda case: case.description,
 )
 def test_given_view_model_in_scenario_plan_when_cleaning_up_then_drops_view(
     test_case: ExecuteScenarioCleanupTestCase,
@@ -105,7 +105,7 @@ def test_given_view_model_in_scenario_plan_when_cleaning_up_then_drops_view(
             expected_error_fragment="failed target __sqb_51b385aebe20__seed__country_codes",
         )
     ],
-    ids=["returns failed cleanup result with target context"],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_failure_when_cleaning_up_then_returns_failed_result(
     test_case: ExecuteScenarioCleanupTestCase,
@@ -144,7 +144,7 @@ def test_given_adapter_failure_when_cleaning_up_then_returns_failed_result(
             ),
         )
     ],
-    ids=["drops unmocked project seed target"],
+    ids=lambda case: case.description,
 )
 def test_given_unmocked_project_seed_when_cleaning_up_then_drops_seed_target(
     test_case: ExecuteScenarioCleanupTestCase,

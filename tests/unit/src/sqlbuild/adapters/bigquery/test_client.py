@@ -72,7 +72,7 @@ from tests.unit.src.sqlbuild.adapters.bigquery.helpers import (
             },
         )
     ],
-    ids=["returns BigQuery inference rules"],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_adapter_when_getting_inference_profile_then_returns_expected_rules(
     test_case: BigQueryExpressionInferenceProfileTestCase,
@@ -120,7 +120,7 @@ def test_given_bigquery_adapter_when_getting_inference_profile_then_returns_expe
             ),
         )
     ],
-    ids=["renders fingerprint pruning with correlated exists"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_prune_then_bigquery_uses_history_rank(
     test_case: BigQueryPruneSqlTestCase,
@@ -156,7 +156,7 @@ def test_given_fingerprint_table_when_rendering_prune_then_bigquery_uses_history
             ),
         )
     ],
-    ids=["renders source freshness pruning with null-safe full identity"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_table_when_rendering_prune_then_bigquery_uses_history_rank(
     test_case: BigQueryPruneSqlTestCase,
@@ -191,7 +191,7 @@ def test_given_source_freshness_table_when_rendering_prune_then_bigquery_uses_hi
             ),
         )
     ],
-    ids=["uses table storage metadata for multiple tables"],
+    ids=lambda case: case.description,
 )
 def test_given_physical_tables_when_getting_freshness_metadata_then_bigquery_uses_table_storage(
     test_case: BigQueryTableFreshnessBatchTestCase,
@@ -240,7 +240,7 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_bigquery_use
             expected_error_fragment="does not support wildcard tables",
         )
     ],
-    ids=["rejects wildcard table metadata freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_wildcard_table_when_getting_freshness_metadata_then_bigquery_raises_clear_error(
     test_case: BigQueryTableFreshnessWildcardTestCase,
@@ -260,159 +260,27 @@ def test_given_wildcard_table_when_getting_freshness_metadata_then_bigquery_rais
         adapter.get_tables_freshness_metadata(connection, requests=(request,))
 
 
-BIGQUERY_QUERY_TEST_CASES: list[BigQueryQueryTestCase] = [
-    BigQueryQueryTestCase(
-        description="returns limited rows and truncation flag",
-        sql="SELECT id, name FROM demo",
-        limit=2,
-        expected_columns=("id", "name"),
-        expected_rows=((1, "a"), (2, "b")),
-        expected_truncated=True,
-    ),
-    BigQueryQueryTestCase(
-        description="returns all rows when limit is none",
-        sql="SELECT id, name FROM demo",
-        limit=None,
-        expected_columns=("id", "name"),
-        expected_rows=((1, "a"), (2, "b"), (3, "c")),
-        expected_truncated=False,
-    ),
-]
-
-BIGQUERY_RENDER_SCHEMA_TEST_CASES: list[BigQueryRenderSchemaTestCase] = [
-    BigQueryRenderSchemaTestCase(
-        description="includes configured location in create schema",
-        database="example-project",
-        schema="dev",
-        location="europe-west2",
-        expected_sql=(
-            "CREATE SCHEMA IF NOT EXISTS `example-project.dev` OPTIONS(location = 'europe-west2')"
-        ),
-    ),
-    BigQueryRenderSchemaTestCase(
-        description="omits location when none configured",
-        database="example-project",
-        schema="dev",
-        location=None,
-        expected_sql="CREATE SCHEMA IF NOT EXISTS `example-project.dev`",
-    ),
-]
-
-BIGQUERY_RENDER_QUALIFIED_NAME_TEST_CASES: list[BigQueryRenderQualifiedNameTestCase] = [
-    BigQueryRenderQualifiedNameTestCase(
-        description="quotes three-part BigQuery relation path",
-        database="example-project",
-        schema="dev",
-        name="stg_customers",
-        expected_qualified_name="`example-project.dev.stg_customers`",
-    ),
-    BigQueryRenderQualifiedNameTestCase(
-        description="quotes two-part BigQuery relation path",
-        database=None,
-        schema="dev",
-        name="stg_customers",
-        expected_qualified_name="`dev.stg_customers`",
-    ),
-]
-
-BIGQUERY_RENDER_CLONE_TEST_CASES: list[BigQueryRenderCloneTestCase] = [
-    BigQueryRenderCloneTestCase(
-        description="renders zero copy table clone by default",
-        source="example-project.prod.fact_orders",
-        target="example-project.dev.fact_orders",
-        hard_copy=False,
-        expected_statements=(
-            "CREATE TABLE `example-project.dev.fact_orders` "
-            "CLONE `example-project.prod.fact_orders`",
-        ),
-        expected_supports_zero_copy=True,
-    ),
-    BigQueryRenderCloneTestCase(
-        description="renders CTAS when hard copy is requested",
-        source="`example-project.prod.fact_orders`",
-        target="`example-project.dev.fact_orders`",
-        hard_copy=True,
-        expected_statements=(
-            "CREATE OR REPLACE TABLE `example-project.dev.fact_orders` AS "
-            "SELECT * FROM `example-project.prod.fact_orders`",
-        ),
-        expected_supports_zero_copy=True,
-    ),
-]
-
-BIGQUERY_SCHEMA_EXISTS_TEST_CASES: list[BigQuerySchemaExistsTestCase] = [
-    BigQuerySchemaExistsTestCase(
-        description="returns true when dataset exists",
-        missing_dataset=False,
-        expected_exists=True,
-    ),
-    BigQuerySchemaExistsTestCase(
-        description="returns false when dataset is missing",
-        missing_dataset=True,
-        expected_exists=False,
-    ),
-]
-
-BIGQUERY_CONNECT_ERROR_TEST_CASES: list[BigQueryConnectErrorTestCase] = [
-    BigQueryConnectErrorTestCase(
-        description="requires explicit connection project",
-        config={"location": "europe-west2"},
-        expected_error_fragment="BigQuery connection requires non-empty 'project'",
-    ),
-    BigQueryConnectErrorTestCase(
-        description="rejects blank connection project",
-        config={"project": " ", "location": "europe-west2"},
-        expected_error_fragment="BigQuery connection requires non-empty 'project'",
-    ),
-]
-
-BIGQUERY_RENDER_CURSOR_BOUND_LITERAL_TEST_CASES: list[BigQueryRenderCursorBoundLiteralTestCase] = [
-    BigQueryRenderCursorBoundLiteralTestCase(
-        description="renders timestamp cursor bounds as typed literals",
-        value="2024-01-15T00:00:00",
-        cursor_type=CursorKind.TIMESTAMP,
-        expected_literal="TIMESTAMP '2024-01-15T00:00:00'",
-    ),
-    BigQueryRenderCursorBoundLiteralTestCase(
-        description="renders integer cursor bounds without quotes",
-        value="42",
-        cursor_type=CursorKind.INTEGER,
-        expected_literal="42",
-    ),
-]
-
-BIGQUERY_SCHEMA_DIFF_TEST_CASES: list[BigQuerySchemaDiffTestCase] = [
-    BigQuerySchemaDiffTestCase(
-        description="detects added removed and changed column types",
-        expected_result=SchemaDiffResult(
-            added_columns=(ColumnInfo(name="new_col", type="DATE"),),
-            removed_columns=(ColumnInfo(name="status", type="STRING"),),
-            type_changed_columns=(
-                (ColumnInfo(name="id", type="INT64"), ColumnInfo(name="id", type="STRING")),
-            ),
-        ),
-        left_relation_columns=(
-            ColumnInfo(name="id", type="INT64"),
-            ColumnInfo(name="status", type="STRING"),
-        ),
-        right_relation_columns=(
-            ColumnInfo(name="id", type="STRING"),
-            ColumnInfo(name="new_col", type="DATE"),
-        ),
-    ),
-    BigQuerySchemaDiffTestCase(
-        description="ignores semantically equivalent type aliases",
-        expected_result=SchemaDiffResult(),
-        left_relation_columns=(ColumnInfo(name="id", type="INT64"),),
-        right_relation_columns=(ColumnInfo(name="id", type="INTEGER"),),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    BIGQUERY_QUERY_TEST_CASES,
-    ids=[case.description for case in BIGQUERY_QUERY_TEST_CASES],
+    [
+        BigQueryQueryTestCase(
+            description="returns limited rows and truncation flag",
+            sql="SELECT id, name FROM demo",
+            limit=2,
+            expected_columns=("id", "name"),
+            expected_rows=((1, "a"), (2, "b")),
+            expected_truncated=True,
+        ),
+        BigQueryQueryTestCase(
+            description="returns all rows when limit is none",
+            sql="SELECT id, name FROM demo",
+            limit=None,
+            expected_columns=("id", "name"),
+            expected_rows=((1, "a"), (2, "b"), (3, "c")),
+            expected_truncated=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_rows_when_querying_then_returns_normalized_result(
     test_case: BigQueryQueryTestCase,
@@ -438,8 +306,25 @@ def test_given_bigquery_rows_when_querying_then_returns_normalized_result(
 
 @pytest.mark.parametrize(
     "test_case",
-    BIGQUERY_RENDER_SCHEMA_TEST_CASES,
-    ids=[case.description for case in BIGQUERY_RENDER_SCHEMA_TEST_CASES],
+    [
+        BigQueryRenderSchemaTestCase(
+            description="includes configured location in create schema",
+            database="example-project",
+            schema="dev",
+            location="europe-west2",
+            expected_sql=(
+                "CREATE SCHEMA IF NOT EXISTS `example-project.dev` OPTIONS(location = 'europe-west2')"
+            ),
+        ),
+        BigQueryRenderSchemaTestCase(
+            description="omits location when none configured",
+            database="example-project",
+            schema="dev",
+            location=None,
+            expected_sql="CREATE SCHEMA IF NOT EXISTS `example-project.dev`",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_schema_target_when_rendering_then_returns_create_schema_sql(
     test_case: BigQueryRenderSchemaTestCase,
@@ -457,8 +342,23 @@ def test_given_bigquery_schema_target_when_rendering_then_returns_create_schema_
 
 @pytest.mark.parametrize(
     "test_case",
-    BIGQUERY_RENDER_QUALIFIED_NAME_TEST_CASES,
-    ids=[case.description for case in BIGQUERY_RENDER_QUALIFIED_NAME_TEST_CASES],
+    [
+        BigQueryRenderQualifiedNameTestCase(
+            description="quotes three-part BigQuery relation path",
+            database="example-project",
+            schema="dev",
+            name="stg_customers",
+            expected_qualified_name="`example-project.dev.stg_customers`",
+        ),
+        BigQueryRenderQualifiedNameTestCase(
+            description="quotes two-part BigQuery relation path",
+            database=None,
+            schema="dev",
+            name="stg_customers",
+            expected_qualified_name="`dev.stg_customers`",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_relation_parts_when_rendering_then_quotes_qualified_name(
     test_case: BigQueryRenderQualifiedNameTestCase,
@@ -495,7 +395,7 @@ def test_given_bigquery_relation_parts_when_rendering_then_quotes_qualified_name
             ),
         )
     ],
-    ids=["renders Python UDF DDL with runtime entry point and packages"],
+    ids=lambda case: case.description,
 )
 def test_given_python_function_when_rendering_then_bigquery_returns_expected_ddl(
     test_case: BigQueryRenderPythonFunctionTestCase,
@@ -529,7 +429,7 @@ def test_given_python_function_when_rendering_then_bigquery_returns_expected_ddl
             ),
         )
     ],
-    ids=["renders table function DDL with inferred BigQuery return schema"],
+    ids=lambda case: case.description,
 )
 def test_given_table_function_when_rendering_then_bigquery_returns_expected_ddl(
     test_case: BigQueryRenderTableFunctionTestCase,
@@ -560,7 +460,7 @@ def test_given_table_function_when_rendering_then_bigquery_returns_expected_ddl(
             ),
         )
     ],
-    ids=["quotes fully qualified function calls with hyphenated project ids"],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_function_call_when_rendering_then_quotes_qualified_target(
     test_case: BigQueryRenderTableFunctionTestCase,
@@ -585,8 +485,19 @@ def test_given_bigquery_function_call_when_rendering_then_quotes_qualified_targe
 
 @pytest.mark.parametrize(
     "test_case",
-    BIGQUERY_SCHEMA_EXISTS_TEST_CASES,
-    ids=[case.description for case in BIGQUERY_SCHEMA_EXISTS_TEST_CASES],
+    [
+        BigQuerySchemaExistsTestCase(
+            description="returns true when dataset exists",
+            missing_dataset=False,
+            expected_exists=True,
+        ),
+        BigQuerySchemaExistsTestCase(
+            description="returns false when dataset is missing",
+            missing_dataset=True,
+            expected_exists=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_dataset_state_when_checking_schema_exists_then_returns_expected(
     test_case: BigQuerySchemaExistsTestCase,
@@ -607,8 +518,19 @@ def test_given_bigquery_dataset_state_when_checking_schema_exists_then_returns_e
 
 @pytest.mark.parametrize(
     "test_case",
-    BIGQUERY_CONNECT_ERROR_TEST_CASES,
-    ids=[case.description for case in BIGQUERY_CONNECT_ERROR_TEST_CASES],
+    [
+        BigQueryConnectErrorTestCase(
+            description="requires explicit connection project",
+            config={"location": "europe-west2"},
+            expected_error_fragment="BigQuery connection requires non-empty 'project'",
+        ),
+        BigQueryConnectErrorTestCase(
+            description="rejects blank connection project",
+            config={"project": " ", "location": "europe-west2"},
+            expected_error_fragment="BigQuery connection requires non-empty 'project'",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_missing_bigquery_project_when_connecting_then_raises_clear_error(
     test_case: BigQueryConnectErrorTestCase,
@@ -630,7 +552,7 @@ def test_given_missing_bigquery_project_when_connecting_then_raises_clear_error(
             expected_error_code="A104",
         ),
     ],
-    ids=["includes BigQuery error details from failed jobs"],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_job_failure_when_executing_then_includes_error_details(
     test_case: BigQueryExecutionErrorTestCase,
@@ -654,8 +576,21 @@ def test_given_bigquery_job_failure_when_executing_then_includes_error_details(
 
 @pytest.mark.parametrize(
     "test_case",
-    BIGQUERY_RENDER_CURSOR_BOUND_LITERAL_TEST_CASES,
-    ids=[case.description for case in BIGQUERY_RENDER_CURSOR_BOUND_LITERAL_TEST_CASES],
+    [
+        BigQueryRenderCursorBoundLiteralTestCase(
+            description="renders timestamp cursor bounds as typed literals",
+            value="2024-01-15T00:00:00",
+            cursor_type=CursorKind.TIMESTAMP,
+            expected_literal="TIMESTAMP '2024-01-15T00:00:00'",
+        ),
+        BigQueryRenderCursorBoundLiteralTestCase(
+            description="renders integer cursor bounds without quotes",
+            value="42",
+            cursor_type=CursorKind.INTEGER,
+            expected_literal="42",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_cursor_bounds_when_rendering_then_bigquery_returns_expected_literal(
     test_case: BigQueryRenderCursorBoundLiteralTestCase,
@@ -669,8 +604,31 @@ def test_given_cursor_bounds_when_rendering_then_bigquery_returns_expected_liter
 
 @pytest.mark.parametrize(
     "test_case",
-    BIGQUERY_RENDER_CLONE_TEST_CASES,
-    ids=[case.description for case in BIGQUERY_RENDER_CLONE_TEST_CASES],
+    [
+        BigQueryRenderCloneTestCase(
+            description="renders zero copy table clone by default",
+            source="example-project.prod.fact_orders",
+            target="example-project.dev.fact_orders",
+            hard_copy=False,
+            expected_statements=(
+                "CREATE TABLE `example-project.dev.fact_orders` "
+                "CLONE `example-project.prod.fact_orders`",
+            ),
+            expected_supports_zero_copy=True,
+        ),
+        BigQueryRenderCloneTestCase(
+            description="renders CTAS when hard copy is requested",
+            source="`example-project.prod.fact_orders`",
+            target="`example-project.dev.fact_orders`",
+            hard_copy=True,
+            expected_statements=(
+                "CREATE OR REPLACE TABLE `example-project.dev.fact_orders` AS "
+                "SELECT * FROM `example-project.prod.fact_orders`",
+            ),
+            expected_supports_zero_copy=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_clone_request_when_rendering_then_bigquery_uses_expected_clone_sql(
     test_case: BigQueryRenderCloneTestCase,
@@ -698,7 +656,7 @@ def test_given_clone_request_when_rendering_then_bigquery_uses_expected_clone_sq
             ),
         )
     ],
-    ids=["quotes hyphenated project id when dropping view"],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_adapter_when_rendering_drop_view_then_quotes_target(
     test_case: BigQueryRenderDropViewTestCase,
@@ -729,7 +687,7 @@ def test_given_bigquery_adapter_when_rendering_drop_view_then_quotes_target(
             ),
         ),
     ],
-    ids=["renders cursor delete insert as merge replace window"],
+    ids=lambda case: case.description,
 )
 def test_given_delete_insert_cursor_when_rendering_then_bigquery_uses_merge(
     test_case: BigQueryRenderDeleteInsertTestCase,
@@ -757,8 +715,33 @@ def test_given_delete_insert_cursor_when_rendering_then_bigquery_uses_merge(
 
 @pytest.mark.parametrize(
     "test_case",
-    BIGQUERY_SCHEMA_DIFF_TEST_CASES,
-    ids=[case.description for case in BIGQUERY_SCHEMA_DIFF_TEST_CASES],
+    [
+        BigQuerySchemaDiffTestCase(
+            description="detects added removed and changed column types",
+            expected_result=SchemaDiffResult(
+                added_columns=(ColumnInfo(name="new_col", type="DATE"),),
+                removed_columns=(ColumnInfo(name="status", type="STRING"),),
+                type_changed_columns=(
+                    (ColumnInfo(name="id", type="INT64"), ColumnInfo(name="id", type="STRING")),
+                ),
+            ),
+            left_relation_columns=(
+                ColumnInfo(name="id", type="INT64"),
+                ColumnInfo(name="status", type="STRING"),
+            ),
+            right_relation_columns=(
+                ColumnInfo(name="id", type="STRING"),
+                ColumnInfo(name="new_col", type="DATE"),
+            ),
+        ),
+        BigQuerySchemaDiffTestCase(
+            description="ignores semantically equivalent type aliases",
+            expected_result=SchemaDiffResult(),
+            left_relation_columns=(ColumnInfo(name="id", type="INT64"),),
+            right_relation_columns=(ColumnInfo(name="id", type="INTEGER"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_relations_when_diffing_schema_then_returns_expected_result(
     test_case: BigQuerySchemaDiffTestCase,
@@ -803,7 +786,7 @@ def test_given_bigquery_relations_when_diffing_schema_then_returns_expected_resu
             ),
         )
     ],
-    ids=["returns row diff counts and column mismatch counts"],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_relations_when_diffing_rows_then_returns_expected_result(
     test_case: BigQueryRowDiffTestCase,
@@ -840,7 +823,7 @@ def test_given_bigquery_relations_when_diffing_rows_then_returns_expected_result
             expected_side_only_samples=((("id", 1),),),
         )
     ],
-    ids=["returns unequal and side-only samples"],
+    ids=lambda case: case.description,
 )
 def test_given_bigquery_relations_when_sampling_rows_then_returns_expected_examples(
     test_case: BigQuerySampleRowsTestCase,
@@ -884,7 +867,7 @@ def test_given_bigquery_relations_when_sampling_rows_then_returns_expected_examp
             ),
         )
     ],
-    ids=["uses typed timestamp cursor filter"],
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_cursor_when_counting_rows_then_bigquery_uses_typed_filter(
     test_case: BigQueryCountRowsTestCase,

@@ -52,7 +52,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         ),
     ],
-    ids=["seed loads waffle_types CSV with correct data"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_project_when_running_seed_then_seed_data_matches_expected(
     test_case: SeedE2ETestCase,
@@ -97,7 +97,7 @@ def test_given_waffle_shop_project_when_running_seed_then_seed_data_matches_expe
             unexpected_build_fragments=("order_amounts",),
         )
     ],
-    ids=["virtual seed command persists VDE seed state"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_project_when_running_seed_then_persists_seed_state(
     test_case: VirtualSeedE2ETestCase,
