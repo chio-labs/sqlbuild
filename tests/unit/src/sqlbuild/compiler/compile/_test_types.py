@@ -153,6 +153,14 @@ class CursorStartCompileInputsTestCase:
 
 
 @dataclass(frozen=True)
+class ResolvedConnectionCompileInputsTestCase:
+    description: str
+    repo_files: dict[str, str]
+    resolved_connection: dict[str, object] | None
+    expected_effective_connection: dict[str, object]
+
+
+@dataclass(frozen=True)
 class CursorStartCompileErrorTestCase:
     description: str
     repo_files: dict[str, str]
