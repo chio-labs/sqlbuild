@@ -20,11 +20,18 @@ from sqlbuild.compiler.planner.main.planning.graph_identity import (
     build_expected_graph_identity_hashes,
 )
 from sqlbuild.compiler.planner.main.planning.local_node_planning import classify_local_node_plan
+from sqlbuild.compiler.planner.main.planning.selection_staleness import (
+    classify_selection_staleness_warnings,
+)
+from sqlbuild.compiler.planner.main.planning.stale_warning_message import (
+    format_stale_upstream_warning_message,
+)
 from sqlbuild.compiler.planner.models import (
     GraphChangesOnlyPropagationInput,
     GraphChangesOnlyPropagationResult,
     GraphIdentityNode,
     GraphNodeKey,
+    SelectionStalenessGraph,
 )
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.planning import (
@@ -40,6 +47,7 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
 from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
     dbt_graph_node_key,
     dbt_graph_node_upstream_deps,
+    dbt_selection_staleness_upstream_deps,
 )
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_graph_identity_nodes,
@@ -163,9 +171,6 @@ def build_dbt_model_planning_result(
     in_selection_changed_seed_unique_ids: frozenset[str] = (
         changed_seed_unique_ids & selected_unique_ids_set
     )
-    stale_out_of_selection_seed_unique_ids: frozenset[str] = (
-        changed_seed_unique_ids - selected_unique_ids_set
-    )
     if graph is not None:
         entries_by_unique_id = _apply_graph_propagation(
             entries_by_unique_id=entries_by_unique_id,
@@ -176,6 +181,18 @@ def build_dbt_model_planning_result(
             changed_seed_unique_ids=in_selection_changed_seed_unique_ids,
         )
     stale_out_of_selection_warning_messages: tuple[str, ...] = ()
+    if graph is not None:
+        stale_out_of_selection_warning_messages = (
+            *stale_out_of_selection_warning_messages,
+            *_build_stale_out_of_selection_model_warning_messages(
+                manifest=manifest,
+                graph=graph,
+                entries_by_unique_id=entries_by_unique_id,
+                selected_unique_ids=selected_unique_ids_set,
+                changed_seed_unique_ids=changed_seed_unique_ids,
+                changed_source_unique_ids=changed_source_unique_ids,
+            ),
+        )
     if graph is not None and (
         node_source_watermark_warning := build_dbt_node_source_watermark_staleness_warning(
             manifest=manifest,
@@ -216,9 +233,6 @@ def build_dbt_model_planning_result(
         source_freshness=source_freshness,
         selected_unique_ids=tuple(sorted(selected_unique_ids_set)),
         changed_seed_unique_ids=tuple(sorted(in_selection_changed_seed_unique_ids)),
-        stale_out_of_selection_seed_unique_ids=tuple(
-            sorted(stale_out_of_selection_seed_unique_ids)
-        ),
     )
 
 
@@ -436,6 +450,71 @@ def _apply_graph_propagation(
                 reason=DbtModelPlanReason.UPSTREAM_CHANGED,
             )
     return propagated
+
+
+def _build_stale_out_of_selection_model_warning_messages(
+    *,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    entries_by_unique_id: dict[str, DbtModelPlanEntry],
+    selected_unique_ids: frozenset[str],
+    changed_seed_unique_ids: frozenset[str],
+    changed_source_unique_ids: frozenset[str],
+) -> tuple[str, ...]:
+    neutral_graph: SelectionStalenessGraph = SelectionStalenessGraph(
+        upstream_deps=dbt_selection_staleness_upstream_deps(manifest=manifest, graph=graph),
+        selected_model_names=frozenset(
+            manifest.models_by_unique_id[unique_id].name
+            for unique_id in selected_unique_ids
+            if unique_id in manifest.models_by_unique_id
+        ),
+        run_model_names=frozenset(
+            entry.name
+            for unique_id, entry in entries_by_unique_id.items()
+            if unique_id in selected_unique_ids and entry.action == DbtModelPlanAction.RUN
+        ),
+        run_seed_names=frozenset(
+            manifest.seeds_by_unique_id[unique_id].name
+            for unique_id in changed_seed_unique_ids & selected_unique_ids
+            if unique_id in manifest.seeds_by_unique_id
+        ),
+        run_source_names=frozenset(
+            manifest.sources_by_unique_id[unique_id].name
+            for unique_id in changed_source_unique_ids & selected_unique_ids
+            if unique_id in manifest.sources_by_unique_id
+        ),
+        changed_model_names=frozenset(
+            entry.name for entry in entries_by_unique_id.values() if _entry_has_own_change(entry)
+        ),
+        changed_seed_names=frozenset(
+            manifest.seeds_by_unique_id[unique_id].name
+            for unique_id in changed_seed_unique_ids
+            if unique_id in manifest.seeds_by_unique_id
+        ),
+        changed_source_names=frozenset(
+            manifest.sources_by_unique_id[unique_id].name
+            for unique_id in changed_source_unique_ids
+            if unique_id in manifest.sources_by_unique_id
+        ),
+    )
+    return tuple(
+        format_stale_upstream_warning_message(
+            model_label="selected dbt model",
+            model_name=warning.model_name,
+            trigger_label="upstream(s)",
+            trigger_names=warning.trigger_names,
+        )
+        for warning in classify_selection_staleness_warnings(neutral_graph)
+    )
+
+
+def _entry_has_own_change(entry: DbtModelPlanEntry) -> bool:
+    return entry.reason in {
+        DbtModelPlanReason.FIRST_RUN,
+        DbtModelPlanReason.FULL_REFRESH,
+        DbtModelPlanReason.RELATION_MISSING,
+        DbtModelPlanReason.CHECKSUM_CHANGED,
+    }
 
 
 def _blocked_sqlbuild_model_names(

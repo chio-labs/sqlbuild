@@ -301,6 +301,9 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
                     schema="main",
                     alias="fact_orders",
                     checksum="same_hash",
+                    depends_on_nodes=tuple(
+                        f"seed.analytics.{seed_name}" for seed_name in test_case.seed_names
+                    ),
                 ),
                 *(
                     build_manifest_seed_node(
@@ -337,6 +340,7 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
             manifest=manifest,
             candidate_unique_ids=("model.analytics.fact_orders",),
             project=project,
+            graph=build_dbt_combined_graph(manifest=manifest, project=project),
             adapter=adapter,
             connection=connection,
         )
@@ -352,10 +356,9 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
         name for call in adapter.list_relation_calls for name in (call[2] or ())
     )
     assert not listed_names
-    changed_seed_short_names: frozenset[str] = frozenset(
-        unique_id.split(".")[-1] for unique_id in result.stale_out_of_selection_seed_unique_ids
-    )
-    assert changed_seed_short_names == frozenset(test_case.expected_changed_seed_names)
+    warnings_text: str = "\n".join(result.stale_out_of_selection_warning_messages)
+    for seed_name in test_case.expected_changed_seed_names:
+        assert f"- {seed_name}" in warnings_text
 
 
 @pytest.mark.parametrize(
