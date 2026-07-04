@@ -96,6 +96,20 @@ def run_compile_pipeline(
             cli_vars=cli_vars,
         )
     )
+    if on_progress is not None:
+        on_progress("Compiling project...")
+    compile_start: float = time.monotonic()
+    project: CompiledProject = build_compiled_project(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        selected_target=selected_target,
+        no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+        resolved_connection=effective_config,
+    )
+    if on_progress is not None:
+        on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
     if on_connection_start is not None:
         on_connection_start(1)
     start: float = time.monotonic()
@@ -114,9 +128,8 @@ def run_compile_pipeline(
         return _build_result(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
-            selected_target=selected_target,
             connection=connection,
-            no_sql_validation=no_sql_validation,
+            project=project,
             defer_to=defer_to,
             defer_sources_to=defer_sources_to,
             source_deferral_enabled=source_deferral_enabled,
@@ -127,9 +140,7 @@ def run_compile_pipeline(
             work_selection_policy=work_selection_policy,
             auto_load_sources=auto_load_sources,
             reload_sources=reload_sources,
-            cli_vars=cli_vars,
             on_progress=on_progress,
-            external_sql_reference_resolver=external_sql_reference_resolver,
             resolve_python_run_selectors=resolve_python_run_selectors,
         )
     finally:
@@ -140,9 +151,8 @@ def _build_result(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
-    selected_target: str | None = None,
     connection: Any,
-    no_sql_validation: bool,
+    project: CompiledProject,
     defer_to: str | None = None,
     defer_sources_to: str | None = None,
     source_deferral_enabled: bool = True,
@@ -153,25 +163,9 @@ def _build_result(
     work_selection_policy: WorkSelectionPolicy = WorkSelectionPolicy.ALL_SELECTED,
     auto_load_sources: bool = False,
     reload_sources: bool = False,
-    cli_vars: dict[str, object] | None = None,
     on_progress: Callable[[str], None] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolve_python_run_selectors: bool = False,
 ) -> CompilePipelineResult:
-    if on_progress is not None:
-        on_progress("Compiling project...")
-    compile_start: float = time.monotonic()
-    project: CompiledProject = build_compiled_project(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        selected_target=selected_target,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-    )
-    if on_progress is not None:
-        on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
-
     deferred_locations: dict[str, CompiledRelationLocation] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
     if defer_to is not None:

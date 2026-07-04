@@ -105,6 +105,14 @@ def run_virtual_plan_pipeline(
 
     if connection_config is None:
         raise PlannerInputError("virtual planning requires explicit connection_config")
+    graph: ProjectGraph = build_project_graph(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        selected_target=selected_target,
+        no_sql_validation=no_sql_validation,
+        cli_vars=cli_vars,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+    )
     if on_connection_start is not None:
         on_connection_start(1)
     start: float = time.monotonic()
@@ -117,14 +125,6 @@ def run_virtual_plan_pipeline(
     if on_connection_complete is not None:
         on_connection_complete(1, time.monotonic() - start)
     try:
-        graph: ProjectGraph = build_project_graph(
-            discovered_inputs=discovered_inputs,
-            adapter=adapter,
-            selected_target=selected_target,
-            no_sql_validation=no_sql_validation,
-            cli_vars=cli_vars,
-            external_sql_reference_resolver=external_sql_reference_resolver,
-        )
         (
             bound_version_hashes,
             bound_local_hashes,

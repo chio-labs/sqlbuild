@@ -62,6 +62,7 @@ def build_compile_inputs(
     defer_model_sql_validation: bool = False,
     python_functions_inherit_default_namespace: bool = True,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolved_connection: dict[str, object] | None = None,
 ) -> CompileProjectInputs:
     """Attach discovered metadata into the first compile input snapshot."""
 
@@ -171,11 +172,15 @@ def build_compile_inputs(
         run_id=resolved_run_id,
         effective_target_name=effective_target_name,
         effective_target=effective_target,
-        effective_connection=build_effective_connection(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            target_config=effective_target,
-            effective_vars=effective_vars,
+        effective_connection=(
+            resolved_connection
+            if resolved_connection is not None
+            else build_effective_connection(
+                project_config=discovered_inputs.project_config,
+                local_config=discovered_inputs.local_config,
+                target_config=effective_target,
+                effective_vars=effective_vars,
+            )
         ),
         effective_settings=effective_settings,
         effective_vars=effective_vars,
