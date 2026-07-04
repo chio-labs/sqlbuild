@@ -19,9 +19,12 @@ from sqlbuild.compiler.planner.helpers.graph.core import (
 )
 from sqlbuild.compiler.planner.helpers.graph.loader_dag import expand_selected_loader_dependencies
 from sqlbuild.compiler.planner.helpers.graph.selectors import parse_selector, resolve_selectors
-from sqlbuild.compiler.planner.helpers.output.plan_entry import build_path_index, build_tag_index
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector, PlannerScope
 from sqlbuild.compiler.planner.types import SelectorKind
+from sqlbuild.compiler.shared.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
+)
 
 
 def build_planner_scope(
@@ -39,8 +42,8 @@ def build_planner_scope(
         upstream_deps
     )
     all_keys: dict[str, CompiledObjectKey] = _build_all_keys(project)
-    tag_index: dict[str, frozenset[CompiledObjectKey]] = build_tag_index(project)
-    path_idx: dict[CompiledObjectKey, str] = build_path_index(project)
+    tag_index: dict[str, frozenset[CompiledObjectKey]] = build_model_tag_index(project)
+    path_idx: dict[CompiledObjectKey, str] = build_model_path_index(project)
     resolved_selected_keys: frozenset[CompiledObjectKey] = (
         selected_keys
         if selected_keys is not None

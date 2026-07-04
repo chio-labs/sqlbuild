@@ -11,6 +11,7 @@ from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
 from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.cli.commands.shared.helpers.config.mode import (
     enforce_no_defer_to_in_virtual_mode,
+    enforce_virtual_only_flags_in_virtual_mode,
 )
 from sqlbuild.cli.commands.shared.helpers.connection.core import (
     resolve_project_connection_config,
@@ -72,6 +73,12 @@ def run_plan(
         discovered_inputs=discovered_inputs,
         command_name="plan",
         defer_to=defer_to,
+    )
+    enforce_virtual_only_flags_in_virtual_mode(
+        discovered_inputs=discovered_inputs,
+        command_name="plan",
+        virtual_env=virtual_env,
+        include_stale_upstreams=include_stale_upstreams,
     )
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,

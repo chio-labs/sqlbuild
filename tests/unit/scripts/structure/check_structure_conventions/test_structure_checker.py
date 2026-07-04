@@ -1934,6 +1934,43 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=("SC054", "SC054"),
         ),
         CheckPathsTestCase(
+            description="flags load_project_macros usage outside the compile-input load site",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/widget/main/load.py": dedent(
+                    """
+                from sqlbuild.compiler.compile.helpers.render.macros import load_project_macros
+
+
+                def load_example(macro_files: tuple) -> dict:
+                    return load_project_macros(macro_files)
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=("SC033", "SC062", "SC062"),
+        ),
+        CheckPathsTestCase(
+            description="allows load_project_macros in build_compile_inputs",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/compiler/__init__.py": '"""Compiler domain."""\n',
+                "src/sqlbuild/compiler/compile/__init__.py": '"""Compile package."""\n',
+                "src/sqlbuild/compiler/compile/main/__init__.py": '"""Compile entries."""\n',
+                "src/sqlbuild/compiler/compile/main/build_compile_inputs.py": dedent(
+                    """
+                from sqlbuild.compiler.compile.helpers.render.macros import load_project_macros
+
+
+                def build_compile_inputs(macro_files: tuple) -> dict:
+                    return load_project_macros(macro_files)
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
             description="flags multiline docstrings",
             repo_files=compliant_repo_files()
             | {

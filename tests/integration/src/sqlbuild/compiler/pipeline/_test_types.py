@@ -22,6 +22,13 @@ class RunCompilePipelineIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class MacroLoadCountIntegrationTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_macro_import_count: int
+
+
+@dataclass(frozen=True)
 class CompileProgressIntegrationTestCase:
     description: str
     project_files: dict[str, str]

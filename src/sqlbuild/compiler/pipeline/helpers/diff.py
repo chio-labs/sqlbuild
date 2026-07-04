@@ -11,6 +11,10 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.shared.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
+)
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
@@ -60,8 +64,8 @@ def resolve_diff_model_names(
         all_keys=all_keys,
         upstream=upstream_deps,
         downstream=downstream_deps,
-        tag_index=_build_tag_index(project),
-        path_index=_build_path_index(project),
+        tag_index=build_model_tag_index(project),
+        path_index=build_model_path_index(project),
     )
     return tuple(
         model.name
@@ -94,26 +98,6 @@ def _build_downstream_deps(
     return {
         key: tuple(sorted(values, key=lambda item: (item.resource_type, item.name)))
         for key, values in downstream.items()
-    }
-
-
-def _build_tag_index(project: CompiledProject) -> dict[str, frozenset[CompiledObjectKey]]:
-    index: dict[str, set[CompiledObjectKey]] = {}
-    for model in project.models:
-        raw_tags: object | None = model.config.values.get("tags")
-        if not isinstance(raw_tags, list | tuple):
-            continue
-        tag: object
-        for tag in raw_tags:
-            if isinstance(tag, str):
-                index.setdefault(tag, set()).add(model.key)
-    return {tag: frozenset(keys) for tag, keys in index.items()}
-
-
-def _build_path_index(project: CompiledProject) -> dict[CompiledObjectKey, str]:
-    return {
-        model.key: str(model.relative_path.parent).replace("\\", "/").removeprefix("models/")
-        for model in project.models
     }
 
 

@@ -76,7 +76,9 @@ def discover_project_inputs(
         local_config=local_config,
         model_files=discover_model_files(
             project_dir=project_dir,
-            sql_analysis_enabled=sql_analysis_enabled,
+            extract_implicit_alias_columns=_extract_implicit_alias_columns(
+                sql_analysis_enabled=sql_analysis_enabled
+            ),
         ),
         sql_function_files=discover_sql_function_files(project_dir=project_dir),
         python_function_files=discover_python_function_files(project_dir=project_dir),
@@ -101,3 +103,9 @@ def discover_project_inputs(
     )
     validate_discovered_inputs(discovered_inputs)
     return discovered_inputs
+
+
+def _extract_implicit_alias_columns(*, sql_analysis_enabled: bool) -> bool:
+    """Guessed alias locations only feed analysis diagnostics, so follow sql_analysis."""
+
+    return sql_analysis_enabled

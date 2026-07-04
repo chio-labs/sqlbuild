@@ -625,7 +625,7 @@ def test_given_model_header_columns_when_locating_then_returns_expected_location
                 "MODEL ();\n\nSELECT\n  CAST(amount AS VARCHAR) amount_text\nFROM raw_orders\n"
             ),
             expected_locations={},
-            sql_analysis_enabled=False,
+            extract_implicit_alias_columns=False,
         ),
         ModelOutputColumnLocationTestCase(
             description="skips union query after first branch because it is ambiguous",
@@ -641,7 +641,7 @@ def test_given_model_select_outputs_when_locating_then_returns_expected_location
     locations: dict[str, SourceLocation] = model_output_column_locations(
         contents=test_case.contents,
         relative_path=Path("models/orders.sql"),
-        sql_analysis_enabled=test_case.sql_analysis_enabled,
+        extract_implicit_alias_columns=test_case.extract_implicit_alias_columns,
     )
 
     assert {

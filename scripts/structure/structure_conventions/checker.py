@@ -55,6 +55,7 @@ from scripts.structure.structure_conventions.rules import (
     check_shared_package_imports,
     check_shared_package_structure,
     check_single_line_docstrings,
+    check_single_project_macro_load_site,
     check_source_file_line_count,
     check_target_reuse_terminology,
     check_top_level_domain_direct_modules,
@@ -113,6 +114,7 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_no_ad_hoc_dbt_graph_projection(file_path, module))
         violations.extend(check_no_ad_hoc_selector_plus_parsing(file_path, module))
         violations.extend(check_single_line_docstrings(file_path, module))
+        violations.extend(check_single_project_macro_load_site(file_path, module))
         violations.extend(check_no_standalone_comments(file_path))
         violations.extend(check_private_definition_ordering(file_path, module))
         violations.extend(check_type_declarations_outside_types(file_path, module))

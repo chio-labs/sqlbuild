@@ -39,7 +39,6 @@ from sqlbuild.compiler.compile.helpers.config.model_validation import (
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.helpers.render.macros import (
     expand_sql_macros,
-    load_project_macros,
 )
 from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     expand_authored_sql,
@@ -102,13 +101,13 @@ def build_model_inputs(
     effective_target_name: str | None,
     run_id: str,
     macro_context: MacroContext,
+    loaded_macros: dict[str, LoadedMacro],
     no_sql_validation: bool = False,
     defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -160,13 +159,10 @@ def build_model_inputs(
             if isinstance(raw_placeholders, dict)
             else None
         )
-        sql_validation_enabled: bool = (
-            effective_settings.sql_analysis
-            and not no_sql_validation
-            and _is_sql_validation_enabled(
-                project_setting=effective_settings.sql_validation,
-                model_config=effective_config,
-            )
+        sql_validation_enabled: bool = _model_sql_validation_gate(
+            effective_settings=effective_settings,
+            no_sql_validation=no_sql_validation,
+            model_config=effective_config,
         )
         if sql_validation_enabled and not defer_model_sql_validation:
             validate_sql_syntax(
@@ -234,14 +230,7 @@ def build_model_inputs(
             logical_schema=effective_config.logical_schema,
             logical_database=effective_config.logical_database,
         )
-        if (
-            effective_settings.sql_analysis
-            and not no_sql_validation
-            and _is_sql_validation_enabled(
-                project_setting=effective_settings.sql_validation,
-                model_config=effective_config,
-            )
-        ):
+        if sql_validation_enabled:
             hook_name: str
             for hook_name in ("pre_hooks", "post_hooks"):
                 validate_hook_sql_syntax(
@@ -433,14 +422,8 @@ def build_model_config(
         effective_target_name=effective_target_name,
         run_id=run_id,
     )
-    model_resolved_values: dict[str, object] = resolve_model_context_templates(
+    model_resolved_values: dict[str, object] = _resolve_chained_model_context_templates(
         values=early_resolved_values,
-        model_name=model_name,
-        effective_target_name=effective_target_name,
-        run_id=run_id,
-    )
-    model_resolved_values = resolve_model_context_templates(
-        values=model_resolved_values,
         model_name=model_name,
         effective_target_name=effective_target_name,
         run_id=run_id,
@@ -1152,6 +1135,29 @@ def resolve_model_context_templates(
     )
 
 
+def _resolve_chained_model_context_templates(
+    *,
+    values: dict[str, object],
+    model_name: str,
+    effective_target_name: str | None,
+    run_id: str,
+) -> dict[str, object]:
+    """Resolve twice so ${CTX:model.*} values may chain exactly one level without looping."""
+
+    first_pass_values: dict[str, object] = resolve_model_context_templates(
+        values=values,
+        model_name=model_name,
+        effective_target_name=effective_target_name,
+        run_id=run_id,
+    )
+    return resolve_model_context_templates(
+        values=first_pass_values,
+        model_name=model_name,
+        effective_target_name=effective_target_name,
+        run_id=run_id,
+    )
+
+
 def resolve_target_context_templates(
     *,
     values: dict[str, object],
@@ -1421,9 +1427,27 @@ def _bool_from_dict(values: dict[str, object], key: str) -> bool:
 
 
 def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:
-    """Resolve whether SQL validation is active for a model."""
+    """Apply the per-model MODEL(sql_validation) override to the project setting."""
 
     raw: object | None = model_config.values.get("sql_validation")
     if isinstance(raw, bool):
         return raw
     return project_setting
+
+
+def _model_sql_validation_gate(
+    *,
+    effective_settings: SettingsConfig,
+    no_sql_validation: bool,
+    model_config: CompileModelConfig,
+) -> bool:
+    """Gate validation on sql_analysis, --no-sql-validation, and project/model sql_validation."""
+
+    return (
+        effective_settings.sql_analysis
+        and not no_sql_validation
+        and _is_sql_validation_enabled(
+            project_setting=effective_settings.sql_validation,
+            model_config=model_config,
+        )
+    )

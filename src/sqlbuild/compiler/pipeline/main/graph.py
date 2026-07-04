@@ -15,12 +15,14 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.helpers.graph import (
     build_static_all_keys,
     build_static_downstream_deps,
-    build_static_path_index,
-    build_static_tag_index,
     build_static_upstream_deps,
 )
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.shared.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
+)
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
@@ -63,7 +65,7 @@ def build_project_graph(
         project=project,
         upstream_deps=upstream_deps,
         downstream_deps=downstream_deps,
-        tag_index=build_static_tag_index(project),
-        path_index=build_static_path_index(project),
+        tag_index=build_model_tag_index(project),
+        path_index=build_model_path_index(project),
         all_keys=build_static_all_keys(project),
     )

@@ -657,7 +657,7 @@ def _build_test_model_query_overrides(
     model_inputs: tuple[CompileModelInput, ...],
     inputs: CompileProjectInputs,
 ) -> dict[str, str]:
-    """Build per-test model SQL with macro mocks applied."""
+    """Re-expand each model from its pre-macro macro_source_sql with test macro mocks applied."""
 
     if not isinstance(test_input.payload, CompileModelSqlTestInputPayload):
         return {}

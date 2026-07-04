@@ -33,7 +33,7 @@ def write_compile_target(
     target_dir: Path,
     adapter: BaseAdapter,
     plan_output: PlanOutput,
-    manifest: dict[str, object],
+    manifest: dict[str, object] | None = None,
 ) -> WrittenTarget:
     """Write compiled output files under target_dir."""
 
@@ -43,7 +43,8 @@ def write_compile_target(
     _write_functions(target_dir=target_dir, adapter=adapter, plan_output=plan_output)
     _write_audits(target_dir=target_dir, plan_output=plan_output)
     _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output)
-    _write_manifest(target_dir=target_dir, manifest=manifest)
+    if manifest is not None:
+        _write_manifest(target_dir=target_dir, manifest=manifest)
 
     return WrittenTarget(
         model_count=len(plan_output.model_entries),

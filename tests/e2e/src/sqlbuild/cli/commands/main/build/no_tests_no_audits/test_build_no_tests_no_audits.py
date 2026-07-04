@@ -2661,6 +2661,6 @@ def test_given_check_selector_when_running_run_then_command_rejects_check(
     assert result.returncode == test_case.expected_exit_code
     combined_output: str = result.stdout + result.stderr
     assert (
-        "sqb build --no-tests --no-audits does not execute Python checks: "
+        "Python checks are not selectable here: "
         "check_orders_export. Use sqb check instead." in combined_output
     )

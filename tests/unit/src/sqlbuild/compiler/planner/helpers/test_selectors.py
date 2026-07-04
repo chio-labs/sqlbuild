@@ -612,13 +612,13 @@ def test_given_invalid_path_selector_when_resolving_then_raises_with_message(
 def test_given_model_paths_when_building_path_index_then_returns_expected_folders(
     test_case: BuildPathIndexTestCase,
 ) -> None:
-    from sqlbuild.compiler.planner.helpers.output.plan_entry import build_path_index
+    from sqlbuild.compiler.shared.helpers.selector_indexes import build_model_path_index
 
     project: CompiledProject = build_test_project(
         model_deps={name: () for name in test_case.model_paths},
         model_paths=test_case.model_paths,
     )
-    result: dict[CompiledObjectKey, str] = build_path_index(project)
+    result: dict[CompiledObjectKey, str] = build_model_path_index(project)
     result_by_name: dict[str, str] = {key.name: folder for key, folder in result.items()}
 
     assert result_by_name == test_case.expected_folders

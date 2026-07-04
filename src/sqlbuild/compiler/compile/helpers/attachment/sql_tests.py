@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.helpers.attachment.references import (
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.helpers.render.macros import (
     find_macro_call_names,
-    load_project_macros,
 )
 from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     expand_authored_sql,
@@ -63,11 +62,11 @@ def build_test_inputs(
     *,
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
+    loaded_macros: dict[str, LoadedMacro],
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     vars_for_substitution: dict[str, object] = effective_vars or {}
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     if external_sql_reference_resolver is not None:
@@ -325,11 +324,11 @@ def build_scenario_inputs(
     *,
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
+    loaded_macros: dict[str, LoadedMacro],
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileSqlScenarioInput, ...]:
     """Build compile-time scenario inputs from discovered SQL-native scenario files."""
 
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     vars_for_substitution: dict[str, object] = effective_vars or {}
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     if external_sql_reference_resolver is not None:
