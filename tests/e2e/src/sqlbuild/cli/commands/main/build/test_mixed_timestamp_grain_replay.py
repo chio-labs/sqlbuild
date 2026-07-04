@@ -183,7 +183,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_row_count=1,
         )
     ],
-    ids=["coarser upstream timestamp bucket reruns at largest bucket"],
+    ids=lambda case: case.description,
 )
 def test_given_coarser_upstream_timestamp_bucket_when_rerunning_then_cli_replays_largest_bucket(
     test_case: MixedTimestampGrainBuildE2ETestCase,

@@ -57,7 +57,7 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.clone._test_types import (
             unexpected_fragments=("fact_orders",),
         ),
     ],
-    ids=["summary footer reports counts and surfaces non-success messages"],
+    ids=lambda case: case.description,
 )
 def test_given_clone_result_when_rendering_summary_then_reports_footer_and_messages(
     test_case: RenderCloneOutputTestCase,
@@ -105,7 +105,7 @@ def test_given_clone_result_when_rendering_summary_then_reports_footer_and_messa
             ),
         )
     ],
-    ids=["streamed line shows position, action, origin->destination and status"],
+    ids=lambda case: case.description,
 )
 def test_given_clone_item_when_rendering_line_then_shows_flow_and_status(
     test_case: RenderCloneItemLineTestCase,

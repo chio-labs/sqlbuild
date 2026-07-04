@@ -18,12 +18,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
-    QueryPropagationBuildE2ETestCase(
-        description="warn-only query change does not propagate downstream",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QueryPropagationBuildE2ETestCase(
+            description="warn-only query change does not propagate downstream",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
             name = "query_propagation_project"
             adapter = "duckdb"
 
@@ -33,10 +36,10 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             [defaults]
             materialized = "table"
                 """
-            ).strip()
-            + "\n",
-            "seed_raw_data.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": dedent(
+                    """
                 CREATE TABLE IF NOT EXISTS raw_orders (
                   id INTEGER,
                   ordered_at TIMESTAMP,
@@ -47,36 +50,36 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   (1, '2026-01-01 00:30:00', 100),
                   (2, '2026-01-01 01:30:00', 200);
                 """
-            ).strip()
-            + "\n",
-            "sources/raw.yml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
                 sources:
                   - name: raw_orders
                     schema: main
                     table: raw_orders
                 """
-            ).strip()
-            + "\n",
-            "models/staging/stg_orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/staging/stg_orders.sql": dedent(
+                    """
                 MODEL (materialized view);
 
                 SELECT id AS order_id, ordered_at, amount_cents FROM __source("raw_orders")
                 """
-            ).strip()
-            + "\n",
-            "models/marts/fact_orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/marts/fact_orders.sql": dedent(
+                    """
                 MODEL (materialized table);
 
                 SELECT order_id, ordered_at, amount_cents AS line_total_cents
                 FROM __ref("stg_orders")
                 """
-            ).strip()
-            + "\n",
-            "models/marts/hourly_order_activity.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/marts/hourly_order_activity.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy delete_insert,
@@ -97,10 +100,10 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                 FROM __ref("fact_orders")
                 GROUP BY DATE_TRUNC('hour', ordered_at)
                 """
-            ).strip()
-            + "\n",
-            "models/marts/daily_activity_rollup.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/marts/daily_activity_rollup.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy delete_insert,
@@ -122,41 +125,41 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                 FROM __ref("hourly_order_activity")
                 GROUP BY DATE_TRUNC('day', activity_hour)
                 """
-            ).strip()
-            + "\n",
-        },
-        initial_build_command=("--no-color", "build"),
-        plan_command=("plan", "--json", "--force"),
-        mutation_file="models/marts/hourly_order_activity.sql",
-        before_text="SUM(line_total_cents) AS revenue_cents",
-        after_text="SUM(line_total_cents) + 0 AS revenue_cents",
-        expected_exit_code=0,
-        expected_reasons={
-            "hourly_order_activity": "query_changed",
-            "daily_activity_rollup": "normal_incremental",
-        },
-        expected_fingerprint_models=(
-            "daily_activity_rollup",
-            "fact_orders",
-            "hourly_order_activity",
-            "stg_orders",
+                ).strip()
+                + "\n",
+            },
+            initial_build_command=("--no-color", "build"),
+            plan_command=("plan", "--json", "--force"),
+            mutation_file="models/marts/hourly_order_activity.sql",
+            before_text="SUM(line_total_cents) AS revenue_cents",
+            after_text="SUM(line_total_cents) + 0 AS revenue_cents",
+            expected_exit_code=0,
+            expected_reasons={
+                "hourly_order_activity": "query_changed",
+                "daily_activity_rollup": "normal_incremental",
+            },
+            expected_fingerprint_models=(
+                "daily_activity_rollup",
+                "fact_orders",
+                "hourly_order_activity",
+                "stg_orders",
+            ),
         ),
-    ),
-    QueryPropagationBuildE2ETestCase(
-        description="changed SQL UDF propagates full rebuild to downstream incremental model",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+        QueryPropagationBuildE2ETestCase(
+            description="changed SQL UDF propagates full rebuild to downstream incremental model",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
             name = "function_query_propagation_project"
             adapter = "duckdb"
 
             [connection]
             database = "propagation.duckdb"
                 """
-            ).strip()
-            + "\n",
-            "seed_raw_data.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": dedent(
+                    """
                 CREATE TABLE IF NOT EXISTS raw_orders (
                   id INTEGER,
                   amount_cents INTEGER
@@ -166,19 +169,19 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   (1, 100),
                   (2, 200);
                 """
-            ).strip()
-            + "\n",
-            "sources/raw.yml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
                 sources:
                   - name: raw_orders
                     schema: main
                     table: raw_orders
                 """
-            ).strip()
-            + "\n",
-            "functions/sql/is_high_value_order.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "functions/sql/is_high_value_order.sql": dedent(
+                    """
                 FUNCTION (
                   arguments (amount_cents INTEGER),
                   returns BOOLEAN,
@@ -187,10 +190,10 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
 
                 amount_cents > 100
                 """
-            ).strip()
-            + "\n",
-            "models/fact_orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/fact_orders.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy delete_insert,
@@ -208,24 +211,24 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   __udf("is_high_value_order")(amount_cents) AS is_high_value
                 FROM __source("raw_orders")
                 """
-            ).strip()
-            + "\n",
-        },
-        initial_build_command=("--no-color", "build"),
-        plan_command=("plan", "--json"),
-        mutation_file="functions/sql/is_high_value_order.sql",
-        before_text="amount_cents > 100",
-        after_text="amount_cents >= 100",
-        expected_exit_code=0,
-        expected_reasons={"fact_orders": "upstream_changed"},
-        expected_actions={"fact_orders": "create_table"},
-        expected_fingerprint_models=("fact_orders", "is_high_value_order"),
-    ),
-    QueryPropagationBuildE2ETestCase(
-        description="bounded query change propagates downstream",
-        repo_files={
-            "sqlbuild_project.toml": dedent(
-                """
+                ).strip()
+                + "\n",
+            },
+            initial_build_command=("--no-color", "build"),
+            plan_command=("plan", "--json"),
+            mutation_file="functions/sql/is_high_value_order.sql",
+            before_text="amount_cents > 100",
+            after_text="amount_cents >= 100",
+            expected_exit_code=0,
+            expected_reasons={"fact_orders": "upstream_changed"},
+            expected_actions={"fact_orders": "create_table"},
+            expected_fingerprint_models=("fact_orders", "is_high_value_order"),
+        ),
+        QueryPropagationBuildE2ETestCase(
+            description="bounded query change propagates downstream",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
             name = "query_propagation_project"
             adapter = "duckdb"
 
@@ -235,10 +238,10 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
             [defaults]
             materialized = "table"
                 """
-            ).strip()
-            + "\n",
-            "seed_raw_data.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "seed_raw_data.sql": dedent(
+                    """
                 CREATE TABLE IF NOT EXISTS raw_orders (
                   id INTEGER,
                   ordered_at TIMESTAMP,
@@ -249,36 +252,36 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                   (1, '2026-01-01 00:30:00', 100),
                   (2, '2026-01-01 01:30:00', 200);
                 """
-            ).strip()
-            + "\n",
-            "sources/raw.yml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
                 sources:
                   - name: raw_orders
                     schema: main
                     table: raw_orders
                 """
-            ).strip()
-            + "\n",
-            "models/staging/stg_orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/staging/stg_orders.sql": dedent(
+                    """
                 MODEL (materialized view);
 
                 SELECT id AS order_id, ordered_at, amount_cents FROM __source("raw_orders")
                 """
-            ).strip()
-            + "\n",
-            "models/marts/fact_orders.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/marts/fact_orders.sql": dedent(
+                    """
                 MODEL (materialized table);
 
                 SELECT order_id, ordered_at, amount_cents AS line_total_cents
                 FROM __ref("stg_orders")
                 """
-            ).strip()
-            + "\n",
-            "models/marts/hourly_order_activity.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/marts/hourly_order_activity.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy delete_insert,
@@ -300,10 +303,10 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                 FROM __ref("fact_orders")
                 GROUP BY DATE_TRUNC('hour', ordered_at)
                 """
-            ).strip()
-            + "\n",
-            "models/marts/daily_activity_rollup.sql": dedent(
-                """
+                ).strip()
+                + "\n",
+                "models/marts/daily_activity_rollup.sql": dedent(
+                    """
                 MODEL (
                   materialized incremental,
                   incremental_strategy delete_insert,
@@ -325,33 +328,28 @@ TEST_CASES: list[QueryPropagationBuildE2ETestCase] = [
                 FROM __ref("hourly_order_activity")
                 GROUP BY DATE_TRUNC('day', activity_hour)
                 """
-            ).strip()
-            + "\n",
-        },
-        initial_build_command=("--no-color", "build"),
-        plan_command=("plan", "--json"),
-        mutation_file="models/marts/hourly_order_activity.sql",
-        before_text="SUM(line_total_cents) AS revenue_cents",
-        after_text="SUM(line_total_cents) + 0 AS revenue_cents",
-        expected_exit_code=0,
-        expected_reasons={
-            "hourly_order_activity": "query_changed",
-            "daily_activity_rollup": "upstream_changed",
-        },
-        expected_fingerprint_models=(
-            "daily_activity_rollup",
-            "fact_orders",
-            "hourly_order_activity",
-            "stg_orders",
+                ).strip()
+                + "\n",
+            },
+            initial_build_command=("--no-color", "build"),
+            plan_command=("plan", "--json"),
+            mutation_file="models/marts/hourly_order_activity.sql",
+            before_text="SUM(line_total_cents) AS revenue_cents",
+            after_text="SUM(line_total_cents) + 0 AS revenue_cents",
+            expected_exit_code=0,
+            expected_reasons={
+                "hourly_order_activity": "query_changed",
+                "daily_activity_rollup": "upstream_changed",
+            },
+            expected_fingerprint_models=(
+                "daily_activity_rollup",
+                "fact_orders",
+                "hourly_order_activity",
+                "stg_orders",
+            ),
         ),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_changed_upstream_when_planning_then_downstream_reason_matches_policy(
     test_case: QueryPropagationBuildE2ETestCase,

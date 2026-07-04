@@ -28,7 +28,7 @@ from tests.unit.src.sqlbuild.executor.node_results.helpers.helpers import (
             ),
         )
     ],
-    ids=["builds scoped read SQL with deterministic ordering"],
+    ids=lambda case: case.description,
 )
 def test_given_node_result_read_request_when_building_sql_then_scopes_and_orders_rows(
     test_case: NodeResultSqlTestCase,

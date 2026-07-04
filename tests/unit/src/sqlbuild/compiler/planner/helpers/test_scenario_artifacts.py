@@ -37,26 +37,24 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_compiled_scenario_with_name,
 )
 
-HASH_PREFIX_TEST_CASES: list[ScenarioHashPrefixTestCase] = [
-    ScenarioHashPrefixTestCase(
-        description="uses stable project and scenario identity hash",
-        project_name="waffle_shop",
-        scenario_name="revenue__customer_refund",
-        expected_hash_prefix="51b385aebe20",
-    ),
-    ScenarioHashPrefixTestCase(
-        description="differs for different scenario names",
-        project_name="waffle_shop",
-        scenario_name="revenue__discount_edge_case",
-        expected_hash_prefix="1c1eb75fd876",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    HASH_PREFIX_TEST_CASES,
-    ids=[case.description for case in HASH_PREFIX_TEST_CASES],
+    [
+        ScenarioHashPrefixTestCase(
+            description="uses stable project and scenario identity hash",
+            project_name="waffle_shop",
+            scenario_name="revenue__customer_refund",
+            expected_hash_prefix="51b385aebe20",
+        ),
+        ScenarioHashPrefixTestCase(
+            description="differs for different scenario names",
+            project_name="waffle_shop",
+            scenario_name="revenue__discount_edge_case",
+            expected_hash_prefix="1c1eb75fd876",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_project_and_scenario_when_hashing_then_returns_expected_prefix(
     test_case: ScenarioHashPrefixTestCase,
@@ -79,7 +77,7 @@ def test_given_project_and_scenario_when_hashing_then_returns_expected_prefix(
             expected_error_fragment="both map to hash prefix '9'",
         )
     ],
-    ids=["raises when hash prefixes collide"],
+    ids=lambda case: case.description,
 )
 def test_given_colliding_scenario_hashes_when_building_index_then_raises_clear_error(
     test_case: ScenarioHashCollisionTestCase,
@@ -95,30 +93,29 @@ def test_given_colliding_scenario_hashes_when_building_index_then_raises_clear_e
     assert exc_info.value.code == SCENARIO_PLAN_HASH_COLLISION
 
 
-ARTIFACT_NAME_TEST_CASES: list[ScenarioArtifactNameTestCase] = [
-    ScenarioArtifactNameTestCase(
-        description="preserves short logical model name",
-        hash_prefix="51b385aebe20",
-        kind="model",
-        logical_name="daily_revenue",
-        identifier_limit=63,
-        expected_physical_name="__sqb_51b385aebe20__model__daily_revenue",
-    ),
-    ScenarioArtifactNameTestCase(
-        description="shortens long logical model name deterministically",
-        hash_prefix="51b385aebe20",
-        kind="model",
-        logical_name="very_long_customer_revenue_reconciliation_by_region_and_day",
-        identifier_limit=63,
-        expected_physical_name=("__sqb_51b385aebe20__model__very_long_customer_revenue__f3f1eed0"),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    ARTIFACT_NAME_TEST_CASES,
-    ids=[case.description for case in ARTIFACT_NAME_TEST_CASES],
+    [
+        ScenarioArtifactNameTestCase(
+            description="preserves short logical model name",
+            hash_prefix="51b385aebe20",
+            kind="model",
+            logical_name="daily_revenue",
+            identifier_limit=63,
+            expected_physical_name="__sqb_51b385aebe20__model__daily_revenue",
+        ),
+        ScenarioArtifactNameTestCase(
+            description="shortens long logical model name deterministically",
+            hash_prefix="51b385aebe20",
+            kind="model",
+            logical_name="very_long_customer_revenue_reconciliation_by_region_and_day",
+            identifier_limit=63,
+            expected_physical_name=(
+                "__sqb_51b385aebe20__model__very_long_customer_revenue__f3f1eed0"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_artifact_when_building_name_then_returns_expected_physical_name(
     test_case: ScenarioArtifactNameTestCase,
@@ -134,64 +131,48 @@ def test_given_scenario_artifact_when_building_name_then_returns_expected_physic
     assert len(result) <= test_case.identifier_limit
 
 
-VALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES: list[ScenarioArtifactNameRecognitionTestCase] = [
-    ScenarioArtifactNameRecognitionTestCase(
-        description="recognizes generated source artifact name",
-        physical_name=build_scenario_artifact_name(
-            hash_prefix="51b385aebe20",
-            kind="source",
-            logical_name="raw__orders",
-        ),
-        expected_is_scenario_artifact=True,
-        expected_hash_prefix="51b385aebe20",
-        expected_kind="source",
-        expected_logical_name="raw__orders",
-    ),
-    ScenarioArtifactNameRecognitionTestCase(
-        description="recognizes generated shortened model artifact name",
-        physical_name=build_scenario_artifact_name(
-            hash_prefix="51b385aebe20",
-            kind="model",
-            logical_name="very_long_customer_revenue_reconciliation_by_region_and_day",
-            identifier_limit=63,
-        ),
-        expected_is_scenario_artifact=True,
-        expected_hash_prefix="51b385aebe20",
-        expected_kind="model",
-        expected_logical_name="very_long_customer_revenue__f3f1eed0",
-    ),
-    ScenarioArtifactNameRecognitionTestCase(
-        description="recognizes generated dbt ref artifact name",
-        physical_name=build_scenario_artifact_name(
-            hash_prefix="51b385aebe20",
-            kind="dbt_ref",
-            logical_name="stripe__payments",
-        ),
-        expected_is_scenario_artifact=True,
-        expected_hash_prefix="51b385aebe20",
-        expected_kind="dbt_ref",
-        expected_logical_name="stripe__payments",
-    ),
-]
-
-INVALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES: list[ScenarioArtifactNameRecognitionTestCase] = [
-    ScenarioArtifactNameRecognitionTestCase(
-        description="rejects non-12-character hash prefix",
-        physical_name="__sqb_51b385aebe2__model__daily_revenue",
-        expected_is_scenario_artifact=False,
-    ),
-    ScenarioArtifactNameRecognitionTestCase(
-        description="rejects unknown artifact kind",
-        physical_name="__sqb_51b385aebe20__cmp__daily_revenue",
-        expected_is_scenario_artifact=False,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    VALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES,
-    ids=[case.description for case in VALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES],
+    [
+        ScenarioArtifactNameRecognitionTestCase(
+            description="recognizes generated source artifact name",
+            physical_name=build_scenario_artifact_name(
+                hash_prefix="51b385aebe20",
+                kind="source",
+                logical_name="raw__orders",
+            ),
+            expected_is_scenario_artifact=True,
+            expected_hash_prefix="51b385aebe20",
+            expected_kind="source",
+            expected_logical_name="raw__orders",
+        ),
+        ScenarioArtifactNameRecognitionTestCase(
+            description="recognizes generated shortened model artifact name",
+            physical_name=build_scenario_artifact_name(
+                hash_prefix="51b385aebe20",
+                kind="model",
+                logical_name="very_long_customer_revenue_reconciliation_by_region_and_day",
+                identifier_limit=63,
+            ),
+            expected_is_scenario_artifact=True,
+            expected_hash_prefix="51b385aebe20",
+            expected_kind="model",
+            expected_logical_name="very_long_customer_revenue__f3f1eed0",
+        ),
+        ScenarioArtifactNameRecognitionTestCase(
+            description="recognizes generated dbt ref artifact name",
+            physical_name=build_scenario_artifact_name(
+                hash_prefix="51b385aebe20",
+                kind="dbt_ref",
+                logical_name="stripe__payments",
+            ),
+            expected_is_scenario_artifact=True,
+            expected_hash_prefix="51b385aebe20",
+            expected_kind="dbt_ref",
+            expected_logical_name="stripe__payments",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_generated_physical_name_when_parsing_scenario_artifact_then_returns_expected_parts(
     test_case: ScenarioArtifactNameRecognitionTestCase,
@@ -211,8 +192,19 @@ def test_given_generated_physical_name_when_parsing_scenario_artifact_then_retur
 
 @pytest.mark.parametrize(
     "test_case",
-    INVALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES,
-    ids=[case.description for case in INVALID_ARTIFACT_NAME_RECOGNITION_TEST_CASES],
+    [
+        ScenarioArtifactNameRecognitionTestCase(
+            description="rejects non-12-character hash prefix",
+            physical_name="__sqb_51b385aebe2__model__daily_revenue",
+            expected_is_scenario_artifact=False,
+        ),
+        ScenarioArtifactNameRecognitionTestCase(
+            description="rejects unknown artifact kind",
+            physical_name="__sqb_51b385aebe20__cmp__daily_revenue",
+            expected_is_scenario_artifact=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_non_scenario_physical_name_when_parsing_scenario_artifact_then_returns_none(
     test_case: ScenarioArtifactNameRecognitionTestCase,
@@ -261,7 +253,7 @@ def test_given_non_scenario_physical_name_when_parsing_scenario_artifact_then_re
             ),
         )
     ],
-    ids=["builds relation map for source ref and model artifacts"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_artifacts_when_building_relation_map_then_returns_expected_map(
     test_case: ScenarioRelationMapTestCase,
@@ -276,31 +268,28 @@ def test_given_scenario_artifacts_when_building_relation_map_then_returns_expect
     assert result == test_case.expected_relation_map
 
 
-RELATION_MAP_ERROR_TEST_CASES: list[ScenarioRelationMapErrorTestCase] = [
-    ScenarioRelationMapErrorTestCase(
-        description="raises on duplicate physical relation names",
-        artifacts=(
-            ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
-            ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
-        ),
-        expected_error_fragment="relation name collision",
-    ),
-    ScenarioRelationMapErrorTestCase(
-        description="raises on adapter normalized collision",
-        artifacts=(
-            ScenarioArtifactIdentity(kind="model", logical_name="Daily_Revenue"),
-            ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
-        ),
-        expected_error_fragment="relation name collision",
-        normalize_case=True,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    RELATION_MAP_ERROR_TEST_CASES,
-    ids=[case.description for case in RELATION_MAP_ERROR_TEST_CASES],
+    [
+        ScenarioRelationMapErrorTestCase(
+            description="raises on duplicate physical relation names",
+            artifacts=(
+                ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
+                ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
+            ),
+            expected_error_fragment="relation name collision",
+        ),
+        ScenarioRelationMapErrorTestCase(
+            description="raises on adapter normalized collision",
+            artifacts=(
+                ScenarioArtifactIdentity(kind="model", logical_name="Daily_Revenue"),
+                ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
+            ),
+            expected_error_fragment="relation name collision",
+            normalize_case=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_colliding_scenario_artifacts_when_building_relation_map_then_raises(
     test_case: ScenarioRelationMapErrorTestCase,

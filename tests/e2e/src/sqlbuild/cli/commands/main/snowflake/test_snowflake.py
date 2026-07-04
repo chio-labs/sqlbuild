@@ -89,41 +89,6 @@ from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_unique_schema_name,
 )
 
-SNOWFLAKE_DBT_CLONE_E2E_TEST_CASES: tuple[SnowflakeDbtCloneE2ETestCase, ...] = (
-    SnowflakeDbtCloneE2ETestCase(
-        description="dbt clone zero-copy clones a prod table into the Snowflake dev target",
-        schema_prefix="sqlbuild_dbt_clone",
-        command=("--no-color", "dbt", "clone", "--select", "fact_orders"),
-        prod_model_sql="select 1 as order_id, 900 as amount\n",
-        feature_model_sql="select 1 as order_id, 111 as amount\n",
-        expected_stdout_fragments=(
-            "sqb clone  origin=prod destination=dev",
-            "fact_orders",
-            "cloned",
-            "CLONED=1",
-        ),
-        expected_rows=((1, 900),),
-    ),
-    SnowflakeDbtCloneE2ETestCase(
-        description="dbt clone recreates a Snowflake view from current SQL",
-        schema_prefix="sqlbuild_dbt_clone_view",
-        command=("--no-color", "dbt", "clone", "--select", "fact_orders"),
-        prod_model_sql=(
-            "{{ config(materialized='view') }}\n\nselect 1 as order_id, 900 as amount\n"
-        ),
-        feature_model_sql=(
-            "{{ config(materialized='view') }}\n\nselect 1 as order_id, 111 as amount\n"
-        ),
-        expected_stdout_fragments=(
-            "sqb clone  origin=prod destination=dev",
-            "fact_orders",
-            "recreated_view",
-            "RECREATED_VIEWS=1",
-        ),
-        expected_rows=((1, 111),),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -146,7 +111,7 @@ SNOWFLAKE_DBT_CLONE_E2E_TEST_CASES: tuple[SnowflakeDbtCloneE2ETestCase, ...] = (
             expected_fingerprint_rows=(("model", "downstream"),),
         )
     ],
-    ids=["direct dependency baseline copies prod upstream on Snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_downstream_selection_when_snowflake_upstream_missing_then_baselines_from_prod(
     tmp_path: Path,
@@ -188,7 +153,7 @@ def test_given_downstream_selection_when_snowflake_upstream_missing_then_baselin
             ),
         )
     ],
-    ids=["dbt init generated project builds through Snowflake PAT dbt profile"],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_dbt_profile_when_running_dbt_init_then_builds_profile_lifecycle(
     tmp_path: Path,
@@ -249,8 +214,41 @@ def test_given_snowflake_dbt_profile_when_running_dbt_init_then_builds_profile_l
 @pytest.mark.dbt
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_DBT_CLONE_E2E_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_DBT_CLONE_E2E_TEST_CASES],
+    (
+        SnowflakeDbtCloneE2ETestCase(
+            description="dbt clone zero-copy clones a prod table into the Snowflake dev target",
+            schema_prefix="sqlbuild_dbt_clone",
+            command=("--no-color", "dbt", "clone", "--select", "fact_orders"),
+            prod_model_sql="select 1 as order_id, 900 as amount\n",
+            feature_model_sql="select 1 as order_id, 111 as amount\n",
+            expected_stdout_fragments=(
+                "sqb clone  origin=prod destination=dev",
+                "fact_orders",
+                "cloned",
+                "CLONED=1",
+            ),
+            expected_rows=((1, 900),),
+        ),
+        SnowflakeDbtCloneE2ETestCase(
+            description="dbt clone recreates a Snowflake view from current SQL",
+            schema_prefix="sqlbuild_dbt_clone_view",
+            command=("--no-color", "dbt", "clone", "--select", "fact_orders"),
+            prod_model_sql=(
+                "{{ config(materialized='view') }}\n\nselect 1 as order_id, 900 as amount\n"
+            ),
+            feature_model_sql=(
+                "{{ config(materialized='view') }}\n\nselect 1 as order_id, 111 as amount\n"
+            ),
+            expected_stdout_fragments=(
+                "sqb clone  origin=prod destination=dev",
+                "fact_orders",
+                "recreated_view",
+                "RECREATED_VIEWS=1",
+            ),
+            expected_rows=((1, 111),),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_dbt_clone_when_running_then_copies_prod_table(
     tmp_path: Path,
@@ -332,7 +330,7 @@ def test_given_snowflake_dbt_clone_when_running_then_copies_prod_table(
             ),
         )
     ],
-    ids=["standard node results persist and read on snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_python_result_when_running_check_on_snowflake_then_persists_node_results(
     tmp_path: Path,
@@ -414,7 +412,7 @@ def test_given_python_result_when_running_check_on_snowflake_then_persists_node_
             ),
         )
     ],
-    ids=["source freshness uses snowflake table metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_physical_source_without_freshness_when_running_on_snowflake_then_uses_metadata(
     tmp_path: Path,
@@ -470,7 +468,7 @@ def test_given_physical_source_without_freshness_when_running_on_snowflake_then_
             expected_seed_strategy="durable_clone",
         )
     ],
-    ids=["virtual seeded incremental build uses clone on snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_incremental_change_when_building_on_snowflake_then_seeds_with_clone(
     test_case: SnowflakeVirtualSeedE2ETestCase,
@@ -581,7 +579,7 @@ def test_given_virtual_incremental_change_when_building_on_snowflake_then_seeds_
             ),
         )
     ],
-    ids=["direct changes only build prunes unchanged snowflake model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_building_changes_only_on_snowflake_then_prunes_model(
     tmp_path: Path,
@@ -647,7 +645,7 @@ def test_given_built_direct_project_when_building_changes_only_on_snowflake_then
             ),
         )
     ],
-    ids=["reconcile repair-view recreates snowflake logical view"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_logical_view_when_repairing_on_snowflake_then_view_is_recreated(
     test_case: SnowflakeReconcileE2ETestCase,
@@ -718,7 +716,7 @@ def test_given_missing_logical_view_when_repairing_on_snowflake_then_view_is_rec
             expected_stdout_fragments=("Attach", "model     orders", "result    attached"),
         )
     ],
-    ids=["reconcile attach rebinds snowflake logical view"],
+    ids=lambda case: case.description,
 )
 def test_given_tracked_physical_relation_when_attaching_on_snowflake_then_view_is_rebound(
     test_case: SnowflakeReconcileE2ETestCase,
@@ -813,7 +811,7 @@ def test_given_tracked_physical_relation_when_attaching_on_snowflake_then_view_i
             ),
         )
     ],
-    ids=["adopt and detach preserve snowflake logical table"],
+    ids=lambda case: case.description,
 )
 def test_given_stateless_table_when_adopting_and_detaching_on_snowflake_then_table_is_preserved(
     test_case: SnowflakeVirtualLifecycleE2ETestCase,
@@ -900,7 +898,7 @@ def test_given_stateless_table_when_adopting_and_detaching_on_snowflake_then_tab
             expected_ref_count_after=0,
         )
     ],
-    ids=["janitor prunes snowflake detached VDE refs and physical versions"],
+    ids=lambda case: case.description,
 )
 def test_given_detached_vde_when_running_janitor_on_snowflake_then_refs_are_pruned(
     test_case: SnowflakeJanitorDetachedVdeE2ETestCase,
@@ -982,138 +980,35 @@ def test_given_detached_vde_when_running_janitor_on_snowflake_then_refs_are_prun
         cleanup_snowflake_schema(schema_name=f"{schema_name}__sqb_physical")
 
 
-SNOWFLAKE_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[SnowflakeScenarioLocalReplayE2ETestCase] = [
-    SnowflakeScenarioLocalReplayE2ETestCase(
-        description="captures snowflake fixtures and replays transpilable SQL locally",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT\n"
-            "  customer_id,\n"
-            "  DATE_TRUNC('DAY', event_ts) AS event_day,\n"
-            "  SUM(IFF(amount_cents >= 1000, amount_cents, 0)) AS large_amount_cents,\n"
-            "  COUNT(*) AS event_count\n"
-            'FROM __source("raw_events")\n'
-            "GROUP BY customer_id, DATE_TRUNC('DAY', event_ts)\n"
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, TO_TIMESTAMP_NTZ('2026-01-01 08:15:00') "
-            "AS event_ts, 1500 AS amount_cents\n"
-            "  UNION ALL\n"
-            "  SELECT 10 AS customer_id, TO_TIMESTAMP_NTZ('2026-01-01 10:30:00') "
-            "AS event_ts, 500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id, "
-            "DATE_TRUNC('DAY', TO_TIMESTAMP_NTZ('2026-01-01 00:00:00')) AS event_day, "
-            "1500 AS large_amount_cents, 2 AS event_count\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "transpilable_event_rollup",
-            "PASS",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-        expected_local_rows=((10, 1500, 2),),
-        local_rows_sql=(
-            "SELECT customer_id, large_amount_cents, event_count "
-            "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
-        ),
-    ),
-    SnowflakeScenarioLocalReplayE2ETestCase(
-        description="reports snowflake local transpilation failures as X607",
-        scenario_name="local_transpile_error",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT customer_id, amount_cents\n"
-            'FROM __source("raw_events")\n'
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "local_transpile_error",
-            "ERROR",
-            "error[X607]",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-        expected_return_code=1,
-        corrupt_capture_dialect=True,
-    ),
-    SnowflakeScenarioLocalReplayE2ETestCase(
-        description="reports snowflake local DuckDB execution failures as X608",
-        scenario_name="local_execution_error",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT\n"
-            "  customer_id,\n"
-            "  __sqb_missing_local_function(amount_cents) AS amount_cents\n"
-            'FROM __source("raw_events")\n'
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "local_execution_error",
-            "ERROR",
-            "error[X608]",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-        expected_return_code=1,
-    ),
-]
-
-SNOWFLAKE_QUERY_E2E_TEST_CASES: list[SnowflakeCliTestCase] = [
-    SnowflakeCliTestCase(
-        description="query command uses snowflake local override",
-        command=(
-            "query",
-            "SELECT CURRENT_DATABASE() AS database_name, CURRENT_SCHEMA() AS schema_name",
-        ),
-        expected_stdout_fragments=("DATABASE_NAME | SQB_DB", "SCHEMA_NAME   |"),
-        expected_schema_fragment="SQLBUILD_E2E_",
-    ),
-    SnowflakeCliTestCase(
-        description="query command renders json output",
-        command=("query", "SELECT 1 AS id, 'alice' AS name", "--format", "json"),
-        expected_stdout_fragments=('"ID": 1', '"NAME": "alice"'),
-    ),
-    SnowflakeCliTestCase(
-        description="query command renders csv output",
-        command=("query", "SELECT 1 AS id, 'alice' AS name", "--format", "csv"),
-        expected_stdout_fragments=("ID,NAME", "1,alice"),
-    ),
-    SnowflakeCliTestCase(
-        description="query command prints ok for ddl statements",
-        command=("query", "CREATE OR REPLACE TEMP TABLE __sqb_query_temp (id INTEGER)"),
-        expected_stdout_fragments=("OK",),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_QUERY_E2E_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_QUERY_E2E_TEST_CASES],
+    [
+        SnowflakeCliTestCase(
+            description="query command uses snowflake local override",
+            command=(
+                "query",
+                "SELECT CURRENT_DATABASE() AS database_name, CURRENT_SCHEMA() AS schema_name",
+            ),
+            expected_stdout_fragments=("DATABASE_NAME | SQB_DB", "SCHEMA_NAME   |"),
+            expected_schema_fragment="SQLBUILD_E2E_",
+        ),
+        SnowflakeCliTestCase(
+            description="query command renders json output",
+            command=("query", "SELECT 1 AS id, 'alice' AS name", "--format", "json"),
+            expected_stdout_fragments=('"ID": 1', '"NAME": "alice"'),
+        ),
+        SnowflakeCliTestCase(
+            description="query command renders csv output",
+            command=("query", "SELECT 1 AS id, 'alice' AS name", "--format", "csv"),
+            expected_stdout_fragments=("ID,NAME", "1,alice"),
+        ),
+        SnowflakeCliTestCase(
+            description="query command prints ok for ddl statements",
+            command=("query", "CREATE OR REPLACE TEMP TABLE __sqb_query_temp (id INTEGER)"),
+            expected_stdout_fragments=("OK",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_local_config_when_running_query_then_outputs_expected_rows(
     tmp_path: Path,
@@ -1147,7 +1042,7 @@ def test_given_snowflake_local_config_when_running_query_then_outputs_expected_r
             expected_loader_rows=(("7", "loaded-dev"),),
         )
     ],
-    ids=["snowflake loader writes dev while model reads prod deferred source"],
+    ids=lambda case: case.description,
 )
 def test_given_source_deferral_env_when_building_on_snowflake_then_reads_prod_and_writes_dev(
     tmp_path: Path,
@@ -1257,7 +1152,7 @@ def test_given_source_deferral_env_when_building_on_snowflake_then_reads_prod_an
             ),
         )
     ],
-    ids=["applies existing-target snapshot changes on snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_snapshot_targets_when_building_on_snowflake_then_apply_sql_succeeds(
     tmp_path: Path,
@@ -1314,8 +1209,106 @@ def test_given_existing_snapshot_targets_when_building_on_snowflake_then_apply_s
 
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
+    [
+        SnowflakeScenarioLocalReplayE2ETestCase(
+            description="captures snowflake fixtures and replays transpilable SQL locally",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT\n"
+                "  customer_id,\n"
+                "  DATE_TRUNC('DAY', event_ts) AS event_day,\n"
+                "  SUM(IFF(amount_cents >= 1000, amount_cents, 0)) AS large_amount_cents,\n"
+                "  COUNT(*) AS event_count\n"
+                'FROM __source("raw_events")\n'
+                "GROUP BY customer_id, DATE_TRUNC('DAY', event_ts)\n"
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, TO_TIMESTAMP_NTZ('2026-01-01 08:15:00') "
+                "AS event_ts, 1500 AS amount_cents\n"
+                "  UNION ALL\n"
+                "  SELECT 10 AS customer_id, TO_TIMESTAMP_NTZ('2026-01-01 10:30:00') "
+                "AS event_ts, 500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id, "
+                "DATE_TRUNC('DAY', TO_TIMESTAMP_NTZ('2026-01-01 00:00:00')) AS event_day, "
+                "1500 AS large_amount_cents, 2 AS event_count\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "transpilable_event_rollup",
+                "PASS",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            expected_local_rows=((10, 1500, 2),),
+            local_rows_sql=(
+                "SELECT customer_id, large_amount_cents, event_count "
+                "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
+            ),
+        ),
+        SnowflakeScenarioLocalReplayE2ETestCase(
+            description="reports snowflake local transpilation failures as X607",
+            scenario_name="local_transpile_error",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT customer_id, amount_cents\n"
+                'FROM __source("raw_events")\n'
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "local_transpile_error",
+                "ERROR",
+                "error[X607]",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            expected_return_code=1,
+            corrupt_capture_dialect=True,
+        ),
+        SnowflakeScenarioLocalReplayE2ETestCase(
+            description="reports snowflake local DuckDB execution failures as X608",
+            scenario_name="local_execution_error",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT\n"
+                "  customer_id,\n"
+                "  __sqb_missing_local_function(amount_cents) AS amount_cents\n"
+                'FROM __source("raw_events")\n'
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "local_execution_error",
+                "ERROR",
+                "error[X608]",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            expected_return_code=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_scenario_capture_when_replaying_locally_then_transpilable_sql_passes(
     tmp_path: Path,
@@ -1375,43 +1368,38 @@ def test_given_snowflake_scenario_capture_when_replaying_locally_then_transpilab
         cleanup_snowflake_schema(schema_name=schema_name)
 
 
-SNOWFLAKE_DBT_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[
-    SnowflakeDbtScenarioLocalReplayE2ETestCase
-] = [
-    SnowflakeDbtScenarioLocalReplayE2ETestCase(
-        description="captures snowflake dbt scenario and replays date_trunc locally",
-        scenario_name="dbt_event_rollup",
-        expected_stdout_fragments=(
-            "dbt_event_rollup",
-            "expect    expected event_rollup",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-        expected_local_rows=((10, 2),),
-        local_rows_sql=(
-            "SELECT customer_id, event_count "
-            "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
-        ),
-    ),
-    SnowflakeDbtScenarioLocalReplayE2ETestCase(
-        description="reports snowflake dbt local transpilation failure as X607",
-        scenario_name="dbt_event_rollup",
-        expected_stdout_fragments=(
-            "dbt_event_rollup",
-            "ERROR",
-            "error[X607]",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-        expected_return_code=1,
-        corrupt_capture_dialect=True,
-    ),
-]
-
-
 @pytest.mark.dbt
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_DBT_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_DBT_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
+    [
+        SnowflakeDbtScenarioLocalReplayE2ETestCase(
+            description="captures snowflake dbt scenario and replays date_trunc locally",
+            scenario_name="dbt_event_rollup",
+            expected_stdout_fragments=(
+                "dbt_event_rollup",
+                "expect    expected event_rollup",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            expected_local_rows=((10, 2),),
+            local_rows_sql=(
+                "SELECT customer_id, event_count "
+                "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
+            ),
+        ),
+        SnowflakeDbtScenarioLocalReplayE2ETestCase(
+            description="reports snowflake dbt local transpilation failure as X607",
+            scenario_name="dbt_event_rollup",
+            expected_stdout_fragments=(
+                "dbt_event_rollup",
+                "ERROR",
+                "error[X607]",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            expected_return_code=1,
+            corrupt_capture_dialect=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_dbt_scenario_capture_when_replaying_locally_then_transpiles_to_duckdb(
     tmp_path: Path,
@@ -1508,7 +1496,7 @@ def test_given_snowflake_dbt_scenario_capture_when_replaying_locally_then_transp
             ),
         )
     ],
-    ids=["executes snapshot scd2 matrix on snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_project_when_building_on_snowflake_then_scd2_history_is_valid(
     tmp_path: Path,
@@ -1613,7 +1601,7 @@ def test_given_snapshot_project_when_building_on_snowflake_then_scd2_history_is_
             },
         )
     ],
-    ids=["runs snowflake scenario remotely and retains inspectable artifacts"],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_scenario_when_running_remotely_then_cleans_up_and_retains_artifacts(
     tmp_path: Path,
@@ -1683,7 +1671,7 @@ def test_given_snowflake_scenario_when_running_remotely_then_cleans_up_and_retai
             expected_stdout_fragments=("Execution", "OK"),
         )
     ],
-    ids=["waffle shop full build succeeds on snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_running_full_build_on_snowflake_then_expected_table_exists(
     tmp_path: Path,
@@ -1749,7 +1737,7 @@ def test_given_waffle_shop_when_running_full_build_on_snowflake_then_expected_ta
             expected_stdout_fragments=("raw_countries", "raw_webhook_events", "raw_customers"),
         )
     ],
-    ids=["source loader strategies apply expected rows on snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_strategy_project_when_loading_twice_on_snowflake_then_write_modes_apply(
     tmp_path: Path,
@@ -1839,7 +1827,7 @@ def test_given_loader_strategy_project_when_loading_twice_on_snowflake_then_writ
             expected_rows=(("1", None), ("2", "late-note")),
         )
     ],
-    ids=["source loader schema evolution adds late columns on snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_schema_evolution_project_when_loading_twice_on_snowflake_then_target_evolves(
     tmp_path: Path,
@@ -1918,7 +1906,7 @@ def test_given_loader_schema_evolution_project_when_loading_twice_on_snowflake_t
             expected_rows=(("1", "loaded"), ("2", "loaded")),
         )
     ],
-    ids=["chained source loader runs on snowflake"],
+    ids=lambda case: case.description,
 )
 def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader_dag(
     tmp_path: Path,
@@ -1991,115 +1979,110 @@ def test_given_chained_loader_project_when_loading_on_snowflake_then_runs_loader
         cleanup_snowflake_schema(schema_name=schema_name)
 
 
-SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
-    SnowflakeIntermediateDagStrategyE2ETestCase
-] = [
-    SnowflakeIntermediateDagStrategyE2ETestCase(
-        description="snowflake append intermediate accumulates rows across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
-            "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "    {'name': 'amount', 'type': 'INTEGER'},\n"
-            "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "])\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        next_seq = 1\n"
-            "    else:\n"
-            "        next_seq = ctx.current_cursor_value + 1\n"
-            "    return [\n"
-            "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("1", "100"), ("2", "200")),
-        expected_terminal_rows=(("1", "100"), ("2", "200")),
-    ),
-    SnowflakeIntermediateDagStrategyE2ETestCase(
-        description="snowflake merge intermediate updates and adds rows across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(\n"
-            "    write_strategy='merge',\n"
-            "    unique_key='event_id',\n"
-            "    cursor_column='load_seq',\n"
-            "    columns=[\n"
-            "        {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "        {'name': 'amount', 'type': 'INTEGER'},\n"
-            "        {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "    ],\n"
-            ")\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        return [\n"
-            "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
-            "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
-            "        ]\n"
-            "    return [\n"
-            "        {'event_id': 1, 'amount': 150, 'load_seq': 2},\n"
-            "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
-        expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
-    ),
-    SnowflakeIntermediateDagStrategyE2ETestCase(
-        description="snowflake delete insert intermediate replaces cursor window across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
-            "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "    {'name': 'amount', 'type': 'INTEGER'},\n"
-            "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "])\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        return [\n"
-            "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
-            "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
-            "        ]\n"
-            "    return [\n"
-            "        {'event_id': 2, 'amount': 250, 'load_seq': 1},\n"
-            "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("2", "250"), ("3", "300")),
-        expected_terminal_rows=(("2", "250"), ("3", "300")),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_INTERMEDIATE_DAG_STRATEGY_TEST_CASES],
+    [
+        SnowflakeIntermediateDagStrategyE2ETestCase(
+            description="snowflake append intermediate accumulates rows across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "    {'name': 'amount', 'type': 'INTEGER'},\n"
+                "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        next_seq = 1\n"
+                "    else:\n"
+                "        next_seq = ctx.current_cursor_value + 1\n"
+                "    return [\n"
+                "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("1", "100"), ("2", "200")),
+            expected_terminal_rows=(("1", "100"), ("2", "200")),
+        ),
+        SnowflakeIntermediateDagStrategyE2ETestCase(
+            description="snowflake merge intermediate updates and adds rows across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(\n"
+                "    write_strategy='merge',\n"
+                "    unique_key='event_id',\n"
+                "    cursor_column='load_seq',\n"
+                "    columns=[\n"
+                "        {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "        {'name': 'amount', 'type': 'INTEGER'},\n"
+                "        {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "    ],\n"
+                ")\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [\n"
+                "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
+                "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
+                "        ]\n"
+                "    return [\n"
+                "        {'event_id': 1, 'amount': 150, 'load_seq': 2},\n"
+                "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
+            expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
+        ),
+        SnowflakeIntermediateDagStrategyE2ETestCase(
+            description="snowflake delete insert intermediate replaces cursor window across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "    {'name': 'amount', 'type': 'INTEGER'},\n"
+                "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [\n"
+                "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
+                "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
+                "        ]\n"
+                "    return [\n"
+                "        {'event_id': 2, 'amount': 250, 'load_seq': 1},\n"
+                "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("2", "250"), ("3", "300")),
+            expected_terminal_rows=(("2", "250"), ("3", "300")),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_intermediate_strategy_project_when_loading_twice_on_snowflake_then_strategy_applies(
     tmp_path: Path,
@@ -2184,7 +2167,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_snowflake_the
             ),
         )
     ],
-    ids=["loader focused waffle shop grows across repeated snowflake builds"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_waffle_shop_when_building_on_snowflake_then_dag_grows_models(
     tmp_path: Path,
@@ -2232,90 +2215,93 @@ def test_given_loader_waffle_shop_when_building_on_snowflake_then_dag_grows_mode
         cleanup_snowflake_schema(schema_name=schema_name)
 
 
-SNOWFLAKE_DIFF_E2E_TEST_CASES: list[SnowflakeDiffE2ETestCase] = [
-    SnowflakeDiffE2ETestCase(
-        description="schema only diff reports clean identical schemas",
-        mutation_sql=(),
-        command=(
-            "--no-color",
-            "diff",
-            "prod:dev",
-            "--schema-only",
-            "--select",
-            "stg_orders",
-        ),
-        expected_stdout_fragments=("stg_orders", "No schema differences."),
-        expected_return_code=0,
-    ),
-    SnowflakeDiffE2ETestCase(
-        description="full diff reports row mismatch",
-        mutation_sql=("UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 1",),
-        command=(
-            "--no-color",
-            "diff",
-            "prod:dev",
-            "--full",
-            "--select",
-            "stg_orders",
-        ),
-        expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=1 | 100 -> 105"),
-        expected_return_code=1,
-    ),
-    SnowflakeDiffE2ETestCase(
-        description="verbose diff shows changed row examples",
-        mutation_sql=("UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 1",),
-        command=(
-            "--no-color",
-            "diff",
-            "prod:dev",
-            "--full",
-            "--verbose",
-            "--select",
-            "stg_orders",
-        ),
-        expected_stdout_fragments=("Examples", "order_id=1 | 100 -> 105"),
-        expected_return_code=1,
-    ),
-    SnowflakeDiffE2ETestCase(
-        description="verbose diff shows side only examples",
-        mutation_sql=(
-            "DELETE FROM stg_orders WHERE order_id = 1",
-            "INSERT INTO stg_orders (order_id, customer_id, amount_cents) VALUES (3, 3, 999)",
-        ),
-        command=(
-            "--no-color",
-            "diff",
-            "prod:dev",
-            "--full",
-            "--verbose",
-            "--select",
-            "stg_orders",
-        ),
-        expected_stdout_fragments=("prod only", "order_id=1", "dev only", "order_id=3"),
-        expected_return_code=1,
-    ),
-    SnowflakeDiffE2ETestCase(
-        description="bounded diff reports mismatch inside bounded window",
-        mutation_sql=("UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 2",),
-        command=(
-            "--no-color",
-            "diff",
-            "prod:dev",
-            "--bounded",
-            "7d",
-            "--select",
-            "stg_orders",
-        ),
-        expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=2 | 200 -> 205"),
-        expected_return_code=1,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_DIFF_E2E_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_DIFF_E2E_TEST_CASES],
+    [
+        SnowflakeDiffE2ETestCase(
+            description="schema only diff reports clean identical schemas",
+            mutation_sql=(),
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--schema-only",
+                "--select",
+                "stg_orders",
+            ),
+            expected_stdout_fragments=("stg_orders", "No schema differences."),
+            expected_return_code=0,
+        ),
+        SnowflakeDiffE2ETestCase(
+            description="full diff reports row mismatch",
+            mutation_sql=(
+                "UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 1",
+            ),
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--select",
+                "stg_orders",
+            ),
+            expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=1 | 100 -> 105"),
+            expected_return_code=1,
+        ),
+        SnowflakeDiffE2ETestCase(
+            description="verbose diff shows changed row examples",
+            mutation_sql=(
+                "UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 1",
+            ),
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--verbose",
+                "--select",
+                "stg_orders",
+            ),
+            expected_stdout_fragments=("Examples", "order_id=1 | 100 -> 105"),
+            expected_return_code=1,
+        ),
+        SnowflakeDiffE2ETestCase(
+            description="verbose diff shows side only examples",
+            mutation_sql=(
+                "DELETE FROM stg_orders WHERE order_id = 1",
+                "INSERT INTO stg_orders (order_id, customer_id, amount_cents) VALUES (3, 3, 999)",
+            ),
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--verbose",
+                "--select",
+                "stg_orders",
+            ),
+            expected_stdout_fragments=("prod only", "order_id=1", "dev only", "order_id=3"),
+            expected_return_code=1,
+        ),
+        SnowflakeDiffE2ETestCase(
+            description="bounded diff reports mismatch inside bounded window",
+            mutation_sql=(
+                "UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 2",
+            ),
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--bounded",
+                "7d",
+                "--select",
+                "stg_orders",
+            ),
+            expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=2 | 200 -> 205"),
+            expected_return_code=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_project_when_running_diff_then_outputs_expected_summary(
     tmp_path: Path,
@@ -2406,7 +2392,7 @@ def test_given_snowflake_project_when_running_diff_then_outputs_expected_summary
             expected_rows=((1, 1, 100), (2, 2, 200)),
         )
     ],
-    ids=["clone defaults to zero copy and hard copy uses CTAS"],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_project_when_cloning_then_default_uses_zero_copy_and_hard_copy_ctas(
     tmp_path: Path,

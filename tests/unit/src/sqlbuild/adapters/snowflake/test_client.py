@@ -49,59 +49,6 @@ from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     install_fake_snowflake_connector,
 )
 
-SNOWFLAKE_CONNECT_CONFIG_TEST_CASES: list[SnowflakeConnectConfigTestCase] = [
-    SnowflakeConnectConfigTestCase(
-        description="defaults MFA token cache flags for username password MFA",
-        config={
-            "account": "acct",
-            "user": "analytics",
-            "password": "secret",
-            "authenticator": "username_password_mfa",
-        },
-        expected_connect_kwargs={
-            "account": "acct",
-            "user": "analytics",
-            "password": "secret",
-            "authenticator": "username_password_mfa",
-            "client_request_mfa_token": True,
-            "client_store_temporary_credential": True,
-        },
-    ),
-    SnowflakeConnectConfigTestCase(
-        description="preserves explicit MFA token cache flags",
-        config={
-            "account": "acct",
-            "authenticator": "username_password_mfa",
-            "client_request_mfa_token": False,
-            "client_store_temporary_credential": False,
-        },
-        expected_connect_kwargs={
-            "account": "acct",
-            "authenticator": "username_password_mfa",
-            "client_request_mfa_token": False,
-            "client_store_temporary_credential": False,
-        },
-    ),
-    SnowflakeConnectConfigTestCase(
-        description="strips SQLBuild routing keys before connector call",
-        config={
-            "source": "explicit",
-            "profile": "analytics",
-            "target": "dev",
-            "project_dir": "dbt_project",
-            "profiles_dir": "profiles",
-            "account": "acct",
-            "authenticator": "programmatic_access_token",
-            "token": "secret-token",
-        },
-        expected_connect_kwargs={
-            "account": "acct",
-            "authenticator": "programmatic_access_token",
-            "token": "secret-token",
-        },
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -116,7 +63,7 @@ SNOWFLAKE_CONNECT_CONFIG_TEST_CASES: list[SnowflakeConnectConfigTestCase] = [
             },
         )
     ],
-    ids=["returns Snowflake inference rules"],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_expected_rules(
     test_case: SnowflakeExpressionInferenceProfileTestCase,
@@ -146,8 +93,59 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
 
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_CONNECT_CONFIG_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_CONNECT_CONFIG_TEST_CASES],
+    [
+        SnowflakeConnectConfigTestCase(
+            description="defaults MFA token cache flags for username password MFA",
+            config={
+                "account": "acct",
+                "user": "analytics",
+                "password": "secret",
+                "authenticator": "username_password_mfa",
+            },
+            expected_connect_kwargs={
+                "account": "acct",
+                "user": "analytics",
+                "password": "secret",
+                "authenticator": "username_password_mfa",
+                "client_request_mfa_token": True,
+                "client_store_temporary_credential": True,
+            },
+        ),
+        SnowflakeConnectConfigTestCase(
+            description="preserves explicit MFA token cache flags",
+            config={
+                "account": "acct",
+                "authenticator": "username_password_mfa",
+                "client_request_mfa_token": False,
+                "client_store_temporary_credential": False,
+            },
+            expected_connect_kwargs={
+                "account": "acct",
+                "authenticator": "username_password_mfa",
+                "client_request_mfa_token": False,
+                "client_store_temporary_credential": False,
+            },
+        ),
+        SnowflakeConnectConfigTestCase(
+            description="strips SQLBuild routing keys before connector call",
+            config={
+                "source": "explicit",
+                "profile": "analytics",
+                "target": "dev",
+                "project_dir": "dbt_project",
+                "profiles_dir": "profiles",
+                "account": "acct",
+                "authenticator": "programmatic_access_token",
+                "token": "secret-token",
+            },
+            expected_connect_kwargs={
+                "account": "acct",
+                "authenticator": "programmatic_access_token",
+                "token": "secret-token",
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_mfa_authenticator_when_connecting_then_uses_expected_token_cache_kwargs(
     test_case: SnowflakeConnectConfigTestCase,
@@ -172,7 +170,7 @@ def test_given_mfa_authenticator_when_connecting_then_uses_expected_token_cache_
             expected_params=("STAGING", "RACE__STG_HORSE", "RACING"),
         )
     ],
-    ids=["uppercases relation schema filter bind values"],
+    ids=lambda case: case.description,
 )
 def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bind_values(
     test_case: SnowflakeInformationSchemaFilterTestCase,
@@ -210,7 +208,7 @@ def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bi
             expected_params=("RACE__STG_HORSE", "STAGING", "RACING"),
         )
     ],
-    ids=["uppercases relation existence filter bind values"],
+    ids=lambda case: case.description,
 )
 def test_given_lowercase_schema_when_checking_relation_exists_then_uses_sargable_filters(
     test_case: SnowflakeInformationSchemaFilterTestCase,
@@ -243,7 +241,7 @@ def test_given_lowercase_schema_when_checking_relation_exists_then_uses_sargable
             expected_params=("STAGING", "RACE__STG_HORSE", "RACING"),
         )
     ],
-    ids=["uppercases column schema filter bind values"],
+    ids=lambda case: case.description,
 )
 def test_given_lowercase_schema_when_getting_all_columns_then_uppercases_filter_bind_values(
     test_case: SnowflakeInformationSchemaFilterTestCase,
@@ -287,7 +285,7 @@ def test_given_lowercase_schema_when_getting_all_columns_then_uppercases_filter_
             ),
         )
     ],
-    ids=["renders fingerprint pruning with delete using ranked stale rows"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_table_when_rendering_prune_then_snowflake_uses_history_rank(
     test_case: SnowflakePruneSqlTestCase,
@@ -322,7 +320,7 @@ def test_given_fingerprint_table_when_rendering_prune_then_snowflake_uses_histor
             ),
         )
     ],
-    ids=["renders source freshness pruning with null-safe full identity"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_table_when_rendering_prune_then_snowflake_uses_history_rank(
     test_case: SnowflakePruneSqlTestCase,
@@ -339,91 +337,23 @@ def test_given_source_freshness_table_when_rendering_prune_then_snowflake_uses_h
         assert fragment in sql
 
 
-TEST_CASES: list[SnowflakeRenderCursorBoundLiteralTestCase] = [
-    SnowflakeRenderCursorBoundLiteralTestCase(
-        description="renders timestamp cursor bounds as typed literals",
-        value="2024-01-15T00:00:00",
-        cursor_type=CursorKind.TIMESTAMP,
-        expected_literal="TIMESTAMP '2024-01-15T00:00:00'",
-    ),
-    SnowflakeRenderCursorBoundLiteralTestCase(
-        description="renders integer cursor bounds without quotes",
-        value="42",
-        cursor_type=CursorKind.INTEGER,
-        expected_literal="42",
-    ),
-]
-
-SNOWFLAKE_RENDER_CLONE_TEST_CASES: list[SnowflakeRenderCloneTestCase] = [
-    SnowflakeRenderCloneTestCase(
-        description="renders zero copy table clone by default",
-        source="prod.fact_orders",
-        target="dev.fact_orders",
-        hard_copy=False,
-        origin_is_transient=False,
-        expected_statements=("CREATE OR REPLACE TABLE dev.fact_orders CLONE prod.fact_orders",),
-        expected_supports_zero_copy=True,
-    ),
-    SnowflakeRenderCloneTestCase(
-        description="renders transient clone when origin is transient",
-        source="prod.fact_orders",
-        target="dev.fact_orders",
-        hard_copy=False,
-        origin_is_transient=True,
-        expected_statements=(
-            "CREATE OR REPLACE TRANSIENT TABLE dev.fact_orders CLONE prod.fact_orders",
-        ),
-        expected_supports_zero_copy=True,
-    ),
-    SnowflakeRenderCloneTestCase(
-        description="renders transient CTAS when hard copy is requested",
-        source="prod.fact_orders",
-        target="dev.fact_orders",
-        hard_copy=True,
-        origin_is_transient=False,
-        expected_statements=(
-            "CREATE OR REPLACE TRANSIENT TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
-        ),
-        expected_supports_zero_copy=True,
-    ),
-]
-
-SNOWFLAKE_RENDER_IDENTIFIER_TEST_CASES: list[SnowflakeRenderIdentifierTestCase] = [
-    SnowflakeRenderIdentifierTestCase(
-        description="uppercases logical lowercase identifiers before quoting",
-        name="event_id",
-        expected_identifier='"EVENT_ID"',
-    ),
-    SnowflakeRenderIdentifierTestCase(
-        description="escapes quotes after applying Snowflake uppercase semantics",
-        name='event"id',
-        expected_identifier='"EVENT""ID"',
-    ),
-]
-
-SNOWFLAKE_TABLE_FRESHNESS_ERROR_TEST_CASES: list[SnowflakeTableFreshnessMetadataErrorTestCase] = [
-    SnowflakeTableFreshnessMetadataErrorTestCase(
-        description="raises when metadata row is missing",
-        row=None,
-        expected_error_fragment="not found",
-    ),
-    SnowflakeTableFreshnessMetadataErrorTestCase(
-        description="raises when relation is a view",
-        row=("VIEW", datetime(2026, 1, 2, 3, 4, 5)),
-        expected_error_fragment="only supports physical tables",
-    ),
-    SnowflakeTableFreshnessMetadataErrorTestCase(
-        description="raises when last altered is missing",
-        row=("BASE TABLE", None),
-        expected_error_fragment="missing LAST_ALTERED",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        SnowflakeRenderCursorBoundLiteralTestCase(
+            description="renders timestamp cursor bounds as typed literals",
+            value="2024-01-15T00:00:00",
+            cursor_type=CursorKind.TIMESTAMP,
+            expected_literal="TIMESTAMP '2024-01-15T00:00:00'",
+        ),
+        SnowflakeRenderCursorBoundLiteralTestCase(
+            description="renders integer cursor bounds without quotes",
+            value="42",
+            cursor_type=CursorKind.INTEGER,
+            expected_literal="42",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_cursor_bounds_when_rendering_then_snowflake_returns_expected_literal(
     test_case: SnowflakeRenderCursorBoundLiteralTestCase,
@@ -437,8 +367,40 @@ def test_given_cursor_bounds_when_rendering_then_snowflake_returns_expected_lite
 
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_RENDER_CLONE_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_RENDER_CLONE_TEST_CASES],
+    [
+        SnowflakeRenderCloneTestCase(
+            description="renders zero copy table clone by default",
+            source="prod.fact_orders",
+            target="dev.fact_orders",
+            hard_copy=False,
+            origin_is_transient=False,
+            expected_statements=("CREATE OR REPLACE TABLE dev.fact_orders CLONE prod.fact_orders",),
+            expected_supports_zero_copy=True,
+        ),
+        SnowflakeRenderCloneTestCase(
+            description="renders transient clone when origin is transient",
+            source="prod.fact_orders",
+            target="dev.fact_orders",
+            hard_copy=False,
+            origin_is_transient=True,
+            expected_statements=(
+                "CREATE OR REPLACE TRANSIENT TABLE dev.fact_orders CLONE prod.fact_orders",
+            ),
+            expected_supports_zero_copy=True,
+        ),
+        SnowflakeRenderCloneTestCase(
+            description="renders transient CTAS when hard copy is requested",
+            source="prod.fact_orders",
+            target="dev.fact_orders",
+            hard_copy=True,
+            origin_is_transient=False,
+            expected_statements=(
+                "CREATE OR REPLACE TRANSIENT TABLE dev.fact_orders AS SELECT * FROM prod.fact_orders",
+            ),
+            expected_supports_zero_copy=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_clone_request_when_rendering_then_snowflake_uses_expected_clone_sql(
     test_case: SnowflakeRenderCloneTestCase,
@@ -469,7 +431,7 @@ def test_given_clone_request_when_rendering_then_snowflake_uses_expected_clone_s
             ),
         )
     ],
-    ids=["moves table across schemas with native rename"],
+    ids=lambda case: case.description,
 )
 def test_given_cross_schema_table_move_when_moving_then_snowflake_uses_native_rename(
     test_case: SnowflakeMoveOrCopyRelationTestCase,
@@ -496,8 +458,19 @@ def test_given_cross_schema_table_move_when_moving_then_snowflake_uses_native_re
 
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_RENDER_IDENTIFIER_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_RENDER_IDENTIFIER_TEST_CASES],
+    [
+        SnowflakeRenderIdentifierTestCase(
+            description="uppercases logical lowercase identifiers before quoting",
+            name="event_id",
+            expected_identifier='"EVENT_ID"',
+        ),
+        SnowflakeRenderIdentifierTestCase(
+            description="escapes quotes after applying Snowflake uppercase semantics",
+            name='event"id',
+            expected_identifier='"EVENT""ID"',
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_identifier_when_rendering_then_snowflake_quotes_uppercase_identifier(
     test_case: SnowflakeRenderIdentifierTestCase,
@@ -520,7 +493,7 @@ def test_given_identifier_when_rendering_then_snowflake_quotes_uppercase_identif
             expected_supports_metadata=True,
         )
     ],
-    ids=["returns last altered for physical table"],
+    ids=lambda case: case.description,
 )
 def test_given_physical_table_when_getting_freshness_metadata_then_returns_last_altered(
     test_case: SnowflakeTableFreshnessMetadataTestCase,
@@ -565,7 +538,7 @@ def test_given_physical_table_when_getting_freshness_metadata_then_returns_last_
             ),
         )
     ],
-    ids=["returns last altered for multiple physical tables"],
+    ids=lambda case: case.description,
 )
 def test_given_physical_tables_when_getting_freshness_metadata_then_batches_last_altered(
     test_case: SnowflakeTableFreshnessBatchTestCase,
@@ -603,8 +576,24 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_batches_last
 
 @pytest.mark.parametrize(
     "test_case",
-    SNOWFLAKE_TABLE_FRESHNESS_ERROR_TEST_CASES,
-    ids=[case.description for case in SNOWFLAKE_TABLE_FRESHNESS_ERROR_TEST_CASES],
+    [
+        SnowflakeTableFreshnessMetadataErrorTestCase(
+            description="raises when metadata row is missing",
+            row=None,
+            expected_error_fragment="not found",
+        ),
+        SnowflakeTableFreshnessMetadataErrorTestCase(
+            description="raises when relation is a view",
+            row=("VIEW", datetime(2026, 1, 2, 3, 4, 5)),
+            expected_error_fragment="only supports physical tables",
+        ),
+        SnowflakeTableFreshnessMetadataErrorTestCase(
+            description="raises when last altered is missing",
+            row=("BASE TABLE", None),
+            expected_error_fragment="missing LAST_ALTERED",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_unsupported_relation_when_getting_freshness_metadata_then_raises_clear_error(
     test_case: SnowflakeTableFreshnessMetadataErrorTestCase,
@@ -644,7 +633,7 @@ def test_given_unsupported_relation_when_getting_freshness_metadata_then_raises_
             ),
         )
     ],
-    ids=["renders Python UDF DDL with runtime handler and packages"],
+    ids=lambda case: case.description,
 )
 def test_given_python_function_when_rendering_then_snowflake_returns_expected_ddl(
     test_case: SnowflakeRenderPythonFunctionTestCase,
@@ -678,7 +667,7 @@ def test_given_python_function_when_rendering_then_snowflake_returns_expected_dd
             ),
         )
     ],
-    ids=["renders table function DDL with explicit Snowflake return columns"],
+    ids=lambda case: case.description,
 )
 def test_given_table_function_when_rendering_then_snowflake_returns_expected_ddl(
     test_case: SnowflakeRenderTableFunctionTestCase,
@@ -704,7 +693,7 @@ def test_given_table_function_when_rendering_then_snowflake_returns_expected_ddl
             expected_result=SchemaDiffResult(),
         )
     ],
-    ids=["treats semantically equivalent numeric types as unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_equivalent_types_when_diffing_schema_then_snowflake_ignores_alias_only_changes(
     test_case: SnowflakeSchemaDiffTestCase,
@@ -739,7 +728,7 @@ def test_given_equivalent_types_when_diffing_schema_then_snowflake_ignores_alias
             expected_columns=("ID", "FIRST_NAME", "CREATED_AT"),
         ),
     ],
-    ids=["preserves Snowflake cursor output column names"],
+    ids=lambda case: case.description,
 )
 def test_given_snowflake_query_metadata_when_getting_column_names_then_preserves_cursor_names(
     test_case: SnowflakeQueryColumnNamesTestCase,
@@ -768,7 +757,7 @@ def test_given_snowflake_query_metadata_when_getting_column_names_then_preserves
             expected_rows=[("1", "Liege waffle")],
         ),
     ],
-    ids=["loads seed with default quote character"],
+    ids=lambda case: case.description,
 )
 def test_given_default_seed_csv_settings_when_loading_seed_then_uses_python_csv_defaults(
     test_case: SnowflakeLoadSeedTestCase,

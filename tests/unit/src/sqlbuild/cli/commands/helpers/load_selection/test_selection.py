@@ -19,26 +19,24 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.load_selection.helpers import 
     build_load_selection_inputs,
 )
 
-LOAD_SELECTION_TEST_CASES: list[LoadSelectionTestCase] = [
-    LoadSelectionTestCase(
-        description="source selector selects terminal source load only",
-        select=("raw_orders",),
-        expected_entry_names=("raw_orders",),
-        expected_loader_node_flags=(False,),
-    ),
-    LoadSelectionTestCase(
-        description="leading plus includes upstream intermediate loader",
-        select=("+raw_orders",),
-        expected_entry_names=("fetch_orders", "raw_orders"),
-        expected_loader_node_flags=(True, False),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    LOAD_SELECTION_TEST_CASES,
-    ids=[case.description for case in LOAD_SELECTION_TEST_CASES],
+    [
+        LoadSelectionTestCase(
+            description="source selector selects terminal source load only",
+            select=("raw_orders",),
+            expected_entry_names=("raw_orders",),
+            expected_loader_node_flags=(False,),
+        ),
+        LoadSelectionTestCase(
+            description="leading plus includes upstream intermediate loader",
+            select=("+raw_orders",),
+            expected_entry_names=("fetch_orders", "raw_orders"),
+            expected_loader_node_flags=(True, False),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_load_selector_when_selecting_then_returns_expected_source_entries(
     test_case: LoadSelectionTestCase,
@@ -66,7 +64,7 @@ def test_given_load_selector_when_selecting_then_returns_expected_source_entries
             expected_entry_names=(),
         )
     ],
-    ids=["integration terminal loader is selected, not reference-only"],
+    ids=lambda case: case.description,
 )
 def test_given_integration_loader_selected_when_selecting_references_then_returns_no_terminal_ref(
     test_case: LoadReferenceSelectionTestCase,

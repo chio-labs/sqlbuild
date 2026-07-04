@@ -32,7 +32,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
             unexpected_fragments=("/tmp/secret-profile.duckdb",),
         )
     ],
-    ids=["generated TOML references dbt profile without materializing secret path"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_duckdb_profile_when_building_init_project_then_toml_omits_secret_values(
     tmp_path: Path,
@@ -93,7 +93,7 @@ def test_given_dbt_duckdb_profile_when_building_init_project_then_toml_omits_sec
             expected_profiles_dir_fragment='profiles_dir = "../dbt_project"',
         )
     ],
-    ids=["uses project-local profiles file when profiles dir is omitted"],
+    ids=lambda case: case.description,
 )
 def test_given_project_local_profiles_when_building_init_project_then_profiles_dir_is_discovered(
     tmp_path: Path,

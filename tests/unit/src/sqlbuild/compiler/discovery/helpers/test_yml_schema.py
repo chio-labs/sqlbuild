@@ -13,10 +13,13 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.discovery.helpers.helpers import expected_or_actual
 
-TEST_CASES: list[ParseSchemaYamlTestCase] = [
-    ParseSchemaYamlTestCase(
-        description="parses seed metadata while model metadata is header-owned",
-        contents="""
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSchemaYamlTestCase(
+            description="parses seed metadata while model metadata is header-owned",
+            contents="""
         seeds:
           - name: country_codes
             columns:
@@ -27,19 +30,19 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
                 type: VARCHAR
                 nullable: true
         """,
-        expected_model_names=(),
-        expected_seed_names=("country_codes",),
-        expected_model_column_names=(),
-        expected_seed_column_names=(("country_code", "country_name"),),
-        expected_model_audit_names=(),
-        expected_column_audit_names=(),
-        expected_seed_column_nullables=((False, True),),
-        expected_seed_databases=(None,),
-        expected_seed_schemas=(None,),
-    ),
-    ParseSchemaYamlTestCase(
-        description="parses seed target overrides",
-        contents="""
+            expected_model_names=(),
+            expected_seed_names=("country_codes",),
+            expected_model_column_names=(),
+            expected_seed_column_names=(("country_code", "country_name"),),
+            expected_model_audit_names=(),
+            expected_column_audit_names=(),
+            expected_seed_column_nullables=((False, True),),
+            expected_seed_databases=(None,),
+            expected_seed_schemas=(None,),
+        ),
+        ParseSchemaYamlTestCase(
+            description="parses seed target overrides",
+            contents="""
         seeds:
           - name: country_codes
             database: "${ENV:SEED_DB}"
@@ -48,34 +51,29 @@ TEST_CASES: list[ParseSchemaYamlTestCase] = [
               - name: country_code
                 type: VARCHAR
         """,
-        expected_model_names=(),
-        expected_seed_names=("country_codes",),
-        expected_model_column_names=(),
-        expected_seed_column_names=(("country_code",),),
-        expected_model_audit_names=(),
-        expected_column_audit_names=(),
-        expected_seed_databases=("${ENV:SEED_DB}",),
-        expected_seed_schemas=("${coalesce(ENV:SEED_SCHEMA, 'lookups')}",),
-    ),
-    ParseSchemaYamlTestCase(
-        description="allows empty schema files with no models or seeds",
-        contents="{}\n",
-        expected_model_names=(),
-        expected_seed_names=(),
-        expected_model_column_names=(),
-        expected_seed_column_names=(),
-        expected_model_audit_names=(),
-        expected_column_audit_names=(),
-        expected_seed_databases=(),
-        expected_seed_schemas=(),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+            expected_model_names=(),
+            expected_seed_names=("country_codes",),
+            expected_model_column_names=(),
+            expected_seed_column_names=(("country_code",),),
+            expected_model_audit_names=(),
+            expected_column_audit_names=(),
+            expected_seed_databases=("${ENV:SEED_DB}",),
+            expected_seed_schemas=("${coalesce(ENV:SEED_SCHEMA, 'lookups')}",),
+        ),
+        ParseSchemaYamlTestCase(
+            description="allows empty schema files with no models or seeds",
+            contents="{}\n",
+            expected_model_names=(),
+            expected_seed_names=(),
+            expected_model_column_names=(),
+            expected_seed_column_names=(),
+            expected_model_audit_names=(),
+            expected_column_audit_names=(),
+            expected_seed_databases=(),
+            expected_seed_schemas=(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_metadata(
     test_case: ParseSchemaYamlTestCase,
@@ -159,7 +157,7 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
             expected_keep_default_na=False,
         ),
     ],
-    ids=["parses full seed csv settings"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_csv_settings_when_parsing_then_it_returns_normalized_settings(
     test_case: ParseSeedCsvSettingsYamlTestCase,
@@ -179,44 +177,46 @@ def test_given_seed_csv_settings_when_parsing_then_it_returns_normalized_setting
     )
 
 
-ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
-    ParseSchemaYamlErrorTestCase(
-        description="raises when the file does not contain a top-level mapping",
-        contents="- name: stg_orders\n",
-        expected_error_fragment="must contain a top-level mapping",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when schema yml declares model metadata",
-        contents="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSchemaYamlErrorTestCase(
+            description="raises when the file does not contain a top-level mapping",
+            contents="- name: stg_orders\n",
+            expected_error_fragment="must contain a top-level mapping",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when schema yml declares model metadata",
+            contents="""
         models:
           - name: stg_orders
         """,
-        expected_error_fragment="model metadata must live in the model file MODEL",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seeds is not a list",
-        contents="seeds: {}\n",
-        expected_error_fragment="seeds must be a list",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when a seed entry is not a mapping",
-        contents="""
+            expected_error_fragment="model metadata must live in the model file MODEL",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seeds is not a list",
+            contents="seeds: {}\n",
+            expected_error_fragment="seeds must be a list",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when a seed entry is not a mapping",
+            contents="""
         seeds:
           - country_codes
         """,
-        expected_error_fragment="seeds must contain only mappings",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when a seed omits columns",
-        contents="""
+            expected_error_fragment="seeds must contain only mappings",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when a seed omits columns",
+            contents="""
         seeds:
           - name: country_codes
         """,
-        expected_error_fragment="seed must declare at least one column",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed meta is not a mapping",
-        contents="""
+            expected_error_fragment="seed must declare at least one column",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed meta is not a mapping",
+            contents="""
         seeds:
           - name: country_codes
             meta: nope
@@ -224,51 +224,51 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
               - name: country_code
                 type: VARCHAR
         """,
-        expected_error_fragment="seed 'meta' must be a mapping",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed columns is not a list",
-        contents="""
+            expected_error_fragment="seed 'meta' must be a mapping",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed columns is not a list",
+            contents="""
         seeds:
           - name: country_codes
             columns: {}
         """,
-        expected_error_fragment="seed columns must be a list",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed column entry is not a mapping",
-        contents="""
+            expected_error_fragment="seed columns must be a list",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed column entry is not a mapping",
+            contents="""
         seeds:
           - name: country_codes
             columns:
               - country_code
         """,
-        expected_error_fragment="seed columns must contain only mappings",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when a seed column omits type",
-        contents="""
+            expected_error_fragment="seed columns must contain only mappings",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when a seed column omits type",
+            contents="""
         seeds:
           - name: country_codes
             columns:
               - name: country_code
         """,
-        expected_error_fragment="seed column 'country_code' must define non-empty string 'type'",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed column name is blank",
-        contents="""
+            expected_error_fragment="seed column 'country_code' must define non-empty string 'type'",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed column name is blank",
+            contents="""
         seeds:
           - name: country_codes
             columns:
               - name: ""
                 type: VARCHAR
         """,
-        expected_error_fragment="seed column must define non-empty string 'name'",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed column nullable is not a boolean",
-        contents="""
+            expected_error_fragment="seed column must define non-empty string 'name'",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed column nullable is not a boolean",
+            contents="""
         seeds:
           - name: country_codes
             columns:
@@ -276,11 +276,11 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
                 type: VARCHAR
                 nullable: 123
         """,
-        expected_error_fragment="seed column 'nullable' must be a boolean",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed column allows nulls and uses not null audit",
-        contents="""
+            expected_error_fragment="seed column 'nullable' must be a boolean",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed column allows nulls and uses not null audit",
+            contents="""
         seeds:
           - name: country_codes
             columns:
@@ -290,13 +290,13 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
                 audits:
                   - not_null
         """,
-        expected_error_fragment=(
-            "column 'country_code' cannot set nullable = true and audit not_null"
+            expected_error_fragment=(
+                "column 'country_code' cannot set nullable = true and audit not_null"
+            ),
         ),
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed csv settings is not a mapping",
-        contents="""
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed csv settings is not a mapping",
+            contents="""
         seeds:
           - name: country_codes
             csv_settings: nope
@@ -304,11 +304,11 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
               - name: country_code
                 type: VARCHAR
         """,
-        expected_error_fragment="seed 'csv_settings' must be a mapping",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed csv settings has unknown keys",
-        contents="""
+            expected_error_fragment="seed 'csv_settings' must be a mapping",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed csv settings has unknown keys",
+            contents="""
         seeds:
           - name: country_codes
             csv_settings:
@@ -317,11 +317,11 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
               - name: country_code
                 type: VARCHAR
         """,
-        expected_error_fragment="unknown keys: unknown",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed csv string setting is not a string",
-        contents="""
+            expected_error_fragment="unknown keys: unknown",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed csv string setting is not a string",
+            contents="""
         seeds:
           - name: country_codes
             csv_settings:
@@ -330,11 +330,11 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
               - name: country_code
                 type: VARCHAR
         """,
-        expected_error_fragment="csv_settings 'delimiter' must be a string",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed csv boolean setting is not a boolean",
-        contents="""
+            expected_error_fragment="csv_settings 'delimiter' must be a string",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed csv boolean setting is not a boolean",
+            contents="""
         seeds:
           - name: country_codes
             csv_settings:
@@ -343,11 +343,11 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
               - name: country_code
                 type: VARCHAR
         """,
-        expected_error_fragment="csv_settings 'keep_default_na' must be a boolean",
-    ),
-    ParseSchemaYamlErrorTestCase(
-        description="raises when seed csv na values type is invalid",
-        contents="""
+            expected_error_fragment="csv_settings 'keep_default_na' must be a boolean",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when seed csv na values type is invalid",
+            contents="""
         seeds:
           - name: country_codes
             csv_settings:
@@ -356,15 +356,10 @@ ERROR_TEST_CASES: list[ParseSchemaYamlErrorTestCase] = [
               - name: country_code
                 type: VARCHAR
         """,
-        expected_error_fragment="csv_settings 'na_values' must be a list or mapping",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    ERROR_TEST_CASES,
-    ids=[case.description for case in ERROR_TEST_CASES],
+            expected_error_fragment="csv_settings 'na_values' must be a list or mapping",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_schema_yaml_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSchemaYamlErrorTestCase,

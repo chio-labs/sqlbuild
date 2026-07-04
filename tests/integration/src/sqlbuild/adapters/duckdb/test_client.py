@@ -47,30 +47,28 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     TransactionalAtomicityTestCase,
 )
 
-EXPRESSION_NULLABILITY_RULE_TEST_CASES: list[ExpressionNullabilityRuleTestCase] = [
-    ExpressionNullabilityRuleTestCase(
-        description="LOWER preserves non-null literal",
-        function_name="LOWER",
-        sql_expression="LOWER('READY')",
-        rule_args=(InferredNullability.NON_NULL,),
-        expected_nullability=InferredNullability.NON_NULL,
-        expected_is_null=False,
-    ),
-    ExpressionNullabilityRuleTestCase(
-        description="LOWER preserves nullable input",
-        function_name="LOWER",
-        sql_expression="LOWER(CAST(NULL AS VARCHAR))",
-        rule_args=(InferredNullability.NULLABLE,),
-        expected_nullability=InferredNullability.NULLABLE,
-        expected_is_null=True,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    EXPRESSION_NULLABILITY_RULE_TEST_CASES,
-    ids=[case.description for case in EXPRESSION_NULLABILITY_RULE_TEST_CASES],
+    [
+        ExpressionNullabilityRuleTestCase(
+            description="LOWER preserves non-null literal",
+            function_name="LOWER",
+            sql_expression="LOWER('READY')",
+            rule_args=(InferredNullability.NON_NULL,),
+            expected_nullability=InferredNullability.NON_NULL,
+            expected_is_null=False,
+        ),
+        ExpressionNullabilityRuleTestCase(
+            description="LOWER preserves nullable input",
+            function_name="LOWER",
+            sql_expression="LOWER(CAST(NULL AS VARCHAR))",
+            rule_args=(InferredNullability.NULLABLE,),
+            expected_nullability=InferredNullability.NULLABLE,
+            expected_is_null=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_expression_rule_when_querying_then_duckdb_matches_nullability_expectation(
     test_case: ExpressionNullabilityRuleTestCase,
@@ -93,424 +91,21 @@ def test_given_expression_rule_when_querying_then_duckdb_matches_nullability_exp
     assert result.rows == ((test_case.expected_is_null,),)
 
 
-CONNECT_TEST_CASES: list[ConnectTestCase] = [
-    ConnectTestCase(
-        description="connects with default in-memory database",
-        config={},
-        expected_connects=True,
-    ),
-    ConnectTestCase(
-        description="connects with explicit memory database",
-        config={"database": ":memory:"},
-        expected_connects=True,
-    ),
-]
-
-QUERY_TEST_CASES: list[QueryTestCase] = [
-    QueryTestCase(
-        description="returns rows and marks limit truncation",
-        sql="SELECT * FROM (VALUES (1, 'alice'), (2, 'bob')) AS t(id, name) ORDER BY id",
-        limit=1,
-        expected_result=QueryResult(
-            columns=("id", "name"),
-            rows=((1, "alice"),),
-            truncated=True,
-        ),
-    ),
-    QueryTestCase(
-        description="returns all rows without limit",
-        sql="SELECT * FROM (VALUES (1), (2)) AS t(id) ORDER BY id",
-        limit=None,
-        expected_result=QueryResult(columns=("id",), rows=((1,), (2,))),
-    ),
-]
-
-RELATION_EXISTS_TEST_CASES: list[RelationExistsTestCase] = [
-    RelationExistsTestCase(
-        description="returns true for existing table",
-        setup_sql=("CREATE TABLE test_table (id INTEGER)",),
-        database=None,
-        schema=None,
-        name="test_table",
-        expected_exists=True,
-    ),
-    RelationExistsTestCase(
-        description="returns false for non-existing table",
-        setup_sql=(),
-        database=None,
-        schema=None,
-        name="missing_table",
-        expected_exists=False,
-    ),
-]
-
-DIFF_SCHEMA_TEST_CASES: list[DiffSchemaTestCase] = [
-    DiffSchemaTestCase(
-        description="detects added removed and type changed columns",
-        left_sql="CREATE TABLE left_t (id INTEGER, name VARCHAR, old_col BOOLEAN)",
-        right_sql="CREATE TABLE right_t (id BIGINT, name VARCHAR, new_col DATE)",
-        expected_result=SchemaDiffResult(
-            added_columns=(ColumnInfo(name="new_col", type="DATE"),),
-            removed_columns=(ColumnInfo(name="old_col", type="BOOLEAN"),),
-            type_changed_columns=(
-                (
-                    ColumnInfo(name="id", type="INTEGER"),
-                    ColumnInfo(name="id", type="BIGINT"),
-                ),
-            ),
-        ),
-    ),
-    DiffSchemaTestCase(
-        description="returns empty result for identical schemas",
-        left_sql="CREATE TABLE left_t (id INTEGER, name VARCHAR)",
-        right_sql="CREATE TABLE right_t (id INTEGER, name VARCHAR)",
-        expected_result=SchemaDiffResult(),
-    ),
-    DiffSchemaTestCase(
-        description="ignores equivalent scalar aliases and detects numeric scale changes",
-        left_sql=(
-            "CREATE TABLE left_t ("
-            "id INTEGER, flag BOOLEAN, amount DECIMAL(10,2), widened DECIMAL(10,2))"
-        ),
-        right_sql=(
-            "CREATE TABLE right_t (id INT, flag BOOL, amount NUMERIC(10,2), widened NUMERIC(10,3))"
-        ),
-        expected_result=SchemaDiffResult(
-            type_changed_columns=(
-                (
-                    ColumnInfo(name="widened", type="DECIMAL(10,2)"),
-                    ColumnInfo(name="widened", type="DECIMAL(10,3)"),
-                ),
-            ),
-        ),
-    ),
-]
-
-DIFF_ROWS_TEST_CASES: list[DiffRowsTestCase] = [
-    DiffRowsTestCase(
-        description="detects matching mismatched and missing rows",
-        left_sql=(
-            "CREATE TABLE left_t AS SELECT * FROM "
-            "(VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, val)"
-        ),
-        right_sql=(
-            "CREATE TABLE right_t AS SELECT * FROM "
-            "(VALUES (1, 'a'), (2, 'x'), (4, 'd')) AS t(id, val)"
-        ),
-        unique_key="id",
-        expected_result=RowDiffResult(
-            left_count=3,
-            right_count=3,
-            joined_count=4,
-            equal_count=1,
-            unequal_count=1,
-            left_only_count=1,
-            right_only_count=1,
-            column_results=(RowDiffColumnResult(name="val", mismatched_count=1),),
-        ),
-    ),
-    DiffRowsTestCase(
-        description="excludes columns from comparison",
-        left_sql=(
-            "CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 'a', 'ignore1')) AS t(id, val, extra)"
-        ),
-        right_sql=(
-            "CREATE TABLE right_t AS SELECT * FROM "
-            "(VALUES (1, 'a', 'ignore2')) AS t(id, val, extra)"
-        ),
-        unique_key="id",
-        excluded_columns=("extra",),
-        expected_result=RowDiffResult(
-            left_count=1,
-            right_count=1,
-            joined_count=1,
-            equal_count=1,
-            unequal_count=0,
-            left_only_count=0,
-            right_only_count=0,
-            column_results=(RowDiffColumnResult(name="val", mismatched_count=0),),
-        ),
-    ),
-    DiffRowsTestCase(
-        description="allows absolute tolerance for numeric columns",
-        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
-        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.005)) AS t(id, amount)",
-        unique_key="id",
-        tolerances=RowDiffTolerances(
-            by_column={"amount": RowDiffTolerance(absolute=Decimal("0.01"))},
-        ),
-        expected_result=RowDiffResult(
-            left_count=1,
-            right_count=1,
-            joined_count=1,
-            equal_count=1,
-            unequal_count=0,
-            left_only_count=0,
-            right_only_count=0,
-            column_results=(
-                RowDiffColumnResult(
-                    name="amount",
-                    mismatched_count=0,
-                    tolerance=RowDiffTolerance(absolute=Decimal("0.01")),
-                ),
-            ),
-        ),
-    ),
-    DiffRowsTestCase(
-        description="allows relative tolerance for float columns",
-        left_sql=(
-            "CREATE TABLE left_t AS SELECT * FROM "
-            "(VALUES (1, CAST(1000000.0 AS DOUBLE))) AS t(id, metric)"
-        ),
-        right_sql=(
-            "CREATE TABLE right_t AS SELECT * FROM "
-            "(VALUES (1, CAST(1000050.0 AS DOUBLE))) AS t(id, metric)"
-        ),
-        unique_key="id",
-        tolerances=RowDiffTolerances(
-            by_type={"float": RowDiffTolerance(relative=Decimal("0.0001"))},
-        ),
-        expected_result=RowDiffResult(
-            left_count=1,
-            right_count=1,
-            joined_count=1,
-            equal_count=1,
-            unequal_count=0,
-            left_only_count=0,
-            right_only_count=0,
-            column_results=(
-                RowDiffColumnResult(
-                    name="metric",
-                    mismatched_count=0,
-                    tolerance=RowDiffTolerance(relative=Decimal("0.0001")),
-                ),
-            ),
-        ),
-    ),
-    DiffRowsTestCase(
-        description="reports numeric difference outside tolerance",
-        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
-        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.02)) AS t(id, amount)",
-        unique_key="id",
-        tolerances=RowDiffTolerances(
-            by_column={"amount": RowDiffTolerance(absolute=Decimal("0.01"))},
-        ),
-        expected_result=RowDiffResult(
-            left_count=1,
-            right_count=1,
-            joined_count=1,
-            equal_count=0,
-            unequal_count=1,
-            left_only_count=0,
-            right_only_count=0,
-            column_results=(
-                RowDiffColumnResult(
-                    name="amount",
-                    mismatched_count=1,
-                    tolerance=RowDiffTolerance(absolute=Decimal("0.01")),
-                ),
-            ),
-        ),
-    ),
-    DiffRowsTestCase(
-        description="uses larger of absolute and relative tolerance",
-        left_sql=(
-            "CREATE TABLE left_t AS SELECT * FROM "
-            "(VALUES (1, CAST(1000000.0 AS DOUBLE))) AS t(id, metric)"
-        ),
-        right_sql=(
-            "CREATE TABLE right_t AS SELECT * FROM "
-            "(VALUES (1, CAST(1000050.0 AS DOUBLE))) AS t(id, metric)"
-        ),
-        unique_key="id",
-        tolerances=RowDiffTolerances(
-            by_column={
-                "metric": RowDiffTolerance(
-                    absolute=Decimal("0.01"),
-                    relative=Decimal("0.0001"),
-                )
-            },
-        ),
-        expected_result=RowDiffResult(
-            left_count=1,
-            right_count=1,
-            joined_count=1,
-            equal_count=1,
-            unequal_count=0,
-            left_only_count=0,
-            right_only_count=0,
-            column_results=(
-                RowDiffColumnResult(
-                    name="metric",
-                    mismatched_count=0,
-                    tolerance=RowDiffTolerance(
-                        absolute=Decimal("0.01"),
-                        relative=Decimal("0.0001"),
-                    ),
-                ),
-            ),
-        ),
-    ),
-    DiffRowsTestCase(
-        description="keeps null versus value different with tolerance",
-        left_sql=(
-            "CREATE TABLE left_t AS SELECT * FROM "
-            "(VALUES (1, CAST(NULL AS DOUBLE))) AS t(id, amount)"
-        ),
-        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
-        unique_key="id",
-        tolerances=RowDiffTolerances(
-            by_column={"amount": RowDiffTolerance(absolute=Decimal("1000"))},
-        ),
-        expected_result=RowDiffResult(
-            left_count=1,
-            right_count=1,
-            joined_count=1,
-            equal_count=0,
-            unequal_count=1,
-            left_only_count=0,
-            right_only_count=0,
-            column_results=(
-                RowDiffColumnResult(
-                    name="amount",
-                    mismatched_count=1,
-                    tolerance=RowDiffTolerance(absolute=Decimal("1000")),
-                ),
-            ),
-        ),
-    ),
-]
-
-DIFF_ROWS_ERROR_TEST_CASES: list[DiffRowsErrorTestCase] = [
-    DiffRowsErrorTestCase(
-        description="rejects tolerance for non numeric column",
-        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
-        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'b')) AS t(id, status)",
-        unique_key="id",
-        tolerances=RowDiffTolerances(
-            by_column={"status": RowDiffTolerance(absolute=Decimal("1"))},
-        ),
-        expected_error_fragment="row diff tolerance for non-numeric column 'status' is invalid",
-    ),
-    DiffRowsErrorTestCase(
-        description="rejects empty tolerance",
-        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.0)) AS t(id, amount)",
-        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.0)) AS t(id, amount)",
-        unique_key="id",
-        tolerances=RowDiffTolerances(by_column={"amount": RowDiffTolerance()}),
-        expected_error_fragment="must define absolute or relative",
-    ),
-    DiffRowsErrorTestCase(
-        description="rejects null left unique key",
-        left_sql=(
-            "CREATE TABLE left_t AS SELECT * FROM "
-            "(VALUES (CAST(NULL AS INTEGER), 'a')) AS t(id, status)"
-        ),
-        right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
-        unique_key="id",
-        expected_error_fragment="left relation contains null unique_key values",
-    ),
-    DiffRowsErrorTestCase(
-        description="rejects duplicate right unique key",
-        left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
-        right_sql=(
-            "CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'a'), (1, 'b')) AS t(id, status)"
-        ),
-        unique_key="id",
-        expected_error_fragment="right relation contains duplicate unique_key values",
-    ),
-    DiffRowsErrorTestCase(
-        description="rejects null composite unique key component",
-        left_sql=(
-            "CREATE TABLE left_t AS SELECT * FROM "
-            "(VALUES (1, CAST(NULL AS INTEGER), 'a')) AS t(id, line_number, status)"
-        ),
-        right_sql=(
-            "CREATE TABLE right_t AS SELECT * FROM "
-            "(VALUES (1, 1, 'a')) AS t(id, line_number, status)"
-        ),
-        unique_key=("id", "line_number"),
-        expected_error_fragment="left relation contains null unique_key values",
-    ),
-    DiffRowsErrorTestCase(
-        description="rejects duplicate composite unique key",
-        left_sql=(
-            "CREATE TABLE left_t AS SELECT * FROM "
-            "(VALUES (1, 1, 'a'), (1, 1, 'b')) AS t(id, line_number, status)"
-        ),
-        right_sql=(
-            "CREATE TABLE right_t AS SELECT * FROM "
-            "(VALUES (1, 1, 'a')) AS t(id, line_number, status)"
-        ),
-        unique_key=("id", "line_number"),
-        expected_error_fragment="left relation contains duplicate unique_key values",
-    ),
-]
-
-COUNT_ROWS_TEST_CASES: list[CountRowsTestCase] = [
-    CountRowsTestCase(
-        description="counts all rows without cursor filter",
-        setup_sql=(
-            "CREATE TABLE count_t (id INTEGER)",
-            "INSERT INTO count_t VALUES (1), (2), (3)",
-        ),
-        relation="count_t",
-        expected_count=3,
-    ),
-    CountRowsTestCase(
-        description="counts rows bounded by integer cursor",
-        setup_sql=(
-            "CREATE TABLE count_bounded (id INTEGER)",
-            "INSERT INTO count_bounded VALUES (1), (2), (3), (4), (5)",
-        ),
-        relation="count_bounded",
-        cursor_column="id",
-        start_cursor=CursorValue(kind=CursorKind.INTEGER, value=2),
-        end_cursor=CursorValue(kind=CursorKind.INTEGER, value=4),
-        expected_count=2,
-    ),
-]
-
-LOAD_SEED_TEST_CASES: list[LoadSeedTestCase] = [
-    LoadSeedTestCase(
-        description="loads csv with explicit column types",
-        csv_content="id,name\n1,alice\n2,bob\n",
-        columns=(
-            ColumnInfo(name="id", type="INTEGER"),
-            ColumnInfo(name="name", type="VARCHAR"),
-        ),
-        infer_types=False,
-        expected_row_count=2,
-        expected_first_row=(1, "alice"),
-    ),
-    LoadSeedTestCase(
-        description="loads csv with inferred types",
-        csv_content="id,name\n1,alice\n2,bob\n",
-        columns=(),
-        infer_types=True,
-        expected_row_count=2,
-        expected_first_row=(1, "alice"),
-    ),
-    LoadSeedTestCase(
-        description="loads csv with custom delimiter",
-        csv_content="id|name\n1|alice\n2|bob\n",
-        columns=(
-            ColumnInfo(name="id", type="INTEGER"),
-            ColumnInfo(name="name", type="VARCHAR"),
-        ),
-        infer_types=False,
-        expected_row_count=2,
-        expected_first_row=(1, "alice"),
-        csv_settings=SeedCsvSettings(delimiter="|"),
-        expected_recorded_fragment="delim='|'",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    CONNECT_TEST_CASES,
-    ids=[case.description for case in CONNECT_TEST_CASES],
+    [
+        ConnectTestCase(
+            description="connects with default in-memory database",
+            config={},
+            expected_connects=True,
+        ),
+        ConnectTestCase(
+            description="connects with explicit memory database",
+            config={"database": ":memory:"},
+            expected_connects=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_config_when_connecting_then_returns_usable_connection(
     test_case: ConnectTestCase,
@@ -531,7 +126,7 @@ def test_given_config_when_connecting_then_returns_usable_connection(
             expected_setting_value="1",
         ),
     ],
-    ids=["applies settings from config"],
+    ids=lambda case: case.description,
 )
 def test_given_config_with_settings_when_connecting_then_applies_settings(
     test_case: ConnectSettingsTestCase,
@@ -546,8 +141,25 @@ def test_given_config_with_settings_when_connecting_then_applies_settings(
 
 @pytest.mark.parametrize(
     "test_case",
-    QUERY_TEST_CASES,
-    ids=[case.description for case in QUERY_TEST_CASES],
+    [
+        QueryTestCase(
+            description="returns rows and marks limit truncation",
+            sql="SELECT * FROM (VALUES (1, 'alice'), (2, 'bob')) AS t(id, name) ORDER BY id",
+            limit=1,
+            expected_result=QueryResult(
+                columns=("id", "name"),
+                rows=((1, "alice"),),
+                truncated=True,
+            ),
+        ),
+        QueryTestCase(
+            description="returns all rows without limit",
+            sql="SELECT * FROM (VALUES (1), (2)) AS t(id) ORDER BY id",
+            limit=None,
+            expected_result=QueryResult(columns=("id",), rows=((1,), (2,))),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sql_when_querying_then_returns_normalized_query_result(
     test_case: QueryTestCase,
@@ -561,8 +173,25 @@ def test_given_sql_when_querying_then_returns_normalized_query_result(
 
 @pytest.mark.parametrize(
     "test_case",
-    RELATION_EXISTS_TEST_CASES,
-    ids=[case.description for case in RELATION_EXISTS_TEST_CASES],
+    [
+        RelationExistsTestCase(
+            description="returns true for existing table",
+            setup_sql=("CREATE TABLE test_table (id INTEGER)",),
+            database=None,
+            schema=None,
+            name="test_table",
+            expected_exists=True,
+        ),
+        RelationExistsTestCase(
+            description="returns false for non-existing table",
+            setup_sql=(),
+            database=None,
+            schema=None,
+            name="missing_table",
+            expected_exists=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_relation_state_when_checking_exists_then_returns_expected(
     test_case: RelationExistsTestCase,
@@ -583,54 +212,51 @@ def test_given_relation_state_when_checking_exists_then_returns_expected(
     assert result == test_case.expected_exists
 
 
-LIST_RELATIONS_TEST_CASES: list[ListRelationsTestCase] = [
-    ListRelationsTestCase(
-        description="lists only relations in the requested schemas",
-        setup_sql=(
-            "CREATE TABLE orders (id INTEGER)",
-            "CREATE VIEW orders_view AS SELECT id FROM orders",
-            "CREATE SCHEMA other_schema",
-            "CREATE TABLE other_schema.hidden (id INTEGER)",
-        ),
-        database=None,
-        schemas=("main",),
-        names=None,
-        expected_names=("orders", "orders_view"),
-    ),
-    ListRelationsTestCase(
-        description="lists relations across multiple requested schemas",
-        setup_sql=(
-            "CREATE TABLE orders (id INTEGER)",
-            "CREATE SCHEMA staging",
-            "CREATE TABLE staging.raw_orders (id INTEGER)",
-            "CREATE SCHEMA excluded",
-            "CREATE TABLE excluded.hidden (id INTEGER)",
-        ),
-        database=None,
-        schemas=("main", "staging"),
-        names=None,
-        expected_names=("orders", "raw_orders"),
-    ),
-    ListRelationsTestCase(
-        description="lists only requested relation names across schemas",
-        setup_sql=(
-            "CREATE TABLE orders (id INTEGER)",
-            "CREATE TABLE customers (id INTEGER)",
-            "CREATE SCHEMA staging",
-            "CREATE TABLE staging.raw_orders (id INTEGER)",
-        ),
-        database=None,
-        schemas=("main", "staging"),
-        names=("orders", "raw_orders"),
-        expected_names=("orders", "raw_orders"),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    LIST_RELATIONS_TEST_CASES,
-    ids=[case.description for case in LIST_RELATIONS_TEST_CASES],
+    [
+        ListRelationsTestCase(
+            description="lists only relations in the requested schemas",
+            setup_sql=(
+                "CREATE TABLE orders (id INTEGER)",
+                "CREATE VIEW orders_view AS SELECT id FROM orders",
+                "CREATE SCHEMA other_schema",
+                "CREATE TABLE other_schema.hidden (id INTEGER)",
+            ),
+            database=None,
+            schemas=("main",),
+            names=None,
+            expected_names=("orders", "orders_view"),
+        ),
+        ListRelationsTestCase(
+            description="lists relations across multiple requested schemas",
+            setup_sql=(
+                "CREATE TABLE orders (id INTEGER)",
+                "CREATE SCHEMA staging",
+                "CREATE TABLE staging.raw_orders (id INTEGER)",
+                "CREATE SCHEMA excluded",
+                "CREATE TABLE excluded.hidden (id INTEGER)",
+            ),
+            database=None,
+            schemas=("main", "staging"),
+            names=None,
+            expected_names=("orders", "raw_orders"),
+        ),
+        ListRelationsTestCase(
+            description="lists only requested relation names across schemas",
+            setup_sql=(
+                "CREATE TABLE orders (id INTEGER)",
+                "CREATE TABLE customers (id INTEGER)",
+                "CREATE SCHEMA staging",
+                "CREATE TABLE staging.raw_orders (id INTEGER)",
+            ),
+            database=None,
+            schemas=("main", "staging"),
+            names=("orders", "raw_orders"),
+            expected_names=("orders", "raw_orders"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_schema_with_relations_when_listing_then_returns_expected_names(
     test_case: ListRelationsTestCase,
@@ -668,7 +294,7 @@ def test_given_schema_with_relations_when_listing_then_returns_expected_names(
             ),
         ),
     ],
-    ids=["returns columns with types in ordinal order"],
+    ids=lambda case: case.description,
 )
 def test_given_table_when_getting_columns_then_returns_typed_column_info(
     test_case: GetColumnsTestCase,
@@ -689,41 +315,38 @@ def test_given_table_when_getting_columns_then_returns_typed_column_info(
     assert columns == test_case.expected_columns
 
 
-GET_ALL_COLUMNS_TEST_CASES: list[GetAllColumnsTestCase] = [
-    GetAllColumnsTestCase(
-        description="returns all columns grouped by table name",
-        setup_sql=(
-            "CREATE TABLE t1 (a INTEGER, b VARCHAR)",
-            "CREATE TABLE t2 (x BOOLEAN)",
-        ),
-        database=None,
-        schemas=("main",),
-        names=None,
-        expected_columns_by_table={
-            "t1": (ColumnInfo(name="a", type="INTEGER"), ColumnInfo(name="b", type="VARCHAR")),
-            "t2": (ColumnInfo(name="x", type="BOOLEAN"),),
-        },
-    ),
-    GetAllColumnsTestCase(
-        description="returns only columns for requested table names",
-        setup_sql=(
-            "CREATE TABLE t1 (a INTEGER, b VARCHAR)",
-            "CREATE TABLE t2 (x BOOLEAN)",
-        ),
-        database=None,
-        schemas=("main",),
-        names=("t1",),
-        expected_columns_by_table={
-            "t1": (ColumnInfo(name="a", type="INTEGER"), ColumnInfo(name="b", type="VARCHAR")),
-        },
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    GET_ALL_COLUMNS_TEST_CASES,
-    ids=[case.description for case in GET_ALL_COLUMNS_TEST_CASES],
+    [
+        GetAllColumnsTestCase(
+            description="returns all columns grouped by table name",
+            setup_sql=(
+                "CREATE TABLE t1 (a INTEGER, b VARCHAR)",
+                "CREATE TABLE t2 (x BOOLEAN)",
+            ),
+            database=None,
+            schemas=("main",),
+            names=None,
+            expected_columns_by_table={
+                "t1": (ColumnInfo(name="a", type="INTEGER"), ColumnInfo(name="b", type="VARCHAR")),
+                "t2": (ColumnInfo(name="x", type="BOOLEAN"),),
+            },
+        ),
+        GetAllColumnsTestCase(
+            description="returns only columns for requested table names",
+            setup_sql=(
+                "CREATE TABLE t1 (a INTEGER, b VARCHAR)",
+                "CREATE TABLE t2 (x BOOLEAN)",
+            ),
+            database=None,
+            schemas=("main",),
+            names=("t1",),
+            expected_columns_by_table={
+                "t1": (ColumnInfo(name="a", type="INTEGER"), ColumnInfo(name="b", type="VARCHAR")),
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_schema_with_tables_when_getting_all_columns_then_returns_grouped(
     test_case: GetAllColumnsTestCase,
@@ -757,7 +380,7 @@ def test_given_schema_with_tables_when_getting_all_columns_then_returns_grouped(
             expected_row_count=4,
         ),
     ],
-    ids=["creates writable table from select"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_when_creating_table_as_then_table_is_writable(
     test_case: MaterializeTestCase,
@@ -791,7 +414,7 @@ def test_given_sql_when_creating_table_as_then_table_is_writable(
             ),
         )
     ],
-    ids=["create_table_as records rendered statement before execution"],
+    ids=lambda case: case.description,
 )
 def test_given_statement_recorder_when_creating_table_then_records_expected_sql(
     test_case: RecorderWriteTestCase,
@@ -837,7 +460,7 @@ def test_given_statement_recorder_when_creating_table_then_records_expected_sql(
             unique_key="id",
         )
     ],
-    ids=["delete_insert records delete and insert statements before execution"],
+    ids=lambda case: case.description,
 )
 def test_given_statement_recorder_when_delete_inserting_then_records_expected_sql(
     test_case: RecorderWriteTestCase,
@@ -874,7 +497,7 @@ def test_given_statement_recorder_when_delete_inserting_then_records_expected_sq
             expected_row_count=2,
         ),
     ],
-    ids=["creates view from select"],
+    ids=lambda case: case.description,
 )
 def test_given_source_table_when_creating_view_then_view_reflects_source(
     test_case: MaterializeTestCase,
@@ -905,7 +528,7 @@ def test_given_source_table_when_creating_view_then_view_reflects_source(
             expected_exists=False,
         ),
     ],
-    ids=["drops existing table"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_table_when_dropping_then_table_no_longer_exists(
     test_case: DropTestCase,
@@ -938,7 +561,7 @@ def test_given_existing_table_when_dropping_then_table_no_longer_exists(
             expected_target_exists=True,
         ),
     ],
-    ids=["renames table"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_table_when_renaming_then_new_name_exists(
     test_case: RenameTestCase,
@@ -981,7 +604,7 @@ def test_given_existing_table_when_renaming_then_new_name_exists(
             expected_target_exists=True,
         ),
     ],
-    ids=["move-or-copy uses native rename within one schema"],
+    ids=lambda case: case.description,
 )
 def test_given_same_schema_table_when_moving_without_copy_then_native_rename_is_used(
     test_case: RenameTestCase,
@@ -1026,7 +649,7 @@ def test_given_same_schema_table_when_moving_without_copy_then_native_rename_is_
             expected_right_value="left",
         ),
     ],
-    ids=["swaps two tables"],
+    ids=lambda case: case.description,
 )
 def test_given_two_tables_when_swapping_then_contents_are_exchanged(
     test_case: SwapTestCase,
@@ -1056,7 +679,7 @@ def test_given_two_tables_when_swapping_then_contents_are_exchanged(
             expected_row_count=3,
         ),
     ],
-    ids=["clones table contents"],
+    ids=lambda case: case.description,
 )
 def test_given_source_table_when_cloning_then_target_has_same_rows(
     test_case: MaterializeTestCase,
@@ -1089,7 +712,7 @@ def test_given_source_table_when_cloning_then_target_has_same_rows(
             expected_row_count=3,
         ),
     ],
-    ids=["appends rows to existing table"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_table_when_appending_then_row_count_increases(
     test_case: MaterializeTestCase,
@@ -1110,61 +733,33 @@ def test_given_existing_table_when_appending_then_row_count_increases(
     assert count == test_case.expected_row_count
 
 
-DELETE_INSERT_TEST_CASES: list[DeleteInsertTestCase] = [
-    DeleteInsertTestCase(
-        description="delete inserts by unique key",
-        setup_sql=(
-            "CREATE TABLE di_target (id INTEGER, val VARCHAR)",
-            "INSERT INTO di_target VALUES (1, 'old'), (2, 'keep')",
-        ),
-        sql="SELECT * FROM (VALUES (1, 'new')) AS t(id, val)",
-        unique_key="id",
-        expected_row_count=2,
-        expected_updated_value="new",
-    ),
-    DeleteInsertTestCase(
-        description="removes duplicate target rows when source is deduplicated",
-        setup_sql=(
-            "CREATE TABLE di_target (id INTEGER, val VARCHAR)",
-            "INSERT INTO di_target VALUES (1, 'dup_a'), (1, 'dup_b'), (2, 'keep')",
-        ),
-        sql="SELECT * FROM (VALUES (1, 'fixed')) AS t(id, val)",
-        unique_key="id",
-        expected_row_count=2,
-        expected_updated_value="fixed",
-    ),
-]
-
-MERGE_TEST_CASES: list[MergeTestCase] = [
-    MergeTestCase(
-        description="inserts new rows and updates existing via merge",
-        setup_sql=(
-            "CREATE TABLE merge_target (id INTEGER, name VARCHAR)",
-            "INSERT INTO merge_target VALUES (1, 'alice'), (2, 'bob')",
-        ),
-        source_sql="SELECT * FROM (VALUES (2, 'robert'), (3, 'charlie')) AS t(id, name)",
-        unique_key="id",
-        expected_row_count=3,
-        expected_values=((1, "alice"), (2, "robert"), (3, "charlie")),
-    ),
-    MergeTestCase(
-        description="preserves duplicate target rows that upsert cannot remove",
-        setup_sql=(
-            "CREATE TABLE merge_target (id INTEGER, name VARCHAR)",
-            "INSERT INTO merge_target VALUES (1, 'dup_a'), (1, 'dup_b'), (2, 'bob')",
-        ),
-        source_sql="SELECT * FROM (VALUES (1, 'fixed')) AS t(id, name)",
-        unique_key="id",
-        expected_row_count=3,
-        expected_values=((1, "fixed"), (1, "fixed"), (2, "bob")),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DELETE_INSERT_TEST_CASES,
-    ids=[case.description for case in DELETE_INSERT_TEST_CASES],
+    [
+        DeleteInsertTestCase(
+            description="delete inserts by unique key",
+            setup_sql=(
+                "CREATE TABLE di_target (id INTEGER, val VARCHAR)",
+                "INSERT INTO di_target VALUES (1, 'old'), (2, 'keep')",
+            ),
+            sql="SELECT * FROM (VALUES (1, 'new')) AS t(id, val)",
+            unique_key="id",
+            expected_row_count=2,
+            expected_updated_value="new",
+        ),
+        DeleteInsertTestCase(
+            description="removes duplicate target rows when source is deduplicated",
+            setup_sql=(
+                "CREATE TABLE di_target (id INTEGER, val VARCHAR)",
+                "INSERT INTO di_target VALUES (1, 'dup_a'), (1, 'dup_b'), (2, 'keep')",
+            ),
+            sql="SELECT * FROM (VALUES (1, 'fixed')) AS t(id, val)",
+            unique_key="id",
+            expected_row_count=2,
+            expected_updated_value="fixed",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_target_when_delete_inserting_then_matching_rows_replaced(
     test_case: DeleteInsertTestCase,
@@ -1190,8 +785,31 @@ def test_given_target_when_delete_inserting_then_matching_rows_replaced(
 
 @pytest.mark.parametrize(
     "test_case",
-    MERGE_TEST_CASES,
-    ids=[case.description for case in MERGE_TEST_CASES],
+    [
+        MergeTestCase(
+            description="inserts new rows and updates existing via merge",
+            setup_sql=(
+                "CREATE TABLE merge_target (id INTEGER, name VARCHAR)",
+                "INSERT INTO merge_target VALUES (1, 'alice'), (2, 'bob')",
+            ),
+            source_sql="SELECT * FROM (VALUES (2, 'robert'), (3, 'charlie')) AS t(id, name)",
+            unique_key="id",
+            expected_row_count=3,
+            expected_values=((1, "alice"), (2, "robert"), (3, "charlie")),
+        ),
+        MergeTestCase(
+            description="preserves duplicate target rows that upsert cannot remove",
+            setup_sql=(
+                "CREATE TABLE merge_target (id INTEGER, name VARCHAR)",
+                "INSERT INTO merge_target VALUES (1, 'dup_a'), (1, 'dup_b'), (2, 'bob')",
+            ),
+            source_sql="SELECT * FROM (VALUES (1, 'fixed')) AS t(id, name)",
+            unique_key="id",
+            expected_row_count=3,
+            expected_values=((1, "fixed"), (1, "fixed"), (2, "bob")),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_target_and_source_when_merging_then_upserts_correctly(
     test_case: MergeTestCase,
@@ -1219,8 +837,41 @@ def test_given_target_and_source_when_merging_then_upserts_correctly(
 
 @pytest.mark.parametrize(
     "test_case",
-    LOAD_SEED_TEST_CASES,
-    ids=[case.description for case in LOAD_SEED_TEST_CASES],
+    [
+        LoadSeedTestCase(
+            description="loads csv with explicit column types",
+            csv_content="id,name\n1,alice\n2,bob\n",
+            columns=(
+                ColumnInfo(name="id", type="INTEGER"),
+                ColumnInfo(name="name", type="VARCHAR"),
+            ),
+            infer_types=False,
+            expected_row_count=2,
+            expected_first_row=(1, "alice"),
+        ),
+        LoadSeedTestCase(
+            description="loads csv with inferred types",
+            csv_content="id,name\n1,alice\n2,bob\n",
+            columns=(),
+            infer_types=True,
+            expected_row_count=2,
+            expected_first_row=(1, "alice"),
+        ),
+        LoadSeedTestCase(
+            description="loads csv with custom delimiter",
+            csv_content="id|name\n1|alice\n2|bob\n",
+            columns=(
+                ColumnInfo(name="id", type="INTEGER"),
+                ColumnInfo(name="name", type="VARCHAR"),
+            ),
+            infer_types=False,
+            expected_row_count=2,
+            expected_first_row=(1, "alice"),
+            csv_settings=SeedCsvSettings(delimiter="|"),
+            expected_recorded_fragment="delim='|'",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
     test_case: LoadSeedTestCase,
@@ -1264,8 +915,48 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_SCHEMA_TEST_CASES,
-    ids=[case.description for case in DIFF_SCHEMA_TEST_CASES],
+    [
+        DiffSchemaTestCase(
+            description="detects added removed and type changed columns",
+            left_sql="CREATE TABLE left_t (id INTEGER, name VARCHAR, old_col BOOLEAN)",
+            right_sql="CREATE TABLE right_t (id BIGINT, name VARCHAR, new_col DATE)",
+            expected_result=SchemaDiffResult(
+                added_columns=(ColumnInfo(name="new_col", type="DATE"),),
+                removed_columns=(ColumnInfo(name="old_col", type="BOOLEAN"),),
+                type_changed_columns=(
+                    (
+                        ColumnInfo(name="id", type="INTEGER"),
+                        ColumnInfo(name="id", type="BIGINT"),
+                    ),
+                ),
+            ),
+        ),
+        DiffSchemaTestCase(
+            description="returns empty result for identical schemas",
+            left_sql="CREATE TABLE left_t (id INTEGER, name VARCHAR)",
+            right_sql="CREATE TABLE right_t (id INTEGER, name VARCHAR)",
+            expected_result=SchemaDiffResult(),
+        ),
+        DiffSchemaTestCase(
+            description="ignores equivalent scalar aliases and detects numeric scale changes",
+            left_sql=(
+                "CREATE TABLE left_t ("
+                "id INTEGER, flag BOOLEAN, amount DECIMAL(10,2), widened DECIMAL(10,2))"
+            ),
+            right_sql=(
+                "CREATE TABLE right_t (id INT, flag BOOL, amount NUMERIC(10,2), widened NUMERIC(10,3))"
+            ),
+            expected_result=SchemaDiffResult(
+                type_changed_columns=(
+                    (
+                        ColumnInfo(name="widened", type="DECIMAL(10,2)"),
+                        ColumnInfo(name="widened", type="DECIMAL(10,3)"),
+                    ),
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_two_tables_when_diffing_schema_then_returns_expected_differences(
     test_case: DiffSchemaTestCase,
@@ -1282,8 +973,201 @@ def test_given_two_tables_when_diffing_schema_then_returns_expected_differences(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_ROWS_TEST_CASES,
-    ids=[case.description for case in DIFF_ROWS_TEST_CASES],
+    [
+        DiffRowsTestCase(
+            description="detects matching mismatched and missing rows",
+            left_sql=(
+                "CREATE TABLE left_t AS SELECT * FROM "
+                "(VALUES (1, 'a'), (2, 'b'), (3, 'c')) AS t(id, val)"
+            ),
+            right_sql=(
+                "CREATE TABLE right_t AS SELECT * FROM "
+                "(VALUES (1, 'a'), (2, 'x'), (4, 'd')) AS t(id, val)"
+            ),
+            unique_key="id",
+            expected_result=RowDiffResult(
+                left_count=3,
+                right_count=3,
+                joined_count=4,
+                equal_count=1,
+                unequal_count=1,
+                left_only_count=1,
+                right_only_count=1,
+                column_results=(RowDiffColumnResult(name="val", mismatched_count=1),),
+            ),
+        ),
+        DiffRowsTestCase(
+            description="excludes columns from comparison",
+            left_sql=(
+                "CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 'a', 'ignore1')) AS t(id, val, extra)"
+            ),
+            right_sql=(
+                "CREATE TABLE right_t AS SELECT * FROM "
+                "(VALUES (1, 'a', 'ignore2')) AS t(id, val, extra)"
+            ),
+            unique_key="id",
+            excluded_columns=("extra",),
+            expected_result=RowDiffResult(
+                left_count=1,
+                right_count=1,
+                joined_count=1,
+                equal_count=1,
+                unequal_count=0,
+                left_only_count=0,
+                right_only_count=0,
+                column_results=(RowDiffColumnResult(name="val", mismatched_count=0),),
+            ),
+        ),
+        DiffRowsTestCase(
+            description="allows absolute tolerance for numeric columns",
+            left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
+            right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.005)) AS t(id, amount)",
+            unique_key="id",
+            tolerances=RowDiffTolerances(
+                by_column={"amount": RowDiffTolerance(absolute=Decimal("0.01"))},
+            ),
+            expected_result=RowDiffResult(
+                left_count=1,
+                right_count=1,
+                joined_count=1,
+                equal_count=1,
+                unequal_count=0,
+                left_only_count=0,
+                right_only_count=0,
+                column_results=(
+                    RowDiffColumnResult(
+                        name="amount",
+                        mismatched_count=0,
+                        tolerance=RowDiffTolerance(absolute=Decimal("0.01")),
+                    ),
+                ),
+            ),
+        ),
+        DiffRowsTestCase(
+            description="allows relative tolerance for float columns",
+            left_sql=(
+                "CREATE TABLE left_t AS SELECT * FROM "
+                "(VALUES (1, CAST(1000000.0 AS DOUBLE))) AS t(id, metric)"
+            ),
+            right_sql=(
+                "CREATE TABLE right_t AS SELECT * FROM "
+                "(VALUES (1, CAST(1000050.0 AS DOUBLE))) AS t(id, metric)"
+            ),
+            unique_key="id",
+            tolerances=RowDiffTolerances(
+                by_type={"float": RowDiffTolerance(relative=Decimal("0.0001"))},
+            ),
+            expected_result=RowDiffResult(
+                left_count=1,
+                right_count=1,
+                joined_count=1,
+                equal_count=1,
+                unequal_count=0,
+                left_only_count=0,
+                right_only_count=0,
+                column_results=(
+                    RowDiffColumnResult(
+                        name="metric",
+                        mismatched_count=0,
+                        tolerance=RowDiffTolerance(relative=Decimal("0.0001")),
+                    ),
+                ),
+            ),
+        ),
+        DiffRowsTestCase(
+            description="reports numeric difference outside tolerance",
+            left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
+            right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.02)) AS t(id, amount)",
+            unique_key="id",
+            tolerances=RowDiffTolerances(
+                by_column={"amount": RowDiffTolerance(absolute=Decimal("0.01"))},
+            ),
+            expected_result=RowDiffResult(
+                left_count=1,
+                right_count=1,
+                joined_count=1,
+                equal_count=0,
+                unequal_count=1,
+                left_only_count=0,
+                right_only_count=0,
+                column_results=(
+                    RowDiffColumnResult(
+                        name="amount",
+                        mismatched_count=1,
+                        tolerance=RowDiffTolerance(absolute=Decimal("0.01")),
+                    ),
+                ),
+            ),
+        ),
+        DiffRowsTestCase(
+            description="uses larger of absolute and relative tolerance",
+            left_sql=(
+                "CREATE TABLE left_t AS SELECT * FROM "
+                "(VALUES (1, CAST(1000000.0 AS DOUBLE))) AS t(id, metric)"
+            ),
+            right_sql=(
+                "CREATE TABLE right_t AS SELECT * FROM "
+                "(VALUES (1, CAST(1000050.0 AS DOUBLE))) AS t(id, metric)"
+            ),
+            unique_key="id",
+            tolerances=RowDiffTolerances(
+                by_column={
+                    "metric": RowDiffTolerance(
+                        absolute=Decimal("0.01"),
+                        relative=Decimal("0.0001"),
+                    )
+                },
+            ),
+            expected_result=RowDiffResult(
+                left_count=1,
+                right_count=1,
+                joined_count=1,
+                equal_count=1,
+                unequal_count=0,
+                left_only_count=0,
+                right_only_count=0,
+                column_results=(
+                    RowDiffColumnResult(
+                        name="metric",
+                        mismatched_count=0,
+                        tolerance=RowDiffTolerance(
+                            absolute=Decimal("0.01"),
+                            relative=Decimal("0.0001"),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        DiffRowsTestCase(
+            description="keeps null versus value different with tolerance",
+            left_sql=(
+                "CREATE TABLE left_t AS SELECT * FROM "
+                "(VALUES (1, CAST(NULL AS DOUBLE))) AS t(id, amount)"
+            ),
+            right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.00)) AS t(id, amount)",
+            unique_key="id",
+            tolerances=RowDiffTolerances(
+                by_column={"amount": RowDiffTolerance(absolute=Decimal("1000"))},
+            ),
+            expected_result=RowDiffResult(
+                left_count=1,
+                right_count=1,
+                joined_count=1,
+                equal_count=0,
+                unequal_count=1,
+                left_only_count=0,
+                right_only_count=0,
+                column_results=(
+                    RowDiffColumnResult(
+                        name="amount",
+                        mismatched_count=1,
+                        tolerance=RowDiffTolerance(absolute=Decimal("1000")),
+                    ),
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_two_tables_when_diffing_rows_then_returns_expected_counts(
     test_case: DiffRowsTestCase,
@@ -1310,8 +1194,72 @@ def test_given_two_tables_when_diffing_rows_then_returns_expected_counts(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIFF_ROWS_ERROR_TEST_CASES,
-    ids=[case.description for case in DIFF_ROWS_ERROR_TEST_CASES],
+    [
+        DiffRowsErrorTestCase(
+            description="rejects tolerance for non numeric column",
+            left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
+            right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'b')) AS t(id, status)",
+            unique_key="id",
+            tolerances=RowDiffTolerances(
+                by_column={"status": RowDiffTolerance(absolute=Decimal("1"))},
+            ),
+            expected_error_fragment="row diff tolerance for non-numeric column 'status' is invalid",
+        ),
+        DiffRowsErrorTestCase(
+            description="rejects empty tolerance",
+            left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 100.0)) AS t(id, amount)",
+            right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 100.0)) AS t(id, amount)",
+            unique_key="id",
+            tolerances=RowDiffTolerances(by_column={"amount": RowDiffTolerance()}),
+            expected_error_fragment="must define absolute or relative",
+        ),
+        DiffRowsErrorTestCase(
+            description="rejects null left unique key",
+            left_sql=(
+                "CREATE TABLE left_t AS SELECT * FROM "
+                "(VALUES (CAST(NULL AS INTEGER), 'a')) AS t(id, status)"
+            ),
+            right_sql="CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
+            unique_key="id",
+            expected_error_fragment="left relation contains null unique_key values",
+        ),
+        DiffRowsErrorTestCase(
+            description="rejects duplicate right unique key",
+            left_sql="CREATE TABLE left_t AS SELECT * FROM (VALUES (1, 'a')) AS t(id, status)",
+            right_sql=(
+                "CREATE TABLE right_t AS SELECT * FROM (VALUES (1, 'a'), (1, 'b')) AS t(id, status)"
+            ),
+            unique_key="id",
+            expected_error_fragment="right relation contains duplicate unique_key values",
+        ),
+        DiffRowsErrorTestCase(
+            description="rejects null composite unique key component",
+            left_sql=(
+                "CREATE TABLE left_t AS SELECT * FROM "
+                "(VALUES (1, CAST(NULL AS INTEGER), 'a')) AS t(id, line_number, status)"
+            ),
+            right_sql=(
+                "CREATE TABLE right_t AS SELECT * FROM "
+                "(VALUES (1, 1, 'a')) AS t(id, line_number, status)"
+            ),
+            unique_key=("id", "line_number"),
+            expected_error_fragment="left relation contains null unique_key values",
+        ),
+        DiffRowsErrorTestCase(
+            description="rejects duplicate composite unique key",
+            left_sql=(
+                "CREATE TABLE left_t AS SELECT * FROM "
+                "(VALUES (1, 1, 'a'), (1, 1, 'b')) AS t(id, line_number, status)"
+            ),
+            right_sql=(
+                "CREATE TABLE right_t AS SELECT * FROM "
+                "(VALUES (1, 1, 'a')) AS t(id, line_number, status)"
+            ),
+            unique_key=("id", "line_number"),
+            expected_error_fragment="left relation contains duplicate unique_key values",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_tolerance_when_diffing_rows_then_raises_clear_error(
     test_case: DiffRowsErrorTestCase,
@@ -1333,8 +1281,30 @@ def test_given_invalid_tolerance_when_diffing_rows_then_raises_clear_error(
 
 @pytest.mark.parametrize(
     "test_case",
-    COUNT_ROWS_TEST_CASES,
-    ids=[case.description for case in COUNT_ROWS_TEST_CASES],
+    [
+        CountRowsTestCase(
+            description="counts all rows without cursor filter",
+            setup_sql=(
+                "CREATE TABLE count_t (id INTEGER)",
+                "INSERT INTO count_t VALUES (1), (2), (3)",
+            ),
+            relation="count_t",
+            expected_count=3,
+        ),
+        CountRowsTestCase(
+            description="counts rows bounded by integer cursor",
+            setup_sql=(
+                "CREATE TABLE count_bounded (id INTEGER)",
+                "INSERT INTO count_bounded VALUES (1), (2), (3), (4), (5)",
+            ),
+            relation="count_bounded",
+            cursor_column="id",
+            start_cursor=CursorValue(kind=CursorKind.INTEGER, value=2),
+            end_cursor=CursorValue(kind=CursorKind.INTEGER, value=4),
+            expected_count=2,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_table_when_counting_rows_then_returns_expected_count(
     test_case: CountRowsTestCase,
@@ -1372,7 +1342,7 @@ def test_given_table_when_counting_rows_then_returns_expected_count(
             expected_rows_after_failure=((1, "keep"), (2, "keep")),
         ),
     ],
-    ids=["delete_insert rolls back delete when insert fails"],
+    ids=lambda case: case.description,
 )
 def test_given_failing_insert_when_delete_inserting_then_original_rows_preserved(
     test_case: TransactionalAtomicityTestCase,
@@ -1416,7 +1386,7 @@ def test_given_failing_insert_when_delete_inserting_then_original_rows_preserved
             expected_rows_after_failure=((1, "keep"), (2, "keep")),
         ),
     ],
-    ids=["delete_insert_cursor rolls back on NOT NULL failure"],
+    ids=lambda case: case.description,
 )
 def test_given_failing_insert_when_delete_insert_cursor_then_original_rows_preserved(
     test_case: TransactionalAtomicityTestCase,
@@ -1460,7 +1430,7 @@ def test_given_failing_insert_when_delete_insert_cursor_then_original_rows_prese
             expected_rows_after_failure=(("left",),),
         ),
     ],
-    ids=["swap rolls back partial renames on failure"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_right_table_when_swapping_then_left_table_preserved(
     test_case: TransactionalAtomicityTestCase,

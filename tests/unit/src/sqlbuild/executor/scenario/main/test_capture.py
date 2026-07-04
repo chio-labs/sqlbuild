@@ -37,28 +37,6 @@ from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
 )
 
 SCENARIO_PLAN: ScenarioExecutionPlan = build_scenario_cleanup_test_plan_with_project_seed()
-SCENARIO_SNAPSHOT_CAPTURE_LIMIT_TEST_CASES: tuple[
-    ExecuteScenarioSnapshotCaptureLimitTestCase, ...
-] = (
-    ExecuteScenarioSnapshotCaptureLimitTestCase(
-        description="row limit fails before downloading oversized relation",
-        limits=ScenarioSnapshotCaptureLimits(max_rows_per_relation=1),
-        expected_error_fragment="exceeding the per-relation capture limit",
-        expected_missing_relative_path=Path("sources/raw__orders.jsonl"),
-        expected_query_fragment="SELECT COUNT(*)",
-        unexpected_query_fragment=(
-            "SELECT * FROM `scenario_schema.__sqb_51b385aebe20__source__raw__orders`"
-        ),
-    ),
-    ExecuteScenarioSnapshotCaptureLimitTestCase(
-        description="byte limit removes partial jsonl",
-        limits=ScenarioSnapshotCaptureLimits(max_bytes_per_relation=1),
-        expected_error_fragment="would exceed the 1 byte limit",
-        expected_missing_relative_path=Path("refs/stg_customers.jsonl"),
-        expected_query_fragment="SELECT *",
-        unexpected_query_fragment="not-a-query-fragment",
-    ),
-)
 
 
 class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
@@ -246,7 +224,7 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
             ),
         )
     ],
-    ids=["captures materialized scenario inputs into JSONL and manifest"],
+    ids=lambda case: case.description,
 )
 def test_given_capture_plan_when_executing_snapshot_capture_then_writes_jsonl_and_manifest(
     test_case: ExecuteScenarioSnapshotCaptureTestCase,
@@ -309,8 +287,27 @@ def test_given_capture_plan_when_executing_snapshot_capture_then_writes_jsonl_an
 
 @pytest.mark.parametrize(
     "test_case",
-    SCENARIO_SNAPSHOT_CAPTURE_LIMIT_TEST_CASES,
-    ids=[case.description for case in SCENARIO_SNAPSHOT_CAPTURE_LIMIT_TEST_CASES],
+    (
+        ExecuteScenarioSnapshotCaptureLimitTestCase(
+            description="row limit fails before downloading oversized relation",
+            limits=ScenarioSnapshotCaptureLimits(max_rows_per_relation=1),
+            expected_error_fragment="exceeding the per-relation capture limit",
+            expected_missing_relative_path=Path("sources/raw__orders.jsonl"),
+            expected_query_fragment="SELECT COUNT(*)",
+            unexpected_query_fragment=(
+                "SELECT * FROM `scenario_schema.__sqb_51b385aebe20__source__raw__orders`"
+            ),
+        ),
+        ExecuteScenarioSnapshotCaptureLimitTestCase(
+            description="byte limit removes partial jsonl",
+            limits=ScenarioSnapshotCaptureLimits(max_bytes_per_relation=1),
+            expected_error_fragment="would exceed the 1 byte limit",
+            expected_missing_relative_path=Path("refs/stg_customers.jsonl"),
+            expected_query_fragment="SELECT *",
+            unexpected_query_fragment="not-a-query-fragment",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_capture_limit_when_executing_snapshot_capture_then_fails_safely(
     test_case: ExecuteScenarioSnapshotCaptureLimitTestCase,
@@ -387,7 +384,7 @@ def test_given_capture_limit_when_executing_snapshot_capture_then_fails_safely(
             expected_manifest_fragment="",
         )
     ],
-    ids=["returns failed result with relation context when warehouse read fails"],
+    ids=lambda case: case.description,
 )
 def test_given_capture_relation_read_failure_when_executing_then_returns_failed_result(
     test_case: ExecuteScenarioSnapshotCaptureTestCase,

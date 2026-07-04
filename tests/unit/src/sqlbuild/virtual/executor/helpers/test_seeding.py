@@ -109,49 +109,33 @@ class FakeStateBackend:
         self.ancestry_records.append(record)
 
 
-TEST_CASES: list[SeedingStrategyTestCase] = [
-    SeedingStrategyTestCase(
-        description="uses durable clone when adapter supports it",
-        incremental_strategy="delete_insert",
-        supports_durable_clone=True,
-        expected_strategy="durable_clone",
-        expected_sql_fragment="DEEP CLONE source_relation",
-    ),
-    SeedingStrategyTestCase(
-        description="uses copy when adapter lacks durable clone",
-        incremental_strategy="delete_insert",
-        supports_durable_clone=False,
-        expected_strategy="copy",
-        expected_sql_fragment="SELECT * FROM source_relation",
-    ),
-    SeedingStrategyTestCase(
-        description="uses bounded append copy before durable clone",
-        incremental_strategy="append",
-        supports_durable_clone=True,
-        expected_strategy="bounded_append_copy",
-        expected_sql_fragment='WHERE "ordered_at" < TIMESTAMP',
-    ),
-]
-
-IDEMPOTENCY_TEST_CASES: list[SeedingIdempotencyTestCase] = [
-    SeedingIdempotencyTestCase(
-        description="drops existing target before seeding",
-        target_exists=True,
-        expected_drop_count=1,
-        expected_ancestry_count=1,
-        expected_first_sql_prefix="DROP ",
-    ),
-    SeedingIdempotencyTestCase(
-        description="seeds missing target without drop",
-        target_exists=False,
-        expected_drop_count=0,
-        expected_ancestry_count=1,
-        expected_first_sql_prefix="CREATE OR REPLACE TABLE ",
-    ),
-]
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SeedingStrategyTestCase(
+            description="uses durable clone when adapter supports it",
+            incremental_strategy="delete_insert",
+            supports_durable_clone=True,
+            expected_strategy="durable_clone",
+            expected_sql_fragment="DEEP CLONE source_relation",
+        ),
+        SeedingStrategyTestCase(
+            description="uses copy when adapter lacks durable clone",
+            incremental_strategy="delete_insert",
+            supports_durable_clone=False,
+            expected_strategy="copy",
+            expected_sql_fragment="SELECT * FROM source_relation",
+        ),
+        SeedingStrategyTestCase(
+            description="uses bounded append copy before durable clone",
+            incremental_strategy="append",
+            supports_durable_clone=True,
+            expected_strategy="bounded_append_copy",
+            expected_sql_fragment='WHERE "ordered_at" < TIMESTAMP',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_incremental_seed_context_when_seeding_then_selects_expected_strategy(
     test_case: SeedingStrategyTestCase,
 ) -> None:
@@ -177,7 +161,24 @@ def test_given_incremental_seed_context_when_seeding_then_selects_expected_strat
 
 
 @pytest.mark.parametrize(
-    "test_case", IDEMPOTENCY_TEST_CASES, ids=[case.description for case in IDEMPOTENCY_TEST_CASES]
+    "test_case",
+    [
+        SeedingIdempotencyTestCase(
+            description="drops existing target before seeding",
+            target_exists=True,
+            expected_drop_count=1,
+            expected_ancestry_count=1,
+            expected_first_sql_prefix="DROP ",
+        ),
+        SeedingIdempotencyTestCase(
+            description="seeds missing target without drop",
+            target_exists=False,
+            expected_drop_count=0,
+            expected_ancestry_count=1,
+            expected_first_sql_prefix="CREATE OR REPLACE TABLE ",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_incremental_target_when_seeding_then_existing_target_is_dropped_first(
     test_case: SeedingIdempotencyTestCase,

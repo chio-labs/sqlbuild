@@ -19,35 +19,33 @@ from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     DiscoverMaterializationFilesTestCase,
 )
 
-TEST_CASES: list[DiscoverMaterializationFilesTestCase] = [
-    DiscoverMaterializationFilesTestCase(
-        description="discovers materialization files from materializations directory",
-        files={
-            "materializations/partition_tracked.py": "def materialize(ctx): pass\n",
-            "materializations/atomic_swap.py": "def materialize(ctx): pass\n",
-        },
-        expected_names=("atomic_swap", "partition_tracked"),
-    ),
-    DiscoverMaterializationFilesTestCase(
-        description="returns empty tuple when materializations directory does not exist",
-        files={},
-        expected_names=(),
-    ),
-    DiscoverMaterializationFilesTestCase(
-        description="skips __init__ files in materializations directory",
-        files={
-            "materializations/__init__.py": "",
-            "materializations/custom_one.py": "def materialize(ctx): pass\n",
-        },
-        expected_names=("custom_one",),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        DiscoverMaterializationFilesTestCase(
+            description="discovers materialization files from materializations directory",
+            files={
+                "materializations/partition_tracked.py": "def materialize(ctx): pass\n",
+                "materializations/atomic_swap.py": "def materialize(ctx): pass\n",
+            },
+            expected_names=("atomic_swap", "partition_tracked"),
+        ),
+        DiscoverMaterializationFilesTestCase(
+            description="returns empty tuple when materializations directory does not exist",
+            files={},
+            expected_names=(),
+        ),
+        DiscoverMaterializationFilesTestCase(
+            description="skips __init__ files in materializations directory",
+            files={
+                "materializations/__init__.py": "",
+                "materializations/custom_one.py": "def materialize(ctx): pass\n",
+            },
+            expected_names=("custom_one",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_project_dir_when_discovering_materializations_then_returns_expected(
     test_case: DiscoverMaterializationFilesTestCase,
@@ -94,7 +92,7 @@ def materialize(ctx, marker_provider: MarkerProvider):
             expected_names=("copy_table",),
         )
     ],
-    ids=["records custom materialization provider usage metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_materialization_provider_parameter_when_discovering_then_records_provider_usage(
     test_case: DiscoverMaterializationFilesTestCase,

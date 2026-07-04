@@ -69,7 +69,7 @@ dg: Any = pytest.importorskip("dagster")
             expected_group_names=("dagster_project",),
         )
     ],
-    ids=["builds materializable specs and check specs from dag artifact"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks(
     test_case: DagsterAssetSpecTestCase,
@@ -136,7 +136,7 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
             ),
         )
     ],
-    ids=["maps Python DAG artifact additions into asset and check specs"],
+    ids=lambda case: case.description,
 )
 def test_given_python_augmented_dag_when_building_specs_then_maps_python_nodes(
     test_case: DagsterPythonArtifactCompatibilityTestCase,
@@ -185,7 +185,7 @@ def test_given_python_augmented_dag_when_building_specs_then_maps_python_nodes(
             ),
         )
     ],
-    ids=["decorates user function as dagster assets definition"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_assets_decorator_when_applied_then_returns_assets_definition(
     test_case: DagsterDecoratorTestCase,
@@ -208,7 +208,7 @@ def test_given_sqlbuild_assets_decorator_when_applied_then_returns_assets_defini
             unexpected_check_names=("audit__not_null__order_id", "audit__freshness__loaded_at"),
         )
     ],
-    ids=["decorates user function as scenario-only asset checks definition"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_scenario_checks_decorator_when_applied_then_returns_check_definition(
     test_case: DagsterScenarioCheckDecoratorTestCase,
@@ -236,7 +236,7 @@ def test_given_sqlbuild_scenario_checks_decorator_when_applied_then_returns_chec
             unexpected_check_names=("audit__not_null__order_id", "audit__freshness__loaded_at"),
         )
     ],
-    ids=["builds scenario-only check specs"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_dag_when_building_scenario_check_specs_then_filters_non_scenarios(
     test_case: DagsterScenarioCheckDecoratorTestCase,
@@ -260,7 +260,7 @@ def test_given_sqlbuild_dag_when_building_scenario_check_specs_then_filters_non_
             expected_error_code="I002",
         )
     ],
-    ids=["assets decorator rejects dag and project together"],
+    ids=lambda case: case.description,
 )
 def test_given_dag_and_project_when_building_assets_decorator_then_raises_coded_input_error(
     test_case: DagsterConflictingInputTestCase,
@@ -282,7 +282,7 @@ def test_given_dag_and_project_when_building_assets_decorator_then_raises_coded_
             expected_error_code="I002",
         )
     ],
-    ids=["scenario checks decorator rejects dag and project together"],
+    ids=lambda case: case.description,
 )
 def test_given_dag_and_project_when_building_scenario_checks_then_raises_coded_input_error(
     test_case: DagsterConflictingInputTestCase,
@@ -304,7 +304,7 @@ def test_given_dag_and_project_when_building_scenario_checks_then_raises_coded_i
             unexpected_check_names=("scenario__orders_minimal", "scenario__customers_minimal"),
         )
     ],
-    ids=["excludes scenario checks when requested"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_dag_when_building_check_specs_then_can_exclude_scenarios(
     test_case: DagsterAssetCheckFilterTestCase,

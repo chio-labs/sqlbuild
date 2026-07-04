@@ -39,7 +39,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
         )
     ],
-    ids=["observes configured source freshness without writing state"],
+    ids=lambda case: case.description,
 )
 def test_given_configured_source_freshness_when_running_then_observes_read_only(
     test_case: FreshnessE2ETestCase,
@@ -123,7 +123,7 @@ def test_given_configured_source_freshness_when_running_then_observes_read_only(
             ),
         )
     ],
-    ids=["fail on error returns nonzero for unknown source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_unknown_source_freshness_when_fail_on_error_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -155,7 +155,7 @@ def test_given_unknown_source_freshness_when_fail_on_error_then_returns_nonzero(
             ),
         )
     ],
-    ids=["explicit freshness error returns nonzero with fail on error"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_error_when_fail_on_error_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -186,7 +186,7 @@ def test_given_source_freshness_error_when_fail_on_error_then_returns_nonzero(
             ),
         )
     ],
-    ids=["model selector observes upstream source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_model_selector_when_running_freshness_then_observes_upstream_sources(
     test_case: FreshnessE2ETestCase,
@@ -216,7 +216,7 @@ def test_given_model_selector_when_running_freshness_then_observes_upstream_sour
             ),
         )
     ],
-    ids=["excluded model removes upstream source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_model_excluded_when_running_freshness_then_skips_upstream_sources(
     test_case: FreshnessE2ETestCase,
@@ -248,7 +248,7 @@ def test_given_model_excluded_when_running_freshness_then_skips_upstream_sources
             ),
         )
     ],
-    ids=["managed source with explicit freshness is observed read only"],
+    ids=lambda case: case.description,
 )
 def test_given_managed_source_with_freshness_when_running_then_observes_read_only(
     test_case: FreshnessE2ETestCase,
@@ -286,7 +286,7 @@ def test_given_managed_source_with_freshness_when_running_then_observes_read_onl
             ),
         )
     ],
-    ids=["existing source freshness state table is not modified"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_source_freshness_state_when_running_then_does_not_write_state(
     test_case: FreshnessE2ETestCase,
@@ -344,7 +344,7 @@ def test_given_existing_source_freshness_state_when_running_then_does_not_write_
             ),
         )
     ],
-    ids=["standard state comparison fails on timestamp movement beyond lag tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_freshness_beyond_tolerance_when_state_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -407,7 +407,7 @@ def test_given_timestamp_freshness_beyond_tolerance_when_state_then_returns_nonz
             ),
         )
     ],
-    ids=["standard state comparison fails on backwards timestamp movement"],
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_freshness_moves_backwards_when_state_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -469,7 +469,7 @@ def test_given_timestamp_freshness_moves_backwards_when_state_then_returns_nonze
             ),
         )
     ],
-    ids=["standard state comparison reads state from multiple target schemas"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_state_in_secondary_schema_when_running_state_then_reports_unchanged(
     test_case: FreshnessE2ETestCase,
@@ -505,7 +505,7 @@ def test_given_source_freshness_state_in_secondary_schema_when_running_state_the
             ),
         )
     ],
-    ids=["standard state comparison reports unchanged source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_persisted_source_freshness_when_running_state_then_reports_unchanged(
     test_case: FreshnessE2ETestCase,
@@ -548,7 +548,7 @@ def test_given_persisted_source_freshness_when_running_state_then_reports_unchan
             ),
         )
     ],
-    ids=["standard state comparison fails on changed source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_changed_source_freshness_when_running_state_fail_on_stale_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -615,7 +615,7 @@ def test_given_changed_source_freshness_when_running_state_fail_on_stale_then_re
             ),
         )
     ],
-    ids=["standard state comparison tolerates timestamp movement within lag tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_freshness_within_tolerance_when_running_state_then_reports_tolerated(
     test_case: FreshnessE2ETestCase,
@@ -695,7 +695,7 @@ def test_given_timestamp_freshness_within_tolerance_when_running_state_then_repo
             ),
         )
     ],
-    ids=["standard state comparison fails when previous state is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_previous_freshness_when_running_state_fail_on_stale_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -733,7 +733,7 @@ def test_given_missing_previous_freshness_when_running_state_fail_on_stale_then_
             ),
         )
     ],
-    ids=["virtual state comparison reports unchanged source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_state_when_running_state_then_reports_unchanged(
     test_case: FreshnessE2ETestCase,
@@ -781,7 +781,7 @@ def test_given_virtual_source_freshness_state_when_running_state_then_reports_un
             ),
         )
     ],
-    ids=["virtual state comparison fails when previous state is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_virtual_freshness_state_when_state_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -834,7 +834,7 @@ def test_given_missing_virtual_freshness_state_when_state_then_returns_nonzero(
             ),
         )
     ],
-    ids=["virtual state comparison fails on changed source freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_changes_when_state_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -908,7 +908,7 @@ def test_given_virtual_source_freshness_changes_when_state_then_returns_nonzero(
             ),
         )
     ],
-    ids=["virtual state comparison tolerates timestamp movement within tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_timestamp_freshness_within_tolerance_when_state_then_reports_tolerated(
     test_case: FreshnessE2ETestCase,
@@ -971,7 +971,7 @@ def test_given_virtual_timestamp_freshness_within_tolerance_when_state_then_repo
             ),
         )
     ],
-    ids=["virtual state comparison fails beyond timestamp tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_timestamp_freshness_beyond_tolerance_when_state_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -1034,7 +1034,7 @@ def test_given_virtual_timestamp_freshness_beyond_tolerance_when_state_then_retu
             ),
         )
     ],
-    ids=["virtual state comparison fails on backwards timestamp movement"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_timestamp_freshness_moves_backwards_when_state_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,
@@ -1097,7 +1097,7 @@ def test_given_virtual_timestamp_freshness_moves_backwards_when_state_then_retur
             ),
         )
     ],
-    ids=["virtual state comparison fails on explicit observation error"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_error_when_state_then_returns_nonzero(
     test_case: FreshnessE2ETestCase,

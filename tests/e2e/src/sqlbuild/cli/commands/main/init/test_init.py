@@ -24,7 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             ),
         )
     ],
-    ids=["init scaffolds hooks directory"],
+    ids=lambda case: case.description,
 )
 def test_given_empty_project_directory_when_running_init_then_hooks_directory_is_scaffolded(
     test_case: InitE2ETestCase,

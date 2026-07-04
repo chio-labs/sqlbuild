@@ -7,40 +7,38 @@ import pytest
 from sqlbuild.integrations.dlt.helpers.progress import SqlbuildDltProgressCollector
 from tests.unit.src.sqlbuild.integrations.dlt._test_types import DltProgressCollectorTestCase
 
-DLT_PROGRESS_COLLECTOR_TEST_CASES: tuple[DltProgressCollectorTestCase, ...] = (
-    DltProgressCollectorTestCase(
-        description="summarizes row, file, and job counters",
-        updates=(
-            ("extract", "raw_orders", 5000, None),
-            ("extract", "Resources", 1, 1),
-            ("normalize", "Files", 2, 2),
-            ("load", "Jobs", 2, 2),
-        ),
-        expected_fragments=(
-            "dlt progress",
-            "extract: Resources 1/1, raw_orders 5000",
-            "normalize: Files 2/2",
-            "load: Jobs 2/2",
-        ),
-        expected_live_fragments=("dlt extract", "dlt normalize", "dlt load"),
-    ),
-    DltProgressCollectorTestCase(
-        description="keeps labelled counters distinct",
-        updates=(
-            ("extract", "Resources", 1, 2),
-            ("extract", "Resources", 1, 2),
-            ("load", "Jobs", 1, 1),
-        ),
-        expected_fragments=("extract: Resources 2/2", "load: Jobs 1/1"),
-        expected_live_fragments=("dlt extract", "dlt load"),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DLT_PROGRESS_COLLECTOR_TEST_CASES,
-    ids=[case.description for case in DLT_PROGRESS_COLLECTOR_TEST_CASES],
+    (
+        DltProgressCollectorTestCase(
+            description="summarizes row, file, and job counters",
+            updates=(
+                ("extract", "raw_orders", 5000, None),
+                ("extract", "Resources", 1, 1),
+                ("normalize", "Files", 2, 2),
+                ("load", "Jobs", 2, 2),
+            ),
+            expected_fragments=(
+                "dlt progress",
+                "extract: Resources 1/1, raw_orders 5000",
+                "normalize: Files 2/2",
+                "load: Jobs 2/2",
+            ),
+            expected_live_fragments=("dlt extract", "dlt normalize", "dlt load"),
+        ),
+        DltProgressCollectorTestCase(
+            description="keeps labelled counters distinct",
+            updates=(
+                ("extract", "Resources", 1, 2),
+                ("extract", "Resources", 1, 2),
+                ("load", "Jobs", 1, 1),
+            ),
+            expected_fragments=("extract: Resources 2/2", "load: Jobs 1/1"),
+            expected_live_fragments=("dlt extract", "dlt load"),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_dlt_progress_updates_when_collecting_then_summarizes_counters(
     test_case: DltProgressCollectorTestCase,

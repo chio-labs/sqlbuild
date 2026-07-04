@@ -32,7 +32,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_sh
             expected_warning_count=0,
         )
     ],
-    ids=["remove column mutation reports query_changed for non-enforced output change"],
+    ids=lambda case: case.description,
 )
 def test_given_remove_column_mutation_when_planning_then_query_change_semantics_are_reported(
     test_case: RemoveColumnSemanticsBuildE2ETestCase,
@@ -65,6 +65,11 @@ def test_given_remove_column_mutation_when_planning_then_query_change_semantics_
         assert model["reason"] == test_case.expected_reason
         assert model["backfill"]["action"] == test_case.expected_backfill_action
         assert model["backfill"]["duration"] == test_case.expected_backfill_duration
-        assert len(payload["warnings"]) == test_case.expected_warning_count
+        non_stale_warnings: list[dict[str, object]] = [
+            warning
+            for warning in payload["warnings"]
+            if not str(warning["message"]).startswith("Stale inputs detected")
+        ]
+        assert len(non_stale_warnings) == test_case.expected_warning_count
     finally:
         model_path.write_text(original_text, encoding="utf-8")

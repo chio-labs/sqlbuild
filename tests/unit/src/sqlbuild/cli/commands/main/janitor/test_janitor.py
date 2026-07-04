@@ -36,7 +36,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.janitor.helpers import build_jani
             unexpected_output_fragments=("KeyboardInterrupt", "Traceback"),
         )
     ],
-    ids=["treats keyboard interrupt at confirmation as cancellation"],
+    ids=lambda case: case.description,
 )
 def test_given_janitor_confirmation_when_keyboard_interrupt_then_returns_cancelled(
     test_case: JanitorConfirmationInterruptTestCase,
@@ -92,7 +92,7 @@ def test_given_janitor_confirmation_when_keyboard_interrupt_then_returns_cancell
             "  sqb janitor\n",
         )
     ],
-    ids=["preserves disabled no-color output"],
+    ids=lambda case: case.description,
 )
 def test_given_disabled_janitor_when_writing_without_color_then_preserves_output(
     test_case: JanitorDisabledOutputTestCase,
@@ -113,7 +113,7 @@ def test_given_disabled_janitor_when_writing_without_color_then_preserves_output
             expected_prefix="\033[33m\033[1mJanitor is disabled for this project.\033[0m",
         )
     ],
-    ids=["styles disabled title"],
+    ids=lambda case: case.description,
 )
 def test_given_disabled_janitor_when_writing_with_color_then_styles_title(
     test_case: JanitorDisabledOutputTestCase,
@@ -153,7 +153,7 @@ def test_given_disabled_janitor_when_writing_with_color_then_styles_title(
             unexpected_output_fragments=("\033[",),
         )
     ],
-    ids=["preserves no-color plan fragments"],
+    ids=lambda case: case.description,
 )
 def test_given_janitor_plan_when_writing_without_color_then_preserves_output_fragments(
     test_case: JanitorPlanOutputTestCase,
@@ -187,7 +187,7 @@ def test_given_janitor_plan_when_writing_without_color_then_preserves_output_fra
             ),
         )
     ],
-    ids=["uses semantic plan colors"],
+    ids=lambda case: case.description,
 )
 def test_given_janitor_plan_when_writing_with_color_then_uses_semantic_colors(
     test_case: JanitorPlanOutputTestCase,

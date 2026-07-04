@@ -103,7 +103,7 @@ CUSTOMERS: SourceFreshnessIdentity = SourceFreshnessIdentity(
             ),
         )
     ],
-    ids=["passes through views and maps materialized upstream table frontier"],
+    ids=lambda case: case.description,
 )
 def test_given_native_plan_when_building_watermark_inputs_then_returns_graph_context(
     test_case: NativeNodeSourceWatermarkInputsTestCase,

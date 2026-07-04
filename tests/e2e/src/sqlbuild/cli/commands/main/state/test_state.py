@@ -22,83 +22,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-STATE_LIFECYCLE_ERROR_E2E_TEST_CASES: tuple[StateLifecycleErrorE2ETestCase, ...] = (
-    StateLifecycleErrorE2ETestCase(
-        description="reset blocks when allow reset is false",
-        project_toml="""
-name = "versioned_state_project"
-adapter = "duckdb"
-default_target = "dev"
-
-[settings]
-virtual_environments = true
-
-[connection]
-database = "warehouse.duckdb"
-
-[targets.dev.state]
-backend = "duckdb"
-schema = "sqlbuild_state"
-allow_reset = false
-
-[targets.dev.state.connection]
-database = "state.duckdb"
-""".lstrip(),
-        command=("--no-color", "state", "reset", "--auto-approve"),
-        expected_exit_code=1,
-        expected_error_fragment=("set `allow_reset = true` under `[targets.<name>.state]`"),
-    ),
-    StateLifecycleErrorE2ETestCase(
-        description="reset blocks without auto approve",
-        project_toml="""
-name = "versioned_state_project"
-adapter = "duckdb"
-default_target = "dev"
-
-[settings]
-virtual_environments = true
-
-[connection]
-database = "warehouse.duckdb"
-
-[targets.dev.state]
-backend = "duckdb"
-schema = "sqlbuild_state"
-allow_reset = true
-
-[targets.dev.state.connection]
-database = "state.duckdb"
-""".lstrip(),
-        command=("--no-color", "state", "reset"),
-        expected_exit_code=1,
-        expected_error_fragment="state reset requires --auto-approve",
-    ),
-    StateLifecycleErrorE2ETestCase(
-        description="rollback blocks before backup exists",
-        project_toml="""
-name = "versioned_state_project"
-adapter = "duckdb"
-default_target = "dev"
-
-[settings]
-virtual_environments = true
-
-[connection]
-database = "warehouse.duckdb"
-
-[targets.dev.state]
-backend = "duckdb"
-schema = "sqlbuild_state"
-
-[targets.dev.state.connection]
-database = "state.duckdb"
-""".lstrip(),
-        command=("--no-color", "state", "rollback"),
-        expected_exit_code=1,
-        expected_error_fragment="No state backup is available for rollback",
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -119,7 +42,7 @@ database = "state.duckdb"
             ),
         )
     ],
-    ids=["duckdb state lifecycle commands manage state tables"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_config_when_running_state_lifecycle_then_state_store_is_updated(
     test_case: StateLifecycleE2ETestCase,
@@ -220,7 +143,7 @@ database = "state.duckdb"
             expected_error_fragment="sqlbuild_state__backup_",
         )
     ],
-    ids=["explicit rollback blocks cleanly when backup schema is deleted"],
+    ids=lambda case: case.description,
 )
 def test_given_deleted_duckdb_state_backup_when_rolling_back_then_it_blocks_cleanly(
     test_case: StateModeGuardE2ETestCase,
@@ -289,7 +212,7 @@ database = "state.duckdb"
             expected_error_fragment="No state backup is available for rollback",
         )
     ],
-    ids=["latest rollback blocks cleanly when backup schema is deleted"],
+    ids=lambda case: case.description,
 )
 def test_given_deleted_latest_duckdb_state_backup_when_rolling_back_then_it_blocks_cleanly(
     test_case: StateModeGuardE2ETestCase,
@@ -358,7 +281,7 @@ database = "state.duckdb"
             expected_error_fragment="Cannot backup invalid state schema",
         )
     ],
-    ids=["migrate blocks cleanly when required state table is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_duckdb_state_table_when_migrating_then_cli_blocks_cleanly(
     test_case: StateModeGuardE2ETestCase,
@@ -407,29 +330,26 @@ database = "state.duckdb"
     )
 
 
-DUCKDB_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES: tuple[StateSchemaCorruptionE2ETestCase, ...] = (
-    StateSchemaCorruptionE2ETestCase(
-        description="migrate blocks cleanly when required state column is missing",
-        mutation_sql='ALTER TABLE "sqlbuild_state"."state_versions" DROP COLUMN "updated_at"',
-        expected_exit_code=1,
-        expected_error_fragment="Cannot backup invalid state schema",
-    ),
-    StateSchemaCorruptionE2ETestCase(
-        description="migrate blocks cleanly when required state column has wrong type",
-        mutation_sql=(
-            'ALTER TABLE "sqlbuild_state"."state_versions" '
-            'ALTER COLUMN "schema_version" SET DATA TYPE TEXT'
-        ),
-        expected_exit_code=1,
-        expected_error_fragment="Cannot backup invalid state schema",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DUCKDB_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES,
-    ids=[case.description for case in DUCKDB_STATE_SCHEMA_CORRUPTION_E2E_TEST_CASES],
+    (
+        StateSchemaCorruptionE2ETestCase(
+            description="migrate blocks cleanly when required state column is missing",
+            mutation_sql='ALTER TABLE "sqlbuild_state"."state_versions" DROP COLUMN "updated_at"',
+            expected_exit_code=1,
+            expected_error_fragment="Cannot backup invalid state schema",
+        ),
+        StateSchemaCorruptionE2ETestCase(
+            description="migrate blocks cleanly when required state column has wrong type",
+            mutation_sql=(
+                'ALTER TABLE "sqlbuild_state"."state_versions" '
+                'ALTER COLUMN "schema_version" SET DATA TYPE TEXT'
+            ),
+            expected_exit_code=1,
+            expected_error_fragment="Cannot backup invalid state schema",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_corrupt_duckdb_state_schema_when_migrating_then_cli_blocks_cleanly(
     test_case: StateSchemaCorruptionE2ETestCase,
@@ -477,8 +397,83 @@ database = "state.duckdb"
 
 @pytest.mark.parametrize(
     "test_case",
-    STATE_LIFECYCLE_ERROR_E2E_TEST_CASES,
-    ids=[case.description for case in STATE_LIFECYCLE_ERROR_E2E_TEST_CASES],
+    (
+        StateLifecycleErrorE2ETestCase(
+            description="reset blocks when allow reset is false",
+            project_toml="""
+name = "versioned_state_project"
+adapter = "duckdb"
+default_target = "dev"
+
+[settings]
+virtual_environments = true
+
+[connection]
+database = "warehouse.duckdb"
+
+[targets.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+allow_reset = false
+
+[targets.dev.state.connection]
+database = "state.duckdb"
+""".lstrip(),
+            command=("--no-color", "state", "reset", "--auto-approve"),
+            expected_exit_code=1,
+            expected_error_fragment=("set `allow_reset = true` under `[targets.<name>.state]`"),
+        ),
+        StateLifecycleErrorE2ETestCase(
+            description="reset blocks without auto approve",
+            project_toml="""
+name = "versioned_state_project"
+adapter = "duckdb"
+default_target = "dev"
+
+[settings]
+virtual_environments = true
+
+[connection]
+database = "warehouse.duckdb"
+
+[targets.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+allow_reset = true
+
+[targets.dev.state.connection]
+database = "state.duckdb"
+""".lstrip(),
+            command=("--no-color", "state", "reset"),
+            expected_exit_code=1,
+            expected_error_fragment="state reset requires --auto-approve",
+        ),
+        StateLifecycleErrorE2ETestCase(
+            description="rollback blocks before backup exists",
+            project_toml="""
+name = "versioned_state_project"
+adapter = "duckdb"
+default_target = "dev"
+
+[settings]
+virtual_environments = true
+
+[connection]
+database = "warehouse.duckdb"
+
+[targets.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[targets.dev.state.connection]
+database = "state.duckdb"
+""".lstrip(),
+            command=("--no-color", "state", "rollback"),
+            expected_exit_code=1,
+            expected_error_fragment="No state backup is available for rollback",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_config_when_running_blocked_state_command_then_cli_reports_error(
     test_case: StateLifecycleErrorE2ETestCase,
@@ -531,7 +526,7 @@ database = "state.duckdb"
             expected_error_fragment="State commands require virtual_environments = true",
         )
     ],
-    ids=["state init blocks outside virtual mode"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_mode_project_when_running_state_init_then_cli_blocks_cleanly(
     test_case: StateModeGuardE2ETestCase,
@@ -564,7 +559,7 @@ def test_given_direct_mode_project_when_running_state_init_then_cli_blocks_clean
             expected_schema_version=1,
         )
     ],
-    ids=["local state connection override controls CLI state database"],
+    ids=lambda case: case.description,
 )
 def test_given_local_state_override_when_running_state_init_then_cli_uses_local_state_database(
     test_case: StateLocalOverrideE2ETestCase,
@@ -635,7 +630,7 @@ database = "local-state.duckdb"
             expected_query_results_after_detach=(("SELECT id FROM dev.orders", ((1,),)),),
         )
     ],
-    ids=["adopt and detach preserve unsuffixed logical names interactively"],
+    ids=lambda case: case.description,
 )
 def test_given_unsuffixed_virtual_environment_when_adopting_and_detaching_then_names_are_preserved(
     test_case: StateAdoptDetachE2ETestCase,
@@ -765,7 +760,7 @@ def test_given_unsuffixed_virtual_environment_when_adopting_and_detaching_then_n
             expected_error_fragment="unsuffixed_virtual_env",
         )
     ],
-    ids=["adopt blocks without unsuffixed virtual env"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_unsuffixed_virtual_env_when_adopting_then_it_blocks_with_config_error(
     tmp_path: Path,
@@ -820,7 +815,7 @@ def test_given_missing_unsuffixed_virtual_env_when_adopting_then_it_blocks_with_
             expected_error_fragment="requires --allow-copy",
         )
     ],
-    ids=["adopt blocks copy fallback without explicit permission"],
+    ids=lambda case: case.description,
 )
 def test_given_copy_fallback_required_when_adopting_without_allow_copy_then_it_blocks(
     tmp_path: Path,
@@ -876,7 +871,7 @@ def test_given_copy_fallback_required_when_adopting_without_allow_copy_then_it_b
             expected_error_fragment="simulated detach copy failure",
         )
     ],
-    ids=["interrupted detach records failed operation"],
+    ids=lambda case: case.description,
 )
 def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_failed(
     tmp_path: Path,
@@ -999,7 +994,7 @@ def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_faile
             expected_error_fragment="simulated adopt failure after move",
         )
     ],
-    ids=["interrupted adopt records failed operation and leaves recoverable residue"],
+    ids=lambda case: case.description,
 )
 def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
     tmp_path: Path,
@@ -1122,7 +1117,7 @@ def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
             expected_error_fragment="VIEW",
         )
     ],
-    ids=["detach recreates view models as views"],
+    ids=lambda case: case.description,
 )
 def test_given_view_model_when_detaching_then_stateless_target_remains_a_view(
     tmp_path: Path,
@@ -1198,7 +1193,7 @@ def test_given_view_model_when_detaching_then_stateless_target_remains_a_view(
             expected_error_fragment="cancelled",
         )
     ],
-    ids=["adopt cancels on wrong confirmation"],
+    ids=lambda case: case.description,
 )
 def test_given_wrong_confirmation_when_adopting_then_it_cancels(
     tmp_path: Path,
@@ -1250,7 +1245,7 @@ def test_given_wrong_confirmation_when_adopting_then_it_cancels(
             expected_error_fragment="requires a finalized virtual environment",
         )
     ],
-    ids=["detach blocks non-finalized virtual environment"],
+    ids=lambda case: case.description,
 )
 def test_given_non_finalized_virtual_environment_when_detaching_then_it_blocks(
     tmp_path: Path,
@@ -1310,7 +1305,7 @@ def test_given_non_finalized_virtual_environment_when_detaching_then_it_blocks(
             expected_schema_version=1,
         )
     ],
-    ids=["rollback accepts explicit backup id"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_state_backup_when_rolling_back_explicit_backup_id_then_restores_backup(
     test_case: StateExplicitRollbackE2ETestCase,

@@ -29,7 +29,7 @@ from tests.unit.src.sqlbuild.executor.clone.main._test_types import CloneStreamT
             ),
         )
     ],
-    ids=["streams one on_item callback per relation with position and flow"],
+    ids=lambda case: case.description,
 )
 def test_given_clone_entries_when_executing_then_streams_each_item(
     test_case: CloneStreamTestCase,

@@ -47,7 +47,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
             audit_model_source_deps={"stg_payments": ("raw_orders",)},
         ),
     ],
-    ids=["adds attached audit source refs to audited model deps"],
+    ids=lambda case: case.description,
 )
 def test_given_project_when_building_upstream_then_includes_expected_deps(
     test_case: BuildUpstreamDepsTestCase,
@@ -66,74 +66,6 @@ def test_given_project_when_building_upstream_then_includes_expected_deps(
     }
 
     assert result == test_case.expected_upstream_keys
-
-
-BUILD_UPSTREAM_ORDER_TEST_CASES: list[TopologicalOrderTestCase] = [
-    TopologicalOrderTestCase(
-        description="includes sources and seeds from build_upstream_deps",
-        upstream=build_upstream_deps(
-            build_test_project(
-                model_deps={"orders": ("raw_orders",)},
-                source_names=("raw_orders",),
-                seed_names=("country_codes",),
-            )
-        ),
-        expected_order=(
-            seed_key("country_codes"),
-            source_key("raw_orders"),
-            model_key("orders"),
-        ),
-    ),
-    TopologicalOrderTestCase(
-        description="runs function deps before sql tests for dependent models",
-        upstream=build_upstream_deps(
-            build_test_project(
-                model_deps={"orders": ("is_completed_order",)},
-                function_names=("is_completed_order",),
-                sql_test_expected_model_names=("orders",),
-            )
-        ),
-        expected_order=(
-            function_key("is_completed_order"),
-            CompiledObjectKey(
-                resource_type="sql_test",
-                name="test_models",
-            ),
-            model_key("orders"),
-        ),
-    ),
-    TopologicalOrderTestCase(
-        description="runs table function tests after their function resource",
-        upstream=build_upstream_deps(
-            build_test_project(
-                function_names=("customer_orders",),
-                table_fn_test_function_names=("customer_orders",),
-            )
-        ),
-        expected_order=(
-            function_key("customer_orders"),
-            CompiledObjectKey(
-                resource_type="sql_test",
-                name="test_table_functions",
-            ),
-        ),
-    ),
-    TopologicalOrderTestCase(
-        description="runs source refs from attached audits before audited model",
-        upstream=build_upstream_deps(
-            build_test_project(
-                model_deps={"stg_payments": ("raw_payments",)},
-                source_names=("raw_payments", "raw_orders"),
-                audit_model_source_deps={"stg_payments": ("raw_orders",)},
-            )
-        ),
-        expected_order=(
-            source_key("raw_orders"),
-            source_key("raw_payments"),
-            model_key("stg_payments"),
-        ),
-    ),
-]
 
 
 @pytest.mark.parametrize(
@@ -157,7 +89,7 @@ BUILD_UPSTREAM_ORDER_TEST_CASES: list[TopologicalOrderTestCase] = [
             },
         ),
     ],
-    ids=["builds downstream edges from upstream deps"],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_deps_when_building_downstream_then_returns_expected(
     test_case: BuildDownstreamDepsTestCase,
@@ -169,45 +101,42 @@ def test_given_upstream_deps_when_building_downstream_then_returns_expected(
     assert result == test_case.expected_downstream_keys
 
 
-TOPOLOGICAL_ORDER_TEST_CASES: list[TopologicalOrderTestCase] = [
-    TopologicalOrderTestCase(
-        description="orders a linear chain in dependency order",
-        upstream={
-            model_key("c"): (model_key("b"),),
-            model_key("b"): (model_key("a"),),
-            model_key("a"): (),
-        },
-        expected_order=(model_key("a"), model_key("b"), model_key("c")),
-    ),
-    TopologicalOrderTestCase(
-        description="orders a diamond graph with stable tie-breaking",
-        upstream={
-            source_key("raw"): (),
-            model_key("left"): (source_key("raw"),),
-            model_key("right"): (source_key("raw"),),
-            model_key("joined"): (model_key("left"), model_key("right")),
-        },
-        expected_order=(
-            source_key("raw"),
-            model_key("left"),
-            model_key("right"),
-            model_key("joined"),
-        ),
-    ),
-    TopologicalOrderTestCase(
-        description="includes external dep nodes not in upstream keys",
-        upstream={
-            model_key("orders"): (source_key("raw_orders"),),
-        },
-        expected_order=(source_key("raw_orders"), model_key("orders")),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    TOPOLOGICAL_ORDER_TEST_CASES,
-    ids=[case.description for case in TOPOLOGICAL_ORDER_TEST_CASES],
+    [
+        TopologicalOrderTestCase(
+            description="orders a linear chain in dependency order",
+            upstream={
+                model_key("c"): (model_key("b"),),
+                model_key("b"): (model_key("a"),),
+                model_key("a"): (),
+            },
+            expected_order=(model_key("a"), model_key("b"), model_key("c")),
+        ),
+        TopologicalOrderTestCase(
+            description="orders a diamond graph with stable tie-breaking",
+            upstream={
+                source_key("raw"): (),
+                model_key("left"): (source_key("raw"),),
+                model_key("right"): (source_key("raw"),),
+                model_key("joined"): (model_key("left"), model_key("right")),
+            },
+            expected_order=(
+                source_key("raw"),
+                model_key("left"),
+                model_key("right"),
+                model_key("joined"),
+            ),
+        ),
+        TopologicalOrderTestCase(
+            description="includes external dep nodes not in upstream keys",
+            upstream={
+                model_key("orders"): (source_key("raw_orders"),),
+            },
+            expected_order=(source_key("raw_orders"), model_key("orders")),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_deps_when_ordering_topologically_then_returns_expected_order(
     test_case: TopologicalOrderTestCase,
@@ -229,7 +158,7 @@ def test_given_upstream_deps_when_ordering_topologically_then_returns_expected_o
             expected_error_type=ValueError,
         ),
     ],
-    ids=["raises on direct cycle between two nodes"],
+    ids=lambda case: case.description,
 )
 def test_given_cyclic_deps_when_ordering_topologically_then_raises(
     test_case: CycleDetectionTestCase,
@@ -238,33 +167,30 @@ def test_given_cyclic_deps_when_ordering_topologically_then_raises(
         topologically_order_keys(test_case.upstream)
 
 
-EXPAND_UPSTREAM_TEST_CASES: list[ExpandUpstreamTestCase] = [
-    ExpandUpstreamTestCase(
-        description="expands transitive upstream through a chain",
-        upstream={
-            model_key("c"): (model_key("b"),),
-            model_key("b"): (model_key("a"),),
-            model_key("a"): (source_key("raw"),),
-            source_key("raw"): (),
-        },
-        key=model_key("c"),
-        expected_keys=frozenset({model_key("b"), model_key("a"), source_key("raw")}),
-    ),
-    ExpandUpstreamTestCase(
-        description="returns empty set for root node",
-        upstream={
-            source_key("raw"): (),
-        },
-        key=source_key("raw"),
-        expected_keys=frozenset(),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    EXPAND_UPSTREAM_TEST_CASES,
-    ids=[case.description for case in EXPAND_UPSTREAM_TEST_CASES],
+    [
+        ExpandUpstreamTestCase(
+            description="expands transitive upstream through a chain",
+            upstream={
+                model_key("c"): (model_key("b"),),
+                model_key("b"): (model_key("a"),),
+                model_key("a"): (source_key("raw"),),
+                source_key("raw"): (),
+            },
+            key=model_key("c"),
+            expected_keys=frozenset({model_key("b"), model_key("a"), source_key("raw")}),
+        ),
+        ExpandUpstreamTestCase(
+            description="returns empty set for root node",
+            upstream={
+                source_key("raw"): (),
+            },
+            key=source_key("raw"),
+            expected_keys=frozenset(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_key_when_expanding_upstream_then_returns_expected_keys(
     test_case: ExpandUpstreamTestCase,
@@ -274,33 +200,30 @@ def test_given_key_when_expanding_upstream_then_returns_expected_keys(
     assert result == test_case.expected_keys
 
 
-EXPAND_DOWNSTREAM_TEST_CASES: list[ExpandDownstreamTestCase] = [
-    ExpandDownstreamTestCase(
-        description="expands transitive downstream through a chain",
-        downstream={
-            source_key("raw"): (model_key("a"),),
-            model_key("a"): (model_key("b"),),
-            model_key("b"): (model_key("c"),),
-            model_key("c"): (),
-        },
-        key=source_key("raw"),
-        expected_keys=frozenset({model_key("a"), model_key("b"), model_key("c")}),
-    ),
-    ExpandDownstreamTestCase(
-        description="returns empty set for leaf node",
-        downstream={
-            model_key("leaf"): (),
-        },
-        key=model_key("leaf"),
-        expected_keys=frozenset(),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    EXPAND_DOWNSTREAM_TEST_CASES,
-    ids=[case.description for case in EXPAND_DOWNSTREAM_TEST_CASES],
+    [
+        ExpandDownstreamTestCase(
+            description="expands transitive downstream through a chain",
+            downstream={
+                source_key("raw"): (model_key("a"),),
+                model_key("a"): (model_key("b"),),
+                model_key("b"): (model_key("c"),),
+                model_key("c"): (),
+            },
+            key=source_key("raw"),
+            expected_keys=frozenset({model_key("a"), model_key("b"), model_key("c")}),
+        ),
+        ExpandDownstreamTestCase(
+            description="returns empty set for leaf node",
+            downstream={
+                model_key("leaf"): (),
+            },
+            key=model_key("leaf"),
+            expected_keys=frozenset(),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_key_when_expanding_downstream_then_returns_expected_keys(
     test_case: ExpandDownstreamTestCase,
@@ -335,7 +258,7 @@ def test_given_key_when_expanding_downstream_then_returns_expected_keys(
             ),
         ),
     ],
-    ids=["finds all nodes on directed paths between start and end"],
+    ids=lambda case: case.description,
 )
 def test_given_start_and_end_when_finding_path_keys_then_returns_expected(
     test_case: FindPathKeysTestCase,
@@ -362,7 +285,7 @@ def test_given_start_and_end_when_finding_path_keys_then_returns_expected(
             expected_error_type=ValueError,
         ),
     ],
-    ids=["raises when end is not downstream of start"],
+    ids=lambda case: case.description,
 )
 def test_given_unreachable_end_when_finding_path_keys_then_raises(
     test_case: FindPathKeysErrorTestCase,
@@ -373,8 +296,73 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
 
 @pytest.mark.parametrize(
     "test_case",
-    BUILD_UPSTREAM_ORDER_TEST_CASES,
-    ids=[case.description for case in BUILD_UPSTREAM_ORDER_TEST_CASES],
+    [
+        TopologicalOrderTestCase(
+            description="includes sources and seeds from build_upstream_deps",
+            upstream=build_upstream_deps(
+                build_test_project(
+                    model_deps={"orders": ("raw_orders",)},
+                    source_names=("raw_orders",),
+                    seed_names=("country_codes",),
+                )
+            ),
+            expected_order=(
+                seed_key("country_codes"),
+                source_key("raw_orders"),
+                model_key("orders"),
+            ),
+        ),
+        TopologicalOrderTestCase(
+            description="runs function deps before sql tests for dependent models",
+            upstream=build_upstream_deps(
+                build_test_project(
+                    model_deps={"orders": ("is_completed_order",)},
+                    function_names=("is_completed_order",),
+                    sql_test_expected_model_names=("orders",),
+                )
+            ),
+            expected_order=(
+                function_key("is_completed_order"),
+                CompiledObjectKey(
+                    resource_type="sql_test",
+                    name="test_models",
+                ),
+                model_key("orders"),
+            ),
+        ),
+        TopologicalOrderTestCase(
+            description="runs table function tests after their function resource",
+            upstream=build_upstream_deps(
+                build_test_project(
+                    function_names=("customer_orders",),
+                    table_fn_test_function_names=("customer_orders",),
+                )
+            ),
+            expected_order=(
+                function_key("customer_orders"),
+                CompiledObjectKey(
+                    resource_type="sql_test",
+                    name="test_table_functions",
+                ),
+            ),
+        ),
+        TopologicalOrderTestCase(
+            description="runs source refs from attached audits before audited model",
+            upstream=build_upstream_deps(
+                build_test_project(
+                    model_deps={"stg_payments": ("raw_payments",)},
+                    source_names=("raw_payments", "raw_orders"),
+                    audit_model_source_deps={"stg_payments": ("raw_orders",)},
+                )
+            ),
+            expected_order=(
+                source_key("raw_orders"),
+                source_key("raw_payments"),
+                model_key("stg_payments"),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_project_when_building_upstream_and_ordering_then_returns_expected(
     test_case: TopologicalOrderTestCase,
@@ -392,7 +380,7 @@ def test_given_project_when_building_upstream_and_ordering_then_returns_expected
             expected_test_upstream_keys=(function_key("is_completed_order"),),
         ),
     ],
-    ids=["sql test depends on functions used by expected model"],
+    ids=lambda case: case.description,
 )
 def test_given_sql_test_for_function_model_when_building_upstream_then_test_depends_on_function(
     test_case: SqlTestFunctionGraphDepsTestCase,
@@ -421,7 +409,7 @@ def test_given_sql_test_for_function_model_when_building_upstream_then_test_depe
             expected_test_upstream_keys=(function_key("customer_orders"),),
         ),
     ],
-    ids=["table function sql test depends directly on tested function"],
+    ids=lambda case: case.description,
 )
 def test_given_table_function_sql_test_when_building_upstream_then_test_depends_on_function(
     test_case: SqlTestFunctionGraphDepsTestCase,

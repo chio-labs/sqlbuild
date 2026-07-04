@@ -97,7 +97,7 @@ from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
             expected_fingerprint_rows=(("model", "downstream"),),
         )
     ],
-    ids=["direct dependency baseline copies prod upstream on Databricks"],
+    ids=lambda case: case.description,
 )
 def test_given_downstream_selection_when_databricks_upstream_missing_then_baselines_from_prod(
     tmp_path: Path,
@@ -141,7 +141,7 @@ def test_given_downstream_selection_when_databricks_upstream_missing_then_baseli
             ),
         )
     ],
-    ids=["dbt init generated project builds through Databricks dbt profile"],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_dbt_profile_when_running_dbt_init_then_builds_profile_lifecycle(
     tmp_path: Path,
@@ -206,7 +206,7 @@ def test_given_databricks_dbt_profile_when_running_dbt_init_then_builds_profile_
             ),
         )
     ],
-    ids=["standard node results persist and read on databricks"],
+    ids=lambda case: case.description,
 )
 def test_given_python_result_when_running_check_on_databricks_then_persists_node_results(
     tmp_path: Path,
@@ -288,7 +288,7 @@ def test_given_python_result_when_running_check_on_databricks_then_persists_node
             ),
         )
     ],
-    ids=["source freshness uses databricks table metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_physical_source_without_freshness_when_running_on_databricks_then_uses_metadata(
     tmp_path: Path,
@@ -346,7 +346,7 @@ def test_given_physical_source_without_freshness_when_running_on_databricks_then
             expected_seed_strategy="durable_clone",
         )
     ],
-    ids=["virtual seeded incremental build uses deep clone on databricks"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_incremental_change_when_building_on_databricks_then_seeds_with_deep_clone(
     tmp_path: Path,
@@ -470,7 +470,7 @@ def test_given_virtual_incremental_change_when_building_on_databricks_then_seeds
             ),
         )
     ],
-    ids=["reconcile repair-view recreates databricks logical view"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_logical_view_when_repairing_on_databricks_then_view_is_recreated(
     tmp_path: Path,
@@ -539,7 +539,7 @@ def test_given_missing_logical_view_when_repairing_on_databricks_then_view_is_re
             ),
         )
     ],
-    ids=["adopt and detach preserve databricks logical table"],
+    ids=lambda case: case.description,
 )
 def test_given_stateless_table_when_adopting_and_detaching_on_databricks_then_table_is_preserved(
     tmp_path: Path,
@@ -616,7 +616,7 @@ def test_given_stateless_table_when_adopting_and_detaching_on_databricks_then_ta
             expected_ref_count_after=0,
         )
     ],
-    ids=["janitor prunes databricks detached VDE refs and physical versions"],
+    ids=lambda case: case.description,
 )
 def test_given_detached_vde_when_running_janitor_on_databricks_then_refs_are_pruned(
     tmp_path: Path,
@@ -694,115 +694,110 @@ def test_given_detached_vde_when_running_janitor_on_databricks_then_refs_are_pru
         cleanup_databricks_schema(schema_name=f"{schema_name}__sqb_physical")
 
 
-DATABRICKS_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[
-    DatabricksIntermediateDagStrategyE2ETestCase
-] = [
-    DatabricksIntermediateDagStrategyE2ETestCase(
-        description="databricks append intermediate accumulates rows across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
-            "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "    {'name': 'amount', 'type': 'INTEGER'},\n"
-            "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "])\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        next_seq = 1\n"
-            "    else:\n"
-            "        next_seq = ctx.current_cursor_value + 1\n"
-            "    return [\n"
-            "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("1", "100"), ("2", "200")),
-        expected_terminal_rows=(("1", "100"), ("2", "200")),
-    ),
-    DatabricksIntermediateDagStrategyE2ETestCase(
-        description="databricks merge intermediate updates and adds rows across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(\n"
-            "    write_strategy='merge',\n"
-            "    unique_key='event_id',\n"
-            "    cursor_column='load_seq',\n"
-            "    columns=[\n"
-            "        {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "        {'name': 'amount', 'type': 'INTEGER'},\n"
-            "        {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "    ],\n"
-            ")\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        return [\n"
-            "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
-            "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
-            "        ]\n"
-            "    return [\n"
-            "        {'event_id': 1, 'amount': 150, 'load_seq': 2},\n"
-            "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
-        expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
-    ),
-    DatabricksIntermediateDagStrategyE2ETestCase(
-        description="databricks delete insert intermediate replaces cursor window across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
-            "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "    {'name': 'amount', 'type': 'INTEGER'},\n"
-            "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "])\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        return [\n"
-            "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
-            "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
-            "        ]\n"
-            "    return [\n"
-            "        {'event_id': 2, 'amount': 250, 'load_seq': 1},\n"
-            "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("2", "250"), ("3", "300")),
-        expected_terminal_rows=(("2", "250"), ("3", "300")),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DATABRICKS_INTERMEDIATE_DAG_STRATEGY_TEST_CASES,
-    ids=[case.description for case in DATABRICKS_INTERMEDIATE_DAG_STRATEGY_TEST_CASES],
+    [
+        DatabricksIntermediateDagStrategyE2ETestCase(
+            description="databricks append intermediate accumulates rows across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "    {'name': 'amount', 'type': 'INTEGER'},\n"
+                "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        next_seq = 1\n"
+                "    else:\n"
+                "        next_seq = ctx.current_cursor_value + 1\n"
+                "    return [\n"
+                "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("1", "100"), ("2", "200")),
+            expected_terminal_rows=(("1", "100"), ("2", "200")),
+        ),
+        DatabricksIntermediateDagStrategyE2ETestCase(
+            description="databricks merge intermediate updates and adds rows across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(\n"
+                "    write_strategy='merge',\n"
+                "    unique_key='event_id',\n"
+                "    cursor_column='load_seq',\n"
+                "    columns=[\n"
+                "        {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "        {'name': 'amount', 'type': 'INTEGER'},\n"
+                "        {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "    ],\n"
+                ")\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [\n"
+                "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
+                "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
+                "        ]\n"
+                "    return [\n"
+                "        {'event_id': 1, 'amount': 150, 'load_seq': 2},\n"
+                "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
+            expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
+        ),
+        DatabricksIntermediateDagStrategyE2ETestCase(
+            description="databricks delete insert intermediate replaces cursor window across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "    {'name': 'amount', 'type': 'INTEGER'},\n"
+                "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [\n"
+                "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
+                "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
+                "        ]\n"
+                "    return [\n"
+                "        {'event_id': 2, 'amount': 250, 'load_seq': 1},\n"
+                "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("2", "250"), ("3", "300")),
+            expected_terminal_rows=(("2", "250"), ("3", "300")),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_intermediate_strategy_project_when_loading_twice_on_databricks_then_strategy_applies(
     tmp_path: Path,
@@ -874,144 +869,41 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_databricks_th
         cleanup_databricks_schema(schema_name=schema_name)
 
 
-DATABRICKS_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[DatabricksScenarioLocalReplayE2ETestCase] = [
-    DatabricksScenarioLocalReplayE2ETestCase(
-        description="captures databricks fixtures and replays transpilable SQL locally",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT\n"
-            "  customer_id,\n"
-            "  date_trunc('DAY', event_ts) AS event_day,\n"
-            "  SUM(if(amount_cents >= 1000, amount_cents, 0)) AS large_amount_cents,\n"
-            "  COUNT(*) AS event_count\n"
-            'FROM __source("raw_events")\n'
-            "GROUP BY customer_id, date_trunc('DAY', event_ts)\n"
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, TIMESTAMP '2026-01-01 08:15:00' "
-            "AS event_ts, 1500 AS amount_cents\n"
-            "  UNION ALL\n"
-            "  SELECT 10 AS customer_id, TIMESTAMP '2026-01-01 10:30:00' "
-            "AS event_ts, 500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id, "
-            "date_trunc('DAY', TIMESTAMP '2026-01-01 00:00:00') AS event_day, "
-            "1500 AS large_amount_cents, 2 AS event_count\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "transpilable_event_rollup",
-            "PASS",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-        expected_local_rows=((10, 1500, 2),),
-        local_rows_sql=(
-            "SELECT customer_id, large_amount_cents, event_count "
-            "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
-        ),
-    ),
-    DatabricksScenarioLocalReplayE2ETestCase(
-        description="reports databricks local transpilation failures as X607",
-        scenario_name="local_transpile_error",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT customer_id, amount_cents\n"
-            'FROM __source("raw_events")\n'
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "local_transpile_error",
-            "ERROR",
-            "error[X607]",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-        expected_return_code=1,
-        corrupt_capture_dialect=True,
-    ),
-    DatabricksScenarioLocalReplayE2ETestCase(
-        description="reports databricks local DuckDB execution failures as X608",
-        scenario_name="local_execution_error",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT\n"
-            "  customer_id,\n"
-            "  __sqb_missing_local_function(amount_cents) AS amount_cents\n"
-            'FROM __source("raw_events")\n'
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "local_execution_error",
-            "ERROR",
-            "error[X608]",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-        expected_return_code=1,
-    ),
-]
-
-DATABRICKS_QUERY_E2E_TEST_CASES: list[DatabricksCliTestCase] = [
-    DatabricksCliTestCase(
-        description="query command uses databricks local override",
-        command=("query", "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID"),
-        expected_stdout_fragments=("ID   | 1", "NAME | alice", "ID   | 2", "NAME | bob"),
-    ),
-    DatabricksCliTestCase(
-        description="query command renders json output",
-        command=(
-            "query",
-            "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID LIMIT 1",
-            "--format",
-            "json",
-        ),
-        expected_stdout_fragments=('"ID": 1', '"NAME": "alice"'),
-    ),
-    DatabricksCliTestCase(
-        description="query command renders csv output",
-        command=(
-            "query",
-            "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID LIMIT 1",
-            "--format",
-            "csv",
-        ),
-        expected_stdout_fragments=("ID,NAME", "1,alice"),
-    ),
-    DatabricksCliTestCase(
-        description="query command prints ok for ddl statements",
-        command=("query", "CREATE OR REPLACE TABLE {ddl_target} (id INT)"),
-        expected_stdout_fragments=("OK",),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DATABRICKS_QUERY_E2E_TEST_CASES,
-    ids=[case.description for case in DATABRICKS_QUERY_E2E_TEST_CASES],
+    [
+        DatabricksCliTestCase(
+            description="query command uses databricks local override",
+            command=("query", "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID"),
+            expected_stdout_fragments=("ID   | 1", "NAME | alice", "ID   | 2", "NAME | bob"),
+        ),
+        DatabricksCliTestCase(
+            description="query command renders json output",
+            command=(
+                "query",
+                "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID LIMIT 1",
+                "--format",
+                "json",
+            ),
+            expected_stdout_fragments=('"ID": 1', '"NAME": "alice"'),
+        ),
+        DatabricksCliTestCase(
+            description="query command renders csv output",
+            command=(
+                "query",
+                "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID LIMIT 1",
+                "--format",
+                "csv",
+            ),
+            expected_stdout_fragments=("ID,NAME", "1,alice"),
+        ),
+        DatabricksCliTestCase(
+            description="query command prints ok for ddl statements",
+            command=("query", "CREATE OR REPLACE TABLE {ddl_target} (id INT)"),
+            expected_stdout_fragments=("OK",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_local_config_when_running_query_then_outputs_expected_rows(
     tmp_path: Path,
@@ -1066,7 +958,7 @@ def test_given_databricks_local_config_when_running_query_then_outputs_expected_
             ),
         )
     ],
-    ids=["applies existing-target snapshot changes on databricks"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_snapshot_targets_when_building_on_databricks_then_apply_sql_succeeds(
     tmp_path: Path,
@@ -1125,8 +1017,106 @@ def test_given_existing_snapshot_targets_when_building_on_databricks_then_apply_
 
 @pytest.mark.parametrize(
     "test_case",
-    DATABRICKS_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
-    ids=[case.description for case in DATABRICKS_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
+    [
+        DatabricksScenarioLocalReplayE2ETestCase(
+            description="captures databricks fixtures and replays transpilable SQL locally",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT\n"
+                "  customer_id,\n"
+                "  date_trunc('DAY', event_ts) AS event_day,\n"
+                "  SUM(if(amount_cents >= 1000, amount_cents, 0)) AS large_amount_cents,\n"
+                "  COUNT(*) AS event_count\n"
+                'FROM __source("raw_events")\n'
+                "GROUP BY customer_id, date_trunc('DAY', event_ts)\n"
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, TIMESTAMP '2026-01-01 08:15:00' "
+                "AS event_ts, 1500 AS amount_cents\n"
+                "  UNION ALL\n"
+                "  SELECT 10 AS customer_id, TIMESTAMP '2026-01-01 10:30:00' "
+                "AS event_ts, 500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id, "
+                "date_trunc('DAY', TIMESTAMP '2026-01-01 00:00:00') AS event_day, "
+                "1500 AS large_amount_cents, 2 AS event_count\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "transpilable_event_rollup",
+                "PASS",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            expected_local_rows=((10, 1500, 2),),
+            local_rows_sql=(
+                "SELECT customer_id, large_amount_cents, event_count "
+                "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
+            ),
+        ),
+        DatabricksScenarioLocalReplayE2ETestCase(
+            description="reports databricks local transpilation failures as X607",
+            scenario_name="local_transpile_error",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT customer_id, amount_cents\n"
+                'FROM __source("raw_events")\n'
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "local_transpile_error",
+                "ERROR",
+                "error[X607]",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            expected_return_code=1,
+            corrupt_capture_dialect=True,
+        ),
+        DatabricksScenarioLocalReplayE2ETestCase(
+            description="reports databricks local DuckDB execution failures as X608",
+            scenario_name="local_execution_error",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT\n"
+                "  customer_id,\n"
+                "  __sqb_missing_local_function(amount_cents) AS amount_cents\n"
+                'FROM __source("raw_events")\n'
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "local_execution_error",
+                "ERROR",
+                "error[X608]",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            expected_return_code=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_scenario_capture_when_replaying_locally_then_transpilable_sql_passes(
     tmp_path: Path,
@@ -1213,7 +1203,7 @@ def test_given_databricks_scenario_capture_when_replaying_locally_then_transpila
             ),
         )
     ],
-    ids=["executes snapshot scd2 matrix on databricks"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_project_when_building_on_databricks_then_scd2_history_is_valid(
     tmp_path: Path,
@@ -1321,7 +1311,7 @@ def test_given_snapshot_project_when_building_on_databricks_then_scd2_history_is
             },
         )
     ],
-    ids=["runs databricks scenario remotely and retains inspectable artifacts"],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_scenario_when_running_remotely_then_cleans_up_and_retains_artifacts(
     tmp_path: Path,
@@ -1400,7 +1390,7 @@ def test_given_databricks_scenario_when_running_remotely_then_cleans_up_and_reta
             expected_stdout_fragments=("Execution", "OK"),
         )
     ],
-    ids=["waffle shop full build succeeds on databricks"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_values_exist(
     tmp_path: Path,
@@ -1481,7 +1471,7 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
             ),
         )
     ],
-    ids=["direct changes only build prunes unchanged databricks model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_building_changes_only_on_databricks_then_prunes_model(
     tmp_path: Path,
@@ -1548,7 +1538,7 @@ def test_given_built_direct_project_when_building_changes_only_on_databricks_the
             expected_stdout_fragments=("raw_countries", "raw_webhook_events", "raw_customers"),
         )
     ],
-    ids=["source loader strategies apply expected rows on databricks"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_strategy_project_when_loading_twice_on_databricks_then_write_modes_apply(
     tmp_path: Path,
@@ -1634,42 +1624,41 @@ def test_given_loader_strategy_project_when_loading_twice_on_databricks_then_wri
             cleanup_databricks_schema(schema_name=schema_name)
 
 
-DATABRICKS_DIFF_E2E_TEST_CASES: list[DatabricksDiffE2ETestCase] = [
-    DatabricksDiffE2ETestCase(
-        description="schema only diff reports clean identical schemas",
-        mutation_sql=(),
-        command=(
-            "--no-color",
-            "diff",
-            "prod:dev",
-            "--schema-only",
-            "--select",
-            "stg_orders",
-        ),
-        expected_stdout_fragments=("stg_orders", "No schema differences."),
-        expected_return_code=0,
-    ),
-    DatabricksDiffE2ETestCase(
-        description="full diff reports row mismatch",
-        mutation_sql=("UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 1",),
-        command=(
-            "--no-color",
-            "diff",
-            "prod:dev",
-            "--full",
-            "--select",
-            "stg_orders",
-        ),
-        expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=1 | 100 -> 105"),
-        expected_return_code=1,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    DATABRICKS_DIFF_E2E_TEST_CASES,
-    ids=[case.description for case in DATABRICKS_DIFF_E2E_TEST_CASES],
+    [
+        DatabricksDiffE2ETestCase(
+            description="schema only diff reports clean identical schemas",
+            mutation_sql=(),
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--schema-only",
+                "--select",
+                "stg_orders",
+            ),
+            expected_stdout_fragments=("stg_orders", "No schema differences."),
+            expected_return_code=0,
+        ),
+        DatabricksDiffE2ETestCase(
+            description="full diff reports row mismatch",
+            mutation_sql=(
+                "UPDATE stg_orders SET amount_cents = amount_cents + 5 WHERE order_id = 1",
+            ),
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--select",
+                "stg_orders",
+            ),
+            expected_stdout_fragments=("amount_cents", "mismatches=1", "order_id=1 | 100 -> 105"),
+            expected_return_code=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_project_when_running_diff_then_outputs_expected_summary(
     tmp_path: Path,
@@ -1768,7 +1757,7 @@ def test_given_databricks_project_when_running_diff_then_outputs_expected_summar
             expected_rows=((1, 1, 100), (2, 2, 200)),
         )
     ],
-    ids=["clone defaults to shallow clone and hard copy uses CTAS"],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_project_when_cloning_then_default_uses_shallow_clone_and_hard_copy_ctas(
     tmp_path: Path,
@@ -1842,7 +1831,7 @@ def test_given_databricks_project_when_cloning_then_default_uses_shallow_clone_a
             expected_error_fragment="missing_column",
         )
     ],
-    ids=["query preserves underlying error"],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_invalid_query_when_running_query_then_underlying_error_is_preserved(
     tmp_path: Path,
@@ -1874,7 +1863,7 @@ def test_given_databricks_invalid_query_when_running_query_then_underlying_error
             expected_error_fragment="missing_column",
         )
     ],
-    ids=["build preserves underlying error"],
+    ids=lambda case: case.description,
 )
 def test_given_databricks_invalid_model_when_building_then_underlying_error_is_preserved(
     tmp_path: Path,

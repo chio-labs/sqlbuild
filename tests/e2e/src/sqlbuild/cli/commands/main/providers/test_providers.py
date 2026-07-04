@@ -96,7 +96,7 @@ PROVIDER_MARKER_FILE: str = (
             ),
         )
     ],
-    ids=["plan output shows provider usage for selected Python surfaces"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_usages_when_planning_then_text_and_json_include_selected_surfaces(
     test_case: ProviderPlanOutputE2ETestCase,
@@ -273,7 +273,7 @@ def test_given_provider_usages_when_planning_then_text_and_json_include_selected
             expected_loaded_rows=((1, "provider-e2e"),),
         )
     ],
-    ids=["providers are available in run build check and load commands"],
+    ids=lambda case: case.description,
 )
 def test_given_project_with_provider_when_running_commands_then_provider_is_injected(
     test_case: ProviderCommandE2ETestCase,
@@ -422,15 +422,24 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
     assert tuple(loaded_rows) == test_case.expected_loaded_rows
 
 
-PROVIDER_COMMAND_FAILURE_TEST_CASES: tuple[ProviderCommandFailureE2ETestCase, ...] = (
-    ProviderCommandFailureE2ETestCase(
-        description="run provider tears down when command fails after setup",
-        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "failing_task"),
-        repo_files={
-            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
-            "providers/marker.py": PROVIDER_MARKER_FILE,
-            "tasks/failing_task.py": dedent(
-                """
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ProviderCommandFailureE2ETestCase(
+            description="run provider tears down when command fails after setup",
+            command=(
+                "--no-color",
+                "build",
+                "--no-tests",
+                "--no-audits",
+                "--select",
+                "failing_task",
+            ),
+            repo_files={
+                "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+                "providers/marker.py": PROVIDER_MARKER_FILE,
+                "tasks/failing_task.py": dedent(
+                    """
                     from providers.marker import MarkerProvider
                     from sqlbuild.tasks import task
 
@@ -440,19 +449,19 @@ PROVIDER_COMMAND_FAILURE_TEST_CASES: tuple[ProviderCommandFailureE2ETestCase, ..
                         marker_provider.mark("task")
                         raise RuntimeError("intentional provider failure")
                     """
-            ).strip()
-            + "\n",
-        },
-        expected_marker_entries=("setup", "task", "teardown"),
-    ),
-    ProviderCommandFailureE2ETestCase(
-        description="build provider tears down when command fails after setup",
-        command=("--no-color", "build", "--select", "failing_asset"),
-        repo_files={
-            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
-            "providers/marker.py": PROVIDER_MARKER_FILE,
-            "assets/failing_asset.py": dedent(
-                """
+                ).strip()
+                + "\n",
+            },
+            expected_marker_entries=("setup", "task", "teardown"),
+        ),
+        ProviderCommandFailureE2ETestCase(
+            description="build provider tears down when command fails after setup",
+            command=("--no-color", "build", "--select", "failing_asset"),
+            repo_files={
+                "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+                "providers/marker.py": PROVIDER_MARKER_FILE,
+                "assets/failing_asset.py": dedent(
+                    """
                     from providers.marker import MarkerProvider
                     from sqlbuild.assets import asset
 
@@ -462,19 +471,19 @@ PROVIDER_COMMAND_FAILURE_TEST_CASES: tuple[ProviderCommandFailureE2ETestCase, ..
                         marker_provider.mark("asset")
                         raise RuntimeError("intentional provider failure")
                     """
-            ).strip()
-            + "\n",
-        },
-        expected_marker_entries=("setup", "asset", "teardown"),
-    ),
-    ProviderCommandFailureE2ETestCase(
-        description="check provider tears down when command fails after setup",
-        command=("--no-color", "check", "--select", "failing_check"),
-        repo_files={
-            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
-            "providers/marker.py": PROVIDER_MARKER_FILE,
-            "checks/failing_check.py": dedent(
-                """
+                ).strip()
+                + "\n",
+            },
+            expected_marker_entries=("setup", "asset", "teardown"),
+        ),
+        ProviderCommandFailureE2ETestCase(
+            description="check provider tears down when command fails after setup",
+            command=("--no-color", "check", "--select", "failing_check"),
+            repo_files={
+                "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+                "providers/marker.py": PROVIDER_MARKER_FILE,
+                "checks/failing_check.py": dedent(
+                    """
                     from providers.marker import MarkerProvider
                     from sqlbuild.checks import check
 
@@ -484,19 +493,19 @@ PROVIDER_COMMAND_FAILURE_TEST_CASES: tuple[ProviderCommandFailureE2ETestCase, ..
                         marker_provider.mark("check")
                         raise RuntimeError("intentional provider failure")
                     """
-            ).strip()
-            + "\n",
-        },
-        expected_marker_entries=("setup", "check", "teardown"),
-    ),
-    ProviderCommandFailureE2ETestCase(
-        description="load provider tears down when command fails after setup",
-        command=("--no-color", "load", "--select", "raw_provider_events"),
-        repo_files={
-            "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
-            "providers/marker.py": PROVIDER_MARKER_FILE,
-            "loaders/failing_loader.py": dedent(
-                """
+                ).strip()
+                + "\n",
+            },
+            expected_marker_entries=("setup", "check", "teardown"),
+        ),
+        ProviderCommandFailureE2ETestCase(
+            description="load provider tears down when command fails after setup",
+            command=("--no-color", "load", "--select", "raw_provider_events"),
+            repo_files={
+                "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
+                "providers/marker.py": PROVIDER_MARKER_FILE,
+                "loaders/failing_loader.py": dedent(
+                    """
                     from providers.marker import MarkerProvider
                     from sqlbuild.loaders import loader
 
@@ -506,10 +515,10 @@ PROVIDER_COMMAND_FAILURE_TEST_CASES: tuple[ProviderCommandFailureE2ETestCase, ..
                         marker_provider.mark("load")
                         raise RuntimeError("intentional provider failure")
                     """
-            ).strip()
-            + "\n",
-            "sources/raw.yml": dedent(
-                """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
                     sources:
                       - name: raw_provider_events
                         managed: true
@@ -518,18 +527,13 @@ PROVIDER_COMMAND_FAILURE_TEST_CASES: tuple[ProviderCommandFailureE2ETestCase, ..
                           - name: event_id
                             type: INTEGER
                     """
-            ).strip()
-            + "\n",
-        },
-        expected_marker_entries=("setup", "load", "teardown"),
+                ).strip()
+                + "\n",
+            },
+            expected_marker_entries=("setup", "load", "teardown"),
+        ),
     ),
-)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    PROVIDER_COMMAND_FAILURE_TEST_CASES,
-    ids=[case.description for case in PROVIDER_COMMAND_FAILURE_TEST_CASES],
+    ids=lambda case: case.description,
 )
 def test_given_provider_backed_command_failure_when_provider_was_setup_then_provider_tears_down(
     test_case: ProviderCommandFailureE2ETestCase,
@@ -553,24 +557,21 @@ def test_given_provider_backed_command_failure_when_provider_was_setup_then_prov
     assert marker_entries == test_case.expected_marker_entries
 
 
-PROVIDER_COMMAND_SIDE_EFFECT_TEST_CASES: tuple[ProviderCommandSideEffectE2ETestCase, ...] = (
-    ProviderCommandSideEffectE2ETestCase(
-        description="compile discovers typed providers without setup side effects",
-        command=("--no-color", "compile"),
-        expected_marker_exists=False,
-    ),
-    ProviderCommandSideEffectE2ETestCase(
-        description="plan discovers typed providers without setup side effects",
-        command=("--no-color", "plan"),
-        expected_marker_exists=False,
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PROVIDER_COMMAND_SIDE_EFFECT_TEST_CASES,
-    ids=[case.description for case in PROVIDER_COMMAND_SIDE_EFFECT_TEST_CASES],
+    (
+        ProviderCommandSideEffectE2ETestCase(
+            description="compile discovers typed providers without setup side effects",
+            command=("--no-color", "compile"),
+            expected_marker_exists=False,
+        ),
+        ProviderCommandSideEffectE2ETestCase(
+            description="plan discovers typed providers without setup side effects",
+            command=("--no-color", "plan"),
+            expected_marker_exists=False,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_provider_project_when_running_compile_or_plan_then_provider_setup_is_not_called(
     test_case: ProviderCommandSideEffectE2ETestCase,
@@ -620,7 +621,7 @@ def test_given_provider_project_when_running_compile_or_plan_then_provider_setup
             ),
         )
     ],
-    ids=["alias-imported provider annotation gets CLI diagnostic"],
+    ids=lambda case: case.description,
 )
 def test_given_alias_imported_provider_annotation_when_running_command_then_cli_prints_guidance(
     test_case: ProviderCommandDiagnosticE2ETestCase,
@@ -697,7 +698,7 @@ def test_given_alias_imported_provider_annotation_when_running_command_then_cli_
             expected_marker_entries=("setup", "virtual_task", "teardown"),
         )
     ],
-    ids=["virtual build provider tears down when command fails after setup"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_build_provider_failure_when_provider_was_setup_then_provider_tears_down(
     test_case: ProviderCommandFailureE2ETestCase,
@@ -737,7 +738,7 @@ def test_given_virtual_build_provider_failure_when_provider_was_setup_then_provi
             expected_exit_code=1,
         )
     ],
-    ids=["custom materialization gets providers and tears down after failure"],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_with_provider_when_it_fails_then_provider_tears_down(
     test_case: ProviderCustomMaterializationE2ETestCase,
@@ -791,7 +792,7 @@ def test_given_custom_materialization_with_provider_when_it_fails_then_provider_
             expected_exit_code=0,
         )
     ],
-    ids=["concurrent provider-backed source loaders share command provider session"],
+    ids=lambda case: case.description,
 )
 def test_given_concurrent_provider_backed_nodes_when_running_command_then_share_provider_session(
     test_case: ProviderCommandConcurrencyE2ETestCase,
@@ -921,7 +922,7 @@ def test_given_concurrent_provider_backed_nodes_when_running_command_then_share_
             expected_exit_code=0,
         )
     ],
-    ids=["python hooks access providers through context and parameter injection"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hooks_with_provider_when_building_then_hooks_use_provider_session(
     test_case: ProviderHookE2ETestCase,
@@ -989,7 +990,7 @@ def test_given_python_hooks_with_provider_when_building_then_hooks_use_provider_
             expected_exit_code=0,
         )
     ],
-    ids=["python hooks on view models use provider injection"],
+    ids=lambda case: case.description,
 )
 def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_use_provider(
     test_case: ProviderHookE2ETestCase,
@@ -1045,13 +1046,15 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
     assert marker_entries == test_case.expected_marker_entries
 
 
-PROVIDER_HOOK_MATERIALIZATION_TEST_CASES: list[ProviderHookMaterializationE2ETestCase] = [
-    ProviderHookMaterializationE2ETestCase(
-        description="incremental python hooks use provider injection",
-        command=("--no-color", "build", "--select", "incremental_orders"),
-        model_relative_path="models/incremental_orders.sql",
-        model_sql=dedent(
-            """
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProviderHookMaterializationE2ETestCase(
+            description="incremental python hooks use provider injection",
+            command=("--no-color", "build", "--select", "incremental_orders"),
+            model_relative_path="models/incremental_orders.sql",
+            model_sql=dedent(
+                """
                 MODEL (
                   materialized incremental,
                   incremental_strategy delete_insert,
@@ -1063,23 +1066,23 @@ PROVIDER_HOOK_MATERIALIZATION_TEST_CASES: list[ProviderHookMaterializationE2ETes
 
                 SELECT 1 AS order_id
                 """
-        ).strip()
-        + "\n",
-        extra_repo_files={},
-        expected_marker_entries=(
-            "setup",
-            "incremental_orders:pre_hooks",
-            "incremental_orders:post_hooks",
-            "teardown",
+            ).strip()
+            + "\n",
+            extra_repo_files={},
+            expected_marker_entries=(
+                "setup",
+                "incremental_orders:pre_hooks",
+                "incremental_orders:post_hooks",
+                "teardown",
+            ),
+            expected_exit_code=0,
         ),
-        expected_exit_code=0,
-    ),
-    ProviderHookMaterializationE2ETestCase(
-        description="microbatch python hooks use provider injection",
-        command=("--no-color", "build", "--select", "+hourly_activity"),
-        model_relative_path="models/hourly_activity.sql",
-        model_sql=dedent(
-            """
+        ProviderHookMaterializationE2ETestCase(
+            description="microbatch python hooks use provider injection",
+            command=("--no-color", "build", "--select", "+hourly_activity"),
+            model_relative_path="models/hourly_activity.sql",
+            model_sql=dedent(
+                """
                 MODEL (
                   materialized incremental,
                   incremental_strategy delete_insert,
@@ -1099,32 +1102,32 @@ PROVIDER_HOOK_MATERIALIZATION_TEST_CASES: list[ProviderHookMaterializationE2ETes
                 FROM __ref("fact_orders")
                 GROUP BY DATE_TRUNC('hour', ordered_at)
                 """
-        ).strip()
-        + "\n",
-        extra_repo_files={
-            "models/fact_orders.sql": dedent(
-                """
+            ).strip()
+            + "\n",
+            extra_repo_files={
+                "models/fact_orders.sql": dedent(
+                    """
                     MODEL (materialized table);
 
                     SELECT 1 AS order_id, TIMESTAMP '2026-01-01 00:00:00' AS ordered_at
                     """
-            ).strip()
-            + "\n",
-        },
-        expected_marker_entries=(
-            "setup",
-            "hourly_activity:pre_hooks",
-            "hourly_activity:post_hooks",
-            "teardown",
+                ).strip()
+                + "\n",
+            },
+            expected_marker_entries=(
+                "setup",
+                "hourly_activity:pre_hooks",
+                "hourly_activity:post_hooks",
+                "teardown",
+            ),
+            expected_exit_code=0,
         ),
-        expected_exit_code=0,
-    ),
-    ProviderHookMaterializationE2ETestCase(
-        description="snapshot python hooks use provider injection",
-        command=("--no-color", "build", "--select", "customer_snapshot"),
-        model_relative_path="models/customer_snapshot.sql",
-        model_sql=dedent(
-            """
+        ProviderHookMaterializationE2ETestCase(
+            description="snapshot python hooks use provider injection",
+            command=("--no-color", "build", "--select", "customer_snapshot"),
+            model_relative_path="models/customer_snapshot.sql",
+            model_sql=dedent(
+                """
                 MODEL (
                   materialized snapshot,
                   unique_key [customer_id],
@@ -1137,23 +1140,23 @@ PROVIDER_HOOK_MATERIALIZATION_TEST_CASES: list[ProviderHookMaterializationE2ETes
                 SELECT 1 AS customer_id, 'basic' AS plan,
                   TIMESTAMP '2026-01-01 00:00:00' AS updated_at
                 """
-        ).strip()
-        + "\n",
-        extra_repo_files={},
-        expected_marker_entries=(
-            "setup",
-            "customer_snapshot:pre_hooks",
-            "customer_snapshot:post_hooks",
-            "teardown",
+            ).strip()
+            + "\n",
+            extra_repo_files={},
+            expected_marker_entries=(
+                "setup",
+                "customer_snapshot:pre_hooks",
+                "customer_snapshot:post_hooks",
+                "teardown",
+            ),
+            expected_exit_code=0,
         ),
-        expected_exit_code=0,
-    ),
-    ProviderHookMaterializationE2ETestCase(
-        description="custom materialization python hooks use provider injection",
-        command=("--no-color", "build", "--select", "custom_orders"),
-        model_relative_path="models/custom_orders.sql",
-        model_sql=dedent(
-            """
+        ProviderHookMaterializationE2ETestCase(
+            description="custom materialization python hooks use provider injection",
+            command=("--no-color", "build", "--select", "custom_orders"),
+            model_relative_path="models/custom_orders.sql",
+            model_sql=dedent(
+                """
                 MODEL (
                   materialized copy_table,
                   pre_hooks [python("mark_hook")],
@@ -1162,11 +1165,11 @@ PROVIDER_HOOK_MATERIALIZATION_TEST_CASES: list[ProviderHookMaterializationE2ETes
 
                 SELECT 1 AS order_id
                 """
-        ).strip()
-        + "\n",
-        extra_repo_files={
-            "materializations/copy_table.py": dedent(
-                """
+            ).strip()
+            + "\n",
+            extra_repo_files={
+                "materializations/copy_table.py": dedent(
+                    """
                     from sqlbuild.executor.custom.models import (
                         MaterializationContext,
                         MaterializationResult,
@@ -1177,24 +1180,19 @@ PROVIDER_HOOK_MATERIALIZATION_TEST_CASES: list[ProviderHookMaterializationE2ETes
                         ctx.execute_sql(f"CREATE TABLE {ctx.destination} AS {ctx.sql}")
                         return MaterializationResult(relation=ctx.destination)
                     """
-            ).strip()
-            + "\n",
-        },
-        expected_marker_entries=(
-            "setup",
-            "custom_orders:pre_hooks",
-            "custom_orders:post_hooks",
-            "teardown",
+                ).strip()
+                + "\n",
+            },
+            expected_marker_entries=(
+                "setup",
+                "custom_orders:pre_hooks",
+                "custom_orders:post_hooks",
+                "teardown",
+            ),
+            expected_exit_code=0,
         ),
-        expected_exit_code=0,
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    PROVIDER_HOOK_MATERIALIZATION_TEST_CASES,
-    ids=[case.description for case in PROVIDER_HOOK_MATERIALIZATION_TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_materialization_hooks_with_provider_when_building_then_hooks_use_provider(
     test_case: ProviderHookMaterializationE2ETestCase,
@@ -1246,7 +1244,7 @@ def test_given_materialization_hooks_with_provider_when_building_then_hooks_use_
             expected_exit_code=0,
         )
     ],
-    ids=["untyped python hook parameter named like provider is injected by name"],
+    ids=lambda case: case.description,
 )
 def test_given_untyped_python_hook_provider_parameter_when_building_then_provider_is_injected(
     test_case: ProviderHookE2ETestCase,
@@ -1305,7 +1303,7 @@ def test_given_untyped_python_hook_provider_parameter_when_building_then_provide
             expected_exit_code=1,
         )
     ],
-    ids=["python hook failure still tears down provider"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_with_provider_when_hook_fails_then_provider_tears_down(
     test_case: ProviderHookE2ETestCase,
@@ -1366,7 +1364,7 @@ def test_given_python_hook_with_provider_when_hook_fails_then_provider_tears_dow
             expected_exit_code=1,
         )
     ],
-    ids=["python post hook failure still tears down provider"],
+    ids=lambda case: case.description,
 )
 def test_given_python_post_hook_with_provider_when_hook_fails_then_provider_tears_down(
     test_case: ProviderHookE2ETestCase,
@@ -1426,7 +1424,7 @@ def test_given_python_post_hook_with_provider_when_hook_fails_then_provider_tear
             expected_error_fragment=("annotated with MarkerProvider imported as 'alias_marker'"),
         )
     ],
-    ids=["alias-imported hook provider annotation gets CLI diagnostic"],
+    ids=lambda case: case.description,
 )
 def test_given_alias_imported_provider_annotation_on_hook_when_building_then_cli_prints_guidance(
     test_case: ProviderHookDiagnosticE2ETestCase,
@@ -1495,7 +1493,7 @@ def test_given_alias_imported_provider_annotation_on_hook_when_building_then_cli
             expected_error_fragment=("Provider parameter 'marker_provider' expected OtherProvider"),
         )
     ],
-    ids=["hook provider annotation mismatch gets CLI diagnostic"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_annotation_mismatch_on_hook_when_building_then_cli_prints_mismatch(
     test_case: ProviderHookDiagnosticE2ETestCase,
@@ -1566,7 +1564,7 @@ def test_given_provider_annotation_mismatch_on_hook_when_building_then_cli_print
             ),
         )
     ],
-    ids=["python hook argument cannot shadow provider injection"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_kwarg_matches_provider_when_building_then_cli_prints_conflict(
     test_case: ProviderHookDiagnosticE2ETestCase,
@@ -1615,44 +1613,43 @@ def test_given_python_hook_kwarg_matches_provider_when_building_then_cli_prints_
     assert test_case.expected_error_fragment in result.stdout + result.stderr
 
 
-PROVIDER_HOOK_CONTEXT_CONFLICT_TEST_CASES: list[ProviderHookContextConflictE2ETestCase] = [
-    ProviderHookContextConflictE2ETestCase(
-        description="python hook argument cannot shadow ctx injection",
-        command=("--no-color", "build", "--select", "orders"),
-        context_parameter_name="ctx",
-        expected_error_fragment=("argument 'ctx' conflicts with reserved context parameter 'ctx'"),
-    ),
-    ProviderHookContextConflictE2ETestCase(
-        description="python hook argument cannot shadow context injection",
-        command=("--no-color", "build", "--select", "orders"),
-        context_parameter_name="context",
-        expected_error_fragment=(
-            "argument 'context' conflicts with reserved context parameter 'context'"
-        ),
-    ),
-    ProviderHookContextConflictE2ETestCase(
-        description="python hook argument cannot shadow _ctx injection",
-        command=("--no-color", "build", "--select", "orders"),
-        context_parameter_name="_ctx",
-        expected_error_fragment=(
-            "argument '_ctx' conflicts with reserved context parameter '_ctx'"
-        ),
-    ),
-    ProviderHookContextConflictE2ETestCase(
-        description="python hook argument cannot shadow hook_context injection",
-        command=("--no-color", "build", "--select", "orders"),
-        context_parameter_name="hook_context",
-        expected_error_fragment=(
-            "argument 'hook_context' conflicts with reserved context parameter 'hook_context'"
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PROVIDER_HOOK_CONTEXT_CONFLICT_TEST_CASES,
-    ids=[case.description for case in PROVIDER_HOOK_CONTEXT_CONFLICT_TEST_CASES],
+    [
+        ProviderHookContextConflictE2ETestCase(
+            description="python hook argument cannot shadow ctx injection",
+            command=("--no-color", "build", "--select", "orders"),
+            context_parameter_name="ctx",
+            expected_error_fragment=(
+                "argument 'ctx' conflicts with reserved context parameter 'ctx'"
+            ),
+        ),
+        ProviderHookContextConflictE2ETestCase(
+            description="python hook argument cannot shadow context injection",
+            command=("--no-color", "build", "--select", "orders"),
+            context_parameter_name="context",
+            expected_error_fragment=(
+                "argument 'context' conflicts with reserved context parameter 'context'"
+            ),
+        ),
+        ProviderHookContextConflictE2ETestCase(
+            description="python hook argument cannot shadow _ctx injection",
+            command=("--no-color", "build", "--select", "orders"),
+            context_parameter_name="_ctx",
+            expected_error_fragment=(
+                "argument '_ctx' conflicts with reserved context parameter '_ctx'"
+            ),
+        ),
+        ProviderHookContextConflictE2ETestCase(
+            description="python hook argument cannot shadow hook_context injection",
+            command=("--no-color", "build", "--select", "orders"),
+            context_parameter_name="hook_context",
+            expected_error_fragment=(
+                "argument 'hook_context' conflicts with reserved context parameter 'hook_context'"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_kwarg_matches_context_when_building_then_cli_prints_conflict(
     test_case: ProviderHookContextConflictE2ETestCase,

@@ -70,7 +70,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             ),
         )
     ],
-    ids=["current dbt models are pruned and changed dbt models rebuild SQLBuild downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_built_dbt_models_when_rerunning_and_changing_model_then_prunes_and_cascades(
     test_case: DbtPhase11ExecutionTestCase,
@@ -137,7 +137,7 @@ def test_given_built_dbt_models_when_rerunning_and_changing_model_then_prunes_an
             expected_source_freshness_rows=(),
         )
     ],
-    ids=["stale dbt source blocks affected branch while unrelated branch runs"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_source_freshness_error_when_building_then_blocks_affected_branch(
     test_case: DbtPhase11SourceBlockingTestCase,
@@ -203,7 +203,7 @@ def test_given_dbt_source_freshness_error_when_building_then_blocks_affected_bra
             expected_rows=((1, 125),),
         )
     ],
-    ids=["changed dbt source freshness reruns dbt and SQLBuild downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_source_freshness_changes_when_building_then_reruns_downstream_work(
     test_case: DbtPhase11SourceFreshnessChangeTestCase,
@@ -311,7 +311,7 @@ def test_given_dbt_source_freshness_changes_when_building_then_reruns_downstream
             expected_rows=((1, 140),),
         )
     ],
-    ids=["dbt-only selector uses source freshness state without SQLBuild staleness"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_only_selector_when_source_freshness_changes_then_reruns_dbt_model_only(
     test_case: DbtPhase11DbtOnlySourceFreshnessTestCase,
@@ -398,7 +398,7 @@ def test_given_dbt_only_selector_when_source_freshness_changes_then_reruns_dbt_m
             expected_source_freshness_rows=(),
         )
     ],
-    ids=["empty dbt source is unknown and does not persist freshness state"],
+    ids=lambda case: case.description,
 )
 def test_given_empty_dbt_source_when_rerunning_then_models_are_current_without_freshness_state(
     test_case: DbtPhase11SourceObservationErrorTestCase,
@@ -456,7 +456,7 @@ def test_given_empty_dbt_source_when_rerunning_then_models_are_current_without_f
             expected_rows=((1, 250),),
         )
     ],
-    ids=["one changed source reruns model that also depends on unchanged source"],
+    ids=lambda case: case.description,
 )
 def test_given_multi_source_dbt_model_when_one_source_changes_then_model_reruns(
     test_case: DbtPhase11MultiSourceFreshnessTestCase,
@@ -535,7 +535,7 @@ def test_given_multi_source_dbt_model_when_one_source_changes_then_model_reruns(
             expected_rows=((1, 310), (2, 320), (3, 999)),
         )
     ],
-    ids=["loaded_at_query and filtered freshness drive dbt interop state"],
+    ids=lambda case: case.description,
 )
 def test_given_query_and_filtered_dbt_sources_when_source_changes_then_freshness_reruns_model(
     test_case: DbtPhase11QueryFilterFreshnessTestCase,
@@ -636,7 +636,7 @@ def test_given_query_and_filtered_dbt_sources_when_source_changes_then_freshness
             expected_rows=((1, 155),),
         )
     ],
-    ids=["backward dbt source freshness movement reruns downstream work"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_source_freshness_moves_backward_when_building_then_reruns_downstream_work(
     test_case: DbtPhase11FreshnessEdgeCaseTestCase,
@@ -702,7 +702,7 @@ def test_given_dbt_source_freshness_moves_backward_when_building_then_reruns_dow
             expected_stale_sqlbuild_model_names=("downstream_orders",),
         )
     ],
-    ids=["missing dbt source table is unknown and plan does not crash"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_dbt_source_table_when_planning_then_source_freshness_is_unknown(
     test_case: DbtPhase11FreshnessEdgeCaseTestCase,
@@ -741,7 +741,7 @@ def test_given_missing_dbt_source_table_when_planning_then_source_freshness_is_u
             expected_rows=((1, 100),),
         )
     ],
-    ids=["custom SQLBuild target schema receives dbt source freshness state"],
+    ids=lambda case: case.description,
 )
 def test_given_custom_sqlbuild_target_schema_when_building_then_writes_freshness_state_there(
     test_case: DbtPhase11FreshnessEdgeCaseTestCase,
@@ -783,7 +783,7 @@ def test_given_custom_sqlbuild_target_schema_when_building_then_writes_freshness
             expected_source_freshness_rows=(),
         )
     ],
-    ids=["failed SQLBuild execution does not persist dbt freshness state"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_execution_fails_after_dbt_when_building_then_does_not_write_freshness_state(
     test_case: DbtPhase11FreshnessEdgeCaseTestCase,
@@ -823,7 +823,7 @@ def test_given_sqlbuild_execution_fails_after_dbt_when_building_then_does_not_wr
             expected_customer_rows=((10, "Ada"),),
         )
     ],
-    ids=["failed dbt model blocks downstream SQLBuild while unrelated branch runs"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_model_failure_when_building_then_blocks_affected_sqlbuild_branch(
     test_case: DbtPhase11ModelFailureTestCase,
@@ -879,7 +879,7 @@ def test_given_dbt_model_failure_when_building_then_blocks_affected_sqlbuild_bra
             unexpected_stdout_fragments=("dbt execution", "seed      country_codes"),
         )
     ],
-    ids=["current dbt producers prune selected seed and test work"],
+    ids=lambda case: case.description,
 )
 def test_given_current_dbt_models_when_seed_and_test_selected_then_prunes_non_model_work(
     test_case: DbtPhase11NonModelWorkTestCase,
@@ -940,7 +940,7 @@ def test_given_current_dbt_models_when_seed_and_test_selected_then_prunes_non_mo
             unexpected_stdout_fragments=("Tests pruned", "Seeds pruned"),
         )
     ],
-    ids=["changed dbt model preserves selected seed and test work"],
+    ids=lambda case: case.description,
 )
 def test_given_changed_dbt_model_when_seed_and_test_selected_then_runs_non_model_work(
     test_case: DbtPhase11NonModelWorkTestCase,
@@ -987,7 +987,7 @@ def test_given_changed_dbt_model_when_seed_and_test_selected_then_runs_non_model
             expected_rows=((1, True),),
         )
     ],
-    ids=["dbt interop preserves native SQLBuild function plan details"],
+    ids=lambda case: case.description,
 )
 def test_given_current_dbt_and_new_sqlbuild_function_when_building_then_shows_native_plan_detail(
     test_case: DbtPhase11SqlbuildNativePlanTestCase,
@@ -1029,7 +1029,7 @@ def test_given_current_dbt_and_new_sqlbuild_function_when_building_then_shows_na
             expected_stdout_fragments=("Skipped current models",),
         )
     ],
-    ids=["plan JSON and human output include dbt model plan state"],
+    ids=lambda case: case.description,
 )
 def test_given_current_dbt_models_when_planning_then_outputs_model_plan_state(
     test_case: DbtPhase11PlanOutputTestCase,
@@ -1072,7 +1072,7 @@ def test_given_current_dbt_models_when_planning_then_outputs_model_plan_state(
             expected_rows=((1, 107),),
         )
     ],
-    ids=["dbt replay_on_change full adds full refresh for changed dbt work"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_replay_full_when_model_changes_then_dbt_execution_uses_full_refresh(
     test_case: DbtPhase11ReplayFullTestCase,
@@ -1108,31 +1108,28 @@ def test_given_dbt_replay_full_when_model_changes_then_dbt_execution_uses_full_r
     ) == list(test_case.expected_rows)
 
 
-FULL_REFRESH_SCOPE_TEST_CASES: list[DbtFullRefreshScopeTestCase] = [
-    DbtFullRefreshScopeTestCase(
-        description="full-refresh of a leaf selects only that model, not its upstream",
-        select="fact_orders",
-        expected_command_select_fragments=("fqn:analytics.fact_orders",),
-        unexpected_command_select_fragments=("fqn:analytics.stg_orders",),
-        expected_full_refresh_count=1,
-    ),
-    DbtFullRefreshScopeTestCase(
-        description="full-refresh of a closure selects the whole upstream closure",
-        select="+fact_orders",
-        expected_command_select_fragments=(
-            "fqn:analytics.fact_orders",
-            "fqn:analytics.stg_orders",
-        ),
-        unexpected_command_select_fragments=(),
-        expected_full_refresh_count=2,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    FULL_REFRESH_SCOPE_TEST_CASES,
-    ids=[case.description for case in FULL_REFRESH_SCOPE_TEST_CASES],
+    [
+        DbtFullRefreshScopeTestCase(
+            description="full-refresh of a leaf selects only that model, not its upstream",
+            select="fact_orders",
+            expected_command_select_fragments=("fqn:analytics.fact_orders",),
+            unexpected_command_select_fragments=("fqn:analytics.stg_orders",),
+            expected_full_refresh_count=1,
+        ),
+        DbtFullRefreshScopeTestCase(
+            description="full-refresh of a closure selects the whole upstream closure",
+            select="+fact_orders",
+            expected_command_select_fragments=(
+                "fqn:analytics.fact_orders",
+                "fqn:analytics.stg_orders",
+            ),
+            unexpected_command_select_fragments=(),
+            expected_full_refresh_count=2,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_full_refresh_when_selecting_then_scope_matches_selection(
     test_case: DbtFullRefreshScopeTestCase,

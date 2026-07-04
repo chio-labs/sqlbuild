@@ -24,26 +24,6 @@ from tests.unit.src.sqlbuild.executor.load._test_types import (
 from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import ExecutionSlackProvider
 
-SOURCE_LOAD_NONE_RETURN_TEST_CASES: list[SourceLoadNoneReturnTestCase] = [
-    SourceLoadNoneReturnTestCase(
-        description="allows targeted self-managed intermediate loader to return none",
-        source_name="fetch_orders",
-        loader_name="fetch_orders",
-        loader_target="staging_fetch_orders",
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_rows_loaded=0,
-    ),
-    SourceLoadNoneReturnTestCase(
-        description="fails untargeted self-managed intermediate loader returning none",
-        source_name="fetch_orders",
-        loader_name="fetch_orders",
-        loader_target=None,
-        expected_status=ExecutionStatus.FAILED,
-        expected_rows_loaded=0,
-        expected_error_fragment="returned no rows and has no destination declared",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -69,7 +49,7 @@ SOURCE_LOAD_NONE_RETURN_TEST_CASES: list[SourceLoadNoneReturnTestCase] = [
             expected_rows_loaded=0,
         )
     ],
-    ids=["passes runtime metadata and cursor fields to loader context"],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_when_executing_then_context_includes_runtime_metadata(
     test_case: SourceLoadExecutionContextTestCase,
@@ -151,7 +131,7 @@ def test_given_source_loader_when_executing_then_context_includes_runtime_metada
             expected_rows_loaded=0,
         )
     ],
-    ids=["injects provider into source loader execution"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_parameter_when_executing_source_loader_then_provider_is_injected(
     test_case: SourceLoadExecutionContextTestCase,
@@ -223,7 +203,7 @@ def test_given_provider_parameter_when_executing_source_loader_then_provider_is_
             expected_rows_loaded=0,
         )
     ],
-    ids=["exposes providers on source loader context"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_executing_source_loader_then_context_exposes_providers(
     test_case: SourceLoadExecutionContextTestCase,
@@ -298,7 +278,7 @@ def test_given_provider_container_when_executing_source_loader_then_context_expo
             expected_rows_loaded=0,
         )
     ],
-    ids=["normalizes missing provider container as source loader failure"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_provider_container_when_executing_source_loader_then_failure_is_recorded(
     test_case: SourceLoadExecutionContextTestCase,
@@ -366,7 +346,7 @@ def test_given_missing_provider_container_when_executing_source_loader_then_fail
             expected_rows_loaded=0,
         )
     ],
-    ids=["injects provider into external source loader execution"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_parameter_when_executing_external_source_loader_then_provider_is_injected(
     test_case: SourceLoadExecutionContextTestCase,
@@ -439,7 +419,7 @@ def test_given_provider_parameter_when_executing_external_source_loader_then_pro
             expected_rows_loaded=0,
         )
     ],
-    ids=["exposes providers on external source loader context"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_executing_external_loader_then_context_exposes_providers(
     test_case: SourceLoadExecutionContextTestCase,
@@ -495,8 +475,26 @@ def test_given_provider_container_when_executing_external_loader_then_context_ex
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_LOAD_NONE_RETURN_TEST_CASES,
-    ids=[case.description for case in SOURCE_LOAD_NONE_RETURN_TEST_CASES],
+    [
+        SourceLoadNoneReturnTestCase(
+            description="allows targeted self-managed intermediate loader to return none",
+            source_name="fetch_orders",
+            loader_name="fetch_orders",
+            loader_target="staging_fetch_orders",
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_rows_loaded=0,
+        ),
+        SourceLoadNoneReturnTestCase(
+            description="fails untargeted self-managed intermediate loader returning none",
+            source_name="fetch_orders",
+            loader_name="fetch_orders",
+            loader_target=None,
+            expected_status=ExecutionStatus.FAILED,
+            expected_rows_loaded=0,
+            expected_error_fragment="returned no rows and has no destination declared",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_self_managed_intermediate_loader_when_returning_none_then_applies_target_rule(
     test_case: SourceLoadNoneReturnTestCase,

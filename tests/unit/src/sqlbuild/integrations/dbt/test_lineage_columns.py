@@ -50,181 +50,74 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     column_lineage_target_id,
 )
 
-COLUMN_LINEAGE_TEST_CASES: tuple[DbtColumnLineageSelectionTestCase, ...] = (
-    DbtColumnLineageSelectionTestCase(
-        description="traces SQLBuild column upstream through compiled dbt SQL",
-        target="downstream_orders:downstream_amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(
-            ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
-            ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
-            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
-        ),
-        expected_target=("model", "downstream_orders", "downstream_amount"),
-    ),
-    DbtColumnLineageSelectionTestCase(
-        description="traces dbt unique id column upstream",
-        target="model.analytics.fact_orders:amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(
-            ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
-            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
-        ),
-        expected_target=("model", "model.analytics.fact_orders", "amount"),
-    ),
-    DbtColumnLineageSelectionTestCase(
-        description="traces dbt short name column upstream",
-        target="fact_orders:amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(
-            ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
-            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
-        ),
-        expected_target=("model", "model.analytics.fact_orders", "amount"),
-    ),
-    DbtColumnLineageSelectionTestCase(
-        description="traces dbt source column downstream into SQLBuild model",
-        target="source.analytics.raw.orders:amount",
-        direction=DbtLineageDirection.DOWNSTREAM,
-        expected_edges=(
-            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
-            ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
-            ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
-        ),
-        expected_target=("source", "source.analytics.raw.orders", "amount"),
-    ),
-    DbtColumnLineageSelectionTestCase(
-        description="limits downstream traversal with depth one",
-        target="source.analytics.raw.orders:amount",
-        direction=DbtLineageDirection.DOWNSTREAM,
-        depth=1,
-        expected_edges=(
-            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
-        ),
-        expected_target=("source", "source.analytics.raw.orders", "amount"),
-        expected_truncated=True,
-    ),
-    DbtColumnLineageSelectionTestCase(
-        description="returns no edges with depth zero",
-        target="downstream_orders:downstream_amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        depth=0,
-        expected_edges=(),
-        expected_target=("model", "downstream_orders", "downstream_amount"),
-        expected_truncated=True,
-    ),
-)
-
-COLUMN_LINEAGE_ERROR_TEST_CASES: tuple[DbtColumnLineageErrorTestCase, ...] = (
-    DbtColumnLineageErrorTestCase(
-        description="rejects both direction",
-        target="downstream_orders:downstream_amount",
-        direction=DbtLineageDirection.BOTH,
-        expected_error_fragment="supports --direction upstream or downstream",
-        expected_code="C336",
-    ),
-    DbtColumnLineageErrorTestCase(
-        description="rejects ambiguous dbt short name",
-        target="orders:amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_error_fragment="ambiguous dbt lineage target 'orders'",
-        expected_code="C330",
-    ),
-    DbtColumnLineageErrorTestCase(
-        description="rejects unknown resource",
-        target="missing_orders:amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_error_fragment="unknown dbt lineage target 'missing_orders'",
-        expected_code="C331",
-    ),
-)
-
-COLUMN_LINEAGE_OUTPUT_TEST_CASES: tuple[DbtColumnLineageOutputTestCase, ...] = (
-    DbtColumnLineageOutputTestCase(
-        description="formats list output",
-        output_format=DbtLineageOutputFormat.LIST,
-        expected_fragments=(
-            "Column dependencies",
-            "model.analytics.fact_orders:amount",
-            "downstream_orders:downstream_amount",
-            "direct",
-        ),
-    ),
-    DbtColumnLineageOutputTestCase(
-        description="formats tree output",
-        output_format=DbtLineageOutputFormat.TREE,
-        expected_fragments=(
-            "Column trace",
-            "downstream_orders:downstream_amount",
-            "fact_orders:amount",
-            "└── ",
-        ),
-    ),
-)
-
-UNQUALIFIED_REF_COLUMN_LINEAGE_TEST_CASES: tuple[DbtColumnLineageSelectionTestCase, ...] = (
-    DbtColumnLineageSelectionTestCase(
-        description="traces unqualified SQLBuild dbt ref",
-        target="downstream_orders:downstream_amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(
-            ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
-            ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
-            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
-        ),
-    ),
-    DbtColumnLineageSelectionTestCase(
-        description="returns no edges for unknown column",
-        target="downstream_orders:missing_amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(),
-    ),
-)
-
-STAR_COLUMN_LINEAGE_TEST_CASES: tuple[DbtColumnLineageSelectionTestCase, ...] = (
-    DbtColumnLineageSelectionTestCase(
-        description="expands star using inspected source schema and propagated model schema",
-        target="model.analytics.fact_orders:amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(
-            ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
-            ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
-        ),
-    ),
-    DbtColumnLineageSelectionTestCase(
-        description="does not trust dbt manifest columns for star expansion",
-        target="model.analytics.fact_orders:amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(),
-    ),
-)
-
-SOURCE_SCHEMA_INSPECTION_TEST_CASES: tuple[DbtColumnLineageSelectionTestCase, ...] = (
-    DbtColumnLineageSelectionTestCase(
-        description="inspects source schema with fallback relation name",
-        target="source.analytics.raw.orders:amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(),
-        expected_warnings=(),
-    ),
-    DbtColumnLineageSelectionTestCase(
-        description="warns when source schema cannot be inspected",
-        target="source.analytics.raw.orders:amount",
-        direction=DbtLineageDirection.UPSTREAM,
-        expected_edges=(),
-        expected_warnings=(
-            "Could not inspect source source.analytics.raw.orders; "
-            "SELECT * lineage from this relation may be incomplete: "
-            "relation was not returned by batched column lookup",
-        ),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    COLUMN_LINEAGE_TEST_CASES,
-    ids=[case.description for case in COLUMN_LINEAGE_TEST_CASES],
+    (
+        DbtColumnLineageSelectionTestCase(
+            description="traces SQLBuild column upstream through compiled dbt SQL",
+            target="downstream_orders:downstream_amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(
+                ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
+                ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ),
+            expected_target=("model", "downstream_orders", "downstream_amount"),
+        ),
+        DbtColumnLineageSelectionTestCase(
+            description="traces dbt unique id column upstream",
+            target="model.analytics.fact_orders:amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(
+                ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ),
+            expected_target=("model", "model.analytics.fact_orders", "amount"),
+        ),
+        DbtColumnLineageSelectionTestCase(
+            description="traces dbt short name column upstream",
+            target="fact_orders:amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(
+                ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ),
+            expected_target=("model", "model.analytics.fact_orders", "amount"),
+        ),
+        DbtColumnLineageSelectionTestCase(
+            description="traces dbt source column downstream into SQLBuild model",
+            target="source.analytics.raw.orders:amount",
+            direction=DbtLineageDirection.DOWNSTREAM,
+            expected_edges=(
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+                ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+                ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
+            ),
+            expected_target=("source", "source.analytics.raw.orders", "amount"),
+        ),
+        DbtColumnLineageSelectionTestCase(
+            description="limits downstream traversal with depth one",
+            target="source.analytics.raw.orders:amount",
+            direction=DbtLineageDirection.DOWNSTREAM,
+            depth=1,
+            expected_edges=(
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ),
+            expected_target=("source", "source.analytics.raw.orders", "amount"),
+            expected_truncated=True,
+        ),
+        DbtColumnLineageSelectionTestCase(
+            description="returns no edges with depth zero",
+            target="downstream_orders:downstream_amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            depth=0,
+            expected_edges=(),
+            expected_target=("model", "downstream_orders", "downstream_amount"),
+            expected_truncated=True,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_compiled_dbt_sql_when_selecting_column_lineage_then_traces_mixed_columns(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -268,8 +161,30 @@ def test_given_compiled_dbt_sql_when_selecting_column_lineage_then_traces_mixed_
 
 @pytest.mark.parametrize(
     "test_case",
-    COLUMN_LINEAGE_ERROR_TEST_CASES,
-    ids=[case.description for case in COLUMN_LINEAGE_ERROR_TEST_CASES],
+    (
+        DbtColumnLineageErrorTestCase(
+            description="rejects both direction",
+            target="downstream_orders:downstream_amount",
+            direction=DbtLineageDirection.BOTH,
+            expected_error_fragment="supports --direction upstream or downstream",
+            expected_code="C336",
+        ),
+        DbtColumnLineageErrorTestCase(
+            description="rejects ambiguous dbt short name",
+            target="orders:amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_error_fragment="ambiguous dbt lineage target 'orders'",
+            expected_code="C330",
+        ),
+        DbtColumnLineageErrorTestCase(
+            description="rejects unknown resource",
+            target="missing_orders:amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_error_fragment="unknown dbt lineage target 'missing_orders'",
+            expected_code="C331",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_column_lineage_target_when_selecting_then_raises_clear_error(
     test_case: DbtColumnLineageErrorTestCase,
@@ -323,7 +238,7 @@ def test_given_invalid_column_lineage_target_when_selecting_then_raises_clear_er
             expected_is_column_target=False,
         )
     ],
-    ids=["ignores malformed column target"],
+    ids=lambda case: case.description,
 )
 def test_given_malformed_column_lineage_target_when_selecting_then_returns_none(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -364,7 +279,7 @@ def test_given_malformed_column_lineage_target_when_selecting_then_returns_none(
             expected_warnings=("Could not inspect source source.analytics.raw.orders",),
         )
     ],
-    ids=["serializes source schema warning"],
+    ids=lambda case: case.description,
 )
 def test_given_source_schema_warning_when_formatting_json_then_includes_warning(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -405,8 +320,25 @@ def test_given_source_schema_warning_when_formatting_json_then_includes_warning(
 
 @pytest.mark.parametrize(
     "test_case",
-    UNQUALIFIED_REF_COLUMN_LINEAGE_TEST_CASES,
-    ids=[case.description for case in UNQUALIFIED_REF_COLUMN_LINEAGE_TEST_CASES],
+    (
+        DbtColumnLineageSelectionTestCase(
+            description="traces unqualified SQLBuild dbt ref",
+            target="downstream_orders:downstream_amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(
+                ("model.analytics.fact_orders:amount", "downstream_orders:downstream_amount"),
+                ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ),
+        ),
+        DbtColumnLineageSelectionTestCase(
+            description="returns no edges for unknown column",
+            target="downstream_orders:missing_amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_unqualified_dbt_ref_or_unknown_column_when_selecting_then_returns_expected_trace(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -439,8 +371,29 @@ def test_given_unqualified_dbt_ref_or_unknown_column_when_selecting_then_returns
 
 @pytest.mark.parametrize(
     "test_case",
-    COLUMN_LINEAGE_OUTPUT_TEST_CASES,
-    ids=[case.description for case in COLUMN_LINEAGE_OUTPUT_TEST_CASES],
+    (
+        DbtColumnLineageOutputTestCase(
+            description="formats list output",
+            output_format=DbtLineageOutputFormat.LIST,
+            expected_fragments=(
+                "Column dependencies",
+                "model.analytics.fact_orders:amount",
+                "downstream_orders:downstream_amount",
+                "direct",
+            ),
+        ),
+        DbtColumnLineageOutputTestCase(
+            description="formats tree output",
+            output_format=DbtLineageOutputFormat.TREE,
+            expected_fragments=(
+                "Column trace",
+                "downstream_orders:downstream_amount",
+                "fact_orders:amount",
+                "└── ",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_column_lineage_trace_when_formatting_human_output_then_includes_expected_fragments(
     test_case: DbtColumnLineageOutputTestCase,
@@ -486,7 +439,7 @@ def test_given_column_lineage_trace_when_formatting_human_output_then_includes_e
             expected_fragments=("Column trace", "No column dependencies found"),
         )
     ],
-    ids=["formats no edge tree output"],
+    ids=lambda case: case.description,
 )
 def test_given_no_edge_column_trace_when_formatting_tree_then_explains_no_dependencies(
     test_case: DbtColumnLineageOutputTestCase,
@@ -517,8 +470,24 @@ def test_given_no_edge_column_trace_when_formatting_tree_then_explains_no_depend
 
 @pytest.mark.parametrize(
     "test_case",
-    STAR_COLUMN_LINEAGE_TEST_CASES,
-    ids=[case.description for case in STAR_COLUMN_LINEAGE_TEST_CASES],
+    (
+        DbtColumnLineageSelectionTestCase(
+            description="expands star using inspected source schema and propagated model schema",
+            target="model.analytics.fact_orders:amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(
+                ("model.analytics.stg_orders:amount", "model.analytics.fact_orders:amount"),
+                ("source.analytics.raw.orders:amount", "model.analytics.stg_orders:amount"),
+            ),
+        ),
+        DbtColumnLineageSelectionTestCase(
+            description="does not trust dbt manifest columns for star expansion",
+            target="model.analytics.fact_orders:amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_star_dbt_sql_when_selecting_column_lineage_then_uses_only_inspected_schema(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -573,7 +542,7 @@ def test_given_star_dbt_sql_when_selecting_column_lineage_then_uses_only_inspect
             expected_confidences=("high", "high"),
         )
     ],
-    ids=["rewrites aliases joins unquoted relations and classifies expression"],
+    ids=lambda case: case.description,
 )
 def test_given_alias_join_and_expression_when_selecting_column_lineage_then_traces_and_classifies(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -633,7 +602,7 @@ def test_given_alias_join_and_expression_when_selecting_column_lineage_then_trac
             ),
         )
     ],
-    ids=["rewrites quoted schema-qualified compiled relations"],
+    ids=lambda case: case.description,
 )
 def test_given_quoted_schema_qualified_relations_when_selecting_column_lineage_then_traces_columns(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -675,7 +644,7 @@ def test_given_quoted_schema_qualified_relations_when_selecting_column_lineage_t
             expected_edges=(),
         )
     ],
-    ids=["does not rewrite ambiguous table-only compiled relation"],
+    ids=lambda case: case.description,
 )
 def test_given_ambiguous_table_only_relation_when_selecting_column_lineage_then_avoids_guessing(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -709,8 +678,27 @@ def test_given_ambiguous_table_only_relation_when_selecting_column_lineage_then_
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_SCHEMA_INSPECTION_TEST_CASES,
-    ids=[case.description for case in SOURCE_SCHEMA_INSPECTION_TEST_CASES],
+    (
+        DbtColumnLineageSelectionTestCase(
+            description="inspects source schema with fallback relation name",
+            target="source.analytics.raw.orders:amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(),
+            expected_warnings=(),
+        ),
+        DbtColumnLineageSelectionTestCase(
+            description="warns when source schema cannot be inspected",
+            target="source.analytics.raw.orders:amount",
+            direction=DbtLineageDirection.UPSTREAM,
+            expected_edges=(),
+            expected_warnings=(
+                "Could not inspect source source.analytics.raw.orders; "
+                "SELECT * lineage from this relation may be incomplete: "
+                "relation was not returned by batched column lookup",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_source_schema_inspection_when_describing_sources_then_returns_columns_or_warnings(
     test_case: DbtColumnLineageSelectionTestCase,
@@ -764,7 +752,7 @@ def test_given_source_schema_inspection_when_describing_sources_then_returns_col
             expected_edges=(),
         )
     ],
-    ids=["empty source schema inspection skips warehouse"],
+    ids=lambda case: case.description,
 )
 def test_given_no_column_lineage_keys_when_inspecting_source_schemas_then_skips_warehouse(
     test_case: DbtColumnLineageSelectionTestCase,

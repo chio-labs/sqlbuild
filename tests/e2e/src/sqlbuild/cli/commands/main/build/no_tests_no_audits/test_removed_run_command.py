@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
             expected_view_names=(),
         )
     ],
-    ids=["top level run is rejected"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_mode_project_when_running_top_level_run_then_cli_rejects_command(
     test_case: RunE2ETestCase,

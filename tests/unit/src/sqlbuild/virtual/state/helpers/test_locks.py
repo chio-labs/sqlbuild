@@ -31,7 +31,7 @@ from tests.unit.src.sqlbuild.virtual.state.helpers.helpers import FakeStateBacke
             expected_state_migration_lock_key="state_migration",
         )
     ],
-    ids=["builds scoped lock keys and returns leases when acquired"],
+    ids=lambda case: case.description,
 )
 def test_given_state_lock_service_when_acquiring_scoped_locks_then_uses_expected_lock_keys(
     test_case: StateLockServiceTestCase,
@@ -104,7 +104,7 @@ def test_given_state_lock_service_when_acquiring_scoped_locks_then_uses_expected
             expected_state_migration_lock_key="state_migration",
         )
     ],
-    ids=["returns no lease when backend lock acquisition conflicts"],
+    ids=lambda case: case.description,
 )
 def test_given_state_lock_service_when_backend_reports_conflict_then_returns_none(
     test_case: StateLockServiceTestCase,

@@ -64,7 +64,7 @@ MODEL_D: GraphNodeKey = GraphNodeKey(node_type="model", node_name="d")
             },
         )
     ],
-    ids=["uses dependency order and named upstream keys while preserving missing nodes"],
+    ids=lambda case: case.description,
 )
 def test_given_identity_graph_when_building_expected_hashes_then_resolves_from_upstreams(
     test_case: GraphIdentityExpectedHashesTestCase,
@@ -78,76 +78,73 @@ def test_given_identity_graph_when_building_expected_hashes_then_resolves_from_u
     assert result == test_case.expected_hashes
 
 
-WRITE_HASHES_TEST_CASES: list[GraphIdentityWriteHashesTestCase] = [
-    GraphIdentityWriteHashesTestCase(
-        description="recomputes selected child from caller supplied parent write hash",
-        nodes={
-            MODEL_A: GraphIdentityNode(
-                key=MODEL_A,
-                resource_kind=GraphResourceKind.MODEL,
-                upstream_keys=(MODEL_B,),
-                local_hash="local_a",
-            ),
-            MODEL_B: GraphIdentityNode(
-                key=MODEL_B,
-                resource_kind=GraphResourceKind.MODEL,
-                upstream_keys=(),
-                local_hash="local_b",
-            ),
-        },
-        execution_order=(MODEL_B, MODEL_A),
-        selected_keys=frozenset({MODEL_A}),
-        base_identity_hashes={MODEL_B: "honest_b"},
-        expected_hashes={
-            MODEL_A: "local_a|model:b=honest_b",
-            MODEL_B: "honest_b",
-        },
-    ),
-    GraphIdentityWriteHashesTestCase(
-        description="composes a fully selected diamond from the shared root once",
-        nodes={
-            MODEL_A: GraphIdentityNode(
-                key=MODEL_A,
-                resource_kind=GraphResourceKind.MODEL,
-                upstream_keys=(),
-                local_hash="local_a",
-            ),
-            MODEL_B: GraphIdentityNode(
-                key=MODEL_B,
-                resource_kind=GraphResourceKind.MODEL,
-                upstream_keys=(MODEL_A,),
-                local_hash="local_b",
-            ),
-            MODEL_C: GraphIdentityNode(
-                key=MODEL_C,
-                resource_kind=GraphResourceKind.MODEL,
-                upstream_keys=(MODEL_A,),
-                local_hash="local_c",
-            ),
-            MODEL_D: GraphIdentityNode(
-                key=MODEL_D,
-                resource_kind=GraphResourceKind.MODEL,
-                upstream_keys=(MODEL_B, MODEL_C),
-                local_hash="local_d",
-            ),
-        },
-        execution_order=(MODEL_A, MODEL_B, MODEL_C, MODEL_D),
-        selected_keys=frozenset({MODEL_A, MODEL_B, MODEL_C, MODEL_D}),
-        base_identity_hashes={},
-        expected_hashes={
-            MODEL_A: "local_a",
-            MODEL_B: "local_b|model:a=local_a",
-            MODEL_C: "local_c|model:a=local_a",
-            MODEL_D: "local_d|model:b=local_b|model:a=local_a,model:c=local_c|model:a=local_a",
-        },
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    WRITE_HASHES_TEST_CASES,
-    ids=[case.description for case in WRITE_HASHES_TEST_CASES],
+    [
+        GraphIdentityWriteHashesTestCase(
+            description="recomputes selected child from caller supplied parent write hash",
+            nodes={
+                MODEL_A: GraphIdentityNode(
+                    key=MODEL_A,
+                    resource_kind=GraphResourceKind.MODEL,
+                    upstream_keys=(MODEL_B,),
+                    local_hash="local_a",
+                ),
+                MODEL_B: GraphIdentityNode(
+                    key=MODEL_B,
+                    resource_kind=GraphResourceKind.MODEL,
+                    upstream_keys=(),
+                    local_hash="local_b",
+                ),
+            },
+            execution_order=(MODEL_B, MODEL_A),
+            selected_keys=frozenset({MODEL_A}),
+            base_identity_hashes={MODEL_B: "honest_b"},
+            expected_hashes={
+                MODEL_A: "local_a|model:b=honest_b",
+                MODEL_B: "honest_b",
+            },
+        ),
+        GraphIdentityWriteHashesTestCase(
+            description="composes a fully selected diamond from the shared root once",
+            nodes={
+                MODEL_A: GraphIdentityNode(
+                    key=MODEL_A,
+                    resource_kind=GraphResourceKind.MODEL,
+                    upstream_keys=(),
+                    local_hash="local_a",
+                ),
+                MODEL_B: GraphIdentityNode(
+                    key=MODEL_B,
+                    resource_kind=GraphResourceKind.MODEL,
+                    upstream_keys=(MODEL_A,),
+                    local_hash="local_b",
+                ),
+                MODEL_C: GraphIdentityNode(
+                    key=MODEL_C,
+                    resource_kind=GraphResourceKind.MODEL,
+                    upstream_keys=(MODEL_A,),
+                    local_hash="local_c",
+                ),
+                MODEL_D: GraphIdentityNode(
+                    key=MODEL_D,
+                    resource_kind=GraphResourceKind.MODEL,
+                    upstream_keys=(MODEL_B, MODEL_C),
+                    local_hash="local_d",
+                ),
+            },
+            execution_order=(MODEL_A, MODEL_B, MODEL_C, MODEL_D),
+            selected_keys=frozenset({MODEL_A, MODEL_B, MODEL_C, MODEL_D}),
+            base_identity_hashes={},
+            expected_hashes={
+                MODEL_A: "local_a",
+                MODEL_B: "local_b|model:a=local_a",
+                MODEL_C: "local_c|model:a=local_a",
+                MODEL_D: "local_d|model:b=local_b|model:a=local_a,model:c=local_c|model:a=local_a",
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_available_hashes_when_building_write_hashes_then_uses_caller_supplied_upstreams(
     test_case: GraphIdentityWriteHashesTestCase,
@@ -172,7 +169,7 @@ def test_given_available_hashes_when_building_write_hashes_then_uses_caller_supp
             expected_max_seconds=5.0,
         )
     ],
-    ids=["fully selected densely connected graph resolves without path blowup"],
+    ids=lambda case: case.description,
 )
 def test_given_fully_selected_dense_graph_when_building_write_hashes_then_stays_linear(
     test_case: GraphIdentityWritePerfTestCase,

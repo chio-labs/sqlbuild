@@ -24,90 +24,73 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_manifest_model_node,
 )
 
-LINEAGE_SELECTION_TEST_CASES: tuple[DbtLineageSelectionTestCase, ...] = (
-    DbtLineageSelectionTestCase(
-        description="selects upstream dbt graph from SQLBuild model",
-        target="mart_orders",
-        direction=DbtLineageDirection.UPSTREAM,
-        depth=None,
-        expected_node_ids=(
-            "dbt:model:model.analytics.int_orders",
-            "dbt:model:model.analytics.stg_orders",
-            "dbt:source:source.analytics.raw.orders",
-            "sqb:model:fact_orders",
-            "sqb:model:mart_orders",
-        ),
-        expected_edges=(
-            ("dbt:model:model.analytics.stg_orders", "dbt:model:model.analytics.int_orders"),
-            ("dbt:source:source.analytics.raw.orders", "dbt:model:model.analytics.stg_orders"),
-            ("dbt:model:model.analytics.int_orders", "sqb:model:fact_orders"),
-            ("sqb:model:fact_orders", "sqb:model:mart_orders"),
-        ),
-        expected_focus_ids=("sqb:model:mart_orders",),
-    ),
-    DbtLineageSelectionTestCase(
-        description="selects downstream SQLBuild graph from dbt unique id",
-        target="model.analytics.stg_orders",
-        direction=DbtLineageDirection.DOWNSTREAM,
-        depth=None,
-        expected_node_ids=(
-            "dbt:model:model.analytics.int_orders",
-            "dbt:model:model.analytics.stg_orders",
-            "sqb:model:fact_orders",
-            "sqb:model:mart_orders",
-        ),
-        expected_edges=(
-            ("dbt:model:model.analytics.stg_orders", "dbt:model:model.analytics.int_orders"),
-            ("dbt:model:model.analytics.int_orders", "sqb:model:fact_orders"),
-            ("sqb:model:fact_orders", "sqb:model:mart_orders"),
-        ),
-        expected_focus_ids=("dbt:model:model.analytics.stg_orders",),
-    ),
-    DbtLineageSelectionTestCase(
-        description="selects depth limited upstream graph from unambiguous dbt name",
-        target="int_orders",
-        direction=DbtLineageDirection.UPSTREAM,
-        depth=1,
-        expected_node_ids=(
-            "dbt:model:model.analytics.int_orders",
-            "dbt:model:model.analytics.stg_orders",
-        ),
-        expected_edges=(
-            ("dbt:model:model.analytics.stg_orders", "dbt:model:model.analytics.int_orders"),
-        ),
-        expected_focus_ids=("dbt:model:model.analytics.int_orders",),
-    ),
-    DbtLineageSelectionTestCase(
-        description="selects only focus node with zero depth",
-        target="mart_orders",
-        direction=DbtLineageDirection.UPSTREAM,
-        depth=0,
-        expected_node_ids=("sqb:model:mart_orders",),
-        expected_edges=(),
-        expected_focus_ids=("sqb:model:mart_orders",),
-    ),
-)
-
-LINEAGE_SELECTION_ERROR_TEST_CASES: tuple[DbtLineageSelectionErrorTestCase, ...] = (
-    DbtLineageSelectionErrorTestCase(
-        description="rejects ambiguous dbt short name",
-        target="orders",
-        expected_error_fragment="ambiguous dbt lineage target 'orders'",
-        expected_code="C330",
-    ),
-    DbtLineageSelectionErrorTestCase(
-        description="rejects unknown target",
-        target="missing_orders",
-        expected_error_fragment="unknown dbt lineage target 'missing_orders'",
-        expected_code="C331",
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_SELECTION_TEST_CASES,
-    ids=[case.description for case in LINEAGE_SELECTION_TEST_CASES],
+    (
+        DbtLineageSelectionTestCase(
+            description="selects upstream dbt graph from SQLBuild model",
+            target="mart_orders",
+            direction=DbtLineageDirection.UPSTREAM,
+            depth=None,
+            expected_node_ids=(
+                "dbt:model:model.analytics.int_orders",
+                "dbt:model:model.analytics.stg_orders",
+                "dbt:source:source.analytics.raw.orders",
+                "sqb:model:fact_orders",
+                "sqb:model:mart_orders",
+            ),
+            expected_edges=(
+                ("dbt:model:model.analytics.stg_orders", "dbt:model:model.analytics.int_orders"),
+                ("dbt:source:source.analytics.raw.orders", "dbt:model:model.analytics.stg_orders"),
+                ("dbt:model:model.analytics.int_orders", "sqb:model:fact_orders"),
+                ("sqb:model:fact_orders", "sqb:model:mart_orders"),
+            ),
+            expected_focus_ids=("sqb:model:mart_orders",),
+        ),
+        DbtLineageSelectionTestCase(
+            description="selects downstream SQLBuild graph from dbt unique id",
+            target="model.analytics.stg_orders",
+            direction=DbtLineageDirection.DOWNSTREAM,
+            depth=None,
+            expected_node_ids=(
+                "dbt:model:model.analytics.int_orders",
+                "dbt:model:model.analytics.stg_orders",
+                "sqb:model:fact_orders",
+                "sqb:model:mart_orders",
+            ),
+            expected_edges=(
+                ("dbt:model:model.analytics.stg_orders", "dbt:model:model.analytics.int_orders"),
+                ("dbt:model:model.analytics.int_orders", "sqb:model:fact_orders"),
+                ("sqb:model:fact_orders", "sqb:model:mart_orders"),
+            ),
+            expected_focus_ids=("dbt:model:model.analytics.stg_orders",),
+        ),
+        DbtLineageSelectionTestCase(
+            description="selects depth limited upstream graph from unambiguous dbt name",
+            target="int_orders",
+            direction=DbtLineageDirection.UPSTREAM,
+            depth=1,
+            expected_node_ids=(
+                "dbt:model:model.analytics.int_orders",
+                "dbt:model:model.analytics.stg_orders",
+            ),
+            expected_edges=(
+                ("dbt:model:model.analytics.stg_orders", "dbt:model:model.analytics.int_orders"),
+            ),
+            expected_focus_ids=("dbt:model:model.analytics.int_orders",),
+        ),
+        DbtLineageSelectionTestCase(
+            description="selects only focus node with zero depth",
+            target="mart_orders",
+            direction=DbtLineageDirection.UPSTREAM,
+            depth=0,
+            expected_node_ids=("sqb:model:mart_orders",),
+            expected_edges=(),
+            expected_focus_ids=("sqb:model:mart_orders",),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_combined_graph_when_selecting_lineage_target_then_returns_expected_slice(
     test_case: DbtLineageSelectionTestCase,
@@ -143,8 +126,21 @@ def test_given_combined_graph_when_selecting_lineage_target_then_returns_expecte
 
 @pytest.mark.parametrize(
     "test_case",
-    LINEAGE_SELECTION_ERROR_TEST_CASES,
-    ids=[case.description for case in LINEAGE_SELECTION_ERROR_TEST_CASES],
+    (
+        DbtLineageSelectionErrorTestCase(
+            description="rejects ambiguous dbt short name",
+            target="orders",
+            expected_error_fragment="ambiguous dbt lineage target 'orders'",
+            expected_code="C330",
+        ),
+        DbtLineageSelectionErrorTestCase(
+            description="rejects unknown target",
+            target="missing_orders",
+            expected_error_fragment="unknown dbt lineage target 'missing_orders'",
+            expected_code="C331",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_lineage_target_when_resolving_then_raises_clear_error(
     test_case: DbtLineageSelectionErrorTestCase,
@@ -193,7 +189,7 @@ def test_given_invalid_lineage_target_when_resolving_then_raises_clear_error(
             expected_focus_ids=("sqb:model:shared_orders",),
         )
     ],
-    ids=["prefers SQLBuild model over dbt short name collision"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_and_dbt_name_collision_when_selecting_then_prefers_sqlbuild_model(
     test_case: DbtLineageSelectionTestCase,

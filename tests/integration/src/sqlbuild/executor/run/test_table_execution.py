@@ -50,426 +50,64 @@ class ZeroCopyDuckDbAdapter(DuckDbAdapter):
         return True
 
 
-STAGED_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
-    TableSuccessTestCase(
-        description="staged table creates target from query",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        expected_row_count=1,
-    ),
-    TableSuccessTestCase(
-        description="staged table replaces existing target via swap",
-        setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id, 'old' AS name",),
-        model_sql="SELECT 2 AS id, 'new' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        expected_row_count=1,
-    ),
-    TableSuccessTestCase(
-        description="staged table with type enforcement casts columns",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        type_enforcement=True,
-        declared_columns=(("id", "BIGINT"), ("name", "VARCHAR")),
-        expected_row_count=1,
-    ),
-    TableSuccessTestCase(
-        description="staged table with passing audit succeeds",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        audit_severity="error",
-        expected_row_count=1,
-        expected_audit_count=1,
-    ),
-    TableSuccessTestCase(
-        description="staged table with failing warn audit allows promotion",
-        setup_sql=(),
-        model_sql="SELECT NULL AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        audit_severity="warn",
-        expected_row_count=1,
-        expected_audit_count=1,
-    ),
-]
-
-STAGED_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
-    TableFailureTestCase(
-        description="staged table with failing error audit blocks promotion",
-        setup_sql=(),
-        model_sql="SELECT NULL AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        audit_severity="error",
-        expected_failed_phase=ExecutionPhase.AUDIT,
-        expected_error_fragment="final audit for 'orders' failed before replacing target table",
-        expected_staging_relation="staging.orders__staging",
-        expected_audit_count=1,
-    ),
-    TableFailureTestCase(
-        description="staged CTAS failure on bad SQL returns STAGING phase error",
-        setup_sql=(),
-        model_sql="SELECT * FROM staging.nonexistent_table",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        expected_failed_phase=ExecutionPhase.STAGING,
-        expected_staging_relation="staging.orders__staging",
-    ),
-    TableFailureTestCase(
-        description="multiple audits all run even when first errors",
-        setup_sql=(),
-        model_sql="SELECT NULL AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        audit_severity="error",
-        extra_audits=(
-            ExtraAuditDefinition(
-                name="name_not_null",
-                audit_sql='SELECT name FROM __ref("orders") WHERE name IS NULL',
-                severity="error",
-            ),
-        ),
-        expected_failed_phase=ExecutionPhase.AUDIT,
-        expected_staging_relation="staging.orders__staging",
-        expected_audit_count=2,
-    ),
-]
-
-DIRECT_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
-    TableSuccessTestCase(
-        description="direct table creates target from query",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.DIRECT,
-        expected_row_count=1,
-    ),
-    TableSuccessTestCase(
-        description="direct table with passing audit succeeds end-to-end",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.DIRECT,
-        audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        audit_severity="error",
-        expected_row_count=1,
-        expected_audit_count=1,
-    ),
-]
-
-DIRECT_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
-    TableFailureTestCase(
-        description="direct table with type enforcement fails",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.DIRECT,
-        type_enforcement=True,
-        declared_columns=(("id", "BIGINT"),),
-        expected_failed_phase=ExecutionPhase.TYPE_ENFORCEMENT,
-        expected_error_fragment="requires staged promotion mode",
-    ),
-    TableFailureTestCase(
-        description="direct failing post_hook marks model failed with promoted relation",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.DIRECT,
-        post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
-        expected_failed_phase=ExecutionPhase.POST_HOOK,
-        expected_promoted_relation="staging.orders",
-        expected_row_count=1,
-    ),
-    TableFailureTestCase(
-        description="direct failing error audit reports target already updated",
-        setup_sql=(),
-        model_sql="SELECT NULL AS id, 'alice' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.DIRECT,
-        audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        audit_severity="error",
-        expected_failed_phase=ExecutionPhase.AUDIT,
-        expected_error_fragment="final audit for 'orders' failed after target table was replaced",
-        expected_promoted_relation="staging.orders",
-        expected_audit_count=1,
-    ),
-]
-
-REUSE_FAILURE_TEST_CASES: list[TableReuseFailureExecutionTestCase] = [
-    TableReuseFailureExecutionTestCase(
-        description="fingerprint mismatch before table reuse fails before copy",
-        setup_sql=("CREATE TABLE staging.orders_origin AS SELECT 7 AS id",),
-        fingerprint_version_hash="stale_version",
-        expected_status=ExecutionStatus.FAILED.value,
-        expected_failed_phase=ExecutionPhase.STAGING,
-        expected_error_fragments=(
-            "cannot reuse from target 'prod'",
-            "reuse origin fingerprint changed after planning",
-        ),
-        expected_target_exists=False,
-    ),
-    TableReuseFailureExecutionTestCase(
-        description="missing origin relation fails before target exists",
-        setup_sql=(),
-        fingerprint_version_hash="expected_version",
-        expected_status=ExecutionStatus.FAILED.value,
-        expected_failed_phase=ExecutionPhase.STAGING,
-        expected_error_fragments=("orders_origin",),
-        expected_target_exists=False,
-    ),
-]
-
-HOOK_SUCCESS_TEST_CASES: list[TableSuccessTestCase] = [
-    TableSuccessTestCase(
-        description="pre_hook runs before materialization",
-        setup_sql=(),
-        model_sql="SELECT * FROM staging.hook_data",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        pre_hook=[SqlHookEntry(statement="CREATE TABLE staging.hook_data AS SELECT 42 AS val")],
-        expected_row_count=1,
-    ),
-    TableSuccessTestCase(
-        description="post_hook runs after promotion",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        post_hook=[
-            SqlHookEntry(statement="CREATE TABLE staging.post_hook_ran AS SELECT 1 AS marker")
-        ],
-        expected_row_count=1,
-    ),
-    TableSuccessTestCase(
-        description="list pre_hook executes all entries in order",
-        setup_sql=(),
-        model_sql="SELECT * FROM staging.hook_step_2",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        pre_hook=[
-            SqlHookEntry(statement="CREATE TABLE staging.hook_step_1 AS SELECT 42 AS val"),
-            SqlHookEntry(
-                statement="CREATE TABLE staging.hook_step_2 AS SELECT * FROM staging.hook_step_1"
-            ),
-        ],
-        expected_row_count=1,
-    ),
-    TableSuccessTestCase(
-        description="python pre_hook runs before table materialization",
-        setup_sql=(),
-        model_sql="SELECT * FROM staging.python_hook_data",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        pre_hook=[PythonHookEntry(name="create_data", kwargs={"value": 42})],
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/table.py"),
-                name="create_data",
-                function=create_python_hook_data,
-            ),
-        ),
-        expected_row_count=1,
-        expected_lifecycle_event_fragments=(
-            "CREATE TABLE staging.python_hook_data AS SELECT 42 AS val",
-            "python pre-hook created data for orders",
-        ),
-    ),
-    TableSuccessTestCase(
-        description="mixed SQL and Python hooks execute around table materialization",
-        setup_sql=("CREATE TABLE staging.hook_log (phase VARCHAR)",),
-        model_sql="SELECT 1 AS id",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        pre_hook=[
-            SqlHookEntry(statement="INSERT INTO staging.hook_log VALUES ('sql_pre')"),
-            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
-        ],
-        post_hook=[
-            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
-            SqlHookEntry(statement="INSERT INTO staging.hook_log VALUES ('sql_post')"),
-        ],
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/table.py"),
-                name="insert_hook_log",
-                function=insert_table_hook_log,
-            ),
-        ),
-        expected_row_count=1,
-        expected_query_results=(
-            (
-                "SELECT phase FROM staging.hook_log ORDER BY rowid",
-                (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",)),
-            ),
-        ),
-    ),
-]
-
-HOOK_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
-    TableFailureTestCase(
-        description="failing pre_hook blocks model",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        pre_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
-        expected_failed_phase=ExecutionPhase.PRE_HOOK,
-    ),
-    TableFailureTestCase(
-        description="failing post_hook marks model failed after promotion",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
-        expected_failed_phase=ExecutionPhase.POST_HOOK,
-        expected_promoted_relation="staging.orders",
-        expected_row_count=1,
-    ),
-    TableFailureTestCase(
-        description="python post_hook failure marks table failed after promotion",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "table post failed"})],
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/table.py"),
-                name="fail_hook",
-                function=fail_table_hook,
-            ),
-        ),
-        expected_failed_phase=ExecutionPhase.POST_HOOK,
-        expected_error_fragment='post_hooks[0] python("fail_hook") failed: table post failed',
-        expected_promoted_relation="staging.orders",
-        expected_row_count=1,
-    ),
-]
-
-CLEANUP_FAILURE_TEST_CASES: list[TableFailureTestCase] = [
-    TableFailureTestCase(
-        description="staged audit failure retains staging relation",
-        setup_sql=(),
-        model_sql="SELECT NULL AS id",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        audit_severity="error",
-        expected_failed_phase=ExecutionPhase.AUDIT,
-        expected_staging_relation="staging.orders__staging",
-        expected_audit_count=1,
-    ),
-    TableFailureTestCase(
-        description="staged audit failure preserves existing target unchanged",
-        setup_sql=("CREATE TABLE staging.orders AS SELECT 99 AS id, 'original' AS name",),
-        model_sql="SELECT NULL AS id, 'new' AS name",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        audit_severity="error",
-        expected_failed_phase=ExecutionPhase.AUDIT,
-        expected_staging_relation="staging.orders__staging",
-        expected_audit_count=1,
-    ),
-]
-
-TYPE_ENFORCEMENT_TEST_CASES: list[TableSuccessTestCase] = [
-    TableSuccessTestCase(
-        description="type enforcement casts subset of columns and preserves extras",
-        setup_sql=(),
-        model_sql="SELECT 1 AS id, 'alice' AS name, 42.5 AS score",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        type_enforcement=True,
-        declared_columns=(("id", "BIGINT"),),
-        expected_row_count=1,
-        expected_column_names=("id", "name", "score"),
-        expected_column_types=("BIGINT",),
-    ),
-    TableSuccessTestCase(
-        description="type enforcement preserves produced column order",
-        setup_sql=(),
-        model_sql="SELECT 'alice' AS name, 1 AS id, TRUE AS active",
-        target_schema="staging",
-        target_name="orders",
-        promotion_mode=TablePromotionMode.STAGED,
-        type_enforcement=True,
-        declared_columns=(("id", "BIGINT"), ("name", "VARCHAR")),
-        expected_row_count=1,
-        expected_column_names=("name", "id", "active"),
-    ),
-]
-
-HARD_COPY_REUSE_TEST_CASES: list[TableReuseExecutionTestCase] = [
-    TableReuseExecutionTestCase(
-        description="staged hard-copy reuse promotes reused relation",
-        reuse_hard_copy=True,
-        promotion_mode=TablePromotionMode.STAGED,
-        expected_status=ExecutionStatus.SUCCESS.value,
-        expected_rows=((7,),),
-        expected_lifecycle_fragments=(
-            "DROP TABLE IF EXISTS staging.orders__staging",
-            "CREATE OR REPLACE TABLE staging.orders__staging AS SELECT * "
-            "FROM staging.orders_origin",
-            "RENAME TO orders",
-        ),
-    ),
-    TableReuseExecutionTestCase(
-        description="direct hard-copy reuse replaces target with reused relation",
-        reuse_hard_copy=True,
-        promotion_mode=TablePromotionMode.DIRECT,
-        expected_status=ExecutionStatus.SUCCESS.value,
-        expected_rows=((7,),),
-        expected_lifecycle_fragments=(
-            "DROP TABLE IF EXISTS staging.orders",
-            "CREATE OR REPLACE TABLE staging.orders AS SELECT * FROM staging.orders_origin",
-        ),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    STAGED_SUCCESS_TEST_CASES,
-    ids=[case.description for case in STAGED_SUCCESS_TEST_CASES],
+    [
+        TableSuccessTestCase(
+            description="staged table creates target from query",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            expected_row_count=1,
+        ),
+        TableSuccessTestCase(
+            description="staged table replaces existing target via swap",
+            setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id, 'old' AS name",),
+            model_sql="SELECT 2 AS id, 'new' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            expected_row_count=1,
+        ),
+        TableSuccessTestCase(
+            description="staged table with type enforcement casts columns",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            type_enforcement=True,
+            declared_columns=(("id", "BIGINT"), ("name", "VARCHAR")),
+            expected_row_count=1,
+        ),
+        TableSuccessTestCase(
+            description="staged table with passing audit succeeds",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+            audit_severity="error",
+            expected_row_count=1,
+            expected_audit_count=1,
+        ),
+        TableSuccessTestCase(
+            description="staged table with failing warn audit allows promotion",
+            setup_sql=(),
+            model_sql="SELECT NULL AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+            audit_severity="warn",
+            expected_row_count=1,
+            expected_audit_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_staged_table_when_executing_then_succeeds(
     test_case: TableSuccessTestCase,
@@ -488,8 +126,53 @@ def test_given_staged_table_when_executing_then_succeeds(
 
 @pytest.mark.parametrize(
     "test_case",
-    STAGED_FAILURE_TEST_CASES,
-    ids=[case.description for case in STAGED_FAILURE_TEST_CASES],
+    [
+        TableFailureTestCase(
+            description="staged table with failing error audit blocks promotion",
+            setup_sql=(),
+            model_sql="SELECT NULL AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+            audit_severity="error",
+            expected_failed_phase=ExecutionPhase.AUDIT,
+            expected_error_fragment="final audit for 'orders' failed before replacing target table",
+            expected_staging_relation="staging.orders__staging",
+            expected_audit_count=1,
+        ),
+        TableFailureTestCase(
+            description="staged CTAS failure on bad SQL returns STAGING phase error",
+            setup_sql=(),
+            model_sql="SELECT * FROM staging.nonexistent_table",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            expected_failed_phase=ExecutionPhase.STAGING,
+            expected_staging_relation="staging.orders__staging",
+        ),
+        TableFailureTestCase(
+            description="multiple audits all run even when first errors",
+            setup_sql=(),
+            model_sql="SELECT NULL AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+            audit_severity="error",
+            extra_audits=(
+                ExtraAuditDefinition(
+                    name="name_not_null",
+                    audit_sql='SELECT name FROM __ref("orders") WHERE name IS NULL',
+                    severity="error",
+                ),
+            ),
+            expected_failed_phase=ExecutionPhase.AUDIT,
+            expected_staging_relation="staging.orders__staging",
+            expected_audit_count=2,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_staged_table_when_executing_then_fails(
     test_case: TableFailureTestCase,
@@ -508,8 +191,30 @@ def test_given_staged_table_when_executing_then_fails(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIRECT_SUCCESS_TEST_CASES,
-    ids=[case.description for case in DIRECT_SUCCESS_TEST_CASES],
+    [
+        TableSuccessTestCase(
+            description="direct table creates target from query",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.DIRECT,
+            expected_row_count=1,
+        ),
+        TableSuccessTestCase(
+            description="direct table with passing audit succeeds end-to-end",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.DIRECT,
+            audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+            audit_severity="error",
+            expected_row_count=1,
+            expected_audit_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_direct_table_when_executing_then_succeeds(
     test_case: TableSuccessTestCase,
@@ -528,8 +233,47 @@ def test_given_direct_table_when_executing_then_succeeds(
 
 @pytest.mark.parametrize(
     "test_case",
-    DIRECT_FAILURE_TEST_CASES,
-    ids=[case.description for case in DIRECT_FAILURE_TEST_CASES],
+    [
+        TableFailureTestCase(
+            description="direct table with type enforcement fails",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.DIRECT,
+            type_enforcement=True,
+            declared_columns=(("id", "BIGINT"),),
+            expected_failed_phase=ExecutionPhase.TYPE_ENFORCEMENT,
+            expected_error_fragment="requires staged promotion mode",
+        ),
+        TableFailureTestCase(
+            description="direct failing post_hook marks model failed with promoted relation",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.DIRECT,
+            post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
+            expected_failed_phase=ExecutionPhase.POST_HOOK,
+            expected_promoted_relation="staging.orders",
+            expected_row_count=1,
+        ),
+        TableFailureTestCase(
+            description="direct failing error audit reports target already updated",
+            setup_sql=(),
+            model_sql="SELECT NULL AS id, 'alice' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.DIRECT,
+            audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+            audit_severity="error",
+            expected_failed_phase=ExecutionPhase.AUDIT,
+            expected_error_fragment="final audit for 'orders' failed after target table was replaced",
+            expected_promoted_relation="staging.orders",
+            expected_audit_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_direct_table_when_executing_then_fails(
     test_case: TableFailureTestCase,
@@ -548,8 +292,99 @@ def test_given_direct_table_when_executing_then_fails(
 
 @pytest.mark.parametrize(
     "test_case",
-    HOOK_SUCCESS_TEST_CASES,
-    ids=[case.description for case in HOOK_SUCCESS_TEST_CASES],
+    [
+        TableSuccessTestCase(
+            description="pre_hook runs before materialization",
+            setup_sql=(),
+            model_sql="SELECT * FROM staging.hook_data",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            pre_hook=[SqlHookEntry(statement="CREATE TABLE staging.hook_data AS SELECT 42 AS val")],
+            expected_row_count=1,
+        ),
+        TableSuccessTestCase(
+            description="post_hook runs after promotion",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            post_hook=[
+                SqlHookEntry(statement="CREATE TABLE staging.post_hook_ran AS SELECT 1 AS marker")
+            ],
+            expected_row_count=1,
+        ),
+        TableSuccessTestCase(
+            description="list pre_hook executes all entries in order",
+            setup_sql=(),
+            model_sql="SELECT * FROM staging.hook_step_2",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            pre_hook=[
+                SqlHookEntry(statement="CREATE TABLE staging.hook_step_1 AS SELECT 42 AS val"),
+                SqlHookEntry(
+                    statement="CREATE TABLE staging.hook_step_2 AS SELECT * FROM staging.hook_step_1"
+                ),
+            ],
+            expected_row_count=1,
+        ),
+        TableSuccessTestCase(
+            description="python pre_hook runs before table materialization",
+            setup_sql=(),
+            model_sql="SELECT * FROM staging.python_hook_data",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            pre_hook=[PythonHookEntry(name="create_data", kwargs={"value": 42})],
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/table.py"),
+                    name="create_data",
+                    function=create_python_hook_data,
+                ),
+            ),
+            expected_row_count=1,
+            expected_lifecycle_event_fragments=(
+                "CREATE TABLE staging.python_hook_data AS SELECT 42 AS val",
+                "python pre-hook created data for orders",
+            ),
+        ),
+        TableSuccessTestCase(
+            description="mixed SQL and Python hooks execute around table materialization",
+            setup_sql=("CREATE TABLE staging.hook_log (phase VARCHAR)",),
+            model_sql="SELECT 1 AS id",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            pre_hook=[
+                SqlHookEntry(statement="INSERT INTO staging.hook_log VALUES ('sql_pre')"),
+                PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
+            ],
+            post_hook=[
+                PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
+                SqlHookEntry(statement="INSERT INTO staging.hook_log VALUES ('sql_post')"),
+            ],
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/table.py"),
+                    name="insert_hook_log",
+                    function=insert_table_hook_log,
+                ),
+            ),
+            expected_row_count=1,
+            expected_query_results=(
+                (
+                    "SELECT phase FROM staging.hook_log ORDER BY rowid",
+                    (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",)),
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_hook_config_when_executing_table_then_succeeds(
     test_case: TableSuccessTestCase,
@@ -568,8 +403,52 @@ def test_given_hook_config_when_executing_table_then_succeeds(
 
 @pytest.mark.parametrize(
     "test_case",
-    HOOK_FAILURE_TEST_CASES,
-    ids=[case.description for case in HOOK_FAILURE_TEST_CASES],
+    [
+        TableFailureTestCase(
+            description="failing pre_hook blocks model",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            pre_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
+            expected_failed_phase=ExecutionPhase.PRE_HOOK,
+        ),
+        TableFailureTestCase(
+            description="failing post_hook marks model failed after promotion",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
+            expected_failed_phase=ExecutionPhase.POST_HOOK,
+            expected_promoted_relation="staging.orders",
+            expected_row_count=1,
+        ),
+        TableFailureTestCase(
+            description="python post_hook failure marks table failed after promotion",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "table post failed"})],
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/table.py"),
+                    name="fail_hook",
+                    function=fail_table_hook,
+                ),
+            ),
+            expected_failed_phase=ExecutionPhase.POST_HOOK,
+            expected_error_fragment='post_hooks[0] python("fail_hook") failed: table post failed',
+            expected_promoted_relation="staging.orders",
+            expected_row_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_hook_config_when_executing_table_then_fails(
     test_case: TableFailureTestCase,
@@ -588,8 +467,35 @@ def test_given_hook_config_when_executing_table_then_fails(
 
 @pytest.mark.parametrize(
     "test_case",
-    CLEANUP_FAILURE_TEST_CASES,
-    ids=[case.description for case in CLEANUP_FAILURE_TEST_CASES],
+    [
+        TableFailureTestCase(
+            description="staged audit failure retains staging relation",
+            setup_sql=(),
+            model_sql="SELECT NULL AS id",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+            audit_severity="error",
+            expected_failed_phase=ExecutionPhase.AUDIT,
+            expected_staging_relation="staging.orders__staging",
+            expected_audit_count=1,
+        ),
+        TableFailureTestCase(
+            description="staged audit failure preserves existing target unchanged",
+            setup_sql=("CREATE TABLE staging.orders AS SELECT 99 AS id, 'original' AS name",),
+            model_sql="SELECT NULL AS id, 'new' AS name",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
+            audit_severity="error",
+            expected_failed_phase=ExecutionPhase.AUDIT,
+            expected_staging_relation="staging.orders__staging",
+            expected_audit_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_failure_condition_when_executing_table_then_cleanup_matches(
     test_case: TableFailureTestCase,
@@ -608,8 +514,34 @@ def test_given_failure_condition_when_executing_table_then_cleanup_matches(
 
 @pytest.mark.parametrize(
     "test_case",
-    TYPE_ENFORCEMENT_TEST_CASES,
-    ids=[case.description for case in TYPE_ENFORCEMENT_TEST_CASES],
+    [
+        TableSuccessTestCase(
+            description="type enforcement casts subset of columns and preserves extras",
+            setup_sql=(),
+            model_sql="SELECT 1 AS id, 'alice' AS name, 42.5 AS score",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            type_enforcement=True,
+            declared_columns=(("id", "BIGINT"),),
+            expected_row_count=1,
+            expected_column_names=("id", "name", "score"),
+            expected_column_types=("BIGINT",),
+        ),
+        TableSuccessTestCase(
+            description="type enforcement preserves produced column order",
+            setup_sql=(),
+            model_sql="SELECT 'alice' AS name, 1 AS id, TRUE AS active",
+            target_schema="staging",
+            target_name="orders",
+            promotion_mode=TablePromotionMode.STAGED,
+            type_enforcement=True,
+            declared_columns=(("id", "BIGINT"), ("name", "VARCHAR")),
+            expected_row_count=1,
+            expected_column_names=("name", "id", "active"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_type_enforcement_when_executing_staged_table_then_columns_match(
     test_case: TableSuccessTestCase,
@@ -628,8 +560,33 @@ def test_given_type_enforcement_when_executing_staged_table_then_columns_match(
 
 @pytest.mark.parametrize(
     "test_case",
-    HARD_COPY_REUSE_TEST_CASES,
-    ids=[case.description for case in HARD_COPY_REUSE_TEST_CASES],
+    [
+        TableReuseExecutionTestCase(
+            description="staged hard-copy reuse promotes reused relation",
+            reuse_hard_copy=True,
+            promotion_mode=TablePromotionMode.STAGED,
+            expected_status=ExecutionStatus.SUCCESS.value,
+            expected_rows=((7,),),
+            expected_lifecycle_fragments=(
+                "DROP TABLE IF EXISTS staging.orders__staging",
+                "CREATE OR REPLACE TABLE staging.orders__staging AS SELECT * "
+                "FROM staging.orders_origin",
+                "RENAME TO orders",
+            ),
+        ),
+        TableReuseExecutionTestCase(
+            description="direct hard-copy reuse replaces target with reused relation",
+            reuse_hard_copy=True,
+            promotion_mode=TablePromotionMode.DIRECT,
+            expected_status=ExecutionStatus.SUCCESS.value,
+            expected_rows=((7,),),
+            expected_lifecycle_fragments=(
+                "DROP TABLE IF EXISTS staging.orders",
+                "CREATE OR REPLACE TABLE staging.orders AS SELECT * FROM staging.orders_origin",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_hard_copy_reuse_relation_when_executing_table_then_materializes_from_origin(
     test_case: TableReuseExecutionTestCase,
@@ -691,7 +648,7 @@ def test_given_hard_copy_reuse_relation_when_executing_table_then_materializes_f
             ),
         )
     ],
-    ids=["cheap reuse with adapter support materializes from origin"],
+    ids=lambda case: case.description,
 )
 def test_given_cheap_reuse_with_adapter_support_when_executing_table_then_materializes_from_origin(
     test_case: TableReuseExecutionTestCase,
@@ -757,7 +714,7 @@ def test_given_cheap_reuse_with_adapter_support_when_executing_table_then_materi
             expected_target_exists=False,
         )
     ],
-    ids=["cheap reuse without adapter support fails clearly"],
+    ids=lambda case: case.description,
 )
 def test_given_cheap_reuse_without_adapter_support_when_executing_table_then_fails_clearly(
     test_case: TableReuseExecutionTestCase,
@@ -815,8 +772,30 @@ def test_given_cheap_reuse_without_adapter_support_when_executing_table_then_fai
 
 @pytest.mark.parametrize(
     "test_case",
-    REUSE_FAILURE_TEST_CASES,
-    ids=[case.description for case in REUSE_FAILURE_TEST_CASES],
+    [
+        TableReuseFailureExecutionTestCase(
+            description="fingerprint mismatch before table reuse fails before copy",
+            setup_sql=("CREATE TABLE staging.orders_origin AS SELECT 7 AS id",),
+            fingerprint_version_hash="stale_version",
+            expected_status=ExecutionStatus.FAILED.value,
+            expected_failed_phase=ExecutionPhase.STAGING,
+            expected_error_fragments=(
+                "cannot reuse from target 'prod'",
+                "reuse origin fingerprint changed after planning",
+            ),
+            expected_target_exists=False,
+        ),
+        TableReuseFailureExecutionTestCase(
+            description="missing origin relation fails before target exists",
+            setup_sql=(),
+            fingerprint_version_hash="expected_version",
+            expected_status=ExecutionStatus.FAILED.value,
+            expected_failed_phase=ExecutionPhase.STAGING,
+            expected_error_fragments=("orders_origin",),
+            expected_target_exists=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_reuse_origin_when_executing_table_then_fails_before_target_replacement(
     test_case: TableReuseFailureExecutionTestCase,
@@ -881,7 +860,7 @@ def test_given_invalid_reuse_origin_when_executing_table_then_fails_before_targe
             expected_rows=((7,),),
         )
     ],
-    ids=["database-qualified reuse origin materializes destination"],
+    ids=lambda case: case.description,
 )
 def test_given_database_qualified_reuse_origin_when_executing_table_then_materializes_destination(
     test_case: TableReuseExecutionTestCase,
@@ -949,7 +928,7 @@ def test_given_database_qualified_reuse_origin_when_executing_table_then_materia
             expected_metadata_reused=True,
         )
     ],
-    ids=["complete table reuse consumes accepted origin audit proof"],
+    ids=lambda case: case.description,
 )
 def test_given_complete_reuse_with_origin_audit_proof_when_executing_table_then_reuses_audit_gate(
     test_case: TableReuseAuditProofExecutionTestCase,
@@ -1033,7 +1012,7 @@ def test_given_complete_reuse_with_origin_audit_proof_when_executing_table_then_
             expected_metadata_reused=False,
         )
     ],
-    ids=["missing origin audit proof executes blocking audit and blocks promotion"],
+    ids=lambda case: case.description,
 )
 def test_given_complete_reuse_without_origin_audit_proof_when_executing_table_then_blocks_bad_data(
     test_case: TableReuseAuditProofExecutionTestCase,
@@ -1105,7 +1084,7 @@ def test_given_complete_reuse_without_origin_audit_proof_when_executing_table_th
             expected_metadata_reused=False,
         )
     ],
-    ids=["failed origin audit proof executes blocking audit and blocks promotion"],
+    ids=lambda case: case.description,
 )
 def test_given_complete_reuse_with_failed_origin_proof_when_executing_then_blocks_bad_data(
     test_case: TableReuseAuditProofExecutionTestCase,
@@ -1188,7 +1167,7 @@ def test_given_complete_reuse_with_failed_origin_proof_when_executing_then_block
             expected_metadata_reused=False,
         )
     ],
-    ids=["changed origin audit proof executes blocking audit and blocks promotion"],
+    ids=lambda case: case.description,
 )
 def test_given_complete_reuse_with_changed_origin_proof_when_executing_then_blocks_bad_data(
     test_case: TableReuseAuditProofExecutionTestCase,
@@ -1268,7 +1247,7 @@ def test_given_complete_reuse_with_changed_origin_proof_when_executing_then_bloc
             expected_metadata_reused=False,
         )
     ],
-    ids=["warn audit under complete reuse executes rather than using proof"],
+    ids=lambda case: case.description,
 )
 def test_given_complete_reuse_with_warn_audit_when_executing_table_then_warn_audit_runs(
     test_case: TableReuseAuditProofExecutionTestCase,
@@ -1337,7 +1316,7 @@ def test_given_complete_reuse_with_warn_audit_when_executing_table_then_warn_aud
             expected_metadata_reused=True,
         )
     ],
-    ids=["direct complete reuse consumes accepted origin audit proof"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_complete_reuse_with_origin_proof_when_executing_then_reuses_gate(
     test_case: TableReuseAuditProofExecutionTestCase,
@@ -1415,7 +1394,7 @@ def test_given_direct_complete_reuse_with_origin_proof_when_executing_then_reuse
             expected_warning_fragment="target schema is missing",
         ),
     ],
-    ids=["missing target schema warns when query tracking is enabled"],
+    ids=lambda case: case.description,
 )
 def test_given_fingerprint_failure_when_executing_table_then_succeeds_with_warning(
     test_case: TableSuccessTestCase,

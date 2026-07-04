@@ -29,7 +29,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import Version
             expected_stale_model_names=("missing", "mismatched", "forced"),
         )
     ],
-    ids=["preserves model order while marking missing mismatched and forced stale"],
+    ids=lambda case: case.description,
 )
 def test_given_version_identity_maps_when_collecting_stale_models_then_returns_expected_names(
     test_case: VersionStalenessTestCase,

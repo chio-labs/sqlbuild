@@ -15,61 +15,59 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-TEST_CASES: list[SelectorSurfaceBuildE2ETestCase] = [
-    SelectorSurfaceBuildE2ETestCase(
-        description="slash path selector works on build",
-        command=("--no-color", "build", "--select", "/models/marts", "--force"),
-        expected_exit_code=0,
-        expected_fragments=("Plan ready (10 selected)", "hourly_activity_with_daily_context"),
-        expected_stream="stdout",
-        pre_commands=(("--no-color", "build"),),
-    ),
-    SelectorSurfaceBuildE2ETestCase(
-        description="path selector endpoint expansion works on build",
-        command=(
-            "--no-color",
-            "build",
-            "--select",
-            "+fact_orders~daily_activity_rollup+",
-            "--force",
-        ),
-        expected_exit_code=0,
-        expected_fragments=(
-            "Plan ready (9 selected, 1 source to load)",
-            "Sources to load (1)",
-            "raw_orders",
-            "waffle_types",
-            "stg_orders",
-            "stg_payments",
-            "fact_orders",
-            "hourly_order_activity",
-            "daily_activity_rollup",
-            "hourly_activity_with_daily_context",
-        ),
-        expected_stream="stdout",
-        pre_commands=(("--no-color", "build"),),
-    ),
-    SelectorSurfaceBuildE2ETestCase(
-        description="malformed path selector with internal plus fails clearly",
-        command=("--no-color", "plan", "--select", "+fact_orders~+daily_activity_rollup"),
-        expected_exit_code=1,
-        expected_fragments=("contains '+' in an unsupported position",),
-        expected_stream="stderr",
-    ),
-    SelectorSurfaceBuildE2ETestCase(
-        description="malformed path selector missing rhs fails clearly",
-        command=("--no-color", "plan", "--select", "fact_orders~"),
-        expected_exit_code=1,
-        expected_fragments=("requires names on both sides of '~'",),
-        expected_stream="stderr",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        SelectorSurfaceBuildE2ETestCase(
+            description="slash path selector works on build",
+            command=("--no-color", "build", "--select", "/models/marts", "--force"),
+            expected_exit_code=0,
+            expected_fragments=("Plan ready (10 selected)", "hourly_activity_with_daily_context"),
+            expected_stream="stdout",
+            pre_commands=(("--no-color", "build"),),
+        ),
+        SelectorSurfaceBuildE2ETestCase(
+            description="path selector endpoint expansion works on build",
+            command=(
+                "--no-color",
+                "build",
+                "--select",
+                "+fact_orders~daily_activity_rollup+",
+                "--force",
+            ),
+            expected_exit_code=0,
+            expected_fragments=(
+                "Plan ready (9 selected, 1 source to load)",
+                "Sources to load (1)",
+                "raw_orders",
+                "waffle_types",
+                "stg_orders",
+                "stg_payments",
+                "fact_orders",
+                "hourly_order_activity",
+                "daily_activity_rollup",
+                "hourly_activity_with_daily_context",
+            ),
+            expected_stream="stdout",
+            pre_commands=(("--no-color", "build"),),
+        ),
+        SelectorSurfaceBuildE2ETestCase(
+            description="malformed path selector with internal plus fails clearly",
+            command=("--no-color", "plan", "--select", "+fact_orders~+daily_activity_rollup"),
+            expected_exit_code=1,
+            expected_fragments=("contains '+' in an unsupported position",),
+            expected_stream="stderr",
+        ),
+        SelectorSurfaceBuildE2ETestCase(
+            description="malformed path selector missing rhs fails clearly",
+            command=("--no-color", "plan", "--select", "fact_orders~"),
+            expected_exit_code=1,
+            expected_fragments=("requires names on both sides of '~'",),
+            expected_stream="stderr",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_selector_commands_when_running_cli_then_behavior_matches_expectation(
     test_case: SelectorSurfaceBuildE2ETestCase,

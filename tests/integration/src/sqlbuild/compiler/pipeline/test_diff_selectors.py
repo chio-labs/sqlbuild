@@ -40,62 +40,60 @@ _PROJECT_FILES: dict[str, str] = {
     ),
 }
 
-TEST_CASES: list[DiffSelectorIntegrationTestCase] = [
-    DiffSelectorIntegrationTestCase(
-        description="name selector returns a single model",
-        select=("fact_orders",),
-        exclude=(),
-        expected_model_names=frozenset(("fact_orders",)),
-    ),
-    DiffSelectorIntegrationTestCase(
-        description="path selector returns models under folder",
-        select=("path:models/staging",),
-        exclude=(),
-        expected_model_names=frozenset(("stg_orders", "stg_customers")),
-    ),
-    DiffSelectorIntegrationTestCase(
-        description="Windows-style path selector returns models under folder",
-        select=("path:models\\staging",),
-        exclude=(),
-        expected_model_names=frozenset(("stg_orders", "stg_customers")),
-    ),
-    DiffSelectorIntegrationTestCase(
-        description="tag selector returns tagged models",
-        select=("tag:mart",),
-        exclude=(),
-        expected_model_names=frozenset(("fact_orders", "dim_customers")),
-    ),
-    DiffSelectorIntegrationTestCase(
-        description="upstream expansion includes model ancestors",
-        select=("+fact_orders",),
-        exclude=(),
-        expected_model_names=frozenset(("stg_orders", "int_orders", "fact_orders")),
-    ),
-    DiffSelectorIntegrationTestCase(
-        description="downstream expansion includes model descendants",
-        select=("stg_orders+",),
-        exclude=(),
-        expected_model_names=frozenset(("stg_orders", "int_orders", "fact_orders")),
-    ),
-    DiffSelectorIntegrationTestCase(
-        description="exclude subtracts from selected models",
-        select=("tag:mart",),
-        exclude=("dim_customers",),
-        expected_model_names=frozenset(("fact_orders",)),
-    ),
-    DiffSelectorIntegrationTestCase(
-        description="comma selector intersects resolved sets",
-        select=("tag:core,path:models/marts",),
-        exclude=(),
-        expected_model_names=frozenset(("fact_orders",)),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        DiffSelectorIntegrationTestCase(
+            description="name selector returns a single model",
+            select=("fact_orders",),
+            exclude=(),
+            expected_model_names=frozenset(("fact_orders",)),
+        ),
+        DiffSelectorIntegrationTestCase(
+            description="path selector returns models under folder",
+            select=("path:models/staging",),
+            exclude=(),
+            expected_model_names=frozenset(("stg_orders", "stg_customers")),
+        ),
+        DiffSelectorIntegrationTestCase(
+            description="Windows-style path selector returns models under folder",
+            select=("path:models\\staging",),
+            exclude=(),
+            expected_model_names=frozenset(("stg_orders", "stg_customers")),
+        ),
+        DiffSelectorIntegrationTestCase(
+            description="tag selector returns tagged models",
+            select=("tag:mart",),
+            exclude=(),
+            expected_model_names=frozenset(("fact_orders", "dim_customers")),
+        ),
+        DiffSelectorIntegrationTestCase(
+            description="upstream expansion includes model ancestors",
+            select=("+fact_orders",),
+            exclude=(),
+            expected_model_names=frozenset(("stg_orders", "int_orders", "fact_orders")),
+        ),
+        DiffSelectorIntegrationTestCase(
+            description="downstream expansion includes model descendants",
+            select=("stg_orders+",),
+            exclude=(),
+            expected_model_names=frozenset(("stg_orders", "int_orders", "fact_orders")),
+        ),
+        DiffSelectorIntegrationTestCase(
+            description="exclude subtracts from selected models",
+            select=("tag:mart",),
+            exclude=("dim_customers",),
+            expected_model_names=frozenset(("fact_orders",)),
+        ),
+        DiffSelectorIntegrationTestCase(
+            description="comma selector intersects resolved sets",
+            select=("tag:core,path:models/marts",),
+            exclude=(),
+            expected_model_names=frozenset(("fact_orders",)),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_compiled_project_when_resolving_diff_selectors_then_returns_expected_models(
     test_case: DiffSelectorIntegrationTestCase,

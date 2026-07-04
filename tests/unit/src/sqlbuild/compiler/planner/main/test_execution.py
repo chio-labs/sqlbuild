@@ -54,288 +54,22 @@ from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
-PLAN_OUTPUT_TEST_CASES: list[StandardSourceFreshnessPlanOutputTestCase] = [
-    StandardSourceFreshnessPlanOutputTestCase(
-        description="standard pruned plan output carries source freshness result",
-        standard_scope_pruning=StandardScopePruning.PRUNE_UNCHANGED,
-        expected_has_source_freshness=True,
-    ),
-    StandardSourceFreshnessPlanOutputTestCase(
-        description="normal standard plan output carries source freshness result",
-        standard_scope_pruning=StandardScopePruning.NONE,
-        expected_has_source_freshness=True,
-    ),
-]
-
-SOURCE_DEFERRAL_CONFLICT_TEST_CASES: list[StandardReuseFromSourceDeferralConflictTestCase] = [
-    StandardReuseFromSourceDeferralConflictTestCase(
-        description="target source deferral conflicts with standard reuse",
-        defer_sources_to=None,
-        target_defer_sources_to="prod_sources",
-        expected_error_fragment="source deferral is active",
-    ),
-    StandardReuseFromSourceDeferralConflictTestCase(
-        description="cli source deferral conflicts with standard reuse",
-        defer_sources_to="prod_sources",
-        target_defer_sources_to=None,
-        expected_error_fragment="source deferral is active",
-    ),
-]
-
-SELECTION_AWARE_STALENESS_TEST_CASES: list[StandardSelectionAwareStalenessTestCase] = [
-    StandardSelectionAwareStalenessTestCase(
-        description="plain leaf selection with changed upstream is no-op and warns",
-        previous_sql_by_model_name={
-            "b": "select 1 as id",
-            "c": "select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "b": "select 2 as id",
-            "c": "select * from __ref('b')",
-        },
-        select=("c",),
-        expected_model_names=(),
-        expected_warning_fragments=("selected model 'c' will build on", "- b"),
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="multi-hop leaf selection with changed root is no-op and warns",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select * from __ref('a')",
-            "c": "select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select * from __ref('a')",
-            "c": "select * from __ref('b')",
-        },
-        select=("c",),
-        expected_model_names=(),
-        expected_warning_fragments=("selected model 'c' will build on", "- a"),
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="multi-hop selected root and leaf warns for unbuilt intermediate",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select * from __ref('a')",
-            "c": "select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select * from __ref('a')",
-            "c": "select * from __ref('b')",
-        },
-        select=("a", "c"),
-        expected_model_names=("a",),
-        expected_warning_fragments=("selected model 'c' will build on", "- b"),
-        expected_current_version_hash_model_names=("a",),
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="mixed selected and unselected upstream changes run and warn",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select 1 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select 2 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        select=("b", "c"),
-        expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' will build on", "- a"),
-        expected_current_version_hash_model_names=("b",),
-        expected_non_current_version_hash_model_names=("c",),
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="mixed case with view child runs and warns",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select 1 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select 2 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        select=("b", "c"),
-        expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' will build on", "- a"),
-        model_configs={"c": {"materialized": "view"}},
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="mixed case with incremental child runs and warns",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select 1 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select 2 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        select=("b", "c"),
-        expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' will build on", "- a"),
-        model_configs={"c": {"materialized": "incremental", "incremental_strategy": "append"}},
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="mixed case with microbatch child runs and warns",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select 1 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select 2 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        select=("b", "c"),
-        expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' will build on", "- a"),
-        model_configs={
-            "c": {
-                "materialized": "incremental",
-                "incremental_strategy": "delete_insert",
-                "incremental_mode": "microbatch",
-                "cursor": "id",
-                "cursor_type": "integer",
-                "unique_key": ("id",),
-            }
-        },
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="mixed case with snapshot child runs and warns",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select 1 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select 2 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        select=("b", "c"),
-        expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' will build on", "- a"),
-        model_configs={
-            "c": {
-                "materialized": "snapshot",
-                "unique_key": ("id",),
-                "snapshot_strategy": "check",
-                "check_columns": ("id",),
-            }
-        },
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="mixed case with custom child runs and warns",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select 1 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select 2 as id",
-            "c": "select * from __ref('a') union all select * from __ref('b')",
-        },
-        select=("b", "c"),
-        expected_model_names=("b", "c"),
-        expected_warning_fragments=("selected model 'c' will build on", "- a"),
-        model_configs={"c": {"materialized": "custom_test_materialization"}},
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="run_despite_unchanged child runs and still warns for unselected upstream",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "c": "select * from __ref('a')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "c": "select * from __ref('a')",
-        },
-        select=("c",),
-        expected_model_names=("c",),
-        expected_warning_fragments=("selected model 'c' will build on", "- a"),
-        model_configs={"c": {"materialized": "table", "run_despite_unchanged": "always"}},
-        expected_non_current_version_hash_model_names=("c",),
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="closure rebuilds changed upstream and downstream without warning",
-        previous_sql_by_model_name={
-            "b": "select 1 as id",
-            "c": "select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "b": "select 2 as id",
-            "c": "select * from __ref('b')",
-        },
-        select=("+c",),
-        expected_model_names=("b", "c"),
-        expected_warning_fragments=(),
-        expected_current_version_hash_model_names=("b", "c"),
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="multi-hop closure rebuilds changed root and chain without warning",
-        previous_sql_by_model_name={
-            "a": "select 1 as id",
-            "b": "select * from __ref('a')",
-            "c": "select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "a": "select 2 as id",
-            "b": "select * from __ref('a')",
-            "c": "select * from __ref('b')",
-        },
-        select=("+c",),
-        expected_model_names=("a", "b", "c"),
-        expected_warning_fragments=(),
-        expected_current_version_hash_model_names=("a", "b", "c"),
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="full refresh applies only to selected leaf",
-        previous_sql_by_model_name={
-            "b": "select 1 as id",
-            "c": "select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "b": "select 1 as id",
-            "c": "select * from __ref('b')",
-        },
-        select=("c",),
-        expected_model_names=("c",),
-        expected_warning_fragments=(),
-        full_refresh=True,
-        expected_current_version_hash_model_names=("c",),
-    ),
-    StandardSelectionAwareStalenessTestCase(
-        description="full refresh selected leaf still warns for changed unselected upstream",
-        previous_sql_by_model_name={
-            "b": "select 1 as id",
-            "c": "select * from __ref('b')",
-        },
-        current_sql_by_model_name={
-            "b": "select 2 as id",
-            "c": "select * from __ref('b')",
-        },
-        select=("c",),
-        expected_model_names=("c",),
-        expected_warning_fragments=("selected model 'c' will build on", "- b"),
-        full_refresh=True,
-        expected_non_current_version_hash_model_names=("c",),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    PLAN_OUTPUT_TEST_CASES,
-    ids=[case.description for case in PLAN_OUTPUT_TEST_CASES],
+    [
+        StandardSourceFreshnessPlanOutputTestCase(
+            description="standard pruned plan output carries source freshness result",
+            standard_scope_pruning=StandardScopePruning.PRUNE_UNCHANGED,
+            expected_has_source_freshness=True,
+        ),
+        StandardSourceFreshnessPlanOutputTestCase(
+            description="normal standard plan output carries source freshness result",
+            standard_scope_pruning=StandardScopePruning.NONE,
+            expected_has_source_freshness=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_direct_plan_when_building_execution_plan_then_source_freshness_is_available(
     test_case: StandardSourceFreshnessPlanOutputTestCase,
@@ -368,7 +102,7 @@ def test_given_direct_plan_when_building_execution_plan_then_source_freshness_is
             expected_hook_names=("notify",),
         )
     ],
-    ids=["execution plan carries discovered hook functions"],
+    ids=lambda case: case.description,
 )
 def test_given_project_with_hook_functions_when_building_execution_plan_then_plan_carries_hooks(
     test_case: HookFunctionPlanOutputTestCase,
@@ -406,8 +140,255 @@ def test_given_project_with_hook_functions_when_building_execution_plan_then_pla
 
 @pytest.mark.parametrize(
     "test_case",
-    SELECTION_AWARE_STALENESS_TEST_CASES,
-    ids=[case.description for case in SELECTION_AWARE_STALENESS_TEST_CASES],
+    [
+        StandardSelectionAwareStalenessTestCase(
+            description="plain leaf selection with changed upstream is no-op and warns",
+            previous_sql_by_model_name={
+                "b": "select 1 as id",
+                "c": "select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "b": "select 2 as id",
+                "c": "select * from __ref('b')",
+            },
+            select=("c",),
+            expected_model_names=(),
+            expected_warning_fragments=("selected model 'c' will build on", "- b"),
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="multi-hop leaf selection with changed root is no-op and warns",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select * from __ref('a')",
+                "c": "select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select * from __ref('a')",
+                "c": "select * from __ref('b')",
+            },
+            select=("c",),
+            expected_model_names=(),
+            expected_warning_fragments=("selected model 'c' will build on", "- a"),
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="multi-hop selected root and leaf warns for unbuilt intermediate",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select * from __ref('a')",
+                "c": "select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select * from __ref('a')",
+                "c": "select * from __ref('b')",
+            },
+            select=("a", "c"),
+            expected_model_names=("a",),
+            expected_warning_fragments=("selected model 'c' will build on", "- b"),
+            expected_current_version_hash_model_names=("a",),
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="mixed selected and unselected upstream changes run and warn",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select 1 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select 2 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            select=("b", "c"),
+            expected_model_names=("b", "c"),
+            expected_warning_fragments=("selected model 'c' will build on", "- a"),
+            expected_current_version_hash_model_names=("b",),
+            expected_non_current_version_hash_model_names=("c",),
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="mixed case with view child runs and warns",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select 1 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select 2 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            select=("b", "c"),
+            expected_model_names=("b", "c"),
+            expected_warning_fragments=("selected model 'c' will build on", "- a"),
+            model_configs={"c": {"materialized": "view"}},
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="mixed case with incremental child runs and warns",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select 1 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select 2 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            select=("b", "c"),
+            expected_model_names=("b", "c"),
+            expected_warning_fragments=("selected model 'c' will build on", "- a"),
+            model_configs={"c": {"materialized": "incremental", "incremental_strategy": "append"}},
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="mixed case with microbatch child runs and warns",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select 1 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select 2 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            select=("b", "c"),
+            expected_model_names=("b", "c"),
+            expected_warning_fragments=("selected model 'c' will build on", "- a"),
+            model_configs={
+                "c": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "delete_insert",
+                    "incremental_mode": "microbatch",
+                    "cursor": "id",
+                    "cursor_type": "integer",
+                    "unique_key": ("id",),
+                }
+            },
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="mixed case with snapshot child runs and warns",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select 1 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select 2 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            select=("b", "c"),
+            expected_model_names=("b", "c"),
+            expected_warning_fragments=("selected model 'c' will build on", "- a"),
+            model_configs={
+                "c": {
+                    "materialized": "snapshot",
+                    "unique_key": ("id",),
+                    "snapshot_strategy": "check",
+                    "check_columns": ("id",),
+                }
+            },
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="mixed case with custom child runs and warns",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select 1 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select 2 as id",
+                "c": "select * from __ref('a') union all select * from __ref('b')",
+            },
+            select=("b", "c"),
+            expected_model_names=("b", "c"),
+            expected_warning_fragments=("selected model 'c' will build on", "- a"),
+            model_configs={"c": {"materialized": "custom_test_materialization"}},
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="run_despite_unchanged child runs and still warns for unselected upstream",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "c": "select * from __ref('a')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "c": "select * from __ref('a')",
+            },
+            select=("c",),
+            expected_model_names=("c",),
+            expected_warning_fragments=("selected model 'c' will build on", "- a"),
+            model_configs={"c": {"materialized": "table", "run_despite_unchanged": "always"}},
+            expected_non_current_version_hash_model_names=("c",),
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="closure rebuilds changed upstream and downstream without warning",
+            previous_sql_by_model_name={
+                "b": "select 1 as id",
+                "c": "select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "b": "select 2 as id",
+                "c": "select * from __ref('b')",
+            },
+            select=("+c",),
+            expected_model_names=("b", "c"),
+            expected_warning_fragments=(),
+            expected_current_version_hash_model_names=("b", "c"),
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="multi-hop closure rebuilds changed root and chain without warning",
+            previous_sql_by_model_name={
+                "a": "select 1 as id",
+                "b": "select * from __ref('a')",
+                "c": "select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "a": "select 2 as id",
+                "b": "select * from __ref('a')",
+                "c": "select * from __ref('b')",
+            },
+            select=("+c",),
+            expected_model_names=("a", "b", "c"),
+            expected_warning_fragments=(),
+            expected_current_version_hash_model_names=("a", "b", "c"),
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="full refresh applies only to selected leaf",
+            previous_sql_by_model_name={
+                "b": "select 1 as id",
+                "c": "select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "b": "select 1 as id",
+                "c": "select * from __ref('b')",
+            },
+            select=("c",),
+            expected_model_names=("c",),
+            expected_warning_fragments=(),
+            full_refresh=True,
+            expected_current_version_hash_model_names=("c",),
+        ),
+        StandardSelectionAwareStalenessTestCase(
+            description="full refresh selected leaf still warns for changed unselected upstream",
+            previous_sql_by_model_name={
+                "b": "select 1 as id",
+                "c": "select * from __ref('b')",
+            },
+            current_sql_by_model_name={
+                "b": "select 2 as id",
+                "c": "select * from __ref('b')",
+            },
+            select=("c",),
+            expected_model_names=("c",),
+            expected_warning_fragments=("selected model 'c' will build on", "- b"),
+            full_refresh=True,
+            expected_non_current_version_hash_model_names=("c",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_standard_pruned_selection_when_upstream_changes_then_respects_selection_and_warns(
     test_case: StandardSelectionAwareStalenessTestCase,
@@ -482,7 +463,7 @@ def test_given_standard_pruned_selection_when_upstream_changes_then_respects_sel
             expected_model_names=("blocked", "unrelated"),
         )
     ],
-    ids=["external blocked overlay skips blocked model but keeps sibling work"],
+    ids=lambda case: case.description,
 )
 def test_given_external_blocked_model_when_building_execution_plan_then_only_that_model_is_skipped(
     test_case: ExternalBlockedPlanOutputTestCase,
@@ -537,7 +518,7 @@ def test_given_external_blocked_model_when_building_execution_plan_then_only_tha
             },
         )
     ],
-    ids=["execution plan carries standard reuse_from metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_reuse_metadata(
     test_case: StandardReuseFromTargetPlanOutputTestCase,
@@ -716,7 +697,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
             expected_dependency_baseline_names=("upstream",),
         )
     ],
-    ids=["plain downstream selection baselines unselected upstream from reuse target"],
+    ids=lambda case: case.description,
 )
 def test_given_plain_downstream_selection_when_upstream_missing_then_plans_dependency_baseline(
     test_case: StandardDependencyBaselinePlanOutputTestCase,
@@ -822,7 +803,7 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
             unexpected_baseline_names=("grandparent",),
         )
     ],
-    ids=["leaf selection baselines only its direct input, not transitive upstreams"],
+    ids=lambda case: case.description,
 )
 def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_candidate(
     test_case: StandardDirectInputBaselineTestCase,
@@ -906,8 +887,21 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
 
 @pytest.mark.parametrize(
     "test_case",
-    SOURCE_DEFERRAL_CONFLICT_TEST_CASES,
-    ids=[case.description for case in SOURCE_DEFERRAL_CONFLICT_TEST_CASES],
+    [
+        StandardReuseFromSourceDeferralConflictTestCase(
+            description="target source deferral conflicts with standard reuse",
+            defer_sources_to=None,
+            target_defer_sources_to="prod_sources",
+            expected_error_fragment="source deferral is active",
+        ),
+        StandardReuseFromSourceDeferralConflictTestCase(
+            description="cli source deferral conflicts with standard reuse",
+            defer_sources_to="prod_sources",
+            target_defer_sources_to=None,
+            expected_error_fragment="source deferral is active",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_and_source_deferral_when_planning_then_raises(
     test_case: StandardReuseFromSourceDeferralConflictTestCase,
@@ -951,7 +945,7 @@ def test_given_reuse_from_and_source_deferral_when_planning_then_raises(
             expected_reuse_decision_metadata_present=False,
         )
     ],
-    ids=["full refresh bypasses standard reuse_from state"],
+    ids=lambda case: case.description,
 )
 def test_given_full_refresh_with_reuse_from_when_planning_then_reuse_state_is_skipped(
     test_case: StandardReuseFullRefreshBypassTestCase,

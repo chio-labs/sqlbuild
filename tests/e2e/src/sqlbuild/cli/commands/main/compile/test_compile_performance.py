@@ -13,22 +13,24 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     run_advanced_compile_benchmark,
 )
 
-TEST_CASES: list[CompilePerformanceGuardTestCase] = [
-    CompilePerformanceGuardTestCase(
-        description="advanced 3000 model compile stays under eight seconds",
-        model_count=3000,
-        expected_max_seconds=8.0,
-    ),
-    CompilePerformanceGuardTestCase(
-        description="advanced 10000 model compile stays under twenty seconds",
-        model_count=10000,
-        expected_max_seconds=20.0,
-    ),
-]
-
 
 @pytest.mark.performance
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompilePerformanceGuardTestCase(
+            description="advanced 3000 model compile stays under eight seconds",
+            model_count=3000,
+            expected_max_seconds=8.0,
+        ),
+        CompilePerformanceGuardTestCase(
+            description="advanced 10000 model compile stays under twenty seconds",
+            model_count=10000,
+            expected_max_seconds=20.0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_generated_advanced_project_when_compiling_then_finishes_within_budget(
     tmp_path: Path,
     test_case: CompilePerformanceGuardTestCase,

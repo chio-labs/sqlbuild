@@ -19,31 +19,29 @@ from tests.unit.src.sqlbuild.executor.shared.helpers.worker_completion.helpers i
     successful_execute,
 )
 
-WORKER_COMPLETION_TEST_CASES: list[WorkerCompletionTestCase] = [
-    WorkerCompletionTestCase(
-        description="publishes success completion and returns connection",
-        key="node_a",
-        connection="connection_a",
-        result="ok",
-        expected_completion=("node_a", "ok"),
-        expected_connection="connection_a",
-    ),
-    WorkerCompletionTestCase(
-        description="publishes failure completion and returns connection",
-        key="node_b",
-        connection="connection_b",
-        result=None,
-        expected_completion=("node_b", "worker exploded"),
-        expected_connection="connection_b",
-        expected_error_fragment="worker exploded",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    WORKER_COMPLETION_TEST_CASES,
-    ids=[case.description for case in WORKER_COMPLETION_TEST_CASES],
+    [
+        WorkerCompletionTestCase(
+            description="publishes success completion and returns connection",
+            key="node_a",
+            connection="connection_a",
+            result="ok",
+            expected_completion=("node_a", "ok"),
+            expected_connection="connection_a",
+        ),
+        WorkerCompletionTestCase(
+            description="publishes failure completion and returns connection",
+            key="node_b",
+            connection="connection_b",
+            result=None,
+            expected_completion=("node_b", "worker exploded"),
+            expected_connection="connection_b",
+            expected_error_fragment="worker exploded",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_worker_execution_when_running_with_completion_then_publishes_one_completion(
     test_case: WorkerCompletionTestCase,

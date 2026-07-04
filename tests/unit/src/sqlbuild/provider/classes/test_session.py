@@ -87,7 +87,7 @@ class ConcurrentRecordingProvider(Provider):
             expected_setup_events=("setup:clock:runtime",),
         )
     ],
-    ids=["item lookup returns provider and calls setup"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_item_lookup_provider_then_returns_provider_and_sets_up_once(
     test_case: ProviderContainerLookupTestCase,
@@ -119,7 +119,7 @@ def test_given_provider_container_when_item_lookup_provider_then_returns_provide
             expected_setup_events=("setup:alerts:runtime",),
         )
     ],
-    ids=["attribute lookup returns provider and calls setup"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_attribute_lookup_then_returns_provider_and_sets_up_once(
     test_case: ProviderContainerLookupTestCase,
@@ -150,7 +150,7 @@ def test_given_provider_container_when_attribute_lookup_then_returns_provider_an
             expected_error_fragment="Provider 'missing' was not found. Available providers: clock",
         )
     ],
-    ids=["missing item lookup errors clearly"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_lookup_missing_provider_then_errors_clearly(
     test_case: ProviderContainerMissingTestCase,
@@ -170,7 +170,7 @@ def test_given_provider_container_when_lookup_missing_provider_then_errors_clear
             expected_error_fragment="Provider 'missing' was not found. Available providers: clock",
         )
     ],
-    ids=["missing attribute lookup raises attribute error clearly"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_attribute_lookup_missing_provider_then_errors_clearly(
     test_case: ProviderContainerMissingTestCase,
@@ -190,7 +190,7 @@ def test_given_provider_container_when_attribute_lookup_missing_provider_then_er
             expected_error_fragment="Provider 'missing' was not found. Available providers: none",
         )
     ],
-    ids=["missing provider with empty container reports none"],
+    ids=lambda case: case.description,
 )
 def test_given_empty_provider_container_when_lookup_missing_provider_then_error_reports_none(
     test_case: ProviderContainerMissingTestCase,
@@ -210,7 +210,7 @@ def test_given_empty_provider_container_when_lookup_missing_provider_then_error_
             expected_error_fragment="Provider session is closed; cannot access 'clock'",
         )
     ],
-    ids=["access after close errors clearly"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_access_after_close_then_errors_clearly(
     test_case: ProviderContainerMissingTestCase,
@@ -232,7 +232,7 @@ def test_given_provider_session_when_access_after_close_then_errors_clearly(
             expected_events=(),
         )
     ],
-    ids=["container keys membership and iteration do not setup providers"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_inspecting_keys_membership_and_iterating_then_no_setup_runs(
     test_case: ProviderSessionLifecycleTestCase,
@@ -261,7 +261,7 @@ def test_given_provider_container_when_inspecting_keys_membership_and_iterating_
             expected_events=("setup:clock:runtime", "setup:alerts:runtime"),
         )
     ],
-    ids=["container items returns providers and sets each up"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_container_when_iterating_items_then_returns_providers_and_sets_each_up(
     test_case: ProviderSessionLifecycleTestCase,
@@ -296,7 +296,7 @@ def test_given_provider_container_when_iterating_items_then_returns_providers_an
             ),
         )
     ],
-    ids=["teardown runs for accessed providers in reverse access order"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_closed_then_teardown_runs_in_reverse_setup_order(
     test_case: ProviderSessionLifecycleTestCase,
@@ -327,7 +327,7 @@ def test_given_provider_session_when_closed_then_teardown_runs_in_reverse_setup_
             expected_events=("setup:clock:runtime", "teardown:clock"),
         )
     ],
-    ids=["close is idempotent and does not teardown twice"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_closed_twice_then_teardown_runs_once(
     test_case: ProviderSessionLifecycleTestCase,
@@ -357,7 +357,7 @@ def test_given_provider_session_when_closed_twice_then_teardown_runs_once(
             expected_teardown_calls=0,
         )
     ],
-    ids=["concurrent same-session access sets up provider once"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_concurrent_get_same_provider_then_setup_runs_once(
     test_case: ProviderSessionLifecycleTestCase,
@@ -391,7 +391,7 @@ def test_given_provider_session_when_concurrent_get_same_provider_then_setup_run
             expected_teardown_calls=1,
         )
     ],
-    ids=["concurrent close teardowns provider once"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_closed_concurrently_then_teardown_runs_once(
     test_case: ProviderSessionLifecycleTestCase,
@@ -418,7 +418,7 @@ def test_given_provider_session_when_closed_concurrently_then_teardown_runs_once
             expected_events=("setup:clock:runtime", "teardown:clock"),
         )
     ],
-    ids=["teardown runs when context exits with original error"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_execution_fails_then_teardown_runs_and_original_error_surfaces(
     test_case: ProviderSessionLifecycleTestCase,
@@ -450,7 +450,7 @@ def test_given_provider_session_when_execution_fails_then_teardown_runs_and_orig
             ),
         )
     ],
-    ids=["setup failure identifies provider"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_setup_fails_then_errors_clearly(
     test_case: ProviderSessionErrorTestCase,
@@ -473,7 +473,7 @@ def test_given_provider_session_when_setup_fails_then_errors_clearly(
             ),
         )
     ],
-    ids=["teardown failure identifies provider"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_teardown_fails_then_errors_clearly(
     test_case: ProviderSessionErrorTestCase,
@@ -497,7 +497,7 @@ def test_given_provider_session_when_teardown_fails_then_errors_clearly(
             expected_error_fragment="first teardown exploded",
         )
     ],
-    ids=["multiple teardown failures are all reported"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_session_when_multiple_teardowns_fail_then_all_failures_are_reported(
     test_case: ProviderSessionErrorTestCase,
@@ -528,7 +528,7 @@ def test_given_provider_session_when_multiple_teardowns_fail_then_all_failures_a
             expected_error_fragment="teardown exploded",
         )
     ],
-    ids=["teardown failure during original failure is recorded"],
+    ids=lambda case: case.description,
 )
 def test_given_teardown_failure_when_execution_already_failed_then_original_error_is_not_hidden(
     test_case: ProviderSessionErrorTestCase,

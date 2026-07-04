@@ -44,7 +44,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_changed_amount_dollars=1.25,
         )
     ],
-    ids=["changes-only rebuilds downstream data"],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_query_change_when_building_changes_only_then_rebuilds_downstream_data(
     test_case: DirectChangesOnlyStateBuildE2ETestCase,
@@ -91,7 +91,7 @@ def test_given_upstream_query_change_when_building_changes_only_then_rebuilds_do
             expected_amount_dollars=1.25,
         )
     ],
-    ids=["seed change reloads seed and downstream model"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_change_when_building_changes_only_then_reloads_seed_and_downstream_model(
     test_case: DirectChangesOnlySeedBuildE2ETestCase,
@@ -173,7 +173,7 @@ def test_given_seed_change_when_building_changes_only_then_reloads_seed_and_down
             expected_amount_dollars=1.25,
         )
     ],
-    ids=["selected leaf warns on changed out-of-selection seed until closure rebuild"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_change_out_of_selection_when_building_leaf_then_warns_until_closure(
     test_case: DirectChangesOnlySeedBuildE2ETestCase,
@@ -254,7 +254,7 @@ def test_given_seed_change_out_of_selection_when_building_leaf_then_warns_until_
             expected_plan_fragment="Plan ready (1 selected)",
         )
     ],
-    ids=["standalone seed writes fingerprint for changes-only build"],
+    ids=lambda case: case.description,
 )
 def test_given_standalone_seed_when_building_changes_only_then_seed_is_current(
     test_case: DirectSeedChangesOnlyGapE2ETestCase,
@@ -318,7 +318,7 @@ def test_given_standalone_seed_when_building_changes_only_then_seed_is_current(
             ),
         )
     ],
-    ids=["seed change plan json reports changed reason"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_change_when_planning_json_then_seed_reason_is_reported(
     test_case: DirectSeedChangesOnlyGapE2ETestCase,
@@ -379,7 +379,7 @@ def test_given_seed_change_when_planning_json_then_seed_reason_is_reported(
             expected_customer_rows=(("Ada",),),
         )
     ],
-    ids=["single changed seed only rebuilds dependent branch"],
+    ids=lambda case: case.description,
 )
 def test_given_multiple_seed_branches_when_one_seed_changes_then_only_dependent_branch_runs(
     test_case: DirectSeedChangesOnlyGapE2ETestCase,
@@ -458,7 +458,7 @@ def test_given_multiple_seed_branches_when_one_seed_changes_then_only_dependent_
             expected_plan_fragment="Plan ready (2 selected)",
         )
     ],
-    ids=["seed column type change selects seed and downstream model"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_schema_change_when_building_changes_only_then_seed_and_downstream_run(
     test_case: DirectSeedChangesOnlyGapE2ETestCase,
@@ -526,7 +526,7 @@ def test_given_seed_schema_change_when_building_changes_only_then_seed_and_downs
             expected_customer_rows=((100,),),
         )
     ],
-    ids=["reuse_from builds active target when seed identity differs"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_and_seed_change_when_building_dev_then_builds_active_seed_version(
     test_case: DirectSeedChangesOnlyGapE2ETestCase,
@@ -603,7 +603,7 @@ def test_given_reuse_from_and_seed_change_when_building_dev_then_builds_active_s
             expected_changed_amount_dollars=1.25,
         )
     ],
-    ids=["later unscoped build rebuilds downstream left stale by scoped build"],
+    ids=lambda case: case.description,
 )
 def test_given_scoped_upstream_changes_only_build_when_building_later_then_rebuilds_downstream(
     test_case: DirectChangesOnlyStateBuildE2ETestCase,
@@ -665,7 +665,7 @@ def test_given_scoped_upstream_changes_only_build_when_building_later_then_rebui
             expected_changed_amount_dollars=1.0,
         )
     ],
-    ids=["changes-only build runs table configured duration despite unchanged"],
+    ids=lambda case: case.description,
 )
 def test_given_run_despite_unchanged_duration_when_building_changes_only_then_rebuilds_downstream(
     test_case: DirectChangesOnlyStateBuildE2ETestCase,
@@ -737,7 +737,7 @@ def test_given_run_despite_unchanged_duration_when_building_changes_only_then_re
             expected_changed_amount_dollars=1.0,
         )
     ],
-    ids=["scoped run_despite_unchanged build leaves downstream stale then catches up"],
+    ids=lambda case: case.description,
 )
 def test_given_scoped_run_despite_unchanged_build_when_building_later_then_downstream_catches_up(
     test_case: DirectChangesOnlyStateBuildE2ETestCase,
@@ -805,7 +805,7 @@ def test_given_scoped_run_despite_unchanged_build_when_building_later_then_downs
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["dev build reuses prod table relation"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_target_when_building_dev_then_copies_prod_relation(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -855,7 +855,7 @@ def test_given_reuse_from_target_when_building_dev_then_copies_prod_relation(
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["dev reuse_from consumes prod audit proof"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_target_with_origin_audit_proof_when_building_dev_then_marks_audit_reused(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -903,7 +903,7 @@ def test_given_reuse_from_target_with_origin_audit_proof_when_building_dev_then_
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["dev build prepares custom materialization from prod baseline"],
+    ids=lambda case: case.description,
 )
 def test_given_custom_reuse_from_target_when_building_dev_then_prepare_version_seeds_baseline(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -963,7 +963,7 @@ def test_given_custom_reuse_from_target_when_building_dev_then_prepare_version_s
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["multi-schema reuse_from uses per-model origin state"],
+    ids=lambda case: case.description,
 )
 def test_given_multi_schema_reuse_from_when_building_dev_then_uses_per_model_origin_state(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1098,7 +1098,7 @@ def test_given_multi_schema_reuse_from_when_building_dev_then_uses_per_model_ori
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["scoped reuse_from leaves downstream stale then catches up"],
+    ids=lambda case: case.description,
 )
 def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catches_up(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1183,7 +1183,7 @@ def test_given_scoped_reuse_from_build_when_building_later_then_downstream_catch
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["selector expansion and selector kinds reuse scoped models"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_when_selecting_by_expansion_tag_and_path_then_reuses_scope(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1256,7 +1256,7 @@ def test_given_reuse_from_when_selecting_by_expansion_tag_and_path_then_reuses_s
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["full refresh bypasses reuse_from execution"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_when_full_refreshing_then_builds_without_reuse(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1299,7 +1299,7 @@ def test_given_reuse_from_when_full_refreshing_then_builds_without_reuse(
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["function change prevents unsafe reuse"],
+    ids=lambda case: case.description,
 )
 def test_given_function_change_with_reuse_from_when_building_dev_then_builds_expected_version(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1366,7 +1366,7 @@ def test_given_function_change_with_reuse_from_when_building_dev_then_builds_exp
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["source freshness change prevents complete table reuse"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_change_with_reuse_from_when_building_dev_then_builds_current_data(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1454,7 +1454,7 @@ def test_given_source_freshness_change_with_reuse_from_when_building_dev_then_bu
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["prod version mismatch falls back to dev build"],
+    ids=lambda case: case.description,
 )
 def test_given_prod_version_mismatch_with_reuse_from_when_building_dev_then_builds_destination(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1506,7 +1506,7 @@ def test_given_prod_version_mismatch_with_reuse_from_when_building_dev_then_buil
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["missing prod relation falls back to dev build"],
+    ids=lambda case: case.description,
 )
 def test_given_prod_relation_missing_with_reuse_from_when_building_dev_then_builds_destination(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1554,7 +1554,7 @@ def test_given_prod_relation_missing_with_reuse_from_when_building_dev_then_buil
             expected_dev_build_exit_code=1,
         )
     ],
-    ids=["inaccessible prod fingerprint state fails clearly"],
+    ids=lambda case: case.description,
 )
 def test_given_prod_fingerprint_state_missing_with_reuse_from_when_building_dev_then_it_fails(
     test_case: DirectReuseFromBuildE2ETestCase,
@@ -1587,7 +1587,7 @@ def test_given_prod_fingerprint_state_missing_with_reuse_from_when_building_dev_
             expected_dev_build_exit_code=0,
         )
     ],
-    ids=["dev build reuses prod snapshot relation and catches up"],
+    ids=lambda case: case.description,
 )
 def test_given_reuse_from_target_when_building_dev_snapshot_then_seeds_and_catches_up(
     test_case: DirectReuseFromBuildE2ETestCase,

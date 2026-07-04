@@ -24,83 +24,30 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
 
 dg: Any = pytest.importorskip("dagster")
 
-CLI_INVOCATION_TEST_CASES: list[DagsterCliInvocationTestCase] = [
-    DagsterCliInvocationTestCase(
-        description="wait captures successful command output",
-        command_stdout="built ok\n",
-        command_stderr="warning line\n",
-        command_exit_code=0,
-        expected_success=True,
-        expected_stdout="built ok\n",
-        expected_stderr="warning line\n",
-    ),
-    DagsterCliInvocationTestCase(
-        description="wait captures failing command output without raising when disabled",
-        command_stdout="",
-        command_stderr="boom\n",
-        command_exit_code=7,
-        expected_success=False,
-        expected_stdout="",
-        expected_stderr="boom\n",
-    ),
-]
-
-CLI_SELECTION_TEST_CASES: list[DagsterCliSelectionTestCase] = [
-    DagsterCliSelectionTestCase(
-        description="selected Dagster asset appends SQLBuild selector",
-        selected_asset_keys=(("analytics", "orders"),),
-        command_args=("build",),
-        expected_selectors=("orders",),
-        expected_uses_select_file=True,
-        expected_uses_json_output=True,
-    ),
-    DagsterCliSelectionTestCase(
-        description="explicit SQLBuild selector is preserved",
-        selected_asset_keys=(("analytics", "orders"),),
-        command_args=("build", "--select", "manual_selector"),
-        expected_selectors=(),
-        expected_uses_select_file=False,
-        expected_uses_json_output=True,
-    ),
-    DagsterCliSelectionTestCase(
-        description="selected Dagster asset appends attached scenario selectors",
-        selected_asset_keys=(("analytics", "orders"),),
-        command_args=("scenario", "test"),
-        expected_selectors=("orders_minimal",),
-        expected_uses_select_file=False,
-        expected_uses_json_output=True,
-    ),
-    DagsterCliSelectionTestCase(
-        description="explicit scenario selector is preserved",
-        selected_asset_keys=(("analytics", "orders"),),
-        command_args=("scenario", "test", "manual_scenario"),
-        expected_selectors=(),
-        expected_uses_select_file=False,
-        expected_uses_json_output=True,
-    ),
-    DagsterCliSelectionTestCase(
-        description="selected loader asset appends load selector",
-        selected_asset_keys=(("shared_order_feed",),),
-        command_args=("load",),
-        expected_selectors=("shared_order_feed",),
-        expected_uses_select_file=True,
-        expected_uses_json_output=True,
-    ),
-    DagsterCliSelectionTestCase(
-        description="selected model asset is ignored for load selector",
-        selected_asset_keys=(("analytics", "orders"),),
-        command_args=("load",),
-        expected_selectors=(),
-        expected_uses_select_file=False,
-        expected_uses_json_output=True,
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    CLI_INVOCATION_TEST_CASES,
-    ids=[case.description for case in CLI_INVOCATION_TEST_CASES],
+    [
+        DagsterCliInvocationTestCase(
+            description="wait captures successful command output",
+            command_stdout="built ok\n",
+            command_stderr="warning line\n",
+            command_exit_code=0,
+            expected_success=True,
+            expected_stdout="built ok\n",
+            expected_stderr="warning line\n",
+        ),
+        DagsterCliInvocationTestCase(
+            description="wait captures failing command output without raising when disabled",
+            command_stdout="",
+            command_stderr="boom\n",
+            command_exit_code=7,
+            expected_success=False,
+            expected_stdout="",
+            expected_stderr="boom\n",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_process_result(
     test_case: DagsterCliInvocationTestCase,
@@ -143,7 +90,7 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
             ),
         )
     ],
-    ids=["stream yields materialize results for dag assets"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_cli_resource_with_dag_when_streaming_then_yields_asset_results(
     test_case: DagsterCliStreamTestCase,
@@ -189,7 +136,7 @@ def test_given_sqlbuild_cli_resource_with_dag_when_streaming_then_yields_asset_r
             expected_check_severities=("WARN",),
         )
     ],
-    ids=["stream yields execution json asset and check results"],
+    ids=lambda case: case.description,
 )
 def test_given_execution_json_when_streaming_then_yields_structured_dagster_events(
     test_case: DagsterCliJsonStreamTestCase,
@@ -239,7 +186,7 @@ def test_given_execution_json_when_streaming_then_yields_structured_dagster_even
             expected_error_fragment="SQLBuild CLI command failed with exit code 3",
         )
     ],
-    ids=["wait raises Dagster failure for nonzero command"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_cli_resource_when_waiting_failed_invocation_then_raises_failure(
     test_case: DagsterCliFailureTestCase,
@@ -264,8 +211,57 @@ def test_given_sqlbuild_cli_resource_when_waiting_failed_invocation_then_raises_
 
 @pytest.mark.parametrize(
     "test_case",
-    CLI_SELECTION_TEST_CASES,
-    ids=[case.description for case in CLI_SELECTION_TEST_CASES],
+    [
+        DagsterCliSelectionTestCase(
+            description="selected Dagster asset appends SQLBuild selector",
+            selected_asset_keys=(("analytics", "orders"),),
+            command_args=("build",),
+            expected_selectors=("orders",),
+            expected_uses_select_file=True,
+            expected_uses_json_output=True,
+        ),
+        DagsterCliSelectionTestCase(
+            description="explicit SQLBuild selector is preserved",
+            selected_asset_keys=(("analytics", "orders"),),
+            command_args=("build", "--select", "manual_selector"),
+            expected_selectors=(),
+            expected_uses_select_file=False,
+            expected_uses_json_output=True,
+        ),
+        DagsterCliSelectionTestCase(
+            description="selected Dagster asset appends attached scenario selectors",
+            selected_asset_keys=(("analytics", "orders"),),
+            command_args=("scenario", "test"),
+            expected_selectors=("orders_minimal",),
+            expected_uses_select_file=False,
+            expected_uses_json_output=True,
+        ),
+        DagsterCliSelectionTestCase(
+            description="explicit scenario selector is preserved",
+            selected_asset_keys=(("analytics", "orders"),),
+            command_args=("scenario", "test", "manual_scenario"),
+            expected_selectors=(),
+            expected_uses_select_file=False,
+            expected_uses_json_output=True,
+        ),
+        DagsterCliSelectionTestCase(
+            description="selected loader asset appends load selector",
+            selected_asset_keys=(("shared_order_feed",),),
+            command_args=("load",),
+            expected_selectors=("shared_order_feed",),
+            expected_uses_select_file=True,
+            expected_uses_json_output=True,
+        ),
+        DagsterCliSelectionTestCase(
+            description="selected model asset is ignored for load selector",
+            selected_asset_keys=(("analytics", "orders"),),
+            command_args=("load",),
+            expected_selectors=(),
+            expected_uses_select_file=False,
+            expected_uses_json_output=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_selected_dagster_assets_when_invoking_cli_then_applies_sqlbuild_selectors(
     test_case: DagsterCliSelectionTestCase,

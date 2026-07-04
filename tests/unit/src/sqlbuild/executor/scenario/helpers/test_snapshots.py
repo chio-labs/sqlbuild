@@ -69,163 +69,6 @@ SNAPSHOT_CAPTURE_FINGERPRINT: str = build_scenario_snapshot_input_fingerprint(
     input_specs=build_scenario_snapshot_input_specs(scenario_plan=SNAPSHOT_CAPTURE_PLAN),
 )
 
-JSONL_ROUND_TRIP_TEST_CASES: list[ScenarioSnapshotJsonlRoundTripTestCase] = [
-    ScenarioSnapshotJsonlRoundTripTestCase(
-        description="jsonl rows round trip with file stats",
-        relative_file_path=Path("sources/raw__orders.jsonl"),
-        rows=(
-            {"order_id": 1, "amount": 10.5, "is_paid": True, "note": None},
-            {"order_id": 2, "amount": 20, "is_paid": False, "note": "refund"},
-        ),
-        expected_stats=ScenarioSnapshotFileStats(row_count=2, byte_count=115),
-        expected_file_contents=(
-            '{"amount":10.5,"is_paid":true,"note":null,"order_id":1}\n'
-            '{"amount":20,"is_paid":false,"note":"refund","order_id":2}\n'
-        ),
-        expected_rows=(
-            {"amount": 10.5, "is_paid": True, "note": None, "order_id": 1},
-            {"amount": 20, "is_paid": False, "note": "refund", "order_id": 2},
-        ),
-    ),
-    ScenarioSnapshotJsonlRoundTripTestCase(
-        description="jsonl rows serialize captured warehouse scalar objects",
-        relative_file_path=Path("sources/raw__orders.jsonl"),
-        rows=(
-            {
-                "amount": Decimal("10.50"),
-                "order_date": date(2026, 1, 2),
-                "loaded_at": datetime(2026, 1, 2, 3, 4, 5),
-                "loaded_time": time(3, 4, 5),
-                "interval": timedelta(days=2),
-                "payload": b"abc",
-            },
-        ),
-        expected_stats=ScenarioSnapshotFileStats(row_count=1, byte_count=151),
-        expected_file_contents=(
-            '{"amount":"10.50","interval":"172800 seconds",'
-            '"loaded_at":"2026-01-02T03:04:05","loaded_time":"03:04:05",'
-            '"order_date":"2026-01-02","payload":"616263"}\n'
-        ),
-        expected_rows=(
-            {
-                "amount": "10.50",
-                "interval": "172800 seconds",
-                "loaded_at": "2026-01-02T03:04:05",
-                "loaded_time": "03:04:05",
-                "order_date": "2026-01-02",
-                "payload": "616263",
-            },
-        ),
-    ),
-]
-
-PATH_TEST_CASES: list[ScenarioSnapshotPathTestCase] = [
-    ScenarioSnapshotPathTestCase(
-        description="source snapshot paths use scenario snapshot root",
-        project_dir=Path("/repo"),
-        scenario_name="order_refund",
-        kind=ScenarioArtifactKind.SOURCE,
-        logical_name="raw__orders",
-        expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
-        expected_manifest_path=Path("/repo/tests/_scenario_snapshots/order_refund/scenario.json"),
-        expected_relation_path=Path("sources/raw__orders.jsonl"),
-    ),
-    ScenarioSnapshotPathTestCase(
-        description="ref snapshot paths use refs directory",
-        project_dir=Path("/repo"),
-        scenario_name="order_refund",
-        kind=ScenarioArtifactKind.REF,
-        logical_name="stg_customers",
-        expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
-        expected_manifest_path=Path("/repo/tests/_scenario_snapshots/order_refund/scenario.json"),
-        expected_relation_path=Path("refs/stg_customers.jsonl"),
-    ),
-    ScenarioSnapshotPathTestCase(
-        description="seed snapshot paths use seeds directory",
-        project_dir=Path("/repo"),
-        scenario_name="order_refund",
-        kind=ScenarioArtifactKind.SEED,
-        logical_name="waffle_types",
-        expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
-        expected_manifest_path=Path("/repo/tests/_scenario_snapshots/order_refund/scenario.json"),
-        expected_relation_path=Path("seeds/waffle_types.jsonl"),
-    ),
-    ScenarioSnapshotPathTestCase(
-        description="dbt ref snapshot paths use dbt_refs directory",
-        project_dir=Path("/repo"),
-        scenario_name="order_refund",
-        kind=ScenarioArtifactKind.DBT_REF,
-        logical_name="analytics__fact_orders",
-        expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
-        expected_manifest_path=Path("/repo/tests/_scenario_snapshots/order_refund/scenario.json"),
-        expected_relation_path=Path("dbt_refs/analytics__fact_orders.jsonl"),
-    ),
-]
-
-
-FRESHNESS_TEST_CASES: list[ScenarioSnapshotFreshnessTestCase] = [
-    ScenarioSnapshotFreshnessTestCase(
-        description="matching input fingerprint is fresh",
-        manifest_fingerprint="abc123",
-        current_fingerprint="abc123",
-        expected_is_fresh=True,
-    ),
-    ScenarioSnapshotFreshnessTestCase(
-        description="different input fingerprint is stale",
-        manifest_fingerprint="abc123",
-        current_fingerprint="def456",
-        expected_is_fresh=False,
-    ),
-]
-
-SNAPSHOT_STATE_TEST_CASES: list[ScenarioSnapshotStateTestCase] = [
-    ScenarioSnapshotStateTestCase(
-        description="missing manifest is classified as missing",
-        manifest=None,
-        manifest_contents=None,
-        expected_state=ScenarioSnapshotState.MISSING,
-        expected_has_manifest=False,
-        expected_error_code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
-    ),
-    ScenarioSnapshotStateTestCase(
-        description="matching fingerprint manifest is classified as fresh",
-        manifest=build_snapshot_manifest(input_fingerprint=SNAPSHOT_STATE_FINGERPRINT),
-        manifest_contents=None,
-        expected_state=ScenarioSnapshotState.FRESH,
-        expected_has_manifest=True,
-    ),
-    ScenarioSnapshotStateTestCase(
-        description="different fingerprint manifest is classified as stale",
-        manifest=build_snapshot_manifest(input_fingerprint="stale123"),
-        manifest_contents=None,
-        expected_state=ScenarioSnapshotState.STALE,
-        expected_has_manifest=True,
-        expected_error_code=SCENARIO_LOCAL_SNAPSHOT_STALE,
-    ),
-    ScenarioSnapshotStateTestCase(
-        description="malformed manifest is classified as invalid",
-        manifest=None,
-        manifest_contents="{not json",
-        expected_state=ScenarioSnapshotState.INVALID,
-        expected_has_manifest=False,
-        expected_error_code=SCENARIO_LOCAL_MANIFEST_INVALID,
-        expected_error_fragment="Invalid scenario snapshot manifest JSON",
-    ),
-]
-
-JSONL_ERROR_TEST_CASES: list[ScenarioSnapshotJsonlErrorTestCase] = [
-    ScenarioSnapshotJsonlErrorTestCase(
-        description="malformed json line fails clearly",
-        file_contents='{"order_id":1}\n{not json}\n',
-        expected_error_fragment="line 2",
-    ),
-    ScenarioSnapshotJsonlErrorTestCase(
-        description="non object json line fails clearly",
-        file_contents='{"order_id":1}\n[1, 2, 3]\n',
-        expected_error_fragment="row must be a JSON object",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -315,7 +158,7 @@ JSONL_ERROR_TEST_CASES: list[ScenarioSnapshotJsonlErrorTestCase] = [
             ),
         )
     ],
-    ids=["scenario execution plan becomes snapshot capture plan"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_execution_plan_when_building_capture_plan_then_returns_snapshot_work(
     test_case: ScenarioSnapshotCapturePlanTestCase,
@@ -338,8 +181,56 @@ def test_given_scenario_execution_plan_when_building_capture_plan_then_returns_s
 
 @pytest.mark.parametrize(
     "test_case",
-    JSONL_ROUND_TRIP_TEST_CASES,
-    ids=[case.description for case in JSONL_ROUND_TRIP_TEST_CASES],
+    [
+        ScenarioSnapshotJsonlRoundTripTestCase(
+            description="jsonl rows round trip with file stats",
+            relative_file_path=Path("sources/raw__orders.jsonl"),
+            rows=(
+                {"order_id": 1, "amount": 10.5, "is_paid": True, "note": None},
+                {"order_id": 2, "amount": 20, "is_paid": False, "note": "refund"},
+            ),
+            expected_stats=ScenarioSnapshotFileStats(row_count=2, byte_count=115),
+            expected_file_contents=(
+                '{"amount":10.5,"is_paid":true,"note":null,"order_id":1}\n'
+                '{"amount":20,"is_paid":false,"note":"refund","order_id":2}\n'
+            ),
+            expected_rows=(
+                {"amount": 10.5, "is_paid": True, "note": None, "order_id": 1},
+                {"amount": 20, "is_paid": False, "note": "refund", "order_id": 2},
+            ),
+        ),
+        ScenarioSnapshotJsonlRoundTripTestCase(
+            description="jsonl rows serialize captured warehouse scalar objects",
+            relative_file_path=Path("sources/raw__orders.jsonl"),
+            rows=(
+                {
+                    "amount": Decimal("10.50"),
+                    "order_date": date(2026, 1, 2),
+                    "loaded_at": datetime(2026, 1, 2, 3, 4, 5),
+                    "loaded_time": time(3, 4, 5),
+                    "interval": timedelta(days=2),
+                    "payload": b"abc",
+                },
+            ),
+            expected_stats=ScenarioSnapshotFileStats(row_count=1, byte_count=151),
+            expected_file_contents=(
+                '{"amount":"10.50","interval":"172800 seconds",'
+                '"loaded_at":"2026-01-02T03:04:05","loaded_time":"03:04:05",'
+                '"order_date":"2026-01-02","payload":"616263"}\n'
+            ),
+            expected_rows=(
+                {
+                    "amount": "10.50",
+                    "interval": "172800 seconds",
+                    "loaded_at": "2026-01-02T03:04:05",
+                    "loaded_time": "03:04:05",
+                    "order_date": "2026-01-02",
+                    "payload": "616263",
+                },
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_rows_when_writing_and_reading_jsonl_then_round_trips_with_stats(
     tmp_path: Path,
@@ -361,8 +252,19 @@ def test_given_snapshot_rows_when_writing_and_reading_jsonl_then_round_trips_wit
 
 @pytest.mark.parametrize(
     "test_case",
-    JSONL_ERROR_TEST_CASES,
-    ids=[case.description for case in JSONL_ERROR_TEST_CASES],
+    [
+        ScenarioSnapshotJsonlErrorTestCase(
+            description="malformed json line fails clearly",
+            file_contents='{"order_id":1}\n{not json}\n',
+            expected_error_fragment="line 2",
+        ),
+        ScenarioSnapshotJsonlErrorTestCase(
+            description="non object json line fails clearly",
+            file_contents='{"order_id":1}\n[1, 2, 3]\n',
+            expected_error_fragment="row must be a JSON object",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_snapshot_jsonl_when_reading_then_raises_clear_error(
     tmp_path: Path,
@@ -392,7 +294,7 @@ def test_given_invalid_snapshot_jsonl_when_reading_then_raises_clear_error(
             ),
         )
     ],
-    ids=["manifest round trips through scenario json shape"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_manifest_when_writing_and_reading_then_round_trips_json_shape(
     tmp_path: Path,
@@ -419,8 +321,41 @@ def test_given_snapshot_manifest_when_writing_and_reading_then_round_trips_json_
 
 @pytest.mark.parametrize(
     "test_case",
-    SNAPSHOT_STATE_TEST_CASES,
-    ids=[case.description for case in SNAPSHOT_STATE_TEST_CASES],
+    [
+        ScenarioSnapshotStateTestCase(
+            description="missing manifest is classified as missing",
+            manifest=None,
+            manifest_contents=None,
+            expected_state=ScenarioSnapshotState.MISSING,
+            expected_has_manifest=False,
+            expected_error_code=SCENARIO_LOCAL_SNAPSHOT_MISSING,
+        ),
+        ScenarioSnapshotStateTestCase(
+            description="matching fingerprint manifest is classified as fresh",
+            manifest=build_snapshot_manifest(input_fingerprint=SNAPSHOT_STATE_FINGERPRINT),
+            manifest_contents=None,
+            expected_state=ScenarioSnapshotState.FRESH,
+            expected_has_manifest=True,
+        ),
+        ScenarioSnapshotStateTestCase(
+            description="different fingerprint manifest is classified as stale",
+            manifest=build_snapshot_manifest(input_fingerprint="stale123"),
+            manifest_contents=None,
+            expected_state=ScenarioSnapshotState.STALE,
+            expected_has_manifest=True,
+            expected_error_code=SCENARIO_LOCAL_SNAPSHOT_STALE,
+        ),
+        ScenarioSnapshotStateTestCase(
+            description="malformed manifest is classified as invalid",
+            manifest=None,
+            manifest_contents="{not json",
+            expected_state=ScenarioSnapshotState.INVALID,
+            expected_has_manifest=False,
+            expected_error_code=SCENARIO_LOCAL_MANIFEST_INVALID,
+            expected_error_fragment="Invalid scenario snapshot manifest JSON",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_manifest_state_when_classifying_then_returns_expected_state(
     tmp_path: Path,
@@ -484,7 +419,7 @@ def test_given_snapshot_manifest_state_when_classifying_then_returns_expected_st
             expected_fixture_fingerprint_differs=True,
         )
     ],
-    ids=["scenario plan inputs become durable snapshot input specs"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_execution_plan_when_building_snapshot_specs_then_returns_input_specs(
     test_case: ScenarioSnapshotInputSpecsFromPlanTestCase,
@@ -519,7 +454,58 @@ def test_given_scenario_execution_plan_when_building_snapshot_specs_then_returns
 
 
 @pytest.mark.parametrize(
-    "test_case", PATH_TEST_CASES, ids=[case.description for case in PATH_TEST_CASES]
+    "test_case",
+    [
+        ScenarioSnapshotPathTestCase(
+            description="source snapshot paths use scenario snapshot root",
+            project_dir=Path("/repo"),
+            scenario_name="order_refund",
+            kind=ScenarioArtifactKind.SOURCE,
+            logical_name="raw__orders",
+            expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
+            expected_manifest_path=Path(
+                "/repo/tests/_scenario_snapshots/order_refund/scenario.json"
+            ),
+            expected_relation_path=Path("sources/raw__orders.jsonl"),
+        ),
+        ScenarioSnapshotPathTestCase(
+            description="ref snapshot paths use refs directory",
+            project_dir=Path("/repo"),
+            scenario_name="order_refund",
+            kind=ScenarioArtifactKind.REF,
+            logical_name="stg_customers",
+            expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
+            expected_manifest_path=Path(
+                "/repo/tests/_scenario_snapshots/order_refund/scenario.json"
+            ),
+            expected_relation_path=Path("refs/stg_customers.jsonl"),
+        ),
+        ScenarioSnapshotPathTestCase(
+            description="seed snapshot paths use seeds directory",
+            project_dir=Path("/repo"),
+            scenario_name="order_refund",
+            kind=ScenarioArtifactKind.SEED,
+            logical_name="waffle_types",
+            expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
+            expected_manifest_path=Path(
+                "/repo/tests/_scenario_snapshots/order_refund/scenario.json"
+            ),
+            expected_relation_path=Path("seeds/waffle_types.jsonl"),
+        ),
+        ScenarioSnapshotPathTestCase(
+            description="dbt ref snapshot paths use dbt_refs directory",
+            project_dir=Path("/repo"),
+            scenario_name="order_refund",
+            kind=ScenarioArtifactKind.DBT_REF,
+            logical_name="analytics__fact_orders",
+            expected_root=Path("/repo/tests/_scenario_snapshots/order_refund"),
+            expected_manifest_path=Path(
+                "/repo/tests/_scenario_snapshots/order_refund/scenario.json"
+            ),
+            expected_relation_path=Path("dbt_refs/analytics__fact_orders.jsonl"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_and_relation_when_resolving_snapshot_paths_then_returns_expected_paths(
     test_case: ScenarioSnapshotPathTestCase,
@@ -594,7 +580,7 @@ def test_given_scenario_and_relation_when_resolving_snapshot_paths_then_returns_
             expected_differs_from_changed=True,
         )
     ],
-    ids=["fingerprint is stable across input ordering and SQL whitespace"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_input_specs_when_fingerprinting_then_is_stable_and_input_sensitive(
     test_case: ScenarioSnapshotFingerprintTestCase,
@@ -616,48 +602,45 @@ def test_given_snapshot_input_specs_when_fingerprinting_then_is_stable_and_input
     assert (fingerprint != changed_fingerprint) is test_case.expected_differs_from_changed
 
 
-SNAPSHOT_DIALECT_FINGERPRINT_TEST_CASES: list[ScenarioSnapshotDialectFingerprintTestCase] = [
-    ScenarioSnapshotDialectFingerprintTestCase(
-        description="fingerprint changes when capture dialect changes",
-        scenario_name="order_refund",
-        input_specs=(
-            ScenarioSnapshotInputSpec(
-                kind=ScenarioArtifactKind.SOURCE,
-                logical_name="raw__orders",
-                file_path=Path("sources/raw__orders.jsonl"),
-                capture_sql="SELECT * FROM raw.orders",
-            ),
-        ),
-        capture_adapter="snowflake",
-        capture_dialect="snowflake",
-        changed_capture_adapter="snowflake",
-        changed_capture_dialect="bigquery",
-        expected_differs_from_changed=True,
-    ),
-    ScenarioSnapshotDialectFingerprintTestCase(
-        description="fingerprint changes when capture adapter changes",
-        scenario_name="order_refund",
-        input_specs=(
-            ScenarioSnapshotInputSpec(
-                kind=ScenarioArtifactKind.SOURCE,
-                logical_name="raw__orders",
-                file_path=Path("sources/raw__orders.jsonl"),
-                capture_sql="SELECT * FROM raw.orders",
-            ),
-        ),
-        capture_adapter="snowflake",
-        capture_dialect="snowflake",
-        changed_capture_adapter="custom_snowflake",
-        changed_capture_dialect="snowflake",
-        expected_differs_from_changed=True,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    SNAPSHOT_DIALECT_FINGERPRINT_TEST_CASES,
-    ids=[case.description for case in SNAPSHOT_DIALECT_FINGERPRINT_TEST_CASES],
+    [
+        ScenarioSnapshotDialectFingerprintTestCase(
+            description="fingerprint changes when capture dialect changes",
+            scenario_name="order_refund",
+            input_specs=(
+                ScenarioSnapshotInputSpec(
+                    kind=ScenarioArtifactKind.SOURCE,
+                    logical_name="raw__orders",
+                    file_path=Path("sources/raw__orders.jsonl"),
+                    capture_sql="SELECT * FROM raw.orders",
+                ),
+            ),
+            capture_adapter="snowflake",
+            capture_dialect="snowflake",
+            changed_capture_adapter="snowflake",
+            changed_capture_dialect="bigquery",
+            expected_differs_from_changed=True,
+        ),
+        ScenarioSnapshotDialectFingerprintTestCase(
+            description="fingerprint changes when capture adapter changes",
+            scenario_name="order_refund",
+            input_specs=(
+                ScenarioSnapshotInputSpec(
+                    kind=ScenarioArtifactKind.SOURCE,
+                    logical_name="raw__orders",
+                    file_path=Path("sources/raw__orders.jsonl"),
+                    capture_sql="SELECT * FROM raw.orders",
+                ),
+            ),
+            capture_adapter="snowflake",
+            capture_dialect="snowflake",
+            changed_capture_adapter="custom_snowflake",
+            changed_capture_dialect="snowflake",
+            expected_differs_from_changed=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_capture_dialect_when_fingerprinting_then_dialect_changes_are_stale(
     test_case: ScenarioSnapshotDialectFingerprintTestCase,
@@ -679,7 +662,22 @@ def test_given_capture_dialect_when_fingerprinting_then_dialect_changes_are_stal
 
 
 @pytest.mark.parametrize(
-    "test_case", FRESHNESS_TEST_CASES, ids=[case.description for case in FRESHNESS_TEST_CASES]
+    "test_case",
+    [
+        ScenarioSnapshotFreshnessTestCase(
+            description="matching input fingerprint is fresh",
+            manifest_fingerprint="abc123",
+            current_fingerprint="abc123",
+            expected_is_fresh=True,
+        ),
+        ScenarioSnapshotFreshnessTestCase(
+            description="different input fingerprint is stale",
+            manifest_fingerprint="abc123",
+            current_fingerprint="def456",
+            expected_is_fresh=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_manifest_and_current_fingerprint_when_checking_freshness_then_returns_expected_state(
     test_case: ScenarioSnapshotFreshnessTestCase,
@@ -714,7 +712,7 @@ def test_given_manifest_and_current_fingerprint_when_checking_freshness_then_ret
             expected_error_type=ValueError,
         )
     ],
-    ids=["model artifacts are not captured as local snapshot relations"],
+    ids=lambda case: case.description,
 )
 def test_given_unsupported_artifact_when_resolving_snapshot_path_then_raises_expected_error(
     test_case: ScenarioSnapshotRelationPathErrorTestCase,

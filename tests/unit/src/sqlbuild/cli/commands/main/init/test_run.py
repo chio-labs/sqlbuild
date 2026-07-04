@@ -70,7 +70,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaff
             ),
         )
     ],
-    ids=["creates blank project directories for all resource types"],
+    ids=lambda case: case.description,
 )
 def test_given_empty_directory_when_running_init_then_scaffolds_project_directories(
     test_case: InitScaffoldTestCase,
@@ -128,7 +128,7 @@ def test_given_empty_directory_when_running_init_then_scaffolds_project_director
             ),
         )
     ],
-    ids=["styles init heading"],
+    ids=lambda case: case.description,
 )
 def test_given_color_terminal_when_running_init_then_it_styles_heading(
     test_case: InitScaffoldTestCase,

@@ -11,26 +11,24 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-QUERY_CLI_TEST_CASES: list[QueryCliTestCase] = [
-    QueryCliTestCase(
-        description="renders long output with default limit",
-        command=("query", "SELECT 1 AS id, 'alice' AS name"),
-        expected_stdout_fragment=(
-            "-[ RECORD 1 ]---------------------------+\nid   | 1\nname | alice\n\n1 row\n"
-        ),
-    ),
-    QueryCliTestCase(
-        description="renders table output when requested",
-        command=("query", "SELECT 1 AS id", "--format", "table"),
-        expected_stdout_fragment="id\n--\n1\n\n1 row\n",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    QUERY_CLI_TEST_CASES,
-    ids=[case.description for case in QUERY_CLI_TEST_CASES],
+    [
+        QueryCliTestCase(
+            description="renders long output with default limit",
+            command=("query", "SELECT 1 AS id, 'alice' AS name"),
+            expected_stdout_fragment=(
+                "-[ RECORD 1 ]---------------------------+\nid   | 1\nname | alice\n\n1 row\n"
+            ),
+        ),
+        QueryCliTestCase(
+            description="renders table output when requested",
+            command=("query", "SELECT 1 AS id", "--format", "table"),
+            expected_stdout_fragment="id\n--\n1\n\n1 row\n",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_query_command_when_running_then_outputs_result(
     tmp_path: Path,

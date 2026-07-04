@@ -31,7 +31,7 @@ from tests.unit.src.sqlbuild.providers.helpers import construct_provider
             expected_channel="#data-alerts",
         )
     ],
-    ids=["provider reads pydantic settings from environment"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_with_settings_when_constructing_then_fields_are_resolved(
     test_case: ProviderSettingsTestCase,
@@ -61,7 +61,7 @@ def test_given_provider_with_settings_when_constructing_then_fields_are_resolved
             expected_error_fragment="Extra inputs are not permitted",
         )
     ],
-    ids=["forbids unknown provider settings fields"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_with_unknown_setting_when_constructing_then_it_fails(
     test_case: ProviderSettingsErrorTestCase,
@@ -75,34 +75,31 @@ def test_given_provider_with_unknown_setting_when_constructing_then_it_fails(
         provider_cls(**{test_case.extra_field_name: test_case.extra_field_value})
 
 
-PROVIDER_NAME_TEST_CASES: tuple[ProviderNameTestCase, ...] = (
-    ProviderNameTestCase(
-        description="normalizes provider suffix as class name text",
-        provider_class_name="SlackProvider",
-        expected_name="slack_provider",
-    ),
-    ProviderNameTestCase(
-        description="normalizes compound provider suffix as class name text",
-        provider_class_name="DataSlackProvider",
-        expected_name="data_slack_provider",
-    ),
-    ProviderNameTestCase(
-        description="normalizes acronym provider suffix as class name text",
-        provider_class_name="AnalyticsApiProvider",
-        expected_name="analytics_api_provider",
-    ),
-    ProviderNameTestCase(
-        description="normalizes class without provider suffix",
-        provider_class_name="Clock",
-        expected_name="clock",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    PROVIDER_NAME_TEST_CASES,
-    ids=[case.description for case in PROVIDER_NAME_TEST_CASES],
+    (
+        ProviderNameTestCase(
+            description="normalizes provider suffix as class name text",
+            provider_class_name="SlackProvider",
+            expected_name="slack_provider",
+        ),
+        ProviderNameTestCase(
+            description="normalizes compound provider suffix as class name text",
+            provider_class_name="DataSlackProvider",
+            expected_name="data_slack_provider",
+        ),
+        ProviderNameTestCase(
+            description="normalizes acronym provider suffix as class name text",
+            provider_class_name="AnalyticsApiProvider",
+            expected_name="analytics_api_provider",
+        ),
+        ProviderNameTestCase(
+            description="normalizes class without provider suffix",
+            provider_class_name="Clock",
+            expected_name="clock",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_provider_class_when_resolving_name_then_default_name_is_normalized(
     test_case: ProviderNameTestCase,
@@ -121,7 +118,7 @@ def test_given_provider_class_when_resolving_name_then_default_name_is_normalize
             expected_name="alerts",
         )
     ],
-    ids=["explicit provider name wins"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_name_override_when_resolving_name_then_explicit_name_wins(
     test_case: ExplicitProviderNameTestCase,
@@ -132,38 +129,35 @@ def test_given_provider_name_override_when_resolving_name_then_explicit_name_win
     assert SlackProvider.name() == test_case.expected_name
 
 
-INVALID_EXPLICIT_PROVIDER_NAME_TEST_CASES: tuple[InvalidExplicitProviderNameTestCase, ...] = (
-    InvalidExplicitProviderNameTestCase(
-        description="rejects empty explicit name",
-        provider_class_name="SlackProvider",
-        provider_name="",
-        expected_error_fragment="empty name",
-    ),
-    InvalidExplicitProviderNameTestCase(
-        description="rejects non snake case explicit name",
-        provider_class_name="SlackProvider",
-        provider_name="DataSlack",
-        expected_error_fragment="lower snake_case",
-    ),
-    InvalidExplicitProviderNameTestCase(
-        description="rejects explicit name starting with digit",
-        provider_class_name="SlackProvider",
-        provider_name="1_slack",
-        expected_error_fragment="lower snake_case",
-    ),
-    InvalidExplicitProviderNameTestCase(
-        description="rejects explicit name containing dash",
-        provider_class_name="SlackProvider",
-        provider_name="data-slack",
-        expected_error_fragment="lower snake_case",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    INVALID_EXPLICIT_PROVIDER_NAME_TEST_CASES,
-    ids=[case.description for case in INVALID_EXPLICIT_PROVIDER_NAME_TEST_CASES],
+    (
+        InvalidExplicitProviderNameTestCase(
+            description="rejects empty explicit name",
+            provider_class_name="SlackProvider",
+            provider_name="",
+            expected_error_fragment="empty name",
+        ),
+        InvalidExplicitProviderNameTestCase(
+            description="rejects non snake case explicit name",
+            provider_class_name="SlackProvider",
+            provider_name="DataSlack",
+            expected_error_fragment="lower snake_case",
+        ),
+        InvalidExplicitProviderNameTestCase(
+            description="rejects explicit name starting with digit",
+            provider_class_name="SlackProvider",
+            provider_name="1_slack",
+            expected_error_fragment="lower snake_case",
+        ),
+        InvalidExplicitProviderNameTestCase(
+            description="rejects explicit name containing dash",
+            provider_class_name="SlackProvider",
+            provider_name="data-slack",
+            expected_error_fragment="lower snake_case",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_explicit_provider_name_when_resolving_name_then_it_fails_clearly(
     test_case: InvalidExplicitProviderNameTestCase,
@@ -190,7 +184,7 @@ def test_given_invalid_explicit_provider_name_when_resolving_name_then_it_fails_
             expected_teardown_calls=0,
         )
     ],
-    ids=["default lifecycle methods are noops"],
+    ids=lambda case: case.description,
 )
 def test_given_provider_when_constructing_then_setup_is_not_called(
     test_case: ProviderLifecycleTestCase,

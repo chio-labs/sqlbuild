@@ -52,35 +52,33 @@ from tests.integration.src.sqlbuild.executor.run.helpers import (
     write_matching_reuse_origin_fingerprint,
 )
 
-SUCCESS_TEST_CASES: list[CustomSuccessTestCase] = [
-    CustomSuccessTestCase(
-        description="simple table creation via custom materialization",
-        model_sql="SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_row_count=2,
-        fn_name="simple",
-    ),
-    CustomSuccessTestCase(
-        description="staging with cleanup via custom materialization",
-        model_sql="SELECT 1 AS id, 'alice' AS name",
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_row_count=1,
-        fn_name="staging",
-    ),
-    CustomSuccessTestCase(
-        description="user runs audits and returns results",
-        model_sql="SELECT 1 AS id, 'alice' AS name",
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_row_count=1,
-        fn_name="audit_running",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SUCCESS_TEST_CASES,
-    ids=[case.description for case in SUCCESS_TEST_CASES],
+    [
+        CustomSuccessTestCase(
+            description="simple table creation via custom materialization",
+            model_sql="SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_row_count=2,
+            fn_name="simple",
+        ),
+        CustomSuccessTestCase(
+            description="staging with cleanup via custom materialization",
+            model_sql="SELECT 1 AS id, 'alice' AS name",
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_row_count=1,
+            fn_name="staging",
+        ),
+        CustomSuccessTestCase(
+            description="user runs audits and returns results",
+            model_sql="SELECT 1 AS id, 'alice' AS name",
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_row_count=1,
+            fn_name="audit_running",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_when_executing_then_succeeds(
     test_case: CustomSuccessTestCase,
@@ -100,30 +98,27 @@ def test_given_custom_materialization_when_executing_then_succeeds(
     assert row_count(connection, qualified_name="main.test_model") == test_case.expected_row_count
 
 
-FAILURE_TEST_CASES: list[CustomFailureTestCase] = [
-    CustomFailureTestCase(
-        description="user returns failed with error message",
-        model_sql="SELECT 1 AS id",
-        expected_status=ExecutionStatus.FAILED,
-        expected_failed_phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-        expected_error_fragment="user-reported failure",
-        fn_name="failing",
-    ),
-    CustomFailureTestCase(
-        description="user function raises exception",
-        model_sql="SELECT 1 AS id",
-        expected_status=ExecutionStatus.FAILED,
-        expected_failed_phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-        expected_error_fragment="materialization crashed",
-        fn_name="excepting",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    FAILURE_TEST_CASES,
-    ids=[case.description for case in FAILURE_TEST_CASES],
+    [
+        CustomFailureTestCase(
+            description="user returns failed with error message",
+            model_sql="SELECT 1 AS id",
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
+            expected_error_fragment="user-reported failure",
+            fn_name="failing",
+        ),
+        CustomFailureTestCase(
+            description="user function raises exception",
+            model_sql="SELECT 1 AS id",
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
+            expected_error_fragment="materialization crashed",
+            fn_name="excepting",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_when_failing_then_reports_failure(
     test_case: CustomFailureTestCase,
@@ -145,96 +140,93 @@ def test_given_custom_materialization_when_failing_then_reports_failure(
     assert test_case.expected_error_fragment in result.error_message
 
 
-HOOK_TEST_CASES: list[HookTestCase] = [
-    HookTestCase(
-        description="SQL and Python hooks execute around custom materialization",
-        pre_hook=[
-            SqlHookEntry(
-                statement=(
-                    "CREATE TABLE main.hook_marker (phase VARCHAR); "
-                    "INSERT INTO main.hook_marker VALUES ('sql_pre')"
-                )
-            ),
-            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
-        ],
-        post_hook=[
-            PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
-            SqlHookEntry(statement="INSERT INTO main.hook_marker VALUES ('sql_post')"),
-        ],
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/custom.py"),
-                name="insert_hook_log",
-                function=insert_custom_hook_log,
-            ),
-        ),
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_table_exists=True,
-        expected_query_results=(
-            (
-                "SELECT phase FROM main.hook_marker ORDER BY rowid",
-                (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",)),
-            ),
-        ),
-    ),
-    HookTestCase(
-        description="pre_hook failure skips materialization",
-        pre_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
-        post_hook=None,
-        expected_status=ExecutionStatus.FAILED,
-        expected_failed_phase=ExecutionPhase.PRE_HOOK,
-        expected_table_exists=False,
-    ),
-    HookTestCase(
-        description="post_hook failure after successful materialization",
-        pre_hook=None,
-        post_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
-        expected_status=ExecutionStatus.FAILED,
-        expected_failed_phase=ExecutionPhase.POST_HOOK,
-        expected_table_exists=True,
-    ),
-    HookTestCase(
-        description="python pre_hook failure skips custom materialization",
-        pre_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "custom pre failed"})],
-        post_hook=None,
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/custom.py"),
-                name="fail_hook",
-                function=fail_custom_hook,
-            ),
-        ),
-        expected_status=ExecutionStatus.FAILED,
-        expected_failed_phase=ExecutionPhase.PRE_HOOK,
-        expected_error_fragment='pre_hooks[0] python("fail_hook") failed: custom pre failed',
-        expected_table_exists=False,
-    ),
-    HookTestCase(
-        description="python post_hook failure after custom materialization",
-        pre_hook=None,
-        post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "custom post failed"})],
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/custom.py"),
-                name="fail_hook",
-                function=fail_custom_hook,
-            ),
-        ),
-        expected_status=ExecutionStatus.FAILED,
-        expected_failed_phase=ExecutionPhase.POST_HOOK,
-        expected_error_fragment='post_hooks[0] python("fail_hook") failed: custom post failed',
-        expected_table_exists=True,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    HOOK_TEST_CASES,
-    ids=[case.description for case in HOOK_TEST_CASES],
+    [
+        HookTestCase(
+            description="SQL and Python hooks execute around custom materialization",
+            pre_hook=[
+                SqlHookEntry(
+                    statement=(
+                        "CREATE TABLE main.hook_marker (phase VARCHAR); "
+                        "INSERT INTO main.hook_marker VALUES ('sql_pre')"
+                    )
+                ),
+                PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_pre"}),
+            ],
+            post_hook=[
+                PythonHookEntry(name="insert_hook_log", kwargs={"phase": "python_post"}),
+                SqlHookEntry(statement="INSERT INTO main.hook_marker VALUES ('sql_post')"),
+            ],
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/custom.py"),
+                    name="insert_hook_log",
+                    function=insert_custom_hook_log,
+                ),
+            ),
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_table_exists=True,
+            expected_query_results=(
+                (
+                    "SELECT phase FROM main.hook_marker ORDER BY rowid",
+                    (("sql_pre",), ("python_pre",), ("python_post",), ("sql_post",)),
+                ),
+            ),
+        ),
+        HookTestCase(
+            description="pre_hook failure skips materialization",
+            pre_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
+            post_hook=None,
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.PRE_HOOK,
+            expected_table_exists=False,
+        ),
+        HookTestCase(
+            description="post_hook failure after successful materialization",
+            pre_hook=None,
+            post_hook=[SqlHookEntry(statement="SELECT * FROM nonexistent_table_for_hook")],
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.POST_HOOK,
+            expected_table_exists=True,
+        ),
+        HookTestCase(
+            description="python pre_hook failure skips custom materialization",
+            pre_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "custom pre failed"})],
+            post_hook=None,
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/custom.py"),
+                    name="fail_hook",
+                    function=fail_custom_hook,
+                ),
+            ),
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.PRE_HOOK,
+            expected_error_fragment='pre_hooks[0] python("fail_hook") failed: custom pre failed',
+            expected_table_exists=False,
+        ),
+        HookTestCase(
+            description="python post_hook failure after custom materialization",
+            pre_hook=None,
+            post_hook=[PythonHookEntry(name="fail_hook", kwargs={"message": "custom post failed"})],
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/custom.py"),
+                    name="fail_hook",
+                    function=fail_custom_hook,
+                ),
+            ),
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.POST_HOOK,
+            expected_error_fragment='post_hooks[0] python("fail_hook") failed: custom post failed',
+            expected_table_exists=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_with_hooks_when_executing_then_handles_hooks(
     test_case: HookTestCase,
@@ -273,27 +265,24 @@ def test_given_custom_materialization_with_hooks_when_executing_then_handles_hoo
         assert actual_rows == expected_rows
 
 
-FRAMEWORK_AUDIT_TEST_CASES: list[FrameworkAuditTestCase] = [
-    FrameworkAuditTestCase(
-        description="framework runs passing audit when user does not call run_audits",
-        audit_passes=True,
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_audit_count=1,
-    ),
-    FrameworkAuditTestCase(
-        description="framework audit error blocks post_hook",
-        audit_passes=False,
-        expected_status=ExecutionStatus.FAILED,
-        expected_failed_phase=ExecutionPhase.AUDIT,
-        expected_audit_count=1,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    FRAMEWORK_AUDIT_TEST_CASES,
-    ids=[case.description for case in FRAMEWORK_AUDIT_TEST_CASES],
+    [
+        FrameworkAuditTestCase(
+            description="framework runs passing audit when user does not call run_audits",
+            audit_passes=True,
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_audit_count=1,
+        ),
+        FrameworkAuditTestCase(
+            description="framework audit error blocks post_hook",
+            audit_passes=False,
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.AUDIT,
+            expected_audit_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_when_framework_runs_audits_then_handles_outcome(
     test_case: FrameworkAuditTestCase,
@@ -336,28 +325,25 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
     assert len(result.audit_results) == test_case.expected_audit_count
 
 
-USER_AUDIT_TEST_CASES: list[UserAuditTestCase] = [
-    UserAuditTestCase(
-        description="user calls run_audits with passing audit against staging",
-        audit_passes=True,
-        expected_status=ExecutionStatus.SUCCESS,
-        expected_audit_count=1,
-        expected_audit_outcome=AuditOutcome.PASS,
-    ),
-    UserAuditTestCase(
-        description="user calls run_audits with failing audit and returns failed",
-        audit_passes=False,
-        expected_status=ExecutionStatus.FAILED,
-        expected_audit_count=1,
-        expected_audit_outcome=AuditOutcome.ERROR,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    USER_AUDIT_TEST_CASES,
-    ids=[case.description for case in USER_AUDIT_TEST_CASES],
+    [
+        UserAuditTestCase(
+            description="user calls run_audits with passing audit against staging",
+            audit_passes=True,
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_audit_count=1,
+            expected_audit_outcome=AuditOutcome.PASS,
+        ),
+        UserAuditTestCase(
+            description="user calls run_audits with failing audit and returns failed",
+            audit_passes=False,
+            expected_status=ExecutionStatus.FAILED,
+            expected_audit_count=1,
+            expected_audit_outcome=AuditOutcome.ERROR,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome(
     test_case: UserAuditTestCase,
@@ -397,7 +383,7 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
             expected_audit_outcome=AuditOutcome.ERROR,
         )
     ],
-    ids=["custom baseline reuse executes user audits despite accepted origin proof"],
+    ids=lambda case: case.description,
 )
 def test_given_custom_reuse_with_origin_proof_when_user_runs_audits_then_audit_executes(
     test_case: UserAuditTestCase,
@@ -467,24 +453,21 @@ def test_given_custom_reuse_with_origin_proof_when_user_runs_audits_then_audit_e
     assert result.audit_results[0].reused is False
 
 
-CLEANUP_TEST_CASES: list[CleanupTestCase] = [
-    CleanupTestCase(
-        description="cleanup relations dropped on success",
-        user_fails=False,
-        expected_staging_exists=False,
-    ),
-    CleanupTestCase(
-        description="cleanup relations kept on failure",
-        user_fails=True,
-        expected_staging_exists=True,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    CLEANUP_TEST_CASES,
-    ids=[case.description for case in CLEANUP_TEST_CASES],
+    [
+        CleanupTestCase(
+            description="cleanup relations dropped on success",
+            user_fails=False,
+            expected_staging_exists=False,
+        ),
+        CleanupTestCase(
+            description="cleanup relations kept on failure",
+            user_fails=True,
+            expected_staging_exists=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_with_cleanup_when_completing_then_handles_cleanup(
     test_case: CleanupTestCase,
@@ -506,56 +489,53 @@ def test_given_custom_materialization_with_cleanup_when_completing_then_handles_
     )
 
 
-CONTEXT_TEST_CASES: list[ContextVerificationTestCase] = [
-    ContextVerificationTestCase(
-        description="context fields populated for first run with full refresh",
-        reason=PlanReason.FULL_REFRESH,
-        custom_config={"tracking_schema": "meta"},
-        custom_placeholders={"start": "'2020-01-01'"},
-        target="prod",
-        effective_vars={"user": "kevin"},
-        expected_is_first_run=True,
-        expected_is_full_refresh=True,
-        expected_query_changed=False,
-        expected_config_key="tracking_schema",
-        expected_config_value="meta",
-        expected_placeholder_key="start",
-        expected_placeholder_value="'2020-01-01'",
-        expected_target="prod",
-        expected_var_key="user",
-        expected_var_value="kevin",
-        expected_qualified_name="meta.partition_state",
-        expected_destination_schema_qualified_name="main.partition_state",
-        expected_preserved_qualified_name="external.partition_state",
-    ),
-    ContextVerificationTestCase(
-        description="context fields populated for query changed run",
-        reason=PlanReason.QUERY_CHANGED,
-        custom_config={"mode": "incremental"},
-        custom_placeholders={},
-        target="dev",
-        effective_vars={"schema_prefix": "staging"},
-        expected_is_first_run=True,
-        expected_is_full_refresh=False,
-        expected_query_changed=True,
-        expected_config_key="mode",
-        expected_config_value="incremental",
-        expected_placeholder_key="",
-        expected_placeholder_value="",
-        expected_target="dev",
-        expected_var_key="schema_prefix",
-        expected_var_value="staging",
-        expected_qualified_name="meta.partition_state",
-        expected_destination_schema_qualified_name="main.partition_state",
-        expected_preserved_qualified_name="external.partition_state",
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    CONTEXT_TEST_CASES,
-    ids=[case.description for case in CONTEXT_TEST_CASES],
+    [
+        ContextVerificationTestCase(
+            description="context fields populated for first run with full refresh",
+            reason=PlanReason.FULL_REFRESH,
+            custom_config={"tracking_schema": "meta"},
+            custom_placeholders={"start": "'2020-01-01'"},
+            target="prod",
+            effective_vars={"user": "kevin"},
+            expected_is_first_run=True,
+            expected_is_full_refresh=True,
+            expected_query_changed=False,
+            expected_config_key="tracking_schema",
+            expected_config_value="meta",
+            expected_placeholder_key="start",
+            expected_placeholder_value="'2020-01-01'",
+            expected_target="prod",
+            expected_var_key="user",
+            expected_var_value="kevin",
+            expected_qualified_name="meta.partition_state",
+            expected_destination_schema_qualified_name="main.partition_state",
+            expected_preserved_qualified_name="external.partition_state",
+        ),
+        ContextVerificationTestCase(
+            description="context fields populated for query changed run",
+            reason=PlanReason.QUERY_CHANGED,
+            custom_config={"mode": "incremental"},
+            custom_placeholders={},
+            target="dev",
+            effective_vars={"schema_prefix": "staging"},
+            expected_is_first_run=True,
+            expected_is_full_refresh=False,
+            expected_query_changed=True,
+            expected_config_key="mode",
+            expected_config_value="incremental",
+            expected_placeholder_key="",
+            expected_placeholder_value="",
+            expected_target="dev",
+            expected_var_key="schema_prefix",
+            expected_var_value="staging",
+            expected_qualified_name="meta.partition_state",
+            expected_destination_schema_qualified_name="main.partition_state",
+            expected_preserved_qualified_name="external.partition_state",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_when_executing_then_context_fields_populated(
     test_case: ContextVerificationTestCase,

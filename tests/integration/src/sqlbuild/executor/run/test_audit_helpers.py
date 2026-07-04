@@ -20,7 +20,7 @@ from tests.integration.src.sqlbuild.executor.run.helpers import build_test_audit
             expected_resolved_sql="SELECT id FROM staging.orders WHERE id IS NULL",
         )
     ],
-    ids=["resolves logical ref to schema-qualified table target"],
+    ids=lambda case: case.description,
 )
 def test_given_manual_audit_entry_when_building_then_resolved_sql_uses_qualified_target(
     test_case: AuditSqlResolutionTestCase,

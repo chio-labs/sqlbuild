@@ -22,33 +22,34 @@ SEED_COUNTRIES: CompiledObjectKey = build_compiled_object_key(
 SOURCE_RAW: CompiledObjectKey = build_compiled_object_key(CompiledResourceType.SOURCE, "raw_orders")
 
 
-TEST_CASES: list[DeferCloneBoundaryTestCase] = [
-    DeferCloneBoundaryTestCase(
-        description="clones the first non-view ancestor and stops",
-        selected_keys=frozenset({MODEL_C}),
-        upstream_deps={
-            MODEL_C: (MODEL_B, SOURCE_RAW),
-            MODEL_B: (MODEL_A, SEED_COUNTRIES),
-            MODEL_A: (),
-            SEED_COUNTRIES: (),
-            SOURCE_RAW: (),
-        },
-        expected_selectors=("b",),
-    ),
-    DeferCloneBoundaryTestCase(
-        description="excludes selected upstreams but includes their own boundary",
-        selected_keys=frozenset({MODEL_B, MODEL_C}),
-        upstream_deps={
-            MODEL_C: (MODEL_B,),
-            MODEL_B: (MODEL_A,),
-            MODEL_A: (),
-        },
-        expected_selectors=("a",),
-    ),
-]
-
-
-@pytest.mark.parametrize("test_case", TEST_CASES, ids=[case.description for case in TEST_CASES])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeferCloneBoundaryTestCase(
+            description="clones the first non-view ancestor and stops",
+            selected_keys=frozenset({MODEL_C}),
+            upstream_deps={
+                MODEL_C: (MODEL_B, SOURCE_RAW),
+                MODEL_B: (MODEL_A, SEED_COUNTRIES),
+                MODEL_A: (),
+                SEED_COUNTRIES: (),
+                SOURCE_RAW: (),
+            },
+            expected_selectors=("b",),
+        ),
+        DeferCloneBoundaryTestCase(
+            description="excludes selected upstreams but includes their own boundary",
+            selected_keys=frozenset({MODEL_B, MODEL_C}),
+            upstream_deps={
+                MODEL_C: (MODEL_B,),
+                MODEL_B: (MODEL_A,),
+                MODEL_A: (),
+            },
+            expected_selectors=("a",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_scope_when_resolving_defer_clone_boundary_then_returns_expected_selectors(
     test_case: DeferCloneBoundaryTestCase,
 ) -> None:

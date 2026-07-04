@@ -31,7 +31,7 @@ from tests.unit.src.sqlbuild.virtual.state.main.helpers import (
             expected_metadata_json='{"dependencies":[]}',
         )
     ],
-    ids=["writes and reads virtual python identity as fingerprint"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_python_identity_when_recording_then_reads_previous_fingerprint(
     test_case: VirtualPythonNodeIdentityTestCase,

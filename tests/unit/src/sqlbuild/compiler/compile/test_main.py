@@ -42,12 +42,15 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     SeedRefRegressionTestCase,
 )
 
-TEST_CASES: list[BuildCompileInputsTestCase] = [
-    BuildCompileInputsTestCase(
-        description="attaches schema metadata to matching models and seeds and normalizes sources",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildCompileInputsTestCase(
+            description="attaches schema metadata to matching models and seeds and normalizes sources",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -86,8 +89,8 @@ warehouse = "dev_wh"
 shared = "environment"
 env_only = "present"
 """.strip()
-            + "\n",
-            "sqlbuild_local.toml": """
+                + "\n",
+                "sqlbuild_local.toml": """
 target = "dev"
 
 [connection]
@@ -102,8 +105,8 @@ concurrency = 4
 shared = "local"
 local_only = "present"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": """
 MODEL (
   columns (
     order_id (type VARCHAR),
@@ -112,8 +115,8 @@ MODEL (
 
 select 1
 """.strip()
-            + "\n",
-            "models/staging/nested/orders_enriched.sql": """
+                + "\n",
+                "models/staging/nested/orders_enriched.sql": """
 MODEL (
   materialized incremental,
   incremental_strategy delete_insert,
@@ -127,8 +130,8 @@ MODEL (
 
 select 1
 """.strip()
-            + "\n",
-            "seeds/schema.yml": """
+                + "\n",
+                "seeds/schema.yml": """
 seeds:
   - name: country_codes
     columns:
@@ -137,81 +140,81 @@ seeds:
       - name: country_name
         type: VARCHAR
 """.strip()
-            + "\n",
-            "seeds/country_codes.csv": "country_code,country_name\nUS,United States\n",
-            "sources/raw.yml": """
+                + "\n",
+                "seeds/country_codes.csv": "country_code,country_name\nUS,United States\n",
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     schema: public
     table: orders
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars={"shared": "cli", "cli_only": "present"},
-        run_id=None,
-        expected_model_schema_names=(None, "orders"),
-        expected_model_config_values=(
-            {
-                "materialized": "incremental",
-                "schema": "nested",
-                "incremental_strategy": "delete_insert",
-                "cursor": "event_time",
-                "cursor_type": "timestamp",
-                "cursor_grain": "second",
-                "incremental_mode": "microbatch",
-                "batch_size": "30m",
-                "contract": "none",
+                + "\n",
             },
-            {
-                "materialized": "view",
-                "schema": "staging",
-                "batch_size": "1h",
-                "contract": "enforced",
+            selected_target=None,
+            cli_vars={"shared": "cli", "cli_only": "present"},
+            run_id=None,
+            expected_model_schema_names=(None, "orders"),
+            expected_model_config_values=(
+                {
+                    "materialized": "incremental",
+                    "schema": "nested",
+                    "incremental_strategy": "delete_insert",
+                    "cursor": "event_time",
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "second",
+                    "incremental_mode": "microbatch",
+                    "batch_size": "30m",
+                    "contract": "none",
+                },
+                {
+                    "materialized": "view",
+                    "schema": "staging",
+                    "batch_size": "1h",
+                    "contract": "enforced",
+                },
+            ),
+            expected_model_query_sqls=("select 1", "select 1"),
+            expected_model_path_defaults=("staging/nested", "staging"),
+            expected_seed_names=("country_codes",),
+            expected_source_names=("raw_orders",),
+            expected_effective_target_name="dev",
+            expected_effective_connection={"path": "local.db", "warehouse": "dev_wh"},
+            expected_effective_vars={
+                "shared": "cli",
+                "project_only": "present",
+                "env_only": "present",
+                "local_only": "present",
+                "cli_only": "present",
             },
+            expected_effective_sql_analysis=False,
+            expected_effective_sql_validation=False,
+            expected_effective_max_concurrency=4,
+            expected_model_references=((), ()),
+            expected_audit_references=(),
         ),
-        expected_model_query_sqls=("select 1", "select 1"),
-        expected_model_path_defaults=("staging/nested", "staging"),
-        expected_seed_names=("country_codes",),
-        expected_source_names=("raw_orders",),
-        expected_effective_target_name="dev",
-        expected_effective_connection={"path": "local.db", "warehouse": "dev_wh"},
-        expected_effective_vars={
-            "shared": "cli",
-            "project_only": "present",
-            "env_only": "present",
-            "local_only": "present",
-            "cli_only": "present",
-        },
-        expected_effective_sql_analysis=False,
-        expected_effective_sql_validation=False,
-        expected_effective_max_concurrency=4,
-        expected_model_references=((), ()),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="allows models with no matching schema metadata",
-        repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
-        selected_target=None,
-        cli_vars={},
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="validates incremental config columns against authored enforced contract",
-        repo_files=base_repo_files()
-        | {
-            "models/orders.sql": """
+        BuildCompileInputsTestCase(
+            description="allows models with no matching schema metadata",
+            repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
+            selected_target=None,
+            cli_vars={},
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="validates incremental config columns against authored enforced contract",
+            repo_files=base_repo_files()
+            | {
+                "models/orders.sql": """
 MODEL (
   materialized incremental,
   contract enforced,
@@ -228,44 +231,44 @@ MODEL (
 
 SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars={},
-        run_id=None,
-        expected_model_schema_names=("orders",),
-        expected_model_config_values=(
-            {
-                "materialized": "incremental",
-                "contract": "enforced",
-                "incremental_strategy": "delete_insert",
-                "cursor": "event_time",
-                "cursor_type": "timestamp",
-                "cursor_grain": "second",
-                "unique_key": ["id"],
+                + "\n",
             },
-        ),
-        expected_model_query_sqls=("SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_column_metadata=(
-            (
-                ("id", "INTEGER", None, ()),
-                ("event_time", "TIMESTAMP", None, ()),
+            selected_target=None,
+            cli_vars={},
+            run_id=None,
+            expected_model_schema_names=("orders",),
+            expected_model_config_values=(
+                {
+                    "materialized": "incremental",
+                    "contract": "enforced",
+                    "incremental_strategy": "delete_insert",
+                    "cursor": "event_time",
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "second",
+                    "unique_key": ["id"],
+                },
             ),
+            expected_model_query_sqls=("SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_column_metadata=(
+                (
+                    ("id", "INTEGER", None, ()),
+                    ("event_time", "TIMESTAMP", None, ()),
+                ),
+            ),
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="does not require snapshot generated validity columns in enforced contract",
-        repo_files=base_repo_files()
-        | {
-            "models/customer_snapshot.sql": """
+        BuildCompileInputsTestCase(
+            description="does not require snapshot generated validity columns in enforced contract",
+            repo_files=base_repo_files()
+            | {
+                "models/customer_snapshot.sql": """
 MODEL (
   materialized snapshot,
   contract enforced,
@@ -282,44 +285,44 @@ MODEL (
 
 SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars={},
-        run_id=None,
-        expected_model_schema_names=("customer_snapshot",),
-        expected_model_config_values=(
-            {
-                "materialized": "snapshot",
-                "contract": "enforced",
-                "unique_key": ["customer_id"],
-                "snapshot_strategy": "timestamp",
-                "updated_at": "updated_at",
-                "valid_from_column": "effective_from",
-                "valid_to_column": "effective_to",
+                + "\n",
             },
-        ),
-        expected_model_query_sqls=("SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_column_metadata=(
-            (
-                ("customer_id", "INTEGER", None, ()),
-                ("updated_at", "TIMESTAMP", None, ()),
+            selected_target=None,
+            cli_vars={},
+            run_id=None,
+            expected_model_schema_names=("customer_snapshot",),
+            expected_model_config_values=(
+                {
+                    "materialized": "snapshot",
+                    "contract": "enforced",
+                    "unique_key": ["customer_id"],
+                    "snapshot_strategy": "timestamp",
+                    "updated_at": "updated_at",
+                    "valid_from_column": "effective_from",
+                    "valid_to_column": "effective_to",
+                },
             ),
+            expected_model_query_sqls=("SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_column_metadata=(
+                (
+                    ("customer_id", "INTEGER", None, ()),
+                    ("updated_at", "TIMESTAMP", None, ()),
+                ),
+            ),
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="prefers selected target over local and project defaults",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="prefers selected target over local and project defaults",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -351,40 +354,40 @@ role = "transformer"
 shared = "prod"
 prod_only = "present"
 """.strip()
-            + "\n",
-            "sqlbuild_local.toml": """
+                + "\n",
+                "sqlbuild_local.toml": """
 target = "dev"
 
 [vars]
 shared = "local"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target="prod",
-        cli_vars={},
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="prod",
-        expected_effective_connection={
-            "path": "base.db",
-            "warehouse": "prod_wh",
-            "role": "transformer",
-        },
-        expected_effective_vars={"shared": "local", "prod_only": "present"},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="prefers local target over project default when cli is absent",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target="prod",
+            cli_vars={},
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="prod",
+            expected_effective_connection={
+                "path": "base.db",
+                "warehouse": "prod_wh",
+                "role": "transformer",
+            },
+            expected_effective_vars={"shared": "local", "prod_only": "present"},
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="prefers local target over project default when cli is absent",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "prod"
@@ -410,33 +413,33 @@ warehouse = "prod_wh"
 [targets.prod.vars]
 active = "prod"
 """.strip()
-            + "\n",
-            "sqlbuild_local.toml": """
+                + "\n",
+                "sqlbuild_local.toml": """
 target = "dev"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="dev",
-        expected_effective_connection={"path": "base.db", "warehouse": "dev_wh"},
-        expected_effective_vars={"active": "dev"},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="returns no effective environment when none is configured anywhere",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="dev",
+            expected_effective_connection={"path": "base.db", "warehouse": "dev_wh"},
+            expected_effective_vars={"active": "dev"},
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="returns no effective environment when none is configured anywhere",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -446,38 +449,38 @@ path = "base.db"
 [vars]
 project_only = "present"
 """.strip()
-            + "\n",
-            "sqlbuild_local.toml": """
+                + "\n",
+                "sqlbuild_local.toml": """
 [vars]
 local_only = "present"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        cli_vars={"cli_only": "present"},
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={"path": "base.db"},
-        expected_effective_vars={
-            "project_only": "present",
-            "local_only": "present",
-            "cli_only": "present",
-        },
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="preserves project connection when environment has no connection override",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            cli_vars={"cli_only": "present"},
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={"path": "base.db"},
+            expected_effective_vars={
+                "project_only": "present",
+                "local_only": "present",
+                "cli_only": "present",
+            },
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="preserves project connection when environment has no connection override",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -493,29 +496,29 @@ warehouse = "default_wh"
 [targets.dev.vars]
 active = "dev"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="dev",
-        expected_effective_connection={"path": "base.db", "warehouse": "default_wh"},
-        expected_effective_vars={"active": "dev"},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="preserves non environment vars when selected target defines none",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="dev",
+            expected_effective_connection={"path": "base.db", "warehouse": "default_wh"},
+            expected_effective_vars={"active": "dev"},
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="preserves non environment vars when selected target defines none",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -530,38 +533,38 @@ project_only = "present"
 [targets.dev.connection]
 warehouse = "dev_wh"
 """.strip()
-            + "\n",
-            "sqlbuild_local.toml": """
+                + "\n",
+                "sqlbuild_local.toml": """
 [vars]
 local_only = "present"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        cli_vars={"cli_only": "present"},
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="dev",
-        expected_effective_connection={"warehouse": "dev_wh"},
-        expected_effective_vars={
-            "project_only": "present",
-            "local_only": "present",
-            "cli_only": "present",
-        },
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="allows environment only connection when project connection is empty",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            cli_vars={"cli_only": "present"},
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="dev",
+            expected_effective_connection={"warehouse": "dev_wh"},
+            expected_effective_vars={
+                "project_only": "present",
+                "local_only": "present",
+                "cli_only": "present",
+            },
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="allows environment only connection when project connection is empty",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -574,29 +577,29 @@ default_target = "dev"
 path = "env.db"
 warehouse = "dev_wh"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="dev",
-        expected_effective_connection={"path": "env.db", "warehouse": "dev_wh"},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="allows env local and cli vars when project vars are empty",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="dev",
+            expected_effective_connection={"path": "env.db", "warehouse": "dev_wh"},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="allows env local and cli vars when project vars are empty",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -609,40 +612,40 @@ default_target = "dev"
 shared = "env"
 env_only = "present"
 """.strip()
-            + "\n",
-            "sqlbuild_local.toml": """
+                + "\n",
+                "sqlbuild_local.toml": """
 [vars]
 shared = "local"
 local_only = "present"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        cli_vars={"shared": "cli", "cli_only": "present"},
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="dev",
-        expected_effective_connection={},
-        expected_effective_vars={
-            "shared": "cli",
-            "env_only": "present",
-            "local_only": "present",
-            "cli_only": "present",
-        },
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="maps every supported project default into compile model config",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            cli_vars={"shared": "cli", "cli_only": "present"},
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="dev",
+            expected_effective_connection={},
+            expected_effective_vars={
+                "shared": "cli",
+                "env_only": "present",
+                "local_only": "present",
+                "cli_only": "present",
+            },
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="maps every supported project default into compile model config",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -664,54 +667,54 @@ row_diff_exclude_columns = ["loaded_at", "run_id"]
 [defaults.row_diff_tolerances.by_column.revenue]
 absolute = 0.01
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": (
-                "MODEL (\n  unique_key [order_id],"
-                "\n  cursor event_time,"
-                "\n  cursor_type timestamp,"
-                "\n  cursor_grain second,"
-                "\n);\n\nselect 1\n"
-            ),
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "materialized": "incremental",
-                "database": "analytics",
-                "schema": "marts",
-                "incremental_strategy": "merge",
-                "incremental_mode": "microbatch",
-                "unique_key": ["order_id"],
-                "cursor": "event_time",
-                "cursor_type": "timestamp",
-                "cursor_grain": "second",
-                "lookback": "1d",
-                "batch_size": "1h",
-                "replay_on_change": "bounded-30d",
-                "row_diff_exclude_columns": ("loaded_at", "run_id"),
-                "row_diff_tolerances": {
-                    "by_column": {"revenue": {"absolute": 0.01}},
-                },
+                + "\n",
+                "models/staging/orders.sql": (
+                    "MODEL (\n  unique_key [order_id],"
+                    "\n  cursor event_time,"
+                    "\n  cursor_type timestamp,"
+                    "\n  cursor_grain second,"
+                    "\n);\n\nselect 1\n"
+                ),
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "materialized": "incremental",
+                    "database": "analytics",
+                    "schema": "marts",
+                    "incremental_strategy": "merge",
+                    "incremental_mode": "microbatch",
+                    "unique_key": ["order_id"],
+                    "cursor": "event_time",
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "second",
+                    "lookback": "1d",
+                    "batch_size": "1h",
+                    "replay_on_change": "bounded-30d",
+                    "row_diff_exclude_columns": ("loaded_at", "run_id"),
+                    "row_diff_tolerances": {
+                        "by_column": {"revenue": {"absolute": 0.01}},
+                    },
+                },
+            ),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="maps append cursor inclusive from project defaults",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="maps append cursor inclusive from project defaults",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -720,43 +723,43 @@ materialized = "incremental"
 incremental_strategy = "append"
 append_cursor_inclusive = false
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": (
-                "MODEL (\n  cursor event_time,"
-                "\n  cursor_type timestamp,"
-                "\n  cursor_grain second,"
-                "\n);\n\nselect 1\n"
-            ),
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "materialized": "incremental",
-                "incremental_strategy": "append",
-                "append_cursor_inclusive": False,
-                "cursor": "event_time",
-                "cursor_type": "timestamp",
-                "cursor_grain": "second",
+                + "\n",
+                "models/staging/orders.sql": (
+                    "MODEL (\n  cursor event_time,"
+                    "\n  cursor_type timestamp,"
+                    "\n  cursor_grain second,"
+                    "\n);\n\nselect 1\n"
+                ),
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "append_cursor_inclusive": False,
+                    "cursor": "event_time",
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "second",
+                },
+            ),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="merges row diff config from project defaults and model header",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="merges row diff config from project defaults and model header",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -778,8 +781,8 @@ absolute = 1
 [defaults.row_diff_tolerances.by_column.revenue]
 absolute = 0.01
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": """
 MODEL (
   row_diff_exclude_columns [run_id, loaded_at],
   row_diff_tolerances (
@@ -799,45 +802,45 @@ MODEL (
 
 select 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "row_diff_exclude_columns": ("loaded_at", "run_id"),
-                "row_diff_tolerances": {
-                    "by_type": {
-                        "float": {"relative": 0.00001},
-                        "integer": {"absolute": 1},
-                    },
-                    "by_column": {
-                        "revenue": {"absolute": 0.01},
-                        "conversion_rate": {
-                            "relative": 0.001,
-                            "absolute": 0.0001,
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "row_diff_exclude_columns": ("loaded_at", "run_id"),
+                    "row_diff_tolerances": {
+                        "by_type": {
+                            "float": {"relative": 0.00001},
+                            "integer": {"absolute": 1},
+                        },
+                        "by_column": {
+                            "revenue": {"absolute": 0.01},
+                            "conversion_rate": {
+                                "relative": 0.001,
+                                "absolute": 0.0001,
+                            },
                         },
                     },
                 },
-            },
+            ),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="expands vars env connection model config and environment overrides",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="expands vars env connection model config and environment overrides",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -862,8 +865,8 @@ row_diff_exclude_columns = ["${schema_prefix}_loaded_at"]
 database = "dev_${CTX:model.database}"
 schema = "dev_${ENV:USER}_${CTX:model.schema}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": """
 MODEL (
   materialized incremental,
   incremental_strategy append,
@@ -881,54 +884,54 @@ MODEL (
 
 select 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id="run_123",
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "database": "dev_analytics_kevin",
-                "schema": "dev_kevin_marts",
-                "materialized": "incremental",
-                "incremental_strategy": "append",
-                "replay_on_change": "bounded-30d",
-                "row_diff_exclude_columns": ("analytics_kevin_loaded_at",),
-                "alias": "orders_dev",
-                "config": {
-                    "cluster_by": ["analytics_kevin_day"],
-                    "run_label": "run_123",
-                    "logical_alias": "orders_dev",
-                    "target_table": "orders_dev",
-                    "target_schema": "dev_kevin_marts",
-                    "target_database": "dev_analytics_kevin",
-                    "target_qualified": "dev_analytics_kevin.dev_kevin_marts.orders_dev",
-                },
+                + "\n",
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id="run_123",
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "database": "dev_analytics_kevin",
+                    "schema": "dev_kevin_marts",
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "replay_on_change": "bounded-30d",
+                    "row_diff_exclude_columns": ("analytics_kevin_loaded_at",),
+                    "alias": "orders_dev",
+                    "config": {
+                        "cluster_by": ["analytics_kevin_day"],
+                        "run_label": "run_123",
+                        "logical_alias": "orders_dev",
+                        "target_table": "orders_dev",
+                        "target_schema": "dev_kevin_marts",
+                        "target_database": "dev_analytics_kevin",
+                        "target_qualified": "dev_analytics_kevin.dev_kevin_marts.orders_dev",
+                    },
+                },
+            ),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="dev",
+            expected_effective_connection={
+                "path": "/tmp/kevin.db",
+                "warehouse": "analytics_kevin_wh",
+            },
+            expected_effective_vars={
+                "user": "kevin",
+                "schema_prefix": "analytics_kevin",
+            },
+            environment_variables={"USER": "kevin", "BACKFILL_POLICY": "bounded-30d"},
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="dev",
-        expected_effective_connection={
-            "path": "/tmp/kevin.db",
-            "warehouse": "analytics_kevin_wh",
-        },
-        expected_effective_vars={
-            "user": "kevin",
-            "schema_prefix": "analytics_kevin",
-        },
-        environment_variables={"USER": "kevin", "BACKFILL_POLICY": "bounded-30d"},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="resolves run context before late target context",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="resolves run context before late target context",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "ci"
@@ -939,8 +942,8 @@ default_target = "ci"
 database = "db_${CTX:run.target}"
 schema = "schema_${CTX:run.id}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": """
 MODEL (
   alias 'orders_${CTX:run.target}',
   config (
@@ -951,38 +954,38 @@ MODEL (
 
 select 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id="run_123",
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "database": "db_ci",
-                "schema": "schema_run_123",
-                "alias": "orders_ci",
-                "config": {
-                    "run_label": "run_123",
-                    "target_qualified": "db_ci.schema_run_123.orders_ci",
-                },
+                + "\n",
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id="run_123",
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "database": "db_ci",
+                    "schema": "schema_run_123",
+                    "alias": "orders_ci",
+                    "config": {
+                        "run_label": "run_123",
+                        "target_qualified": "db_ci.schema_run_123.orders_ci",
+                    },
+                },
+            ),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="ci",
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="ci",
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="expands helper functions in config interpolation",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="expands helper functions in config interpolation",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -993,8 +996,8 @@ database = "${if(ENV:CI, 'ci_db', 'dev_db')}"
 schema = "${coalesce(ENV:CUSTOM_SCHEMA, 'fallback_schema')}"
 append_cursor_inclusive = "${if(eq(ENV:APPEND_INCLUSIVE, '0'), false, true)}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": """
 MODEL (
   cursor event_time,
   cursor_type timestamp,
@@ -1004,41 +1007,41 @@ MODEL (
 
 select 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id="run_123",
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "materialized": "incremental",
-                "incremental_strategy": "append",
-                "database": "ci_db",
-                "schema": "fallback_schema",
-                "append_cursor_inclusive": False,
-                "cursor": "event_time",
-                "cursor_type": "timestamp",
-                "cursor_grain": "second",
-                "alias": "orders_dev",
+                + "\n",
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id="run_123",
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "database": "ci_db",
+                    "schema": "fallback_schema",
+                    "append_cursor_inclusive": False,
+                    "cursor": "event_time",
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "second",
+                    "alias": "orders_dev",
+                },
+            ),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            environment_variables={"CI": "1", "APPEND_INCLUSIVE": "0"},
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        environment_variables={"CI": "1", "APPEND_INCLUSIVE": "0"},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="expands config templates in model header metadata fields",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="expands config templates in model header metadata fields",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -1053,8 +1056,8 @@ id_type = "INTEGER"
 source_name = "orders_api"
 valid_order_id = "1"
 """.strip()
-            + "\n",
-            "models/marts/orders.sql": """
+                + "\n",
+                "models/marts/orders.sql": """
 MODEL (
   schema "${model_schema}",
   alias "orders_${ENV:ENV_NAME}",
@@ -1071,55 +1074,55 @@ MODEL (
 
 select 1 as order_id
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=("orders",),
-        expected_model_schema_descriptions=("Orders for dev",),
-        expected_model_column_metadata=(
-            (
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=("orders",),
+            expected_model_schema_descriptions=("Orders for dev",),
+            expected_model_column_metadata=(
                 (
-                    "order_id",
-                    "INTEGER",
-                    "Order id from orders_api",
-                    (("accepted_values", {"values": ["1"]}),),
+                    (
+                        "order_id",
+                        "INTEGER",
+                        "Order id from orders_api",
+                        (("accepted_values", {"values": ["1"]}),),
+                    ),
                 ),
             ),
+            expected_model_config_values=(
+                {"schema": "marts", "alias": "orders_dev", "tags": ["orders", "finance"]},
+            ),
+            expected_model_query_sqls=("select 1 as order_id",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_audit_sql_bodies=(
+                "SELECT order_id\n"
+                'FROM __ref("orders")\n'
+                "WHERE order_id IS NOT NULL\n"
+                "  AND order_id NOT IN ('1')",
+            ),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={
+                "model_schema": "marts",
+                "tag_name": "finance",
+                "id_type": "INTEGER",
+                "source_name": "orders_api",
+                "valid_order_id": "1",
+            },
+            environment_variables={"ENV_NAME": "dev"},
+            expected_effective_sql_validation=False,
+            expected_model_references=((),),
+            expected_audit_references=((("ref", "orders"),),),
         ),
-        expected_model_config_values=(
-            {"schema": "marts", "alias": "orders_dev", "tags": ["orders", "finance"]},
-        ),
-        expected_model_query_sqls=("select 1 as order_id",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_audit_sql_bodies=(
-            "SELECT order_id\n"
-            'FROM __ref("orders")\n'
-            "WHERE order_id IS NOT NULL\n"
-            "  AND order_id NOT IN ('1')",
-        ),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={
-            "model_schema": "marts",
-            "tag_name": "finance",
-            "id_type": "INTEGER",
-            "source_name": "orders_api",
-            "valid_order_id": "1",
-        },
-        environment_variables={"ENV_NAME": "dev"},
-        expected_effective_sql_validation=False,
-        expected_model_references=((),),
-        expected_audit_references=((("ref", "orders"),),),
-    ),
-    BuildCompileInputsTestCase(
-        description="supports multi hop var expansion and preserve environment overrides",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="supports multi hop var expansion and preserve environment overrides",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -1144,39 +1147,39 @@ alias = "${stage_two}_orders"
 database = "preserve"
 schema = "preserve"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "database": "analytics_team_prod",
-                "schema": "marts",
-                "alias": "analytics_team_prod_orders",
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "database": "analytics_team_prod",
+                    "schema": "marts",
+                    "alias": "analytics_team_prod_orders",
+                },
+            ),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=("staging",),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="dev",
+            expected_effective_connection={},
+            expected_effective_vars={
+                "base": "analytics",
+                "stage_one": "analytics_team",
+                "stage_two": "analytics_team_prod",
+            },
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=("staging",),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="dev",
-        expected_effective_connection={},
-        expected_effective_vars={
-            "base": "analytics",
-            "stage_one": "analytics_team",
-            "stage_two": "analytics_team_prod",
-        },
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="expands macros in model query and sql interpolation in hook strings",
-        repo_files=base_repo_files()
-        | {
-            "macros/common.py": """
+        BuildCompileInputsTestCase(
+            description="expands macros in model query and sql interpolation in hook strings",
+            repo_files=base_repo_files()
+            | {
+                "macros/common.py": """
 def project_columns(ctx) -> str:
     optional_suffix = "" if ctx.vars["optional_suffix"] is None else ctx.vars["optional_suffix"]
     return (
@@ -1191,8 +1194,8 @@ def grant_select(target: str) -> str:
     return f"GRANT SELECT ON {target} TO analyst_role"
 
 """.strip()
-            + "\n",
-            "sqlbuild_project.toml": """
+                + "\n",
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -1208,8 +1211,8 @@ schema = "marts"
 [targets.dev]
 database = "analytics"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": """
 MODEL (
   alias orders_dev,
   post_hooks [sql('@grant_select("@@CTX:destination.qualified")')],
@@ -1217,8 +1220,8 @@ MODEL (
 
 select @project_columns() from __source("raw_orders")
 """.strip()
-            + "\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -1231,45 +1234,45 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-            "audits/orders.sql": """
+                + "\n",
+                "audits/orders.sql": """
 AUDIT ();
 
 SELECT @project_columns() FROM __source("raw_orders")
 """.strip()
-            + "\n",
-            "sources/raw.yml": """
+                + "\n",
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     table: orders
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars={
-            "run_label": "cli_macro",
-            "grants": {"role": "analyst"},
-            "optional_suffix": None,
-        },
-        run_id="run_123",
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "schema": "marts",
-                "alias": "orders_dev",
-                "database": "analytics",
-                "post_hooks": [
-                    SqlHookEntry(
-                        statement="GRANT SELECT ON analytics.marts.orders_dev TO analyst_role"
-                    )
-                ],
+                + "\n",
             },
-        ),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=("raw_orders",),
-        expected_test_sql_bodies=(
-            """
+            selected_target=None,
+            cli_vars={
+                "run_label": "cli_macro",
+                "grants": {"role": "analyst"},
+                "optional_suffix": None,
+            },
+            run_id="run_123",
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "schema": "marts",
+                    "alias": "orders_dev",
+                    "database": "analytics",
+                    "post_hooks": [
+                        SqlHookEntry(
+                            statement="GRANT SELECT ON analytics.marts.orders_dev TO analyst_role"
+                        )
+                    ],
+                },
+            ),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=("raw_orders",),
+            expected_test_sql_bodies=(
+                """
 WITH
 __source__raw_orders AS (
   SELECT order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, '' AS suffix
@@ -1280,35 +1283,35 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip(),
+            ),
+            expected_test_authored_cte_names=(("__source__raw_orders",),),
+            expected_test_mock_model_names=((),),
+            expected_test_mock_source_names=(("raw_orders",),),
+            expected_test_mock_seed_names=((),),
+            expected_test_expected_model_names=(("orders",),),
+            expected_audit_sql_bodies=(
+                "SELECT order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, "
+                "'' AS suffix FROM __source(\"raw_orders\")",
+            ),
+            expected_effective_target_name="dev",
+            expected_effective_connection={},
+            expected_effective_vars={
+                "run_label": "cli_macro",
+                "grants": {"role": "analyst"},
+                "optional_suffix": None,
+            },
+            expected_model_query_sqls=(
+                "select order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, "
+                "'' AS suffix from __source(\"raw_orders\")",
+            ),
+            expected_model_references=((("source", "raw_orders"),),),
+            expected_audit_references=((("source", "raw_orders"),),),
         ),
-        expected_test_authored_cte_names=(("__source__raw_orders",),),
-        expected_test_mock_model_names=((),),
-        expected_test_mock_source_names=(("raw_orders",),),
-        expected_test_mock_seed_names=((),),
-        expected_test_expected_model_names=(("orders",),),
-        expected_audit_sql_bodies=(
-            "SELECT order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, "
-            "'' AS suffix FROM __source(\"raw_orders\")",
-        ),
-        expected_effective_target_name="dev",
-        expected_effective_connection={},
-        expected_effective_vars={
-            "run_label": "cli_macro",
-            "grants": {"role": "analyst"},
-            "optional_suffix": None,
-        },
-        expected_model_query_sqls=(
-            "select order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, "
-            "'' AS suffix from __source(\"raw_orders\")",
-        ),
-        expected_model_references=((("source", "raw_orders"),),),
-        expected_audit_references=((("source", "raw_orders"),),),
-    ),
-    BuildCompileInputsTestCase(
-        description="accepts dbt source and seed SQL test fixtures from manifest",
-        repo_files=base_repo_files()
-        | {
-            "dbt/target/manifest.json": """
+        BuildCompileInputsTestCase(
+            description="accepts dbt source and seed SQL test fixtures from manifest",
+            repo_files=base_repo_files()
+            | {
+                "dbt/target/manifest.json": """
 {
   "nodes": {
     "seed.analytics.countries": {
@@ -1332,9 +1335,9 @@ SELECT 1
   "macros": {}
 }
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -1349,22 +1352,22 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_query_sqls=("select 1",),
-        expected_test_sql_bodies=(
-            """
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_query_sqls=("select 1",),
+            expected_test_sql_bodies=(
+                """
 WITH
 __source__raw__orders AS (
   SELECT 1 AS order_id
@@ -1377,25 +1380,25 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip(),
+            ),
+            expected_test_authored_cte_names=(("__source__raw__orders", "__seed__countries"),),
+            expected_test_mock_model_names=((),),
+            expected_test_mock_source_names=(("raw__orders",),),
+            expected_test_mock_seed_names=(("countries",),),
+            expected_test_expected_model_names=(("orders",),),
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_test_authored_cte_names=(("__source__raw__orders", "__seed__countries"),),
-        expected_test_mock_model_names=((),),
-        expected_test_mock_source_names=(("raw__orders",),),
-        expected_test_mock_seed_names=(("countries",),),
-        expected_test_expected_model_names=(("orders",),),
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="applies sql interpolation across all authored sql text fields",
-        repo_files=base_repo_files()
-        | {
-            "macros/common.py": """
+        BuildCompileInputsTestCase(
+            description="applies sql interpolation across all authored sql text fields",
+            repo_files=base_repo_files()
+            | {
+                "macros/common.py": """
 def source_columns() -> str:
     return "1 AS id"
 """.strip()
-            + "\n",
-            "sqlbuild_project.toml": """
+                + "\n",
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -1410,8 +1413,8 @@ domain = "example.com"
 audit_schema = "audit"
 min_amount = "100"
 """.strip()
-            + "\n",
-            "models/orders.sql": """
+                + "\n",
+                "models/orders.sql": """
 MODEL (
   pre_hooks [sql("insert into @@audit_schema.load_log select '@@ENV:USER_NAME'")],
   columns (order_id (audits [source_filter])),
@@ -1422,8 +1425,8 @@ FROM @@raw_schema.orders
 WHERE email LIKE '%@@domain'
   AND event_date >= CURRENT_DATE
 """.strip()
-            + "\n",
-            "functions/sql/is_large_order.sql": """
+                + "\n",
+                "functions/sql/is_large_order.sql": """
 FUNCTION (
   arguments (amount INTEGER),
   returns BOOLEAN,
@@ -1431,8 +1434,8 @@ FUNCTION (
 
 amount > @@min_amount AND '@@ENV:USER_NAME' = 'runner'
 """.strip()
-            + "\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -1444,14 +1447,14 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-            "audits/orders.sql": """
+                + "\n",
+                "audits/orders.sql": """
 AUDIT ();
 
 SELECT * FROM @@raw_schema.orders WHERE loaded_by = '@@ENV:USER_NAME'
 """.strip()
-            + "\n",
-            "audits/generic/source_filter.sql": """
+                + "\n",
+                "audits/generic/source_filter.sql": """
 AUDIT ();
 
 SELECT @column
@@ -1459,8 +1462,8 @@ FROM @relation
 WHERE @column IS NOT NULL
   AND source_system = '@@ENV:SOURCE_SYSTEM'
 """.strip()
-            + "\n",
-            "sources/raw.yml": """
+                + "\n",
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     expression: |
@@ -1471,88 +1474,92 @@ sources:
     schema: ${raw_schema}
     table: orders_${ENV:USER_NAME}
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=("orders",),
-        expected_model_config_values=(
-            {"pre_hooks": [SqlHookEntry(statement="insert into audit.load_log select 'runner'")]},
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=("orders",),
+            expected_model_config_values=(
+                {
+                    "pre_hooks": [
+                        SqlHookEntry(statement="insert into audit.load_log select 'runner'")
+                    ]
+                },
+            ),
+            expected_model_query_sqls=(
+                "SELECT *\n"
+                "FROM analytics_raw.orders\n"
+                "WHERE email LIKE '%example.com'\n"
+                "  AND event_date >= CURRENT_DATE",
+            ),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=("raw_orders", "raw_table"),
+            expected_source_expressions=(
+                "SELECT 1 AS id, 'runner' AS loaded_by\nFROM analytics_raw.raw_orders\n",
+                None,
+            ),
+            expected_source_relations=(
+                (None, None, None),
+                ("raw_db", "analytics_raw", "orders_runner"),
+            ),
+            expected_test_sql_bodies=(
+                "WITH\n"
+                "__ref__orders AS (\n"
+                "  SELECT * FROM analytics_raw.orders WHERE loaded_by = 'runner'\n"
+                "),\n"
+                "__expected__orders AS (\n"
+                "  SELECT 1 AS id\n"
+                ")\n"
+                "SELECT 1",
+            ),
+            expected_test_authored_cte_names=(("__ref__orders",),),
+            expected_test_mock_model_names=(("orders",),),
+            expected_test_mock_source_names=((),),
+            expected_test_mock_seed_names=((),),
+            expected_test_expected_model_names=(("orders",),),
+            expected_audit_sql_bodies=(
+                "SELECT * FROM analytics_raw.orders WHERE loaded_by = 'runner'",
+                "SELECT order_id\n"
+                'FROM __ref("orders")\n'
+                "WHERE order_id IS NOT NULL\n"
+                "  AND source_system = 'crm'",
+            ),
+            expected_sql_function_names=("is_large_order",),
+            expected_sql_function_arguments=((("amount", "INTEGER"),),),
+            expected_sql_function_returns=("BOOLEAN",),
+            expected_sql_function_return_columns=((),),
+            expected_sql_function_body_sqls=("amount > 100 AND 'runner' = 'runner'",),
+            expected_sql_function_databases=(None,),
+            expected_sql_function_schemas=(None,),
+            expected_sql_function_languages=("sql",),
+            expected_sql_function_runtime_versions=(None,),
+            expected_sql_function_entry_points=(None,),
+            expected_sql_function_packages=((),),
+            expected_sql_function_replay_on_changes=(None,),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={
+                "raw_database": "raw_db",
+                "raw_schema": "analytics_raw",
+                "domain": "example.com",
+                "audit_schema": "audit",
+                "min_amount": "100",
+            },
+            expected_effective_sql_validation=False,
+            expected_model_references=((),),
+            expected_audit_references=((), (("ref", "orders"),)),
+            environment_variables={
+                "USER_NAME": "runner",
+                "SOURCE_SYSTEM": "crm",
+            },
         ),
-        expected_model_query_sqls=(
-            "SELECT *\n"
-            "FROM analytics_raw.orders\n"
-            "WHERE email LIKE '%example.com'\n"
-            "  AND event_date >= CURRENT_DATE",
-        ),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=("raw_orders", "raw_table"),
-        expected_source_expressions=(
-            "SELECT 1 AS id, 'runner' AS loaded_by\nFROM analytics_raw.raw_orders\n",
-            None,
-        ),
-        expected_source_relations=(
-            (None, None, None),
-            ("raw_db", "analytics_raw", "orders_runner"),
-        ),
-        expected_test_sql_bodies=(
-            "WITH\n"
-            "__ref__orders AS (\n"
-            "  SELECT * FROM analytics_raw.orders WHERE loaded_by = 'runner'\n"
-            "),\n"
-            "__expected__orders AS (\n"
-            "  SELECT 1 AS id\n"
-            ")\n"
-            "SELECT 1",
-        ),
-        expected_test_authored_cte_names=(("__ref__orders",),),
-        expected_test_mock_model_names=(("orders",),),
-        expected_test_mock_source_names=((),),
-        expected_test_mock_seed_names=((),),
-        expected_test_expected_model_names=(("orders",),),
-        expected_audit_sql_bodies=(
-            "SELECT * FROM analytics_raw.orders WHERE loaded_by = 'runner'",
-            "SELECT order_id\n"
-            'FROM __ref("orders")\n'
-            "WHERE order_id IS NOT NULL\n"
-            "  AND source_system = 'crm'",
-        ),
-        expected_sql_function_names=("is_large_order",),
-        expected_sql_function_arguments=((("amount", "INTEGER"),),),
-        expected_sql_function_returns=("BOOLEAN",),
-        expected_sql_function_return_columns=((),),
-        expected_sql_function_body_sqls=("amount > 100 AND 'runner' = 'runner'",),
-        expected_sql_function_databases=(None,),
-        expected_sql_function_schemas=(None,),
-        expected_sql_function_languages=("sql",),
-        expected_sql_function_runtime_versions=(None,),
-        expected_sql_function_entry_points=(None,),
-        expected_sql_function_packages=((),),
-        expected_sql_function_replay_on_changes=(None,),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={
-            "raw_database": "raw_db",
-            "raw_schema": "analytics_raw",
-            "domain": "example.com",
-            "audit_schema": "audit",
-            "min_amount": "100",
-        },
-        expected_effective_sql_validation=False,
-        expected_model_references=((),),
-        expected_audit_references=((), (("ref", "orders"),)),
-        environment_variables={
-            "USER_NAME": "runner",
-            "SOURCE_SYSTEM": "crm",
-        },
-    ),
-    BuildCompileInputsTestCase(
-        description="expands typed SQL hooks without expanding Python hook kwargs",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="expands typed SQL hooks without expanding Python hook kwargs",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -1565,8 +1572,8 @@ schema = "marts"
 [targets.dev]
 database = "analytics"
 """.strip()
-            + "\n",
-            "models/orders.sql": """
+                + "\n",
+                "models/orders.sql": """
 MODEL (
   alias orders_dev,
   post_hooks [
@@ -1577,8 +1584,8 @@ MODEL (
 
 SELECT 1 AS id
 """.strip()
-            + "\n",
-            "hooks/notifications.py": """
+                + "\n",
+                "hooks/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -1586,40 +1593,40 @@ from sqlbuild.hooks import hook
 def notify(ctx, message):
     return None
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "schema": "marts",
-                "alias": "orders_dev",
-                "database": "analytics",
-                "post_hooks": [
-                    SqlHookEntry(statement="select 'analytics.marts.orders_dev' as target"),
-                    PythonHookEntry(
-                        name="notify",
-                        kwargs={"message": "@@CTX:destination.qualified"},
-                    ),
-                ],
+                + "\n",
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "schema": "marts",
+                    "alias": "orders_dev",
+                    "database": "analytics",
+                    "post_hooks": [
+                        SqlHookEntry(statement="select 'analytics.marts.orders_dev' as target"),
+                        PythonHookEntry(
+                            name="notify",
+                            kwargs={"message": "@@CTX:destination.qualified"},
+                        ),
+                    ],
+                },
+            ),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name="dev",
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_query_sqls=("SELECT 1 AS id",),
+            expected_model_references=((),),
         ),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name="dev",
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_query_sqls=("SELECT 1 AS id",),
-        expected_model_references=((),),
-    ),
-    BuildCompileInputsTestCase(
-        description="validates Python hook kwargs while allowing defaults and variadic kwargs",
-        repo_files=base_repo_files()
-        | {
-            "models/orders.sql": """
+        BuildCompileInputsTestCase(
+            description="validates Python hook kwargs while allowing defaults and variadic kwargs",
+            repo_files=base_repo_files()
+            | {
+                "models/orders.sql": """
 MODEL (
   pre_hooks [
     python("defaulted", channel: "alerts"),
@@ -1631,8 +1638,8 @@ MODEL (
 
 SELECT 1 AS id
 """.strip()
-            + "\n",
-            "hooks/notifications.py": """
+                + "\n",
+                "hooks/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -1655,36 +1662,36 @@ def context_named(hook_context, message):
 def optional_positional_only(ctx, channel="alerts", /):
     return None
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "pre_hooks": [
-                    PythonHookEntry(name="defaulted", kwargs={"channel": "alerts"}),
-                    PythonHookEntry(name="flexible", kwargs={"extra": "value"}),
-                    PythonHookEntry(name="context_named", kwargs={"message": "ok"}),
-                    PythonHookEntry(name="optional_positional_only", kwargs={}),
-                ],
+                + "\n",
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "pre_hooks": [
+                        PythonHookEntry(name="defaulted", kwargs={"channel": "alerts"}),
+                        PythonHookEntry(name="flexible", kwargs={"extra": "value"}),
+                        PythonHookEntry(name="context_named", kwargs={"message": "ok"}),
+                        PythonHookEntry(name="optional_positional_only", kwargs={}),
+                    ],
+                },
+            ),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_query_sqls=("SELECT 1 AS id",),
+            expected_model_references=((),),
         ),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_query_sqls=("SELECT 1 AS id",),
-        expected_model_references=((),),
-    ),
-    BuildCompileInputsTestCase(
-        description="preserves raw Python hook kwargs after discovered hook validation",
-        repo_files=base_repo_files()
-        | {
-            "models/orders.sql": """
+        BuildCompileInputsTestCase(
+            description="preserves raw Python hook kwargs after discovered hook validation",
+            repo_files=base_repo_files()
+            | {
+                "models/orders.sql": """
 MODEL (
   post_hooks [
     python("notify", message: "@@CTX:destination.qualified", macro_text: "@format_message()"),
@@ -1693,8 +1700,8 @@ MODEL (
 
 SELECT 1 AS id
 """.strip()
-            + "\n",
-            "hooks/notifications.py": """
+                + "\n",
+                "hooks/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -1702,44 +1709,44 @@ from sqlbuild.hooks import hook
 def notify(ctx, message, macro_text):
     return None
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=(
-            {
-                "post_hooks": [
-                    PythonHookEntry(
-                        name="notify",
-                        kwargs={
-                            "message": "@@CTX:destination.qualified",
-                            "macro_text": "@format_message()",
-                        },
-                    ),
-                ],
+                + "\n",
             },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "post_hooks": [
+                        PythonHookEntry(
+                            name="notify",
+                            kwargs={
+                                "message": "@@CTX:destination.qualified",
+                                "macro_text": "@format_message()",
+                            },
+                        ),
+                    ],
+                },
+            ),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_query_sqls=("SELECT 1 AS id",),
+            expected_model_references=((),),
         ),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_query_sqls=("SELECT 1 AS id",),
-        expected_model_references=((),),
-    ),
-    BuildCompileInputsTestCase(
-        description="expands vars and macros in sql function bodies and headers",
-        repo_files=base_repo_files()
-        | {
-            "macros/common.py": """
+        BuildCompileInputsTestCase(
+            description="expands vars and macros in sql function bodies and headers",
+            repo_files=base_repo_files()
+            | {
+                "macros/common.py": """
 def status_match(column_name: str, status: str) -> str:
     return f"{column_name} = '{status}'"
 """.strip()
-            + "\n",
-            "sqlbuild_project.toml": """
+                + "\n",
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -1758,8 +1765,8 @@ backfill_days = "30"
 database = "analytics_default"
 schema = "default_schema"
 """.strip()
-            + "\n",
-            "functions/sql/is_completed_order.sql": """
+                + "\n",
+                "functions/sql/is_completed_order.sql": """
 FUNCTION (
   database ${udf_database},
   schema ${udf_schema},
@@ -1770,58 +1777,58 @@ FUNCTION (
 
 @status_match("order_status", "completed") AND order_status <> @@cancelled_status
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(),
-        expected_model_config_values=(),
-        expected_model_query_sqls=(),
-        expected_model_path_defaults=(),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_sql_function_names=("is_completed_order",),
-        expected_sql_function_arguments=((("order_status", "VARCHAR"),),),
-        expected_sql_function_returns=("BOOLEAN",),
-        expected_sql_function_return_columns=((),),
-        expected_sql_function_body_sqls=(
-            "order_status = 'completed' AND order_status <> 'cancelled'",
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(),
+            expected_model_config_values=(),
+            expected_model_query_sqls=(),
+            expected_model_path_defaults=(),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_sql_function_names=("is_completed_order",),
+            expected_sql_function_arguments=((("order_status", "VARCHAR"),),),
+            expected_sql_function_returns=("BOOLEAN",),
+            expected_sql_function_return_columns=((),),
+            expected_sql_function_body_sqls=(
+                "order_status = 'completed' AND order_status <> 'cancelled'",
+            ),
+            expected_sql_function_databases=("analytics",),
+            expected_sql_function_schemas=("udf_dev",),
+            expected_sql_function_languages=("sql",),
+            expected_sql_function_runtime_versions=(None,),
+            expected_sql_function_entry_points=(None,),
+            expected_sql_function_packages=((),),
+            expected_sql_function_replay_on_changes=("bounded-30d",),
+            expected_effective_target_name="dev",
+            expected_effective_connection={},
+            expected_effective_vars={
+                "status_type": "VARCHAR",
+                "return_type": "BOOLEAN",
+                "cancelled_status": "'cancelled'",
+                "udf_database": "analytics",
+                "udf_schema": "udf_dev",
+                "backfill_days": "30",
+            },
+            expected_model_references=(),
+            expected_audit_references=(),
         ),
-        expected_sql_function_databases=("analytics",),
-        expected_sql_function_schemas=("udf_dev",),
-        expected_sql_function_languages=("sql",),
-        expected_sql_function_runtime_versions=(None,),
-        expected_sql_function_entry_points=(None,),
-        expected_sql_function_packages=((),),
-        expected_sql_function_replay_on_changes=("bounded-30d",),
-        expected_effective_target_name="dev",
-        expected_effective_connection={},
-        expected_effective_vars={
-            "status_type": "VARCHAR",
-            "return_type": "BOOLEAN",
-            "cancelled_status": "'cancelled'",
-            "udf_database": "analytics",
-            "udf_schema": "udf_dev",
-            "backfill_days": "30",
-        },
-        expected_model_references=(),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="attaches SQL table function metadata with return columns and body refs",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="attaches SQL table function metadata with return columns and body refs",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
 [settings]
 sql_validation = false
 """.strip()
-            + "\n",
-            "models/fact_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id, 7 AS customer_id\n",
-            "functions/sql/customer_orders.sql": """
+                + "\n",
+                "models/fact_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id, 7 AS customer_id\n",
+                "functions/sql/customer_orders.sql": """
 FUNCTION (
   arguments (p_customer_id INTEGER),
   returns table (
@@ -1834,53 +1841,53 @@ SELECT order_id, 100 AS amount_cents
 FROM __ref("fact_orders")
 WHERE customer_id = p_customer_id
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("SELECT 1 AS order_id, 7 AS customer_id",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_sql_function_names=("customer_orders",),
-        expected_sql_function_arguments=((("p_customer_id", "INTEGER"),),),
-        expected_sql_function_returns=("TABLE",),
-        expected_sql_function_return_columns=(
-            (("order_id", "INTEGER"), ("amount_cents", "INTEGER")),
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("SELECT 1 AS order_id, 7 AS customer_id",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_sql_function_names=("customer_orders",),
+            expected_sql_function_arguments=((("p_customer_id", "INTEGER"),),),
+            expected_sql_function_returns=("TABLE",),
+            expected_sql_function_return_columns=(
+                (("order_id", "INTEGER"), ("amount_cents", "INTEGER")),
+            ),
+            expected_sql_function_body_sqls=(
+                "SELECT order_id, 100 AS amount_cents\n"
+                'FROM __ref("fact_orders")\n'
+                "WHERE customer_id = p_customer_id",
+            ),
+            expected_sql_function_databases=(None,),
+            expected_sql_function_schemas=(None,),
+            expected_sql_function_languages=("sql",),
+            expected_sql_function_runtime_versions=(None,),
+            expected_sql_function_entry_points=(None,),
+            expected_sql_function_packages=((),),
+            expected_sql_function_replay_on_changes=(None,),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_effective_sql_validation=False,
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-        expected_sql_function_body_sqls=(
-            "SELECT order_id, 100 AS amount_cents\n"
-            'FROM __ref("fact_orders")\n'
-            "WHERE customer_id = p_customer_id",
-        ),
-        expected_sql_function_databases=(None,),
-        expected_sql_function_schemas=(None,),
-        expected_sql_function_languages=("sql",),
-        expected_sql_function_runtime_versions=(None,),
-        expected_sql_function_entry_points=(None,),
-        expected_sql_function_packages=((),),
-        expected_sql_function_replay_on_changes=(None,),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_effective_sql_validation=False,
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="expands macros across multi block tests and audits",
-        repo_files=base_repo_files()
-        | {
-            "macros/common.py": """
+        BuildCompileInputsTestCase(
+            description="expands macros across multi block tests and audits",
+            repo_files=base_repo_files()
+            | {
+                "macros/common.py": """
 def project_columns() -> str:
     return "order_id"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "tests/unit/orders.sql": """
 TEST (name: "first");
 
 WITH
@@ -1903,8 +1910,8 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-            "audits/orders.sql": """
+                + "\n",
+                "audits/orders.sql": """
 AUDIT (name: "first");
 
 SELECT @project_columns() FROM raw_orders;
@@ -1913,22 +1920,22 @@ AUDIT (name: "second");
 
 SELECT @project_columns() FROM raw_customers
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_test_sql_bodies=(
-            """
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_test_sql_bodies=(
+                """
 WITH
 __ref__orders AS (
   SELECT order_id FROM raw_orders
@@ -1938,7 +1945,7 @@ __expected__orders AS (
 )
 SELECT 1;
 """.strip(),
-            """
+                """
 WITH
 __ref__orders AS (
   SELECT order_id FROM raw_customers
@@ -1948,27 +1955,27 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip(),
+            ),
+            expected_test_authored_cte_names=(
+                ("__ref__orders",),
+                ("__ref__orders",),
+            ),
+            expected_test_mock_model_names=(("orders",), ("orders",)),
+            expected_test_mock_source_names=((), ()),
+            expected_test_mock_seed_names=((), ()),
+            expected_test_expected_model_names=(("orders",), ("orders",)),
+            expected_audit_sql_bodies=(
+                "SELECT order_id FROM raw_orders;",
+                "SELECT order_id FROM raw_customers",
+            ),
+            expected_model_references=((),),
+            expected_audit_references=((), ()),
         ),
-        expected_test_authored_cte_names=(
-            ("__ref__orders",),
-            ("__ref__orders",),
-        ),
-        expected_test_mock_model_names=(("orders",), ("orders",)),
-        expected_test_mock_source_names=((), ()),
-        expected_test_mock_seed_names=((), ()),
-        expected_test_expected_model_names=(("orders",), ("orders",)),
-        expected_audit_sql_bodies=(
-            "SELECT order_id FROM raw_orders;",
-            "SELECT order_id FROM raw_customers",
-        ),
-        expected_model_references=((),),
-        expected_audit_references=((), ()),
-    ),
-    BuildCompileInputsTestCase(
-        description="discovers python sqlbuild udf metadata",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="discovers python sqlbuild udf metadata",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -1983,8 +1990,8 @@ udf_schema = "udf_dev"
 [targets.dev]
 schema = "default_schema"
 """.strip()
-            + "\n",
-            "functions/python/is_completed_order.py": """
+                + "\n",
+                "functions/python/is_completed_order.py": """
 from sqlbuild.functions import udf
 
 @udf(
@@ -1997,49 +2004,49 @@ from sqlbuild.functions import udf
 def main(order_status):
     return order_status == "completed"
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(),
-        expected_model_config_values=(),
-        expected_model_query_sqls=(),
-        expected_model_path_defaults=(),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_sql_function_names=("is_completed_order",),
-        expected_sql_function_arguments=((("order_status", "VARCHAR"),),),
-        expected_sql_function_returns=("BOOLEAN",),
-        expected_sql_function_return_columns=((),),
-        expected_sql_function_body_sqls=(
-            """
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(),
+            expected_model_config_values=(),
+            expected_model_query_sqls=(),
+            expected_model_path_defaults=(),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_sql_function_names=("is_completed_order",),
+            expected_sql_function_arguments=((("order_status", "VARCHAR"),),),
+            expected_sql_function_returns=("BOOLEAN",),
+            expected_sql_function_return_columns=((),),
+            expected_sql_function_body_sqls=(
+                """
 def main(order_status):
     return order_status == 'completed'
 """.strip(),
+            ),
+            expected_sql_function_databases=(None,),
+            expected_sql_function_schemas=("udf_dev",),
+            expected_sql_function_languages=("python",),
+            expected_sql_function_runtime_versions=("3.11",),
+            expected_sql_function_entry_points=("main",),
+            expected_sql_function_packages=(("faker",),),
+            expected_sql_function_replay_on_changes=(None,),
+            expected_effective_target_name="dev",
+            expected_effective_connection={},
+            expected_effective_vars={
+                "status_type": "VARCHAR",
+                "return_type": "BOOLEAN",
+                "udf_schema": "udf_dev",
+            },
+            expected_model_references=(),
+            expected_audit_references=(),
         ),
-        expected_sql_function_databases=(None,),
-        expected_sql_function_schemas=("udf_dev",),
-        expected_sql_function_languages=("python",),
-        expected_sql_function_runtime_versions=("3.11",),
-        expected_sql_function_entry_points=("main",),
-        expected_sql_function_packages=(("faker",),),
-        expected_sql_function_replay_on_changes=(None,),
-        expected_effective_target_name="dev",
-        expected_effective_connection={},
-        expected_effective_vars={
-            "status_type": "VARCHAR",
-            "return_type": "BOOLEAN",
-            "udf_schema": "udf_dev",
-        },
-        expected_model_references=(),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="renders attached model and source audits from generic definitions",
-        repo_files=base_repo_files()
-        | {
-            "models/marts/orders.sql": """
+        BuildCompileInputsTestCase(
+            description="renders attached model and source audits from generic definitions",
+            repo_files=base_repo_files()
+            | {
+                "models/marts/orders.sql": """
 MODEL (
   audits [model_not_null],
   columns (
@@ -2049,8 +2056,8 @@ MODEL (
 
 select 1
 """.strip()
-            + "\n",
-            "sources/raw.yml": """
+                + "\n",
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     audits:
@@ -2060,64 +2067,64 @@ sources:
         audits:
           - source_column_not_null
 """.strip()
-            + "\n",
-            "audits/generic/model_not_null.sql": """
+                + "\n",
+                "audits/generic/model_not_null.sql": """
 AUDIT ();
 
 SELECT 1 FROM __ref("@model")
 """.strip()
-            + "\n",
-            "audits/generic/column_not_null.sql": """
+                + "\n",
+                "audits/generic/column_not_null.sql": """
 AUDIT ();
 
 SELECT @column FROM __ref("@model") WHERE @column IS NULL
 """.strip()
-            + "\n",
-            "audits/generic/source_not_null.sql": """
+                + "\n",
+                "audits/generic/source_not_null.sql": """
 AUDIT ();
 
 SELECT 1 FROM __source("@source")
 """.strip()
-            + "\n",
-            "audits/generic/source_column_not_null.sql": """
+                + "\n",
+                "audits/generic/source_column_not_null.sql": """
 AUDIT ();
 
 SELECT @column FROM __source("@source") WHERE @column IS NULL
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=("orders",),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=("raw_orders",),
-        expected_test_sql_bodies=(),
-        expected_audit_sql_bodies=(
-            'SELECT 1 FROM __ref("orders")',
-            'SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
-            'SELECT 1 FROM __source("raw_orders")',
-            'SELECT order_id FROM __source("raw_orders") WHERE order_id IS NULL',
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=("orders",),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=("raw_orders",),
+            expected_test_sql_bodies=(),
+            expected_audit_sql_bodies=(
+                'SELECT 1 FROM __ref("orders")',
+                'SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+                'SELECT 1 FROM __source("raw_orders")',
+                'SELECT order_id FROM __source("raw_orders") WHERE order_id IS NULL',
+            ),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(
+                (("ref", "orders"),),
+                (("ref", "orders"),),
+                (("source", "raw_orders"),),
+                (("source", "raw_orders"),),
+            ),
         ),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(
-            (("ref", "orders"),),
-            (("ref", "orders"),),
-            (("source", "raw_orders"),),
-            (("source", "raw_orders"),),
-        ),
-    ),
-    BuildCompileInputsTestCase(
-        description="renders built-in attached audits when no project generic definition exists",
-        repo_files=base_repo_files()
-        | {
-            "models/marts/orders.sql": """
+        BuildCompileInputsTestCase(
+            description="renders built-in attached audits when no project generic definition exists",
+            repo_files=base_repo_files()
+            | {
+                "models/marts/orders.sql": """
 MODEL (
   columns (
     order_id (nullable false, audits [not_null, unique]),
@@ -2131,9 +2138,9 @@ MODEL (
 
 select 1 as order_id, 'placed' as status, null as customer_id
 """.strip()
-            + "\n",
-            "models/marts/customers.sql": "MODEL ();\n\nselect 1 as customer_id\n",
-            "sources/raw.yml": """
+                + "\n",
+                "models/marts/customers.sql": "MODEL ();\n\nselect 1 as customer_id\n",
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     columns:
@@ -2141,210 +2148,210 @@ sources:
         audits:
           - not_null
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None, "orders"),
-        expected_model_config_values=({}, {}),
-        expected_model_query_sqls=(
-            "select 1 as customer_id",
-            "select 1 as order_id, 'placed' as status, null as customer_id",
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None, "orders"),
+            expected_model_config_values=({}, {}),
+            expected_model_query_sqls=(
+                "select 1 as customer_id",
+                "select 1 as order_id, 'placed' as status, null as customer_id",
+            ),
+            expected_model_column_nullables=((), (False, None, True)),
+            expected_model_path_defaults=(None, None),
+            expected_seed_names=(),
+            expected_source_names=("raw_orders",),
+            expected_test_sql_bodies=(),
+            expected_audit_sql_bodies=(
+                'SELECT order_id\nFROM __ref("orders")\nWHERE order_id IS NULL',
+                'SELECT order_id, COUNT(*) AS duplicate_count\nFROM __ref("orders")\n'
+                "WHERE order_id IS NOT NULL\nGROUP BY order_id\nHAVING COUNT(*) > 1",
+                'SELECT status\nFROM __ref("orders")\nWHERE status IS NOT NULL\n'
+                "  AND status NOT IN ('placed', 'completed')",
+                'SELECT customer_id\nFROM __ref("orders")\nWHERE customer_id IS NOT NULL\n'
+                "  AND customer_id NOT IN (\n"
+                "    SELECT customer_id\n"
+                '    FROM __ref("customers")\n'
+                "    WHERE customer_id IS NOT NULL\n"
+                "  )",
+                'SELECT order_id\nFROM __source("raw_orders")\nWHERE order_id IS NULL',
+            ),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((), ()),
+            expected_audit_references=(
+                (("ref", "orders"),),
+                (("ref", "orders"),),
+                (("ref", "orders"),),
+                (("ref", "orders"), ("ref", "customers")),
+                (("source", "raw_orders"),),
+            ),
         ),
-        expected_model_column_nullables=((), (False, None, True)),
-        expected_model_path_defaults=(None, None),
-        expected_seed_names=(),
-        expected_source_names=("raw_orders",),
-        expected_test_sql_bodies=(),
-        expected_audit_sql_bodies=(
-            'SELECT order_id\nFROM __ref("orders")\nWHERE order_id IS NULL',
-            'SELECT order_id, COUNT(*) AS duplicate_count\nFROM __ref("orders")\n'
-            "WHERE order_id IS NOT NULL\nGROUP BY order_id\nHAVING COUNT(*) > 1",
-            'SELECT status\nFROM __ref("orders")\nWHERE status IS NOT NULL\n'
-            "  AND status NOT IN ('placed', 'completed')",
-            'SELECT customer_id\nFROM __ref("orders")\nWHERE customer_id IS NOT NULL\n'
-            "  AND customer_id NOT IN (\n"
-            "    SELECT customer_id\n"
-            '    FROM __ref("customers")\n'
-            "    WHERE customer_id IS NOT NULL\n"
-            "  )",
-            'SELECT order_id\nFROM __source("raw_orders")\nWHERE order_id IS NULL',
-        ),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((), ()),
-        expected_audit_references=(
-            (("ref", "orders"),),
-            (("ref", "orders"),),
-            (("ref", "orders"),),
-            (("ref", "orders"), ("ref", "customers")),
-            (("source", "raw_orders"),),
-        ),
-    ),
-    BuildCompileInputsTestCase(
-        description="skips generic audit definitions as direct executable audits",
-        repo_files=base_repo_files()
-        | {
-            "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
-            "audits/generic/custom_check.sql": """
+        BuildCompileInputsTestCase(
+            description="skips generic audit definitions as direct executable audits",
+            repo_files=base_repo_files()
+            | {
+                "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+                "audits/generic/custom_check.sql": """
 AUDIT ();
 
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_test_sql_bodies=(),
-        expected_audit_sql_bodies=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="warns when project generic audit shadows built-in audit",
-        repo_files=base_repo_files()
-        | {
-            "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
-            "audits/generic/not_null.sql": "AUDIT ();\n\nSELECT 1\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_test_sql_bodies=(),
-        expected_audit_sql_bodies=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-        expected_diagnostic_codes=("P003",),
-        expected_diagnostic_messages=(
-            "project audit 'not_null' overrides built-in audit 'not_null'",
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_test_sql_bodies=(),
+            expected_audit_sql_bodies=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
         ),
-    ),
-    BuildCompileInputsTestCase(
-        description="generates clickstate style run ids when none are provided",
-        repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
-        selected_target=None,
-        cli_vars=None,
-        run_id=None,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("select 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="allows invalid sql when project sql validation is disabled",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsTestCase(
+            description="warns when project generic audit shadows built-in audit",
+            repo_files=base_repo_files()
+            | {
+                "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+                "audits/generic/not_null.sql": "AUDIT ();\n\nSELECT 1\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_test_sql_bodies=(),
+            expected_audit_sql_bodies=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
+            expected_diagnostic_codes=("P003",),
+            expected_diagnostic_messages=(
+                "project audit 'not_null' overrides built-in audit 'not_null'",
+            ),
+        ),
+        BuildCompileInputsTestCase(
+            description="generates clickstate style run ids when none are provided",
+            repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("select 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="allows invalid sql when project sql validation is disabled",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
 [settings]
 sql_validation = false
 """.strip()
-            + "\n",
-            "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id="test_run",
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_effective_sql_validation=False,
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="allows invalid sql when sql_analysis is disabled",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id="test_run",
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_effective_sql_validation=False,
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="allows invalid sql when sql_analysis is disabled",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
 [settings]
 sql_analysis = false
 """.strip()
-            + "\n",
-            "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id="test_run",
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_effective_sql_analysis=False,
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="allows invalid sql when no_sql_validation flag is set",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id="test_run",
-        no_sql_validation=True,
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((),),
-        expected_audit_references=(),
-    ),
-    BuildCompileInputsTestCase(
-        description="validates dbt refs from discovered manifest while preserving markers",
-        repo_files=base_repo_files()
-        | {
-            "dbt/target/manifest.json": """
+                + "\n",
+                "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id="test_run",
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_effective_sql_analysis=False,
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="allows invalid sql when no_sql_validation flag is set",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id="test_run",
+            no_sql_validation=True,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=("SELEC id FROM (SELECT 1",),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="validates dbt refs from discovered manifest while preserving markers",
+            repo_files=base_repo_files()
+            | {
+                "dbt/target/manifest.json": """
 {
   "nodes": {
     "model.analytics.stg_orders": {
@@ -2364,37 +2371,32 @@ sql_analysis = false
   }
 }
 """.strip()
-            + "\n",
-            "models/fact_orders.sql": (
-                'MODEL ();\n\nselect * from __dbt_ref("stg_orders") '
-                'union all select * from __dbt_ref("stripe", "orders")\n'
+                + "\n",
+                "models/fact_orders.sql": (
+                    'MODEL ();\n\nselect * from __dbt_ref("stg_orders") '
+                    'union all select * from __dbt_ref("stripe", "orders")\n'
+                ),
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id="test_run",
+            expected_model_schema_names=(None,),
+            expected_model_config_values=({},),
+            expected_model_query_sqls=(
+                'select * from __dbt_ref("stg_orders") '
+                'union all select * from __dbt_ref("stripe", "orders")',
             ),
-        },
-        selected_target=None,
-        cli_vars=None,
-        run_id="test_run",
-        expected_model_schema_names=(None,),
-        expected_model_config_values=({},),
-        expected_model_query_sqls=(
-            'select * from __dbt_ref("stg_orders") '
-            'union all select * from __dbt_ref("stripe", "orders")',
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((("dbt_ref", "stg_orders"), ("dbt_ref", "orders")),),
+            expected_audit_references=(),
         ),
-        expected_model_path_defaults=(None,),
-        expected_seed_names=(),
-        expected_source_names=(),
-        expected_effective_target_name=None,
-        expected_effective_connection={},
-        expected_effective_vars={},
-        expected_model_references=((("dbt_ref", "stg_orders"), ("dbt_ref", "orders")),),
-        expected_audit_references=(),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_metadata(
     test_case: BuildCompileInputsTestCase,
@@ -2672,7 +2674,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
             expected_allow_as_clone_destination=True,
         )
     ],
-    ids=["merges local target overrides with nullable clone policy"],
+    ids=lambda case: case.description,
 )
 def test_given_project_and_local_environment_when_resolving_then_local_values_override_by_field(
     test_case: ResolveTargetConfigTestCase,
@@ -2725,26 +2727,28 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
     )
 
 
-COMPILE_ERROR_TEST_CASES: list[BuildCompileInputsErrorTestCase] = [
-    BuildCompileInputsErrorTestCase(
-        description="raises when a model references a table function",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildCompileInputsErrorTestCase(
+            description="raises when a model references a table function",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
 [settings]
 sql_validation = false
 """.strip()
-            + "\n",
-            "models/orders.sql": """
+                + "\n",
+                "models/orders.sql": """
 MODEL ();
 
 SELECT * FROM __table_fn("customer_orders")(1)
 """.strip()
-            + "\n",
-            "functions/sql/customer_orders.sql": """
+                + "\n",
+                "functions/sql/customer_orders.sql": """
 FUNCTION (
   arguments (p_customer_id INTEGER),
   returns table (order_id INTEGER)
@@ -2752,32 +2756,32 @@ FUNCTION (
 
 SELECT 1 AS order_id
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="table functions are terminal resources",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a model references an unknown source",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="table functions are terminal resources",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a model references an unknown source",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": """
 MODEL ();
 
 SELECT * FROM __source("missing_source")
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="references unknown source 'missing_source'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when authored enforced contract omits incremental cursor",
-        repo_files=base_repo_files()
-        | {
-            "models/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="references unknown source 'missing_source'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when authored enforced contract omits incremental cursor",
+            repo_files=base_repo_files()
+            | {
+                "models/orders.sql": """
 MODEL (
   materialized incremental,
   contract enforced,
@@ -2792,17 +2796,17 @@ MODEL (
 
 SELECT 1 AS id, CURRENT_TIMESTAMP AS event_time
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="cursor references column 'event_time' not declared",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when authored enforced contract omits snapshot check column",
-        repo_files=base_repo_files()
-        | {
-            "models/customer_snapshot.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="cursor references column 'event_time' not declared",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when authored enforced contract omits snapshot check column",
+            repo_files=base_repo_files()
+            | {
+                "models/customer_snapshot.sql": """
 MODEL (
   materialized snapshot,
   contract enforced,
@@ -2817,17 +2821,17 @@ MODEL (
 
 SELECT 1 AS customer_id, 'pro' AS plan, 'active' AS status
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="check_columns references column 'status' not declared",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when authored enforced snapshot appends new columns",
-        repo_files=base_repo_files()
-        | {
-            "models/customer_snapshot.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="check_columns references column 'status' not declared",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when authored enforced snapshot appends new columns",
+            repo_files=base_repo_files()
+            | {
+                "models/customer_snapshot.sql": """
 MODEL (
   materialized snapshot,
   contract enforced,
@@ -2843,111 +2847,111 @@ MODEL (
 
 SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="snapshot_schema_change=append_new_columns is not valid",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when an audit references an unknown source",
-        repo_files=base_repo_files()
-        | {
-            "audits/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="snapshot_schema_change=append_new_columns is not valid",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when an audit references an unknown source",
+            repo_files=base_repo_files()
+            | {
+                "audits/orders.sql": """
 AUDIT ();
 
 SELECT * FROM __source("missing_source")
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="references unknown source 'missing_source'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a model uses dbt refs",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="references unknown source 'missing_source'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a model uses dbt refs",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": """
 MODEL ();
 
 SELECT * FROM __dbt_ref("stg_orders")
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"Model file models/staging/orders\.sql uses __dbt_ref\('stg_orders'\) "
-            "but no dbt manifest was found"
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"Model file models/staging/orders\.sql uses __dbt_ref\('stg_orders'\) "
+                "but no dbt manifest was found"
+            ),
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a SQL function uses dbt refs",
-        repo_files=base_repo_files()
-        | {
-            "functions/sql/orders.sql": """
+        BuildCompileInputsErrorTestCase(
+            description="raises when a SQL function uses dbt refs",
+            repo_files=base_repo_files()
+            | {
+                "functions/sql/orders.sql": """
 FUNCTION (
   returns table (order_id INTEGER)
 );
 
 SELECT * FROM __dbt_ref("stg_orders")
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"SQL function file functions/sql/orders\.sql uses __dbt_ref\('stg_orders'\) "
-            "but dbt refs are not supported yet"
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"SQL function file functions/sql/orders\.sql uses __dbt_ref\('stg_orders'\) "
+                "but dbt refs are not supported yet"
+            ),
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when an audit uses dbt refs",
-        repo_files=base_repo_files()
-        | {
-            "audits/orders.sql": """
+        BuildCompileInputsErrorTestCase(
+            description="raises when an audit uses dbt refs",
+            repo_files=base_repo_files()
+            | {
+                "audits/orders.sql": """
 AUDIT ();
 
 SELECT * FROM __dbt_ref("stg_orders")
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"Audit file audits/orders\.sql may not use __dbt_ref\('stg_orders'\); "
-            "audit dbt model checks belong in dbt"
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"Audit file audits/orders\.sql may not use __dbt_ref\('stg_orders'\); "
+                "audit dbt model checks belong in dbt"
+            ),
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when an attached source audit overrides implicit source context",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+        BuildCompileInputsErrorTestCase(
+            description="raises when an attached source audit overrides implicit source context",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     audits:
       - source_not_null:
           source: other_source
 """.strip()
-            + "\n",
-            "audits/generic/source_not_null.sql": """
+                + "\n",
+                "audits/generic/source_not_null.sql": """
 AUDIT ();
 
 SELECT 1 FROM __source("@source")
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="must not override implicit source from attached context",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when model column allows nulls and uses not null audit",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="must not override implicit source from attached context",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when model column allows nulls and uses not null audit",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": """
 MODEL (
   columns (
     order_id (nullable true, audits [not_null]),
@@ -2956,70 +2960,72 @@ MODEL (
 
 SELECT 1 AS order_id
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=("column 'order_id' cannot set nullable = true and audit not_null"),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when an attached source audit references an unknown generic definition",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                "column 'order_id' cannot set nullable = true and audit not_null"
+            ),
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when an attached source audit references an unknown generic definition",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     audits:
       - missing_definition
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="references unknown generic audit 'missing_definition'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled test body references an unknown macro",
-        repo_files=base_repo_files()
-        | {
-            "tests/unit/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="references unknown generic audit 'missing_definition'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled test body references an unknown macro",
+            repo_files=base_repo_files()
+            | {
+                "tests/unit/orders.sql": """
 TEST ();
 
 SELECT @missing_macro()
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="Unknown macro '@missing_macro'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled test body lacks top level test ctes",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="Unknown macro '@missing_macro'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled test body lacks top level test ctes",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="must declare mock CTEs and one __expected__<model>",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled test body lacks ceremonial select one",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "sources/raw.yml": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="must declare mock CTEs and one __expected__<model>",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled test body lacks ceremonial select one",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
 """.strip()
-            + "\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -3031,18 +3037,18 @@ __expected__orders AS (
 )
 SELECT order_id FROM __expected__orders
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled test body references an unknown source mock",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled test body references an unknown source mock",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -3054,18 +3060,18 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="mocks unknown source 'missing_source'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled test body references an unknown seed mock",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="mocks unknown source 'missing_source'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled test body references an unknown seed mock",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -3077,17 +3083,17 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="mocks unknown seed 'missing_seed'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when dbt source fixture collides through compile attachment",
-        repo_files=base_repo_files()
-        | {
-            "dbt/target/manifest.json": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="mocks unknown seed 'missing_seed'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when dbt source fixture collides through compile attachment",
+            repo_files=base_repo_files()
+            | {
+                "dbt/target/manifest.json": """
 {
   "nodes": {},
   "sources": {
@@ -3103,14 +3109,14 @@ SELECT 1
   "macros": {}
 }
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "sources/raw.yml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "sources/raw.yml": """
 sources:
   - name: raw__orders
 """.strip()
-            + "\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -3122,17 +3128,17 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="conflicts with a SQLBuild source",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when dbt seed fixture collides through compile attachment",
-        repo_files=base_repo_files()
-        | {
-            "dbt/target/manifest.json": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="conflicts with a SQLBuild source",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when dbt seed fixture collides through compile attachment",
+            repo_files=base_repo_files()
+            | {
+                "dbt/target/manifest.json": """
 {
   "nodes": {
     "seed.analytics.countries": {
@@ -3147,10 +3153,10 @@ SELECT 1
   "macros": {}
 }
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "seeds/countries.csv": "country_code,country_name\nUS,United States\n",
-            "seeds/schema.yml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "seeds/countries.csv": "country_code,country_name\nUS,United States\n",
+                "seeds/schema.yml": """
 seeds:
   - name: countries
     columns:
@@ -3159,8 +3165,8 @@ seeds:
       - name: country_name
         type: VARCHAR
 """.strip()
-            + "\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -3172,23 +3178,23 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="conflicts with a SQLBuild seed",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled test body references an unknown macro mock",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "sources/raw.yml": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="conflicts with a SQLBuild seed",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled test body references an unknown macro mock",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
 """.strip()
-            + "\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -3203,22 +3209,22 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="mocks unknown macro 'missing_macro'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled test body references an unknown expected model",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="mocks unknown macro 'missing_macro'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled test body references an unknown expected model",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
 """.strip()
-            + "\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -3230,23 +3236,23 @@ __expected__missing_model AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="expects unknown model 'missing_model'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled test body uses a reserved helper cte name",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "sources/raw.yml": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="expects unknown model 'missing_model'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled test body uses a reserved helper cte name",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
 """.strip()
-            + "\n",
-            "tests/unit/orders.sql": """
+                + "\n",
+                "tests/unit/orders.sql": """
 TEST ();
 
 WITH
@@ -3261,174 +3267,174 @@ __expected__orders AS (
 )
 SELECT 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="uses reserved helper CTE name '__actual'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when a compiled audit body references an unknown macro",
-        repo_files=base_repo_files()
-        | {
-            "audits/orders.sql": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="uses reserved helper CTE name '__actual'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a compiled audit body references an unknown macro",
+            repo_files=base_repo_files()
+            | {
+                "audits/orders.sql": """
 AUDIT ();
 
 SELECT @missing_macro()
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="Unknown macro '@missing_macro'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when macro files collide during compile",
-        repo_files=base_repo_files()
-        | {
-            "macros/common.py": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="Unknown macro '@missing_macro'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when macro files collide during compile",
+            repo_files=base_repo_files()
+            | {
+                "macros/common.py": """
 def project_columns() -> str:
     return "order_id"
 """.strip()
-            + "\n",
-            "macros/nested/common.py": """
+                + "\n",
+                "macros/nested/common.py": """
 def project_columns() -> str:
     return "customer_id"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="Macro name collision for 'project_columns'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when model config field contains a macro call",
-        repo_files=base_repo_files()
-        | {
-            "macros/common.py": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="Macro name collision for 'project_columns'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when model config field contains a macro call",
+            repo_files=base_repo_files()
+            | {
+                "macros/common.py": """
 def dynamic_schema() -> str:
     return "marts"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": """
 MODEL (
   schema '@dynamic_schema()',
 );
 
 select 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="model config field 'schema' does not allow macros",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when the selected target does not exist",
-        repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
-        selected_target="missing",
-        run_id=None,
-        expected_error_fragment="Unknown target 'missing'",
-        expected_error_type=SpecConfigError,
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when the local target does not exist",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_local.toml": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="model config field 'schema' does not allow macros",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when the selected target does not exist",
+            repo_files=base_repo_files() | {"models/staging/orders.sql": "MODEL ();\n\nselect 1\n"},
+            selected_target="missing",
+            run_id=None,
+            expected_error_fragment="Unknown target 'missing'",
+            expected_error_type=SpecConfigError,
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when the local target does not exist",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_local.toml": """
 target = "missing"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="Unknown target 'missing'",
-        expected_error_type=SpecConfigError,
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when the project default target does not exist",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="Unknown target 'missing'",
+            expected_error_type=SpecConfigError,
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when the project default target does not exist",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "missing"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="Unknown target 'missing'",
-        expected_error_type=SpecConfigError,
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when effective vars reference an unknown project variable",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="Unknown target 'missing'",
+            expected_error_type=SpecConfigError,
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when effective vars reference an unknown project variable",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
 [vars]
 user = "${missing}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="effective vars references unknown variable 'missing'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when connection templates reference missing env vars",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="effective vars references unknown variable 'missing'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when connection templates reference missing env vars",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
 [connection]
 path = "${ENV:SQLBUILD_DB_PATH}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            "effective connection references missing ENV variable 'SQLBUILD_DB_PATH'"
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                "effective connection references missing ENV variable 'SQLBUILD_DB_PATH'"
+            ),
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when model config uses unknown ctx keys",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsErrorTestCase(
+            description="raises when model config uses unknown ctx keys",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": """
+                + "\n",
+                "models/staging/orders.sql": """
 MODEL (
   schema '${CTX:this}',
 );
 
 select 1
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="model config references unknown CTX key 'this'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when environment override references an unknown ctx key",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="model config references unknown CTX key 'this'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when environment override references an unknown ctx key",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -3441,20 +3447,20 @@ schema = "marts"
 [targets.dev]
 schema = "dev_${CTX:destination.missing}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            "environment schema references unknown CTX key 'destination.missing'"
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                "environment schema references unknown CTX key 'destination.missing'"
+            ),
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when environment database override references unavailable ctx value",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsErrorTestCase(
+            description="raises when environment database override references unavailable ctx value",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 default_target = "dev"
@@ -3464,20 +3470,20 @@ default_target = "dev"
 [targets.dev]
 database = "dev_${CTX:model.database}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            "environment database references CTX key 'model.database' but no value is available"
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                "environment database references CTX key 'model.database' but no value is available"
+            ),
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when effective vars contain a cyclic reference",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsErrorTestCase(
+            description="raises when effective vars contain a cyclic reference",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -3485,20 +3491,20 @@ adapter = "duckdb"
 first = "${second}"
 second = "${first}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            "effective vars contain a cyclic reference: first -> second -> first"
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                "effective vars contain a cyclic reference: first -> second -> first"
+            ),
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when templates use an unsupported namespace",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+        BuildCompileInputsErrorTestCase(
+            description="raises when templates use an unsupported namespace",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
@@ -3508,148 +3514,154 @@ user = "kevin"
 [defaults]
 schema = "${SQLBUILD:user}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="model config references unsupported template namespace 'SQLBUILD'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when connection values use disallowed ctx templates",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="model config references unsupported template namespace 'SQLBUILD'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when connection values use disallowed ctx templates",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
 [connection]
 path = "${CTX:schema}"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="effective connection does not allow CTX templates",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when model query sql has invalid syntax",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="SQL syntax error in model 'broken'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when legacy pre_hook config is used",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": ("MODEL (pre_hook 'SELECT 1');\n\nSELECT 1 AS id\n"),
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="uses legacy 'pre_hook'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when legacy post_hook config is used",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": ("MODEL (post_hook ['SELECT 1']);\n\nSELECT 1 AS id\n"),
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="uses legacy 'post_hook'",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when plural hooks use bare SQL strings",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": ("MODEL (post_hooks ['SELECT 1']);\n\nSELECT 1 AS id\n"),
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="post_hooks entries must use typed sql",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when pre_hook sql has invalid syntax",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": (
-                "MODEL (pre_hooks [sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
-            ),
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=r"model 'broken' pre_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when post_hook sql has invalid syntax",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": (
-                "MODEL (post_hooks [sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
-            ),
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=r"model 'broken' post_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when hook sql is not an executable statement",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": ("MODEL (post_hooks [sql('1 + 1')]);\n\nSELECT 1 AS id\n"),
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"model 'broken' post_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL .* "
-            r"must be a valid executable SQL statement"
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="effective connection does not allow CTX templates",
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when hook sql uses config template syntax",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": (
-                "MODEL (post_hooks ["
-                "sql('GRANT SELECT ON ${CTX:destination.qualified} TO analyst')"
-                "]);\n\n"
-                "SELECT 1 AS id\n"
-            ),
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"post_hooks\[0\] sql\(\"\.\.\.\"\) .* uses unsupported \$\{\.\.\.\} "
-            r"template syntax"
+        BuildCompileInputsErrorTestCase(
+            description="raises when model query sql has invalid syntax",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": "MODEL ();\n\nSELEC id FROM (SELECT 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="SQL syntax error in model 'broken'",
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when python hook references unknown hook name",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": (
-                'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
-            ),
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"post_hooks\[0\] python\(\"notify\"\) references an unknown hook"
+        BuildCompileInputsErrorTestCase(
+            description="raises when legacy pre_hook config is used",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": ("MODEL (pre_hook 'SELECT 1');\n\nSELECT 1 AS id\n"),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="uses legacy 'pre_hook'",
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises with nonzero hook index when later python hook is invalid",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": (
-                'MODEL (post_hooks [python("known"), python("missing")]);\n\nSELECT 1 AS id\n'
+        BuildCompileInputsErrorTestCase(
+            description="raises when legacy post_hook config is used",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    "MODEL (post_hook ['SELECT 1']);\n\nSELECT 1 AS id\n"
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="uses legacy 'post_hook'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when plural hooks use bare SQL strings",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    "MODEL (post_hooks ['SELECT 1']);\n\nSELECT 1 AS id\n"
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="post_hooks entries must use typed sql",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when pre_hook sql has invalid syntax",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    "MODEL (pre_hooks [sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=r"model 'broken' pre_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when post_hook sql has invalid syntax",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    "MODEL (post_hooks [sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=r"model 'broken' post_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when hook sql is not an executable statement",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    "MODEL (post_hooks [sql('1 + 1')]);\n\nSELECT 1 AS id\n"
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"model 'broken' post_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL .* "
+                r"must be a valid executable SQL statement"
             ),
-            "hooks/notifications.py": """
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when hook sql uses config template syntax",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    "MODEL (post_hooks ["
+                    "sql('GRANT SELECT ON ${CTX:destination.qualified} TO analyst')"
+                    "]);\n\n"
+                    "SELECT 1 AS id\n"
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] sql\(\"\.\.\.\"\) .* uses unsupported \$\{\.\.\.\} "
+                r"template syntax"
+            ),
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when python hook references unknown hook name",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] python\(\"notify\"\) references an unknown hook"
+            ),
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises with nonzero hook index when later python hook is invalid",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [python("known"), python("missing")]);\n\nSELECT 1 AS id\n'
+                ),
+                "hooks/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -3657,22 +3669,22 @@ from sqlbuild.hooks import hook
 def known(ctx):
     return None
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"post_hooks\[1\] python\(\"missing\"\) references an unknown hook"
-        ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when python hook is missing required kwarg",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": (
-                'MODEL (pre_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[1\] python\(\"missing\"\) references an unknown hook"
             ),
-            "hooks/notifications.py": """
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when python hook is missing required kwarg",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    'MODEL (pre_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+                ),
+                "hooks/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -3680,22 +3692,22 @@ from sqlbuild.hooks import hook
 def notify(ctx, channel):
     return None
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"pre_hooks\[0\] python\(\"notify\"\) is missing required argument\(s\): channel"
-        ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when python hook receives unknown kwarg",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": (
-                'MODEL (post_hooks [python("notify", unknown: "value")]);\n\nSELECT 1 AS id\n'
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"pre_hooks\[0\] python\(\"notify\"\) is missing required argument\(s\): channel"
             ),
-            "hooks/notifications.py": """
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when python hook receives unknown kwarg",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [python("notify", unknown: "value")]);\n\nSELECT 1 AS id\n'
+                ),
+                "hooks/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -3703,22 +3715,22 @@ from sqlbuild.hooks import hook
 def notify(ctx):
     return None
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"post_hooks\[0\] python\(\"notify\"\) has unknown argument\(s\): unknown"
-        ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when python hook requires positional only argument",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/broken.sql": (
-                'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] python\(\"notify\"\) has unknown argument\(s\): unknown"
             ),
-            "hooks/notifications.py": """
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when python hook requires positional only argument",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
+                ),
+                "hooks/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -3726,40 +3738,40 @@ from sqlbuild.hooks import hook
 def notify(ctx, channel, /):
     return None
 """.strip()
-            + "\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment=(
-            r"post_hooks\[0\] python\(\"notify\"\) cannot be configured .* "
-            r"channel"
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] python\(\"notify\"\) cannot be configured .* "
+                r"channel"
+            ),
         ),
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when model header tags is a string instead of list",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL (tags nightly);\n\nSELECT 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="tags must be a list",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when dbt ref has no discovered manifest",
-        repo_files=base_repo_files()
-        | {
-            "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="but no dbt manifest was found",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when dbt ref is ambiguous in discovered manifest",
-        repo_files=base_repo_files()
-        | {
-            "dbt/target/manifest.json": """
+        BuildCompileInputsErrorTestCase(
+            description="raises when model header tags is a string instead of list",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL (tags nightly);\n\nSELECT 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="tags must be a list",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when dbt ref has no discovered manifest",
+            repo_files=base_repo_files()
+            | {
+                "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="but no dbt manifest was found",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when dbt ref is ambiguous in discovered manifest",
+            repo_files=base_repo_files()
+            | {
+                "dbt/target/manifest.json": """
 {
   "nodes": {
     "model.analytics.orders": {
@@ -3779,18 +3791,18 @@ def notify(ctx, channel, /):
   }
 }
 """.strip()
-            + "\n",
-            "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="dbt model 'orders' is ambiguous across packages",
-    ),
-    BuildCompileInputsErrorTestCase(
-        description="raises when dbt and SQLBuild model names overlap",
-        repo_files=base_repo_files()
-        | {
-            "dbt/target/manifest.json": """
+                + "\n",
+                "models/fact_orders.sql": 'MODEL ();\n\nselect * from __dbt_ref("orders")\n',
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="dbt model 'orders' is ambiguous across packages",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when dbt and SQLBuild model names overlap",
+            repo_files=base_repo_files()
+            | {
+                "dbt/target/manifest.json": """
 {
   "nodes": {
     "model.analytics.orders": {
@@ -3803,20 +3815,15 @@ def notify(ctx, channel, /):
   }
 }
 """.strip()
-            + "\n",
-            "models/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        selected_target=None,
-        run_id=None,
-        expected_error_fragment="dbt and SQLBuild models share names: orders",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    COMPILE_ERROR_TEST_CASES,
-    ids=[case.description for case in COMPILE_ERROR_TEST_CASES],
+                + "\n",
+                "models/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="dbt and SQLBuild models share names: orders",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_clear_errors(
     test_case: BuildCompileInputsErrorTestCase,
@@ -3868,7 +3875,7 @@ def notify(ctx, channel):
             expected_marker_file_exists=False,
         ),
     ],
-    ids=["Python hook validation inspects signatures without executing hooks"],
+    ids=lambda case: case.description,
 )
 def test_given_python_hook_when_building_compile_inputs_then_validation_does_not_execute_hook(
     test_case: BuildCompileInputsPythonHookValidationTestCase,
@@ -3904,7 +3911,7 @@ def test_given_python_hook_when_building_compile_inputs_then_validation_does_not
             ],
         )
     ],
-    ids=["layers typed hooks from defaults and path defaults"],
+    ids=lambda case: case.description,
 )
 def test_given_typed_hook_defaults_when_building_config_then_layers_values(
     test_case: BuildModelConfigHooksTestCase,
@@ -3960,7 +3967,7 @@ SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
             expected_error_fragment="snapshot_schema_change=append_new_columns is not valid",
         ),
     ],
-    ids=["snapshot append new columns contract conflict has code"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_contract_schema_change_conflict_when_building_then_error_has_code(
     test_case: BuildCompileInputsErrorTestCase,
@@ -4007,7 +4014,7 @@ def test_given_snapshot_contract_schema_change_conflict_when_building_then_error
             expected_model_count=1,
         ),
     ],
-    ids=["model referencing a seed via __seed compiles successfully"],
+    ids=lambda case: case.description,
 )
 def test_given_model_referencing_seed_when_building_compile_inputs_then_succeeds(
     test_case: SeedRefRegressionTestCase,

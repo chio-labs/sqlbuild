@@ -11,44 +11,6 @@ from tests.unit.src.sqlbuild.shared.helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.shared.helpers.helpers import apply_no_progress_env
 
-PROGRESS_SPINNERS_DISABLED_TEST_CASES: tuple[ProgressSpinnersDisabledTestCase, ...] = (
-    ProgressSpinnersDisabledTestCase(
-        description="unset env keeps spinners enabled",
-        env_value=None,
-        expected_disabled=False,
-    ),
-    ProgressSpinnersDisabledTestCase(
-        description="truthy '1' disables spinners",
-        env_value="1",
-        expected_disabled=True,
-    ),
-    ProgressSpinnersDisabledTestCase(
-        description="truthy 'true' is case-insensitive and trimmed",
-        env_value="  TRUE  ",
-        expected_disabled=True,
-    ),
-    ProgressSpinnersDisabledTestCase(
-        description="truthy 'on' disables spinners",
-        env_value="on",
-        expected_disabled=True,
-    ),
-    ProgressSpinnersDisabledTestCase(
-        description="falsey '0' keeps spinners enabled",
-        env_value="0",
-        expected_disabled=False,
-    ),
-    ProgressSpinnersDisabledTestCase(
-        description="arbitrary value keeps spinners enabled",
-        env_value="maybe",
-        expected_disabled=False,
-    ),
-    ProgressSpinnersDisabledTestCase(
-        description="empty value keeps spinners enabled",
-        env_value="",
-        expected_disabled=False,
-    ),
-)
-
 
 class _TtyStream(io.StringIO):
     def isatty(self) -> bool:
@@ -57,8 +19,44 @@ class _TtyStream(io.StringIO):
 
 @pytest.mark.parametrize(
     "test_case",
-    PROGRESS_SPINNERS_DISABLED_TEST_CASES,
-    ids=[case.description for case in PROGRESS_SPINNERS_DISABLED_TEST_CASES],
+    (
+        ProgressSpinnersDisabledTestCase(
+            description="unset env keeps spinners enabled",
+            env_value=None,
+            expected_disabled=False,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="truthy '1' disables spinners",
+            env_value="1",
+            expected_disabled=True,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="truthy 'true' is case-insensitive and trimmed",
+            env_value="  TRUE  ",
+            expected_disabled=True,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="truthy 'on' disables spinners",
+            env_value="on",
+            expected_disabled=True,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="falsey '0' keeps spinners enabled",
+            env_value="0",
+            expected_disabled=False,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="arbitrary value keeps spinners enabled",
+            env_value="maybe",
+            expected_disabled=False,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="empty value keeps spinners enabled",
+            env_value="",
+            expected_disabled=False,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_no_progress_env_when_checking_then_reports_expected_disabled_state(
     test_case: ProgressSpinnersDisabledTestCase,
@@ -71,8 +69,44 @@ def test_given_no_progress_env_when_checking_then_reports_expected_disabled_stat
 
 @pytest.mark.parametrize(
     "test_case",
-    PROGRESS_SPINNERS_DISABLED_TEST_CASES,
-    ids=[case.description for case in PROGRESS_SPINNERS_DISABLED_TEST_CASES],
+    (
+        ProgressSpinnersDisabledTestCase(
+            description="unset env keeps spinners enabled",
+            env_value=None,
+            expected_disabled=False,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="truthy '1' disables spinners",
+            env_value="1",
+            expected_disabled=True,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="truthy 'true' is case-insensitive and trimmed",
+            env_value="  TRUE  ",
+            expected_disabled=True,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="truthy 'on' disables spinners",
+            env_value="on",
+            expected_disabled=True,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="falsey '0' keeps spinners enabled",
+            env_value="0",
+            expected_disabled=False,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="arbitrary value keeps spinners enabled",
+            env_value="maybe",
+            expected_disabled=False,
+        ),
+        ProgressSpinnersDisabledTestCase(
+            description="empty value keeps spinners enabled",
+            env_value="",
+            expected_disabled=False,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_no_progress_env_when_building_status_on_tty_then_toggles_spinner(
     test_case: ProgressSpinnersDisabledTestCase,

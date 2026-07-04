@@ -41,81 +41,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     table_exists,
 )
 
-DEPENDENCY_BASELINE_TEST_CASES: list[DependencyBaselineBuildE2ETestCase] = [
-    DependencyBaselineBuildE2ETestCase(
-        description="missing table upstream is baselined before downstream build",
-        project_name="dependency_baseline_missing_table",
-        upstream_sql=table_upstream_model_sql(amount=100),
-        downstream_sql=downstream_model_sql(),
-        prod_setup_sql=raw_orders_setup_sql(rows_sql="(1, 100, TIMESTAMP '2026-01-01 00:00:00')"),
-        setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-        command=("--no-color", "build", "--select", "downstream"),
-        expected_stdout_fragments=(
-            "Plan ready (1 selected)",
-            "Reused inputs (1)",
-            "upstream",
-            "from reuse origin target",
-            "downstream",
-            "Completed successfully.",
-        ),
-        unexpected_stdout_fragments=("cannot build selected scope",),
-        expected_upstream_rows=((1, 100),),
-        expected_downstream_rows=((1, 100),),
-        expected_fingerprint_rows=(("model", "downstream"),),
-    ),
-    DependencyBaselineBuildE2ETestCase(
-        description="current table upstream does not baseline",
-        project_name="dependency_baseline_current_table",
-        upstream_sql=table_upstream_model_sql(amount=110),
-        downstream_sql=downstream_model_sql(),
-        prod_setup_sql=raw_orders_setup_sql(rows_sql="(1, 110, TIMESTAMP '2026-01-01 00:00:00')"),
-        setup_commands=(
-            ("--no-color", "build", "--target", "prod", "--select", "upstream"),
-            ("--no-color", "build", "--target", "dev", "--select", "upstream"),
-        ),
-        command=("--no-color", "build", "--select", "downstream"),
-        expected_stdout_fragments=("Plan ready (1 selected)", "downstream"),
-        unexpected_stdout_fragments=("Reused inputs",),
-        expected_upstream_rows=((1, 110),),
-        expected_downstream_rows=((1, 110),),
-        expected_fingerprint_rows=(("model", "downstream"), ("model", "upstream")),
-    ),
-    DependencyBaselineBuildE2ETestCase(
-        description="stale table upstream is baselined before downstream build",
-        project_name="dependency_baseline_stale_table",
-        upstream_sql=table_upstream_model_sql(amount=120),
-        downstream_sql=downstream_model_sql(),
-        prod_setup_sql=raw_orders_setup_sql(rows_sql="(1, 120, TIMESTAMP '2026-01-01 00:00:00')"),
-        dev_setup_sql=(
-            "CREATE SCHEMA dev;\nCREATE TABLE dev.upstream AS SELECT 1 AS id, 999 AS amount;\n"
-        ),
-        setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-        command=("--no-color", "build", "--select", "downstream"),
-        expected_stdout_fragments=("Reused inputs (1)", "from reuse origin target"),
-        unexpected_stdout_fragments=("cannot build selected scope",),
-        expected_upstream_rows=((1, 120),),
-        expected_downstream_rows=((1, 120),),
-        expected_fingerprint_rows=(("model", "downstream"),),
-    ),
-    DependencyBaselineBuildE2ETestCase(
-        description="incremental upstream baselines whole relation without catch-up",
-        project_name="dependency_baseline_incremental_whole_relation",
-        upstream_sql=incremental_upstream_model_sql(),
-        downstream_sql=downstream_model_sql(),
-        prod_setup_sql=raw_orders_setup_sql(rows_sql="(1, 130, TIMESTAMP '2026-01-01 00:00:00')"),
-        setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-        dev_setup_sql=(
-            "INSERT INTO main.raw_orders VALUES (2, 131, TIMESTAMP '2026-01-02 00:00:00');\n"
-        ),
-        command=("--no-color", "build", "--select", "downstream"),
-        expected_stdout_fragments=("Reused inputs (1)", "from reuse origin target"),
-        unexpected_stdout_fragments=("incremental_append",),
-        expected_upstream_rows=((1, 130),),
-        expected_downstream_rows=((1, 130),),
-        expected_fingerprint_rows=(("model", "downstream"),),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -160,7 +85,7 @@ DEPENDENCY_BASELINE_TEST_CASES: list[DependencyBaselineBuildE2ETestCase] = [
             expected_fingerprint_rows=(("model", "downstream"), ("model", "upstream")),
         )
     ],
-    ids=["selected downstream clones missing upstream boundary from prod"],
+    ids=lambda case: case.description,
 )
 def test_given_selected_downstream_when_building_with_defer_clone_then_clones_boundary(
     tmp_path: Path,
@@ -172,8 +97,89 @@ def test_given_selected_downstream_when_building_with_defer_clone_then_clones_bo
 
 @pytest.mark.parametrize(
     "test_case",
-    DEPENDENCY_BASELINE_TEST_CASES,
-    ids=[case.description for case in DEPENDENCY_BASELINE_TEST_CASES],
+    [
+        DependencyBaselineBuildE2ETestCase(
+            description="missing table upstream is baselined before downstream build",
+            project_name="dependency_baseline_missing_table",
+            upstream_sql=table_upstream_model_sql(amount=100),
+            downstream_sql=downstream_model_sql(),
+            prod_setup_sql=raw_orders_setup_sql(
+                rows_sql="(1, 100, TIMESTAMP '2026-01-01 00:00:00')"
+            ),
+            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
+            command=("--no-color", "build", "--select", "downstream"),
+            expected_stdout_fragments=(
+                "Plan ready (1 selected)",
+                "Reused inputs (1)",
+                "upstream",
+                "from reuse origin target",
+                "downstream",
+                "Completed successfully.",
+            ),
+            unexpected_stdout_fragments=("cannot build selected scope",),
+            expected_upstream_rows=((1, 100),),
+            expected_downstream_rows=((1, 100),),
+            expected_fingerprint_rows=(("model", "downstream"),),
+        ),
+        DependencyBaselineBuildE2ETestCase(
+            description="current table upstream does not baseline",
+            project_name="dependency_baseline_current_table",
+            upstream_sql=table_upstream_model_sql(amount=110),
+            downstream_sql=downstream_model_sql(),
+            prod_setup_sql=raw_orders_setup_sql(
+                rows_sql="(1, 110, TIMESTAMP '2026-01-01 00:00:00')"
+            ),
+            setup_commands=(
+                ("--no-color", "build", "--target", "prod", "--select", "upstream"),
+                ("--no-color", "build", "--target", "dev", "--select", "upstream"),
+            ),
+            command=("--no-color", "build", "--select", "downstream"),
+            expected_stdout_fragments=("Plan ready (1 selected)", "downstream"),
+            unexpected_stdout_fragments=("Reused inputs",),
+            expected_upstream_rows=((1, 110),),
+            expected_downstream_rows=((1, 110),),
+            expected_fingerprint_rows=(("model", "downstream"), ("model", "upstream")),
+        ),
+        DependencyBaselineBuildE2ETestCase(
+            description="stale table upstream is baselined before downstream build",
+            project_name="dependency_baseline_stale_table",
+            upstream_sql=table_upstream_model_sql(amount=120),
+            downstream_sql=downstream_model_sql(),
+            prod_setup_sql=raw_orders_setup_sql(
+                rows_sql="(1, 120, TIMESTAMP '2026-01-01 00:00:00')"
+            ),
+            dev_setup_sql=(
+                "CREATE SCHEMA dev;\nCREATE TABLE dev.upstream AS SELECT 1 AS id, 999 AS amount;\n"
+            ),
+            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
+            command=("--no-color", "build", "--select", "downstream"),
+            expected_stdout_fragments=("Reused inputs (1)", "from reuse origin target"),
+            unexpected_stdout_fragments=("cannot build selected scope",),
+            expected_upstream_rows=((1, 120),),
+            expected_downstream_rows=((1, 120),),
+            expected_fingerprint_rows=(("model", "downstream"),),
+        ),
+        DependencyBaselineBuildE2ETestCase(
+            description="incremental upstream baselines whole relation without catch-up",
+            project_name="dependency_baseline_incremental_whole_relation",
+            upstream_sql=incremental_upstream_model_sql(),
+            downstream_sql=downstream_model_sql(),
+            prod_setup_sql=raw_orders_setup_sql(
+                rows_sql="(1, 130, TIMESTAMP '2026-01-01 00:00:00')"
+            ),
+            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
+            dev_setup_sql=(
+                "INSERT INTO main.raw_orders VALUES (2, 131, TIMESTAMP '2026-01-02 00:00:00');\n"
+            ),
+            command=("--no-color", "build", "--select", "downstream"),
+            expected_stdout_fragments=("Reused inputs (1)", "from reuse origin target"),
+            unexpected_stdout_fragments=("incremental_append",),
+            expected_upstream_rows=((1, 130),),
+            expected_downstream_rows=((1, 130),),
+            expected_fingerprint_rows=(("model", "downstream"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dependency_baseline_project_when_building_downstream_then_prepares_upstream(
     tmp_path: Path,
@@ -205,7 +211,7 @@ def test_given_dependency_baseline_project_when_building_downstream_then_prepare
             expected_c_rows=((1,), (2,)),
         )
     ],
-    ids=["out of selection changed upstream warns without rerunning leaf"],
+    ids=lambda case: case.description,
 )
 def test_given_changed_unselected_upstream_when_building_leaf_then_warns_and_noops(
     tmp_path: Path,
@@ -271,376 +277,6 @@ def test_given_changed_unselected_upstream_when_building_leaf_then_warns_and_noo
     assert tuple(c_rows) == test_case.expected_c_rows
 
 
-STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES: list[StandardPythonBuildHardeningE2ETestCase] = [
-    StandardPythonBuildHardeningE2ETestCase(
-        description="ingress Python failure blocks downstream source load and model",
-        project_name="python_build_ingress_failure_project",
-        command=("--no-color", "build", "--select", "+fact_orders"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_ingress_failure_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_ingress_failure_project.duckdb"\n'
-            ),
-            "tasks/prepare.py": (
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def prepare_orders(ctx):\n"
-                "    raise RuntimeError('prepare failed')\n"
-            ),
-            "loaders/raw.py": (
-                "from tasks.prepare import prepare_orders\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(prepare_orders,))\n"
-                "def raw_orders(ctx):\n"
-                "    return [{'order_id': 1}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-        },
-        expected_exit_code=1,
-        expected_output_fragments=(
-            "Python ingress (1)",
-            "python    task      prepare_orders",
-            "FAIL",
-            "Python node failures:",
-        ),
-        expected_absent_tables=("raw_orders", "fact_orders"),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="ingress hard skip blocks downstream source load and model",
-        project_name="python_build_ingress_skip_project",
-        command=("--no-color", "build", "--select", "+fact_orders"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_ingress_skip_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_ingress_skip_project.duckdb"\n'
-            ),
-            "tasks/prepare.py": (
-                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def prepare_orders(ctx):\n"
-                "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
-            ),
-            "loaders/raw.py": (
-                "from tasks.prepare import prepare_orders\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(prepare_orders,))\n"
-                "def raw_orders(ctx):\n"
-                "    return [{'order_id': 1}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-        },
-        expected_exit_code=0,
-        expected_output_fragments=(
-            "Python ingress (1)",
-            "python    task      prepare_orders",
-            "SKIP",
-            "no input",
-        ),
-        expected_absent_tables=("raw_orders", "fact_orders"),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="non json python result payload fails at producer",
-        project_name="python_build_non_json_result_project",
-        command=("--no-color", "build", "--select", "produce_bad_result"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_non_json_result_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_non_json_result_project.duckdb"\n'
-            ),
-            "tasks/bad.py": (
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def produce_bad_result(ctx):\n"
-                "    return ctx.result(payload={'bad': {'a', 'b'}})\n"
-            ),
-        },
-        expected_exit_code=1,
-        expected_output_fragments=(
-            "produce_bad_result",
-            "non-JSON-serializable payload",
-        ),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="non json python result metadata fails at producer",
-        project_name="python_build_non_json_metadata_project",
-        command=("--no-color", "build", "--select", "produce_bad_metadata"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_non_json_metadata_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_non_json_metadata_project.duckdb"\n'
-            ),
-            "tasks/bad.py": (
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def produce_bad_metadata(ctx):\n"
-                "    return ctx.result(payload={}, metadata={'bad': {'a', 'b'}})\n"
-            ),
-        },
-        expected_exit_code=1,
-        expected_output_fragments=(
-            "produce_bad_metadata",
-            "non-JSON-serializable metadata",
-        ),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="read-side Python failure fails build after SQL succeeds",
-        project_name="python_build_read_side_failure_project",
-        command=("--no-color", "build", "--select", "fact_orders fail_after_fact"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_read_side_failure_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_read_side_failure_project.duckdb"\n'
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    expression: SELECT 1 AS order_id\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-            "tasks/profile.py": (
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('fact_orders'))\n"
-                "def fail_after_fact(ctx):\n"
-                "    raise RuntimeError('profile failed')\n"
-            ),
-        },
-        expected_exit_code=1,
-        expected_output_fragments=(
-            "fact_orders",
-            "python    task      fail_after_fact",
-            "FAIL",
-            "Python node failures:",
-        ),
-        expected_present_tables=("fact_orders",),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="read-side hard skip is reported after SQL succeeds",
-        project_name="python_build_read_side_hard_skip_project",
-        command=("--no-color", "build", "--select", "fact_orders skip_after_fact"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_read_side_hard_skip_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_read_side_hard_skip_project.duckdb"\n'
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    expression: SELECT 1 AS order_id\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-            "tasks/profile.py": (
-                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('fact_orders'))\n"
-                "def skip_after_fact(ctx):\n"
-                "    return ctx.skip('no profile needed', mode=SkipMode.HARD)\n"
-            ),
-        },
-        expected_exit_code=0,
-        expected_output_fragments=(
-            "fact_orders",
-            "python    task      skip_after_fact",
-            "SKIP",
-            "no profile needed",
-        ),
-        expected_present_tables=("fact_orders",),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="read-side soft skip is reported after SQL succeeds",
-        project_name="python_build_read_side_soft_skip_project",
-        command=("--no-color", "build", "--select", "fact_orders soft_skip_after_fact"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_read_side_soft_skip_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_read_side_soft_skip_project.duckdb"\n'
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    expression: SELECT 1 AS order_id\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-            "tasks/profile.py": (
-                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('fact_orders'))\n"
-                "def soft_skip_after_fact(ctx):\n"
-                "    return ctx.skip('optional profile skipped', mode=SkipMode.SOFT)\n"
-            ),
-        },
-        expected_exit_code=0,
-        expected_output_fragments=(
-            "fact_orders",
-            "python    task      soft_skip_after_fact",
-            "SKIP",
-            "optional profile skipped",
-        ),
-        expected_present_tables=("fact_orders",),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="no-python suppresses read-side Python but keeps ingress Python",
-        project_name="python_build_no_python_project",
-        command=("--no-color", "build", "--select", "+fact_orders", "--no-python"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_no_python_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_no_python_project.duckdb"\n'
-            ),
-            "tasks/prepare.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def prepare_orders(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
-                "    marker.write_text('prepared')\n"
-                "    return ctx.result(payload={'order_id': 3})\n"
-            ),
-            "loaders/raw.py": (
-                "from tasks.prepare import prepare_orders\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(prepare_orders,))\n"
-                "def raw_orders(ctx):\n"
-                "    return [{'order_id': 3}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-            "tasks/profile.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('fact_orders'))\n"
-                "def profile_fact(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('profile.txt')\n"
-                "    marker.write_text('profiled')\n"
-                "    return ctx.result()\n"
-            ),
-        },
-        expected_exit_code=0,
-        expected_output_fragments=(
-            "python    task      prepare_orders",
-            "OK",
-        ),
-        expected_present_tables=("raw_orders", "fact_orders"),
-        expected_markers=(("prepared.txt", "prepared"),),
-        expected_absent_paths=("profile.txt",),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="source relation resolves in direct read-side Python task",
-        project_name="python_build_source_relation_project",
-        command=("--no-color", "build", "--select", "+raw_orders profile_raw_orders"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_build_source_relation_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_build_source_relation_project.duckdb"\n'
-            ),
-            "loaders/raw.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader\n"
-                "def raw_orders(ctx):\n"
-                "    return [{'order_id': 5}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "tasks/profile.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.refs import source\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=source('raw_orders'))\n"
-                "def profile_raw_orders(ctx):\n"
-                "    relation = ctx.relation(source('raw_orders'))\n"
-                "    value = ctx.query(f'SELECT order_id FROM {relation}').fetchall()[0][0]\n"
-                "    marker = Path(__file__).parents[1].joinpath('source_profile.txt')\n"
-                "    marker.write_text(str(value))\n"
-                "    return ctx.result(metadata={'source_order_id': value})\n"
-            ),
-        },
-        expected_exit_code=0,
-        expected_output_fragments=(
-            "python    task      profile_raw_orders",
-            "OK",
-        ),
-        expected_present_tables=("raw_orders",),
-        expected_markers=(("source_profile.txt", "5"),),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -660,7 +296,7 @@ STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES: list[StandardPythonBuildHardeningE2E
             ),
         )
     ],
-    ids=["standard changes-only build prunes unchanged selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_building_changes_only_then_prunes_unchanged_model(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -720,7 +356,7 @@ def test_given_built_direct_project_when_building_changes_only_then_prunes_uncha
             expected_query_results=((2,),),
         )
     ],
-    ids=["standard changes-only build executes changed selected model"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_query_change_when_building_changes_only_then_executes_changed_model(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -781,7 +417,7 @@ def test_given_direct_query_change_when_building_changes_only_then_executes_chan
             expected_output_fragments=("fact_orders",),
         )
     ],
-    ids=["direct build persists function hashes in model metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_direct_function_dependency_when_building_then_persists_function_hash_metadata(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -851,7 +487,7 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
             ),
         )
     ],
-    ids=["standard changes-only build prunes read-side Python for unchanged SQL"],
+    ids=lambda case: case.description,
 )
 def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_read_side_python(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -918,7 +554,7 @@ def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_rea
             unexpected_output_fragments=(),
         )
     ],
-    ids=["standard normal build appends source freshness after success"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_when_building_normally_then_writes_state_after_success(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -993,7 +629,7 @@ def test_given_source_freshness_when_building_normally_then_writes_state_after_s
             unexpected_output_fragments=("Plan ready (0 selected)",),
         )
     ],
-    ids=["standard changes-only persists plan-time source freshness observation"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_changes_during_build_when_appending_then_persists_plan_time_value(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -1086,7 +722,7 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
             unexpected_output_fragments=("Execution  sqb build", "TOTAL=0"),
         )
     ],
-    ids=["direct timestamp source freshness respects lag tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_within_tolerance(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -1170,7 +806,7 @@ def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_wit
             expected_output_fragments=("orders", "payments", "FAIL"),
         )
     ],
-    ids=["standard source freshness appends independent successful branch only"],
+    ids=lambda case: case.description,
 )
 def test_given_independent_source_branch_failure_when_building_then_appends_successful_source_only(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -1284,7 +920,7 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
             ),
         )
     ],
-    ids=["source freshness error blocks affected branch but unrelated branch runs"],
+    ids=lambda case: case.description,
 )
 def test_given_source_freshness_error_when_building_then_blocks_only_affected_branch(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -1369,7 +1005,7 @@ def test_given_source_freshness_error_when_building_then_blocks_only_affected_br
             expected_output_fragments=("fact_orders", "FAIL"),
         )
     ],
-    ids=["standard source freshness shared downstream failure blocks all sources"],
+    ids=lambda case: case.description,
 )
 def test_given_shared_downstream_failure_when_building_then_blocks_all_source_appends(
     test_case: DirectChangesOnlyBuildE2ETestCase,
@@ -1465,8 +1101,375 @@ def test_given_shared_downstream_failure_when_building_then_blocks_all_source_ap
 
 @pytest.mark.parametrize(
     "test_case",
-    STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES,
-    ids=[case.description for case in STANDARD_PYTHON_BUILD_HARDENING_TEST_CASES],
+    [
+        StandardPythonBuildHardeningE2ETestCase(
+            description="ingress Python failure blocks downstream source load and model",
+            project_name="python_build_ingress_failure_project",
+            command=("--no-color", "build", "--select", "+fact_orders"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_ingress_failure_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_ingress_failure_project.duckdb"\n'
+                ),
+                "tasks/prepare.py": (
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def prepare_orders(ctx):\n"
+                    "    raise RuntimeError('prepare failed')\n"
+                ),
+                "loaders/raw.py": (
+                    "from tasks.prepare import prepare_orders\n"
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader(depends_on=(prepare_orders,))\n"
+                    "def raw_orders(ctx):\n"
+                    "    return [{'order_id': 1}]\n"
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_orders\n"
+                    "    managed: true\n"
+                    "    write_strategy: table\n"
+                    "    columns:\n"
+                    "      - name: order_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/fact_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+                ),
+            },
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "Python ingress (1)",
+                "python    task      prepare_orders",
+                "FAIL",
+                "Python node failures:",
+            ),
+            expected_absent_tables=("raw_orders", "fact_orders"),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="ingress hard skip blocks downstream source load and model",
+            project_name="python_build_ingress_skip_project",
+            command=("--no-color", "build", "--select", "+fact_orders"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_ingress_skip_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_ingress_skip_project.duckdb"\n'
+                ),
+                "tasks/prepare.py": (
+                    "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def prepare_orders(ctx):\n"
+                    "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+                ),
+                "loaders/raw.py": (
+                    "from tasks.prepare import prepare_orders\n"
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader(depends_on=(prepare_orders,))\n"
+                    "def raw_orders(ctx):\n"
+                    "    return [{'order_id': 1}]\n"
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_orders\n"
+                    "    managed: true\n"
+                    "    write_strategy: table\n"
+                    "    columns:\n"
+                    "      - name: order_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/fact_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "Python ingress (1)",
+                "python    task      prepare_orders",
+                "SKIP",
+                "no input",
+            ),
+            expected_absent_tables=("raw_orders", "fact_orders"),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="non json python result payload fails at producer",
+            project_name="python_build_non_json_result_project",
+            command=("--no-color", "build", "--select", "produce_bad_result"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_non_json_result_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_non_json_result_project.duckdb"\n'
+                ),
+                "tasks/bad.py": (
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def produce_bad_result(ctx):\n"
+                    "    return ctx.result(payload={'bad': {'a', 'b'}})\n"
+                ),
+            },
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "produce_bad_result",
+                "non-JSON-serializable payload",
+            ),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="non json python result metadata fails at producer",
+            project_name="python_build_non_json_metadata_project",
+            command=("--no-color", "build", "--select", "produce_bad_metadata"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_non_json_metadata_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_non_json_metadata_project.duckdb"\n'
+                ),
+                "tasks/bad.py": (
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def produce_bad_metadata(ctx):\n"
+                    "    return ctx.result(payload={}, metadata={'bad': {'a', 'b'}})\n"
+                ),
+            },
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "produce_bad_metadata",
+                "non-JSON-serializable metadata",
+            ),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="read-side Python failure fails build after SQL succeeds",
+            project_name="python_build_read_side_failure_project",
+            command=("--no-color", "build", "--select", "fact_orders fail_after_fact"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_read_side_failure_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_read_side_failure_project.duckdb"\n'
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_orders\n"
+                    "    expression: SELECT 1 AS order_id\n"
+                    "    columns:\n"
+                    "      - name: order_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/fact_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+                ),
+                "tasks/profile.py": (
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('fact_orders'))\n"
+                    "def fail_after_fact(ctx):\n"
+                    "    raise RuntimeError('profile failed')\n"
+                ),
+            },
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "fact_orders",
+                "python    task      fail_after_fact",
+                "FAIL",
+                "Python node failures:",
+            ),
+            expected_present_tables=("fact_orders",),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="read-side hard skip is reported after SQL succeeds",
+            project_name="python_build_read_side_hard_skip_project",
+            command=("--no-color", "build", "--select", "fact_orders skip_after_fact"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_read_side_hard_skip_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_read_side_hard_skip_project.duckdb"\n'
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_orders\n"
+                    "    expression: SELECT 1 AS order_id\n"
+                    "    columns:\n"
+                    "      - name: order_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/fact_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+                ),
+                "tasks/profile.py": (
+                    "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('fact_orders'))\n"
+                    "def skip_after_fact(ctx):\n"
+                    "    return ctx.skip('no profile needed', mode=SkipMode.HARD)\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "fact_orders",
+                "python    task      skip_after_fact",
+                "SKIP",
+                "no profile needed",
+            ),
+            expected_present_tables=("fact_orders",),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="read-side soft skip is reported after SQL succeeds",
+            project_name="python_build_read_side_soft_skip_project",
+            command=("--no-color", "build", "--select", "fact_orders soft_skip_after_fact"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_read_side_soft_skip_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_read_side_soft_skip_project.duckdb"\n'
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_orders\n"
+                    "    expression: SELECT 1 AS order_id\n"
+                    "    columns:\n"
+                    "      - name: order_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/fact_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+                ),
+                "tasks/profile.py": (
+                    "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('fact_orders'))\n"
+                    "def soft_skip_after_fact(ctx):\n"
+                    "    return ctx.skip('optional profile skipped', mode=SkipMode.SOFT)\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "fact_orders",
+                "python    task      soft_skip_after_fact",
+                "SKIP",
+                "optional profile skipped",
+            ),
+            expected_present_tables=("fact_orders",),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="no-python suppresses read-side Python but keeps ingress Python",
+            project_name="python_build_no_python_project",
+            command=("--no-color", "build", "--select", "+fact_orders", "--no-python"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_no_python_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_no_python_project.duckdb"\n'
+                ),
+                "tasks/prepare.py": (
+                    "from pathlib import Path\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def prepare_orders(ctx):\n"
+                    "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                    "    marker.write_text('prepared')\n"
+                    "    return ctx.result(payload={'order_id': 3})\n"
+                ),
+                "loaders/raw.py": (
+                    "from tasks.prepare import prepare_orders\n"
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader(depends_on=(prepare_orders,))\n"
+                    "def raw_orders(ctx):\n"
+                    "    return [{'order_id': 3}]\n"
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_orders\n"
+                    "    managed: true\n"
+                    "    write_strategy: table\n"
+                    "    columns:\n"
+                    "      - name: order_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/fact_orders.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+                ),
+                "tasks/profile.py": (
+                    "from pathlib import Path\n"
+                    "from sqlbuild.refs import model\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=model('fact_orders'))\n"
+                    "def profile_fact(ctx):\n"
+                    "    marker = Path(__file__).parents[1].joinpath('profile.txt')\n"
+                    "    marker.write_text('profiled')\n"
+                    "    return ctx.result()\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "python    task      prepare_orders",
+                "OK",
+            ),
+            expected_present_tables=("raw_orders", "fact_orders"),
+            expected_markers=(("prepared.txt", "prepared"),),
+            expected_absent_paths=("profile.txt",),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="source relation resolves in direct read-side Python task",
+            project_name="python_build_source_relation_project",
+            command=("--no-color", "build", "--select", "+raw_orders profile_raw_orders"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_build_source_relation_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_build_source_relation_project.duckdb"\n'
+                ),
+                "loaders/raw.py": (
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader\n"
+                    "def raw_orders(ctx):\n"
+                    "    return [{'order_id': 5}]\n"
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_orders\n"
+                    "    managed: true\n"
+                    "    write_strategy: table\n"
+                    "    columns:\n"
+                    "      - name: order_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "tasks/profile.py": (
+                    "from pathlib import Path\n"
+                    "from sqlbuild.refs import source\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task(depends_on=source('raw_orders'))\n"
+                    "def profile_raw_orders(ctx):\n"
+                    "    relation = ctx.relation(source('raw_orders'))\n"
+                    "    value = ctx.query(f'SELECT order_id FROM {relation}').fetchall()[0][0]\n"
+                    "    marker = Path(__file__).parents[1].joinpath('source_profile.txt')\n"
+                    "    marker.write_text(str(value))\n"
+                    "    return ctx.result(metadata={'source_order_id': value})\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=(
+                "python    task      profile_raw_orders",
+                "OK",
+            ),
+            expected_present_tables=("raw_orders",),
+            expected_markers=(("source_profile.txt", "5"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_python_lifecycle_edge_case_when_building_then_direct_build_hardens_behavior(
     test_case: StandardPythonBuildHardeningE2ETestCase,
@@ -1503,85 +1506,82 @@ def test_given_python_lifecycle_edge_case_when_building_then_direct_build_harden
         assert not (project_dir / absent_path).exists()
 
 
-STANDARD_SOURCE_ONLY_BUILD_POLICY_TEST_CASES: list[StandardPythonBuildHardeningE2ETestCase] = [
-    StandardPythonBuildHardeningE2ETestCase(
-        description="direct build fails when skipped intermediate target is missing",
-        project_name="direct_build_missing_intermediate_project",
-        command=("--no-color", "build", "--select", "raw_events"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "direct_build_missing_intermediate_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "direct_build_missing_intermediate_project.duckdb"\n'
-            ),
-            "loaders/raw.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(write_strategy='table', columns=[\n"
-                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-                "])\n"
-                "def fetch_events(ctx):\n"
-                "    return [{'event_id': 1}]\n\n"
-                "@loader(depends_on=[fetch_events])\n"
-                "def raw_events(ctx):\n"
-                "    events = ctx.loader(fetch_events)\n"
-                "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
-                "SELECT event_id FROM {events.destination}')\n"
-            ),
-            "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
-        },
-        expected_exit_code=1,
-        expected_output_fragments=("requires intermediate loader 'fetch_events'",),
-    ),
-    StandardPythonBuildHardeningE2ETestCase(
-        description="direct build no-python source only warns and skips task ingress",
-        project_name="direct_build_no_python_source_only_project",
-        command=("--no-color", "build", "--select", "raw_events", "--no-python"),
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "direct_build_no_python_source_only_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "direct_build_no_python_source_only_project.duckdb"\n'
-            ),
-            "tasks/prepare.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def prepare_events(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
-                "    marker.write_text('prepared')\n"
-                "    return ctx.result()\n"
-            ),
-            "loaders/raw.py": (
-                "from sqlbuild.loaders import loader\n"
-                "from tasks.prepare import prepare_events\n\n"
-                "@loader(depends_on=[prepare_events])\n"
-                "def raw_events(ctx):\n"
-                "    return [{'event_id': 1}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_events\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: event_id\n"
-                "        type: INTEGER\n"
-            ),
-        },
-        expected_exit_code=0,
-        expected_output_fragments=("source    raw_events", "unselected upstream task"),
-        expected_present_tables=("raw_events",),
-        expected_absent_paths=("prepared.txt",),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    STANDARD_SOURCE_ONLY_BUILD_POLICY_TEST_CASES,
-    ids=[case.description for case in STANDARD_SOURCE_ONLY_BUILD_POLICY_TEST_CASES],
+    [
+        StandardPythonBuildHardeningE2ETestCase(
+            description="direct build fails when skipped intermediate target is missing",
+            project_name="direct_build_missing_intermediate_project",
+            command=("--no-color", "build", "--select", "raw_events"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "direct_build_missing_intermediate_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "direct_build_missing_intermediate_project.duckdb"\n'
+                ),
+                "loaders/raw.py": (
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader(write_strategy='table', columns=[\n"
+                    "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                    "])\n"
+                    "def fetch_events(ctx):\n"
+                    "    return [{'event_id': 1}]\n\n"
+                    "@loader(depends_on=[fetch_events])\n"
+                    "def raw_events(ctx):\n"
+                    "    events = ctx.loader(fetch_events)\n"
+                    "    ctx.execute_sql(f'CREATE OR REPLACE TABLE {ctx.destination} AS "
+                    "SELECT event_id FROM {events.destination}')\n"
+                ),
+                "sources/raw.yml": "sources:\n  - name: raw_events\n    managed: true\n",
+            },
+            expected_exit_code=1,
+            expected_output_fragments=("requires intermediate loader 'fetch_events'",),
+        ),
+        StandardPythonBuildHardeningE2ETestCase(
+            description="direct build no-python source only warns and skips task ingress",
+            project_name="direct_build_no_python_source_only_project",
+            command=("--no-color", "build", "--select", "raw_events", "--no-python"),
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "direct_build_no_python_source_only_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "direct_build_no_python_source_only_project.duckdb"\n'
+                ),
+                "tasks/prepare.py": (
+                    "from pathlib import Path\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def prepare_events(ctx):\n"
+                    "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                    "    marker.write_text('prepared')\n"
+                    "    return ctx.result()\n"
+                ),
+                "loaders/raw.py": (
+                    "from sqlbuild.loaders import loader\n"
+                    "from tasks.prepare import prepare_events\n\n"
+                    "@loader(depends_on=[prepare_events])\n"
+                    "def raw_events(ctx):\n"
+                    "    return [{'event_id': 1}]\n"
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_events\n"
+                    "    managed: true\n"
+                    "    write_strategy: table\n"
+                    "    columns:\n"
+                    "      - name: event_id\n"
+                    "        type: INTEGER\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("source    raw_events", "unselected upstream task"),
+            expected_present_tables=("raw_events",),
+            expected_absent_paths=("prepared.txt",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_direct_source_only_build_when_loader_has_ingress_then_enforces_source_policy(
     tmp_path: Path,
@@ -1646,7 +1646,7 @@ def test_given_direct_source_only_build_when_loader_has_ingress_then_enforces_so
             expected_present_tables=("raw_events",),
         )
     ],
-    ids=["direct build reuses existing intermediate target without rerunning loader"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_intermediate_target_when_building_source_only_then_reuses_target(
     tmp_path: Path,
@@ -1706,7 +1706,7 @@ def test_given_existing_intermediate_target_when_building_source_only_then_reuse
             expected_json_status="success",
         )
     ],
-    ids=["build json includes Python node results"],
+    ids=lambda case: case.description,
 )
 def test_given_python_asset_with_json_output_when_building_then_json_includes_python_result(
     test_case: StandardPythonBuildHardeningE2ETestCase,
@@ -1781,7 +1781,7 @@ def test_given_python_asset_with_json_output_when_building_then_json_includes_py
             expected_asset_materialized="true",
         )
     ],
-    ids=["build executes full Python SQL Python spine in lifecycle order"],
+    ids=lambda case: case.description,
 )
 def test_given_python_sql_python_spine_when_building_then_orders_python_around_sql(
     test_case: PythonBuildE2ETestCase,
@@ -1937,7 +1937,7 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
             expected_failed_status="failed",
         )
     ],
-    ids=["later task reads persisted history and explicit run id"],
+    ids=lambda case: case.description,
 )
 def test_given_prior_python_task_result_when_later_task_reads_result_then_uses_persisted_state(
     test_case: PythonPersistedResultBuildE2ETestCase,
@@ -2079,7 +2079,7 @@ def test_given_prior_python_task_result_when_later_task_reads_result_then_uses_p
             expected_loader_text="raw_events:raw_events:1",
         )
     ],
-    ids=["later task reads prior persisted loader result"],
+    ids=lambda case: case.description,
 )
 def test_given_prior_loader_result_when_later_task_reads_result_then_uses_loader_summary(
     test_case: PythonLoaderPersistedResultBuildE2ETestCase,
@@ -2151,88 +2151,87 @@ def test_given_prior_loader_result_when_later_task_reads_result_then_uses_loader
     )
 
 
-LOADER_STATUS_RESULT_TEST_CASES: tuple[PythonLoaderStatusResultBuildE2ETestCase, ...] = (
-    PythonLoaderStatusResultBuildE2ETestCase(
-        description="failed loader persists failed result row",
-        project_name="python_failed_loader_result_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_failed_loader_result_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_failed_loader_result_project.duckdb"\n'
-            ),
-            "loaders/events.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader\n"
-                "def raw_events(ctx):\n"
-                "    raise RuntimeError('loader failed')\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_events\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: event_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_events.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
-            ),
-        },
-        command=("--no-color", "build", "--select", "fact_events"),
-        expected_exit_code=1,
-        expected_rows=(("raw_events", "failed", "loader failed"),),
-    ),
-    PythonLoaderStatusResultBuildE2ETestCase(
-        description="skipped loader persists skipped result row",
-        project_name="python_skipped_loader_result_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_skipped_loader_result_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_skipped_loader_result_project.duckdb"\n'
-            ),
-            "tasks/prepare.py": (
-                "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def prepare_events(ctx):\n"
-                "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
-            ),
-            "loaders/events.py": (
-                "from tasks.prepare import prepare_events\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(prepare_events,))\n"
-                "def raw_events(ctx):\n"
-                "    return [{'event_id': 1}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_events\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: event_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_events.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
-            ),
-        },
-        command=("--no-color", "build", "--select", "+fact_events"),
-        expected_exit_code=0,
-        expected_rows=(("raw_events", "skipped", "Upstream node hard-skipped: prepare_events"),),
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    LOADER_STATUS_RESULT_TEST_CASES,
-    ids=[case.description for case in LOADER_STATUS_RESULT_TEST_CASES],
+    (
+        PythonLoaderStatusResultBuildE2ETestCase(
+            description="failed loader persists failed result row",
+            project_name="python_failed_loader_result_project",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_failed_loader_result_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_failed_loader_result_project.duckdb"\n'
+                ),
+                "loaders/events.py": (
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader\n"
+                    "def raw_events(ctx):\n"
+                    "    raise RuntimeError('loader failed')\n"
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_events\n"
+                    "    managed: true\n"
+                    "    write_strategy: table\n"
+                    "    columns:\n"
+                    "      - name: event_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/fact_events.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
+                ),
+            },
+            command=("--no-color", "build", "--select", "fact_events"),
+            expected_exit_code=1,
+            expected_rows=(("raw_events", "failed", "loader failed"),),
+        ),
+        PythonLoaderStatusResultBuildE2ETestCase(
+            description="skipped loader persists skipped result row",
+            project_name="python_skipped_loader_result_project",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "python_skipped_loader_result_project"\n'
+                    'adapter = "duckdb"\n\n'
+                    "[connection]\n"
+                    'database = "python_skipped_loader_result_project.duckdb"\n'
+                ),
+                "tasks/prepare.py": (
+                    "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
+                    "from sqlbuild.tasks import task\n\n"
+                    "@task\n"
+                    "def prepare_events(ctx):\n"
+                    "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+                ),
+                "loaders/events.py": (
+                    "from tasks.prepare import prepare_events\n"
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader(depends_on=(prepare_events,))\n"
+                    "def raw_events(ctx):\n"
+                    "    return [{'event_id': 1}]\n"
+                ),
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_events\n"
+                    "    managed: true\n"
+                    "    write_strategy: table\n"
+                    "    columns:\n"
+                    "      - name: event_id\n"
+                    "        type: INTEGER\n"
+                ),
+                "models/fact_events.sql": (
+                    'MODEL (materialized table);\n\nSELECT * FROM __source("raw_events")\n'
+                ),
+            },
+            command=("--no-color", "build", "--select", "+fact_events"),
+            expected_exit_code=0,
+            expected_rows=(
+                ("raw_events", "skipped", "Upstream node hard-skipped: prepare_events"),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_loader_status_result_when_building_then_persists_loader_status_row(
     test_case: PythonLoaderStatusResultBuildE2ETestCase,
@@ -2277,7 +2276,7 @@ def test_given_loader_status_result_when_building_then_persists_loader_status_ro
             ),
         )
     ],
-    ids=["same node name reads only active target result"],
+    ids=lambda case: case.description,
 )
 def test_given_same_node_results_in_multiple_targets_when_reading_then_uses_active_target(
     test_case: PythonTargetIsolationBuildE2ETestCase,
@@ -2425,7 +2424,7 @@ def test_given_same_node_results_in_multiple_targets_when_reading_then_uses_acti
             ),
         ),
     ],
-    ids=["build materializes all tables views and seeds with correct data"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_project_when_running_build_then_warehouse_state_matches_expected(
     test_case: BuildE2ETestCase,

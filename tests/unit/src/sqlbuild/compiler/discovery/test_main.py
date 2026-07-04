@@ -141,7 +141,7 @@ class SlackProvider(Provider):
             expected_provider_class_names=("SlackProvider",),
         )
     ],
-    ids=["discovers raw project inputs across authored project surfaces"],
+    ids=lambda case: case.description,
 )
 def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expected_raw_inventory(
     test_case: DiscoverProjectInputsTestCase,
@@ -296,13 +296,15 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert discovered_inputs.local_config.target == "dev"
 
 
-FACTORY_VALIDATION_TEST_CASES: tuple[DiscoverFactoryValidationTestCase, ...] = (
-    DiscoverFactoryValidationTestCase(
-        description="generated managed source loader matches source",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": "sources:\n  - name: raw_orders\n    managed: true\n",
-            "loaders/generated.py": """
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiscoverFactoryValidationTestCase(
+            description="generated managed source loader matches source",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": "sources:\n  - name: raw_orders\n    managed: true\n",
+                "loaders/generated.py": """
 from sqlbuild.factories import factory
 from sqlbuild.loaders import loader
 
@@ -314,14 +316,14 @@ def generated_loaders():
         return [{"order_id": 1}]
     return load
 """,
-        },
-        expected_loader_names=("raw_orders",),
-    ),
-    DiscoverFactoryValidationTestCase(
-        description="generated task and asset dependency validates",
-        repo_files=base_repo_files()
-        | {
-            "factories/generated.py": """
+            },
+            expected_loader_names=("raw_orders",),
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="generated task and asset dependency validates",
+            repo_files=base_repo_files()
+            | {
+                "factories/generated.py": """
 from sqlbuild.assets import asset
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
@@ -339,15 +341,15 @@ def generated_nodes():
 
     return [prepare, export]
 """,
-        },
-        expected_task_names=("prepare_orders",),
-        expected_asset_names=("orders_export",),
-    ),
-    DiscoverFactoryValidationTestCase(
-        description="single-kind factory validates in factories folder",
-        repo_files=base_repo_files()
-        | {
-            "factories/generated_tasks.py": """
+            },
+            expected_task_names=("prepare_orders",),
+            expected_asset_names=("orders_export",),
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="single-kind factory validates in factories folder",
+            repo_files=base_repo_files()
+            | {
+                "factories/generated_tasks.py": """
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
 
@@ -360,176 +362,11 @@ def generated_tasks():
 
     return prepare
 """,
-        },
-        expected_task_names=("prepare_orders",),
-    ),
-)
-
-
-FACTORY_VALIDATION_ERROR_TEST_CASES: tuple[DiscoverFactoryValidationTestCase, ...] = (
-    DiscoverFactoryValidationTestCase(
-        description="generated duplicate names fail validation",
-        repo_files=base_repo_files()
-        | {
-            "tasks/generated.py": """
-from sqlbuild.factories import factory
-from sqlbuild.tasks import task
-
-
-def make_task():
-    @task(name="profile")
-    def profile(ctx):
-        return None
-    return profile
-
-
-@factory
-def generated_tasks():
-    return [make_task(), make_task()]
-""",
-        },
-        expected_error_fragment="Duplicate Python node found for 'profile'",
-    ),
-    DiscoverFactoryValidationTestCase(
-        description="generated name colliding with top-level node fails validation",
-        repo_files=base_repo_files()
-        | {
-            "tasks/top_level.py": """
-from sqlbuild.tasks import task
-
-
-@task(name="profile")
-def top_level_profile(ctx):
-    return None
-""",
-            "assets/generated.py": """
-from sqlbuild.assets import asset
-from sqlbuild.factories import factory
-
-
-@factory
-def generated_assets():
-    @asset(name="profile")
-    def generated_profile(ctx):
-        return None
-    return generated_profile
-""",
-        },
-        expected_error_fragment="Duplicate Python node found for 'profile'",
-    ),
-    DiscoverFactoryValidationTestCase(
-        description="generated dependency cycle fails validation",
-        repo_files=base_repo_files()
-        | {
-            "tasks/generated.py": """
-from sqlbuild.factories import factory
-from sqlbuild.tasks import task
-
-
-@factory
-def generated_tasks():
-    def first_body(ctx):
-        return None
-    def second_body(ctx):
-        return None
-    first = task(name="first", depends_on=[])(first_body)
-    second = task(name="second", depends_on=[first])(second_body)
-    first = task(name="first", depends_on=[second])(first)
-    return [first, second]
-""",
-        },
-        expected_error_fragment="Python node dependency cycle detected",
-    ),
-    DiscoverFactoryValidationTestCase(
-        description="generated loader SQL dependency fails validation",
-        repo_files=base_repo_files()
-        | {
-            "loaders/generated.py": """
-from sqlbuild.factories import factory
-from sqlbuild.loaders import loader
-from sqlbuild.refs import model
-
-
-@factory
-def generated_loaders():
-    @loader(name="raw_orders", depends_on=[model("orders")])
-    def raw_orders(ctx):
-        return []
-    return raw_orders
-""",
-        },
-        expected_error_fragment="Loader 'raw_orders' depends on SQL resource 'orders'",
-    ),
-    DiscoverFactoryValidationTestCase(
-        description="generated check SQL dependency fails validation",
-        repo_files=base_repo_files()
-        | {
-            "checks/generated.py": """
-from sqlbuild.checks import check
-from sqlbuild.factories import factory
-from sqlbuild.refs import model
-
-
-@factory
-def generated_checks():
-    @check(name="check_orders", depends_on=model("orders"))
-    def check_orders(ctx):
-        return True
-    return check_orders
-""",
-        },
-        expected_error_fragment="Check 'check_orders' depends on SQL resource 'orders'",
-    ),
-    DiscoverFactoryValidationTestCase(
-        description="generated managed source loader mismatch fails validation",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": "sources:\n  - name: raw_orders\n    managed: true\n",
-            "loaders/generated.py": """
-from sqlbuild.factories import factory
-from sqlbuild.loaders import loader
-
-
-@factory
-def generated_loaders():
-    @loader(name="load_orders")
-    def load(ctx):
-        return []
-    return load
-""",
-        },
-        expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
-    ),
-    DiscoverFactoryValidationTestCase(
-        description="kind-folder factory returning foreign kind fails validation",
-        repo_files=base_repo_files()
-        | {
-            "assets/generated.py": """
-from sqlbuild.factories import factory
-from sqlbuild.loaders import loader
-
-
-@factory
-def gen():
-    @loader(name="raw_orders")
-    def load(ctx):
-        return []
-
-    return load
-""",
-        },
-        expected_error_fragment=(
-            "Factory gen in assets/ returned a loader 'raw_orders'; "
-            "mixed-kind factories must live in factories/."
+            },
+            expected_task_names=("prepare_orders",),
         ),
     ),
-)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    FACTORY_VALIDATION_TEST_CASES,
-    ids=[case.description for case in FACTORY_VALIDATION_TEST_CASES],
+    ids=lambda case: case.description,
 )
 def test_given_generated_factory_nodes_when_discovering_inputs_then_validates_expanded_nodes(
     test_case: DiscoverFactoryValidationTestCase,
@@ -550,8 +387,165 @@ def test_given_generated_factory_nodes_when_discovering_inputs_then_validates_ex
 
 @pytest.mark.parametrize(
     "test_case",
-    FACTORY_VALIDATION_ERROR_TEST_CASES,
-    ids=[case.description for case in FACTORY_VALIDATION_ERROR_TEST_CASES],
+    (
+        DiscoverFactoryValidationTestCase(
+            description="generated duplicate names fail validation",
+            repo_files=base_repo_files()
+            | {
+                "tasks/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+def make_task():
+    @task(name="profile")
+    def profile(ctx):
+        return None
+    return profile
+
+
+@factory
+def generated_tasks():
+    return [make_task(), make_task()]
+""",
+            },
+            expected_error_fragment="Duplicate Python node found for 'profile'",
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="generated name colliding with top-level node fails validation",
+            repo_files=base_repo_files()
+            | {
+                "tasks/top_level.py": """
+from sqlbuild.tasks import task
+
+
+@task(name="profile")
+def top_level_profile(ctx):
+    return None
+""",
+                "assets/generated.py": """
+from sqlbuild.assets import asset
+from sqlbuild.factories import factory
+
+
+@factory
+def generated_assets():
+    @asset(name="profile")
+    def generated_profile(ctx):
+        return None
+    return generated_profile
+""",
+            },
+            expected_error_fragment="Duplicate Python node found for 'profile'",
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="generated dependency cycle fails validation",
+            repo_files=base_repo_files()
+            | {
+                "tasks/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@factory
+def generated_tasks():
+    def first_body(ctx):
+        return None
+    def second_body(ctx):
+        return None
+    first = task(name="first", depends_on=[])(first_body)
+    second = task(name="second", depends_on=[first])(second_body)
+    first = task(name="first", depends_on=[second])(first)
+    return [first, second]
+""",
+            },
+            expected_error_fragment="Python node dependency cycle detected",
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="generated loader SQL dependency fails validation",
+            repo_files=base_repo_files()
+            | {
+                "loaders/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.loaders import loader
+from sqlbuild.refs import model
+
+
+@factory
+def generated_loaders():
+    @loader(name="raw_orders", depends_on=[model("orders")])
+    def raw_orders(ctx):
+        return []
+    return raw_orders
+""",
+            },
+            expected_error_fragment="Loader 'raw_orders' depends on SQL resource 'orders'",
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="generated check SQL dependency fails validation",
+            repo_files=base_repo_files()
+            | {
+                "checks/generated.py": """
+from sqlbuild.checks import check
+from sqlbuild.factories import factory
+from sqlbuild.refs import model
+
+
+@factory
+def generated_checks():
+    @check(name="check_orders", depends_on=model("orders"))
+    def check_orders(ctx):
+        return True
+    return check_orders
+""",
+            },
+            expected_error_fragment="Check 'check_orders' depends on SQL resource 'orders'",
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="generated managed source loader mismatch fails validation",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": "sources:\n  - name: raw_orders\n    managed: true\n",
+                "loaders/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.loaders import loader
+
+
+@factory
+def generated_loaders():
+    @loader(name="load_orders")
+    def load(ctx):
+        return []
+    return load
+""",
+            },
+            expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="kind-folder factory returning foreign kind fails validation",
+            repo_files=base_repo_files()
+            | {
+                "assets/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.loaders import loader
+
+
+@factory
+def gen():
+    @loader(name="raw_orders")
+    def load(ctx):
+        return []
+
+    return load
+""",
+            },
+            expected_error_fragment=(
+                "Factory gen in assets/ returned a loader 'raw_orders'; "
+                "mixed-kind factories must live in factories/."
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_invalid_generated_factory_nodes_when_discovering_inputs_then_raises(
     test_case: DiscoverFactoryValidationTestCase,
@@ -564,216 +558,218 @@ def test_given_invalid_generated_factory_nodes_when_discovering_inputs_then_rais
         discover_project_inputs(project_dir=tmp_path)
 
 
-DISCOVERY_ERROR_TEST_CASES: list[DiscoverProjectInputsErrorTestCase] = [
-    DiscoverProjectInputsErrorTestCase(
-        description="raises on duplicate source names across files",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw_orders.yml": """
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiscoverProjectInputsErrorTestCase(
+            description="raises on duplicate source names across files",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw_orders.yml": """
 sources:
   - name: raw_orders
     schema: public
     table: orders
 """.strip()
-            + "\n",
-            "sources/raw_orders_duplicate.yml": """
+                + "\n",
+                "sources/raw_orders_duplicate.yml": """
 sources:
   - name: raw_orders
     schema: public
     table: orders_backup
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Duplicate source declaration found for 'raw_orders'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises on schema yml model metadata",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/schema.yml": """
+                + "\n",
+            },
+            expected_error_fragment="Duplicate source declaration found for 'raw_orders'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises on schema yml model metadata",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/schema.yml": """
 models:
   - name: stg_orders
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="model metadata must live in the model file MODEL",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises on duplicate schema seed names across files",
-        repo_files=base_repo_files()
-        | {
-            "seeds/a.yml": """
+                + "\n",
+            },
+            expected_error_fragment="model metadata must live in the model file MODEL",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises on duplicate schema seed names across files",
+            repo_files=base_repo_files()
+            | {
+                "seeds/a.yml": """
 seeds:
   - name: country_codes
     columns:
       - name: country_code
         type: VARCHAR
 """.strip()
-            + "\n",
-            "seeds/b.yml": """
+                + "\n",
+                "seeds/b.yml": """
 seeds:
   - name: country_codes
     columns:
       - name: country_code
         type: VARCHAR
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Duplicate seed declaration found for 'country_codes'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises on duplicate model file names across directories",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        expected_error_fragment="Duplicate model file name found for 'orders'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises on duplicate scenario file names across directories",
-        repo_files=base_repo_files()
-        | {
-            "tests/scenarios/revenue/customer_refund.sql": "SCENARIO ();\nSELECT 1\n",
-            "tests/scenarios/support/customer_refund.sql": "SCENARIO ();\nSELECT 1\n",
-        },
-        expected_error_fragment="Duplicate scenario file name found for 'customer_refund'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when model and source names collide",
-        repo_files=base_repo_files()
-        | {
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-            "sources/raw.yml": """
+                + "\n",
+            },
+            expected_error_fragment="Duplicate seed declaration found for 'country_codes'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises on duplicate model file names across directories",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/marts/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            expected_error_fragment="Duplicate model file name found for 'orders'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises on duplicate scenario file names across directories",
+            repo_files=base_repo_files()
+            | {
+                "tests/scenarios/revenue/customer_refund.sql": "SCENARIO ();\nSELECT 1\n",
+                "tests/scenarios/support/customer_refund.sql": "SCENARIO ();\nSELECT 1\n",
+            },
+            expected_error_fragment="Duplicate scenario file name found for 'customer_refund'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when model and source names collide",
+            repo_files=base_repo_files()
+            | {
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+                "sources/raw.yml": """
 sources:
   - name: orders
     table: orders
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Logical relation name 'orders' is declared as both model",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when source and seed names collide",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+                + "\n",
+            },
+            expected_error_fragment="Logical relation name 'orders' is declared as both model",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when source and seed names collide",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: country_codes
     table: country_codes
 """.strip()
-            + "\n",
-            "seeds/schema.yml": """
+                + "\n",
+                "seeds/schema.yml": """
 seeds:
   - name: country_codes
     columns:
       - name: country_code
         type: VARCHAR
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Logical relation name 'country_codes' is declared as both source",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when a source references an unknown loader",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+                + "\n",
+            },
+            expected_error_fragment="Logical relation name 'country_codes' is declared as both source",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a source references an unknown loader",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     managed: true
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when loader names are duplicated",
-        repo_files=base_repo_files()
-        | {
-            "loaders/a.py": """
+                + "\n",
+            },
+            expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when loader names are duplicated",
+            repo_files=base_repo_files()
+            | {
+                "loaders/a.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
     return []
 """,
-            "loaders/b.py": """
+                "loaders/b.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
     return []
 """,
-        },
-        expected_error_fragment="Duplicate source loader found for 'raw_orders'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when explicit loader names are duplicated",
-        repo_files=base_repo_files()
-        | {
-            "loaders/a.py": """
+            },
+            expected_error_fragment="Duplicate source loader found for 'raw_orders'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when explicit loader names are duplicated",
+            repo_files=base_repo_files()
+            | {
+                "loaders/a.py": """
 from sqlbuild.loaders import loader
 
 @loader(name="raw_orders")
 def load_a(ctx):
     return []
 """,
-            "loaders/b.py": """
+                "loaders/b.py": """
 from sqlbuild.loaders import loader
 
 @loader(name="raw_orders")
 def load_b(ctx):
     return []
 """,
-        },
-        expected_error_fragment="Duplicate source loader found for 'raw_orders'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when unmanaged source name collides with loader name",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+            },
+            expected_error_fragment="Duplicate source loader found for 'raw_orders'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when unmanaged source name collides with loader name",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: fetch_orders
     table: fetch_orders
 """.strip()
-            + "\n",
-            "loaders/raw_orders.py": """
+                + "\n",
+                "loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def fetch_orders(ctx):
     return []
 """,
-        },
-        expected_error_fragment="Source 'fetch_orders' in sources/raw.yml conflicts with loader",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when unmanaged source name collides with terminal loader name",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+            },
+            expected_error_fragment="Source 'fetch_orders' in sources/raw.yml conflicts with loader",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when unmanaged source name collides with terminal loader name",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     table: raw_orders
 """.strip()
-            + "\n",
-            "loaders/raw_orders.py": """
+                + "\n",
+                "loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
     return []
 """,
-        },
-        expected_error_fragment="Source 'raw_orders' in sources/raw.yml conflicts with loader",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when loader dependency is not decorated",
-        repo_files=base_repo_files()
-        | {
-            "loaders/events.py": """
+            },
+            expected_error_fragment="Source 'raw_orders' in sources/raw.yml conflicts with loader",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when loader dependency is not decorated",
+            repo_files=base_repo_files()
+            | {
+                "loaders/events.py": """
 from sqlbuild.loaders import loader
 
 def fetch_events(ctx):
@@ -783,14 +779,14 @@ def fetch_events(ctx):
 def enriched_events(ctx):
     return []
 """,
-        },
-        expected_error_fragment="Loader 'enriched_events' depends on an unknown loader",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when loader dependencies contain a cycle",
-        repo_files=base_repo_files()
-        | {
-            "loaders/events.py": """
+            },
+            expected_error_fragment="Loader 'enriched_events' depends on an unknown loader",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when loader dependencies contain a cycle",
+            repo_files=base_repo_files()
+            | {
+                "loaders/events.py": """
 from sqlbuild.loaders import loader
 
 def fetch_events(ctx):
@@ -802,63 +798,63 @@ def enriched_events(ctx):
 
 fetch_events = loader(depends_on=[enriched_events])(fetch_events)
 """,
-        },
-        expected_error_fragment="Loader dependency cycle detected",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when terminal loader owns source config",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+            },
+            expected_error_fragment="Loader dependency cycle detected",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when terminal loader owns source config",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: raw_orders
     managed: true
     write_strategy: table
 """.strip()
-            + "\n",
-            "loaders/raw_orders.py": """
+                + "\n",
+                "loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader(write_strategy="table", columns=[{"name": "id", "type": "INTEGER"}])
 def raw_orders(ctx):
     return []
 """,
-        },
-        expected_error_fragment="terminal source loader write and schema config must be declared",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when task and asset names are duplicated",
-        repo_files=base_repo_files()
-        | {
-            "tasks/export_customers.py": """
+            },
+            expected_error_fragment="terminal source loader write and schema config must be declared",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when task and asset names are duplicated",
+            repo_files=base_repo_files()
+            | {
+                "tasks/export_customers.py": """
 from sqlbuild.tasks import task
 
 @task
 def export_customers(ctx):
     return None
 """,
-            "assets/export_customers.py": """
+                "assets/export_customers.py": """
 from sqlbuild.assets import asset
 
 @asset
 def export_customers(ctx):
     return None
 """,
-        },
-        expected_error_fragment="Duplicate Python node found for 'export_customers'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when check name collides with task name",
-        repo_files=base_repo_files()
-        | {
-            "tasks/export_customers.py": """
+            },
+            expected_error_fragment="Duplicate Python node found for 'export_customers'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when check name collides with task name",
+            repo_files=base_repo_files()
+            | {
+                "tasks/export_customers.py": """
 from sqlbuild.tasks import task
 
 @task
 def export_customers(ctx):
     return None
 """,
-            "checks/export_customers.py": """
+                "checks/export_customers.py": """
 from sqlbuild.checks import check
 from tasks.export_customers import export_customers
 
@@ -866,69 +862,69 @@ from tasks.export_customers import export_customers
 def export_customers_check(ctx):
     return True
 """,
-        },
-        expected_error_fragment="Duplicate Python node found for 'export_customers'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when model name collides with task name",
-        repo_files=base_repo_files()
-        | {
-            "models/marts/export_customers.sql": "MODEL ();\n\nselect 1\n",
-            "tasks/export_customers.py": """
+            },
+            expected_error_fragment="Duplicate Python node found for 'export_customers'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when model name collides with task name",
+            repo_files=base_repo_files()
+            | {
+                "models/marts/export_customers.sql": "MODEL ();\n\nselect 1\n",
+                "tasks/export_customers.py": """
 from sqlbuild.tasks import task
 
 @task
 def export_customers(ctx):
     return None
 """,
-        },
-        expected_error_fragment=(
-            "Selectable resource name 'export_customers' is declared as both model"
+            },
+            expected_error_fragment=(
+                "Selectable resource name 'export_customers' is declared as both model"
+            ),
         ),
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when seed name collides with asset name",
-        repo_files=base_repo_files()
-        | {
-            "seeds/schema.yml": """
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when seed name collides with asset name",
+            repo_files=base_repo_files()
+            | {
+                "seeds/schema.yml": """
 seeds:
   - name: export_customers
     columns:
       - name: customer_id
         type: INTEGER
 """.strip()
-            + "\n",
-            "seeds/export_customers.csv": "customer_id\n1\n",
-            "assets/export_customers.py": """
+                + "\n",
+                "seeds/export_customers.csv": "customer_id\n1\n",
+                "assets/export_customers.py": """
 from sqlbuild.assets import asset
 
 @asset
 def export_customers(ctx):
     return None
 """,
-        },
-        expected_error_fragment=(
-            "Selectable resource name 'export_customers' is declared as both seed"
+            },
+            expected_error_fragment=(
+                "Selectable resource name 'export_customers' is declared as both seed"
+            ),
         ),
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when source name collides with check name",
-        repo_files=base_repo_files()
-        | {
-            "sources/raw.yml": """
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when source name collides with check name",
+            repo_files=base_repo_files()
+            | {
+                "sources/raw.yml": """
 sources:
   - name: export_customers_exists
     table: export_customers_exists
 """.strip()
-            + "\n",
-            "tasks/export_customers.py": """
+                + "\n",
+                "tasks/export_customers.py": """
 from sqlbuild.tasks import task
 
 @task
 def export_customers(ctx):
     return None
 """,
-            "checks/export_customers.py": """
+                "checks/export_customers.py": """
 from sqlbuild.checks import check
 from tasks.export_customers import export_customers
 
@@ -936,16 +932,16 @@ from tasks.export_customers import export_customers
 def export_customers_exists(ctx):
     return True
 """,
-        },
-        expected_error_fragment=(
-            "Selectable resource name 'export_customers_exists' is declared as both source"
+            },
+            expected_error_fragment=(
+                "Selectable resource name 'export_customers_exists' is declared as both source"
+            ),
         ),
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when sql function name collides with python function name",
-        repo_files=base_repo_files()
-        | {
-            "functions/sql/is_large_order.sql": """
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when sql function name collides with python function name",
+            repo_files=base_repo_files()
+            | {
+                "functions/sql/is_large_order.sql": """
 FUNCTION (
   arguments (amount INTEGER),
   returns BOOLEAN,
@@ -953,25 +949,25 @@ FUNCTION (
 
 amount > 100
 """.strip()
-            + "\n",
-            "functions/python/is_large_order.py": """
+                + "\n",
+                "functions/python/is_large_order.py": """
 from sqlbuild.functions import udf
 
 @udf(arguments={"amount": "INTEGER"}, returns="BOOLEAN", runtime_version="3.11")
 def main(amount):
     return amount > 100
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment=(
-            "Selectable resource name 'is_large_order' is declared as both function"
+                + "\n",
+            },
+            expected_error_fragment=(
+                "Selectable resource name 'is_large_order' is declared as both function"
+            ),
         ),
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when function name collides with loader name",
-        repo_files=base_repo_files()
-        | {
-            "functions/sql/fetch_orders.sql": """
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when function name collides with loader name",
+            repo_files=base_repo_files()
+            | {
+                "functions/sql/fetch_orders.sql": """
 FUNCTION (
   arguments (amount INTEGER),
   returns BOOLEAN,
@@ -979,24 +975,24 @@ FUNCTION (
 
 amount > 100
 """.strip()
-            + "\n",
-            "loaders/fetch_orders.py": """
+                + "\n",
+                "loaders/fetch_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def fetch_orders(ctx):
     return []
 """,
-        },
-        expected_error_fragment=(
-            "Selectable resource name 'fetch_orders' is declared as both function"
+            },
+            expected_error_fragment=(
+                "Selectable resource name 'fetch_orders' is declared as both function"
+            ),
         ),
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when task dependency is not decorated",
-        repo_files=base_repo_files()
-        | {
-            "tasks/windows.py": """
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when task dependency is not decorated",
+            repo_files=base_repo_files()
+            | {
+                "tasks/windows.py": """
 from sqlbuild.tasks import task
 
 def fetch_window(ctx):
@@ -1006,14 +1002,14 @@ def fetch_window(ctx):
 def export_window(ctx):
     return None
 """,
-        },
-        expected_error_fragment="Python node 'export_window' depends on an unknown Python node",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when task and asset dependencies contain a cycle",
-        repo_files=base_repo_files()
-        | {
-            "tasks/windows.py": """
+            },
+            expected_error_fragment="Python node 'export_window' depends on an unknown Python node",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when task and asset dependencies contain a cycle",
+            repo_files=base_repo_files()
+            | {
+                "tasks/windows.py": """
 from sqlbuild.tasks import task
 
 def fetch_window(ctx):
@@ -1025,14 +1021,14 @@ def enrich_window(ctx):
 
 fetch_window = task(depends_on=enrich_window)(fetch_window)
 """,
-        },
-        expected_error_fragment="Python node dependency cycle detected",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when check dependency is not decorated",
-        repo_files=base_repo_files()
-        | {
-            "checks/exports.py": """
+            },
+            expected_error_fragment="Python node dependency cycle detected",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when check dependency is not decorated",
+            repo_files=base_repo_files()
+            | {
+                "checks/exports.py": """
 from sqlbuild.checks import check
 
 def export_customers(ctx):
@@ -1042,14 +1038,14 @@ def export_customers(ctx):
 def export_customers_exists(ctx):
     return True
 """,
-        },
-        expected_error_fragment="Check 'export_customers_exists' depends on an unknown Python node",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when loader declares SQL model dependency",
-        repo_files=base_repo_files()
-        | {
-            "loaders/orders.py": """
+            },
+            expected_error_fragment="Check 'export_customers_exists' depends on an unknown Python node",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when loader declares SQL model dependency",
+            repo_files=base_repo_files()
+            | {
+                "loaders/orders.py": """
 from sqlbuild.loaders import loader
 from sqlbuild.refs import model
 
@@ -1057,14 +1053,14 @@ from sqlbuild.refs import model
 def load_orders(ctx):
     return []
 """,
-        },
-        expected_error_fragment="Loader 'load_orders' depends on SQL resource 'stg_orders'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when check declares SQL model dependency",
-        repo_files=base_repo_files()
-        | {
-            "checks/orders.py": """
+            },
+            expected_error_fragment="Loader 'load_orders' depends on SQL resource 'stg_orders'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when check declares SQL model dependency",
+            repo_files=base_repo_files()
+            | {
+                "checks/orders.py": """
 from sqlbuild.checks import check
 from sqlbuild.refs import model
 
@@ -1072,21 +1068,21 @@ from sqlbuild.refs import model
 def check_orders(ctx):
     return True
 """,
-        },
-        expected_error_fragment="Check 'check_orders' depends on SQL resource 'stg_orders'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when check depends on check",
-        repo_files=base_repo_files()
-        | {
-            "assets/exports.py": """
+            },
+            expected_error_fragment="Check 'check_orders' depends on SQL resource 'stg_orders'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when check depends on check",
+            repo_files=base_repo_files()
+            | {
+                "assets/exports.py": """
 from sqlbuild.assets import asset
 
 @asset
 def export_customers(ctx):
     return None
 """,
-            "checks/exports.py": """
+                "checks/exports.py": """
 from sqlbuild.checks import check
 from assets.exports import export_customers
 
@@ -1098,95 +1094,77 @@ def export_customers_exists(ctx):
 def export_customers_recent(ctx):
     return True
 """,
-        },
-        expected_error_fragment="Check 'export_customers_recent' depends on another check",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when seeds are declared outside seeds directory",
-        repo_files=base_repo_files()
-        | {
-            "models/schema.yml": """
+            },
+            expected_error_fragment="Check 'export_customers_recent' depends on another check",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when seeds are declared outside seeds directory",
+            repo_files=base_repo_files()
+            | {
+                "models/schema.yml": """
 seeds:
   - name: country_codes
     columns:
       - name: country_code
         type: VARCHAR
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="seed declarations must live under seeds/",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when a seed declaration uses yaml extension",
-        repo_files=base_repo_files()
-        | {
-            "seeds/lookups.yaml": "seeds: []\n",
-        },
-        expected_error_fragment=r"\.yaml is not supported",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when seed csv basenames are duplicated",
-        repo_files=base_repo_files()
-        | {
-            "seeds/a/country_codes.csv": "country_code\nUS\n",
-            "seeds/b/country_codes.csv": "country_code\nCA\n",
-            "seeds/lookups.yml": """
+                + "\n",
+            },
+            expected_error_fragment="seed declarations must live under seeds/",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a seed declaration uses yaml extension",
+            repo_files=base_repo_files()
+            | {
+                "seeds/lookups.yaml": "seeds: []\n",
+            },
+            expected_error_fragment=r"\.yaml is not supported",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when seed csv basenames are duplicated",
+            repo_files=base_repo_files()
+            | {
+                "seeds/a/country_codes.csv": "country_code\nUS\n",
+                "seeds/b/country_codes.csv": "country_code\nCA\n",
+                "seeds/lookups.yml": """
 seeds:
   - name: country_codes
     columns:
       - name: country_code
         type: VARCHAR
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="Duplicate seed CSV name 'country_codes' found",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when a declared seed has no matching csv file",
-        repo_files=base_repo_files()
-        | {
-            "seeds/schema.yml": """
+                + "\n",
+            },
+            expected_error_fragment="Duplicate seed CSV name 'country_codes' found",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a declared seed has no matching csv file",
+            repo_files=base_repo_files()
+            | {
+                "seeds/schema.yml": """
 seeds:
   - name: country_codes
     columns:
       - name: country_code
         type: VARCHAR
 """.strip()
-            + "\n",
-        },
-        expected_error_fragment="has no matching CSV file under seeds/",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when a seed csv has no matching declaration",
-        repo_files=base_repo_files()
-        | {
-            "seeds/country_codes.csv": "country_code\nUS\n",
-        },
-        expected_error_fragment="has no matching declaration for seed 'country_codes'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when a seed csv header does not match declared columns",
-        repo_files=base_repo_files()
-        | {
-            "seeds/schema.yml": """
-seeds:
-  - name: country_codes
-    columns:
-      - name: country_code
-        type: VARCHAR
-      - name: country_name
-        type: VARCHAR
-""".strip()
-            + "\n",
-            "seeds/country_codes.csv": "country_name,country_code\nUS,United States\n",
-        },
-        expected_error_fragment="does not match declared seed columns",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when a seed csv has duplicate header columns",
-        repo_files=base_repo_files()
-        | {
-            "seeds/schema.yml": """
+                + "\n",
+            },
+            expected_error_fragment="has no matching CSV file under seeds/",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a seed csv has no matching declaration",
+            repo_files=base_repo_files()
+            | {
+                "seeds/country_codes.csv": "country_code\nUS\n",
+            },
+            expected_error_fragment="has no matching declaration for seed 'country_codes'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a seed csv header does not match declared columns",
+            repo_files=base_repo_files()
+            | {
+                "seeds/schema.yml": """
 seeds:
   - name: country_codes
     columns:
@@ -1195,34 +1173,47 @@ seeds:
       - name: country_name
         type: VARCHAR
 """.strip()
-            + "\n",
-            "seeds/country_codes.csv": "country_code,country_code\nUS,United States\n",
-        },
-        expected_error_fragment="contains duplicate CSV header column 'country_code'",
-    ),
-    DiscoverProjectInputsErrorTestCase(
-        description="raises when path defaults match no model paths",
-        repo_files=base_repo_files()
-        | {
-            "sqlbuild_project.toml": """
+                + "\n",
+                "seeds/country_codes.csv": "country_name,country_code\nUS,United States\n",
+            },
+            expected_error_fragment="does not match declared seed columns",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when a seed csv has duplicate header columns",
+            repo_files=base_repo_files()
+            | {
+                "seeds/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: country_code
+        type: VARCHAR
+      - name: country_name
+        type: VARCHAR
+""".strip()
+                + "\n",
+                "seeds/country_codes.csv": "country_code,country_code\nUS,United States\n",
+            },
+            expected_error_fragment="contains duplicate CSV header column 'country_code'",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when path defaults match no model paths",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
 name = "demo"
 adapter = "duckdb"
 
 [path_defaults.stagingg]
 schema = "staging"
 """.strip()
-            + "\n",
-            "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
-        },
-        expected_error_fragment=r"path_defaults\['stagingg'\] does not match any model paths",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    DISCOVERY_ERROR_TEST_CASES,
-    ids=[case.description for case in DISCOVERY_ERROR_TEST_CASES],
+                + "\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
+            },
+            expected_error_fragment=r"path_defaults\['stagingg'\] does not match any model paths",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_discovery_conflicts_when_discovering_inputs_then_it_raises_clear_errors(
     test_case: DiscoverProjectInputsErrorTestCase,

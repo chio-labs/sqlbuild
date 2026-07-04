@@ -19,43 +19,6 @@ from tests.unit.src.sqlbuild.executor.load._test_types import (
 )
 from tests.unit.src.sqlbuild.executor.load.helpers import CountingLoaderContextTestAdapter
 
-LOAD_PIPELINE_SKIP_FAN_IN_TEST_CASES: tuple[LoadPipelineSkipFanInTestCase, ...] = (
-    LoadPipelineSkipFanInTestCase(
-        description="runs downstream when soft-skipped loader branch has successful sibling",
-        hard_skip=False,
-        expected_statuses=(
-            ExecutionStatus.SKIPPED,
-            ExecutionStatus.SUCCESS,
-            ExecutionStatus.SKIPPED,
-            ExecutionStatus.SUCCESS,
-        ),
-        expected_skip_modes=("soft", None, "soft", None),
-        expected_skip_reasons=(
-            "no new orders",
-            None,
-            "All upstream loaders were soft-skipped",
-            None,
-        ),
-    ),
-    LoadPipelineSkipFanInTestCase(
-        description="skips downstream when hard-skipped loader branch has successful sibling",
-        hard_skip=True,
-        expected_statuses=(
-            ExecutionStatus.SKIPPED,
-            ExecutionStatus.SUCCESS,
-            ExecutionStatus.SKIPPED,
-            ExecutionStatus.SKIPPED,
-        ),
-        expected_skip_modes=("hard", None, "hard", "hard"),
-        expected_skip_reasons=(
-            "no new orders",
-            None,
-            "Upstream loader hard-skipped",
-            "Upstream loader hard-skipped",
-        ),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -70,7 +33,7 @@ LOAD_PIPELINE_SKIP_FAN_IN_TEST_CASES: tuple[LoadPipelineSkipFanInTestCase, ...] 
             expected_lifecycle_message="external loader ran",
         )
     ],
-    ids=["runs external loader without opening SQLBuild connection"],
+    ids=lambda case: case.description,
 )
 def test_given_external_loader_when_running_load_pipeline_then_does_not_open_connection(
     test_case: ExternalLoadPipelineTestCase,
@@ -118,8 +81,43 @@ def test_given_external_loader_when_running_load_pipeline_then_does_not_open_con
 
 @pytest.mark.parametrize(
     "test_case",
-    LOAD_PIPELINE_SKIP_FAN_IN_TEST_CASES,
-    ids=[case.description for case in LOAD_PIPELINE_SKIP_FAN_IN_TEST_CASES],
+    (
+        LoadPipelineSkipFanInTestCase(
+            description="runs downstream when soft-skipped loader branch has successful sibling",
+            hard_skip=False,
+            expected_statuses=(
+                ExecutionStatus.SKIPPED,
+                ExecutionStatus.SUCCESS,
+                ExecutionStatus.SKIPPED,
+                ExecutionStatus.SUCCESS,
+            ),
+            expected_skip_modes=("soft", None, "soft", None),
+            expected_skip_reasons=(
+                "no new orders",
+                None,
+                "All upstream loaders were soft-skipped",
+                None,
+            ),
+        ),
+        LoadPipelineSkipFanInTestCase(
+            description="skips downstream when hard-skipped loader branch has successful sibling",
+            hard_skip=True,
+            expected_statuses=(
+                ExecutionStatus.SKIPPED,
+                ExecutionStatus.SUCCESS,
+                ExecutionStatus.SKIPPED,
+                ExecutionStatus.SKIPPED,
+            ),
+            expected_skip_modes=("hard", None, "hard", "hard"),
+            expected_skip_reasons=(
+                "no new orders",
+                None,
+                "Upstream loader hard-skipped",
+                "Upstream loader hard-skipped",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_mixed_loader_skips_when_running_pipeline_then_fan_in_matches_mode(
     test_case: LoadPipelineSkipFanInTestCase,

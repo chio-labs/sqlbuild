@@ -12,48 +12,46 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop, run_sqb
 
-TEST_CASES: list[PlanCommandBuildE2ETestCase] = [
-    PlanCommandBuildE2ETestCase(
-        description="plan select no-color scopes to marts",
-        command=("--no-color", "plan", "--select", "path:models/marts", "--force"),
-        expected_exit_code=0,
-        expected_fragments=(
-            "Plan ready (10 selected)",
-            "Functions (2 standard run)",
-            "is_completed_order",
-            "sql udf",
-            "is_completed_order_py",
-            "python udf",
-            "Models (8 standard run)",
-        ),
-        expected_stream="stdout",
-    ),
-    PlanCommandBuildE2ETestCase(
-        description="plan exclude removes marts branch from selected scope",
-        command=(
-            "--no-color",
-            "plan",
-            "--select",
-            "/models/marts",
-            "--force",
-            "--exclude",
-            "hourly_order_activity",
-        ),
-        expected_exit_code=0,
-        expected_fragments=(
-            "Plan ready (9 selected)",
-            "Functions (2 standard run)",
-            "Models (7 standard run)",
-        ),
-        expected_stream="stdout",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    TEST_CASES,
-    ids=[case.description for case in TEST_CASES],
+    [
+        PlanCommandBuildE2ETestCase(
+            description="plan select no-color scopes to marts",
+            command=("--no-color", "plan", "--select", "path:models/marts", "--force"),
+            expected_exit_code=0,
+            expected_fragments=(
+                "Plan ready (10 selected)",
+                "Functions (2 standard run)",
+                "is_completed_order",
+                "sql udf",
+                "is_completed_order_py",
+                "python udf",
+                "Models (8 standard run)",
+            ),
+            expected_stream="stdout",
+        ),
+        PlanCommandBuildE2ETestCase(
+            description="plan exclude removes marts branch from selected scope",
+            command=(
+                "--no-color",
+                "plan",
+                "--select",
+                "/models/marts",
+                "--force",
+                "--exclude",
+                "hourly_order_activity",
+            ),
+            expected_exit_code=0,
+            expected_fragments=(
+                "Plan ready (9 selected)",
+                "Functions (2 standard run)",
+                "Models (7 standard run)",
+            ),
+            expected_stream="stdout",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_plan_command_variants_when_running_cli_then_scope_behavior_matches_expectation(
     test_case: PlanCommandBuildE2ETestCase,

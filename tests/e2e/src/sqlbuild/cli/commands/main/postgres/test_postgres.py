@@ -88,7 +88,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_fingerprint_rows=(("model", "downstream"),),
         )
     ],
-    ids=["direct dependency baseline copies prod upstream on Postgres"],
+    ids=lambda case: case.description,
 )
 def test_given_downstream_selection_when_postgres_upstream_missing_then_baselines_from_prod(
     tmp_path: Path,
@@ -145,7 +145,7 @@ def test_given_downstream_selection_when_postgres_upstream_missing_then_baseline
             ),
         )
     ],
-    ids=["dbt init generated project builds through postgres dbt profile"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_dbt_profile_when_running_dbt_init_then_plain_build_uses_profile(
     tmp_path: Path,
@@ -299,7 +299,7 @@ def test_given_postgres_dbt_profile_when_running_dbt_init_then_plain_build_uses_
             ),
         )
     ],
-    ids=["standard node results persist and read on postgres"],
+    ids=lambda case: case.description,
 )
 def test_given_python_result_when_running_check_on_postgres_then_persists_node_results(
     tmp_path: Path,
@@ -381,7 +381,7 @@ def test_given_python_result_when_running_check_on_postgres_then_persists_node_r
             expected_stdout_fragments=("Execution", "OK"),
         )
     ],
-    ids=["waffle shop full build succeeds on postgres"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_table_exists(
     tmp_path: Path,
@@ -431,7 +431,7 @@ def test_given_waffle_shop_when_running_full_build_on_postgres_then_expected_tab
             ),
         )
     ],
-    ids=["direct changes only build prunes unchanged postgres model"],
+    ids=lambda case: case.description,
 )
 def test_given_built_direct_project_when_building_changes_only_on_postgres_then_prunes_model(
     tmp_path: Path,
@@ -494,7 +494,7 @@ def test_given_built_direct_project_when_building_changes_only_on_postgres_then_
             expected_loader_rows=(("7", "loaded-dev"),),
         )
     ],
-    ids=["postgres loader writes dev while model reads prod deferred source"],
+    ids=lambda case: case.description,
 )
 def test_given_source_deferral_env_when_building_on_postgres_then_reads_prod_and_writes_dev(
     tmp_path: Path,
@@ -591,7 +591,7 @@ def test_given_source_deferral_env_when_building_on_postgres_then_reads_prod_and
             expected_rows=(("7", "loaded-dev", "99"),),
         )
     ],
-    ids=["postgres partial source type enforcement preserves extra columns"],
+    ids=lambda case: case.description,
 )
 def test_given_partial_source_type_enforcement_when_building_on_postgres_then_casts_columns(
     tmp_path: Path,
@@ -674,7 +674,7 @@ def test_given_partial_source_type_enforcement_when_building_on_postgres_then_ca
             expected_event_count=4,
         )
     ],
-    ids=["loader focused waffle shop grows across repeated postgres builds"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_waffle_shop_when_building_on_postgres_then_dag_grows_models(
     tmp_path: Path,
@@ -742,7 +742,7 @@ def test_given_loader_waffle_shop_when_building_on_postgres_then_dag_grows_model
             expected_stdout_fragments=("raw_countries", "raw_webhook_events", "raw_customers"),
         )
     ],
-    ids=["source loader strategies apply expected rows on postgres"],
+    ids=lambda case: case.description,
 )
 def test_given_loader_strategy_project_when_loading_twice_on_postgres_then_write_modes_apply(
     tmp_path: Path,
@@ -828,83 +828,80 @@ def test_given_loader_strategy_project_when_loading_twice_on_postgres_then_write
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
 
 
-POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES: list[PostgresScenarioLocalReplayE2ETestCase] = [
-    PostgresScenarioLocalReplayE2ETestCase(
-        description="captures postgres fixtures and replays transpilable SQL locally",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT\n"
-            "  customer_id,\n"
-            "  DATE_TRUNC('day', event_ts) AS event_day,\n"
-            "  SUM(CASE WHEN amount_cents >= 1000 THEN amount_cents ELSE 0 END)"
-            " AS large_amount_cents,\n"
-            "  COUNT(*) AS event_count\n"
-            'FROM __source("raw_events")\n'
-            "GROUP BY customer_id, DATE_TRUNC('day', event_ts)\n"
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, CAST('2026-01-01 08:15:00' AS TIMESTAMP)"
-            " AS event_ts, 1500 AS amount_cents\n"
-            "  UNION ALL\n"
-            "  SELECT 10 AS customer_id, CAST('2026-01-01 10:30:00' AS TIMESTAMP)"
-            " AS event_ts, 500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id,"
-            " DATE_TRUNC('day', CAST('2026-01-01 00:00:00' AS TIMESTAMP)) AS event_day,"
-            " 1500 AS large_amount_cents, 2 AS event_count\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "transpilable_event_rollup",
-            "PASS",
-            "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
-        ),
-        expected_local_rows=((10, 1500, 2),),
-        local_rows_sql=(
-            "SELECT customer_id, large_amount_cents, event_count "
-            "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
-        ),
-    ),
-    PostgresScenarioLocalReplayE2ETestCase(
-        description="reports postgres local transpilation failures as X607",
-        scenario_name="local_transpile_error",
-        model_sql=(
-            "MODEL (materialized table);\n\n"
-            "SELECT customer_id, amount_cents\n"
-            'FROM __source("raw_events")\n'
-        ),
-        scenario_sql=(
-            "SCENARIO ();\n\n"
-            "WITH\n"
-            "__source__raw_events AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            "),\n"
-            "__expected__event_rollup AS (\n"
-            "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
-            ")\n"
-            "SELECT 1\n"
-        ),
-        expected_stdout_fragments=(
-            "local_transpile_error",
-            "ERROR",
-            "error[X607]",
-            "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
-        ),
-        expected_return_code=1,
-        corrupt_capture_dialect=True,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES,
-    ids=[case.description for case in POSTGRES_SCENARIO_LOCAL_REPLAY_E2E_TEST_CASES],
+    [
+        PostgresScenarioLocalReplayE2ETestCase(
+            description="captures postgres fixtures and replays transpilable SQL locally",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT\n"
+                "  customer_id,\n"
+                "  DATE_TRUNC('day', event_ts) AS event_day,\n"
+                "  SUM(CASE WHEN amount_cents >= 1000 THEN amount_cents ELSE 0 END)"
+                " AS large_amount_cents,\n"
+                "  COUNT(*) AS event_count\n"
+                'FROM __source("raw_events")\n'
+                "GROUP BY customer_id, DATE_TRUNC('day', event_ts)\n"
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, CAST('2026-01-01 08:15:00' AS TIMESTAMP)"
+                " AS event_ts, 1500 AS amount_cents\n"
+                "  UNION ALL\n"
+                "  SELECT 10 AS customer_id, CAST('2026-01-01 10:30:00' AS TIMESTAMP)"
+                " AS event_ts, 500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id,"
+                " DATE_TRUNC('day', CAST('2026-01-01 00:00:00' AS TIMESTAMP)) AS event_day,"
+                " 1500 AS large_amount_cents, 2 AS event_count\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "transpilable_event_rollup",
+                "PASS",
+                "PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+            ),
+            expected_local_rows=((10, 1500, 2),),
+            local_rows_sql=(
+                "SELECT customer_id, large_amount_cents, event_count "
+                "FROM __sqb_local__model__event_rollup ORDER BY customer_id"
+            ),
+        ),
+        PostgresScenarioLocalReplayE2ETestCase(
+            description="reports postgres local transpilation failures as X607",
+            scenario_name="local_transpile_error",
+            model_sql=(
+                "MODEL (materialized table);\n\n"
+                "SELECT customer_id, amount_cents\n"
+                'FROM __source("raw_events")\n'
+            ),
+            scenario_sql=(
+                "SCENARIO ();\n\n"
+                "WITH\n"
+                "__source__raw_events AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                "),\n"
+                "__expected__event_rollup AS (\n"
+                "  SELECT 10 AS customer_id, 1500 AS amount_cents\n"
+                ")\n"
+                "SELECT 1\n"
+            ),
+            expected_stdout_fragments=(
+                "local_transpile_error",
+                "ERROR",
+                "error[X607]",
+                "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
+            ),
+            expected_return_code=1,
+            corrupt_capture_dialect=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_scenario_capture_when_replaying_locally_then_transpilable_sql_passes(
     tmp_path: Path,
@@ -969,7 +966,7 @@ def test_given_postgres_scenario_capture_when_replaying_locally_then_transpilabl
             expected_rows=(("1", "loaded"), ("2", "loaded")),
         )
     ],
-    ids=["chained source loader runs on postgres"],
+    ids=lambda case: case.description,
 )
 def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_dag(
     tmp_path: Path,
@@ -1048,113 +1045,110 @@ def test_given_chained_loader_project_when_loading_on_postgres_then_runs_loader_
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
 
 
-POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES: list[PostgresIntermediateDagStrategyE2ETestCase] = [
-    PostgresIntermediateDagStrategyE2ETestCase(
-        description="postgres append intermediate accumulates rows across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
-            "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "    {'name': 'amount', 'type': 'INTEGER'},\n"
-            "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "])\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        next_seq = 1\n"
-            "    else:\n"
-            "        next_seq = ctx.current_cursor_value + 1\n"
-            "    return [\n"
-            "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("1", "100"), ("2", "200")),
-        expected_terminal_rows=(("1", "100"), ("2", "200")),
-    ),
-    PostgresIntermediateDagStrategyE2ETestCase(
-        description="postgres merge intermediate updates and adds rows across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(\n"
-            "    write_strategy='merge',\n"
-            "    unique_key='event_id',\n"
-            "    cursor_column='load_seq',\n"
-            "    columns=[\n"
-            "        {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "        {'name': 'amount', 'type': 'INTEGER'},\n"
-            "        {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "    ],\n"
-            ")\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        return [\n"
-            "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
-            "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
-            "        ]\n"
-            "    return [\n"
-            "        {'event_id': 1, 'amount': 150, 'load_seq': 2},\n"
-            "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
-        expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
-    ),
-    PostgresIntermediateDagStrategyE2ETestCase(
-        description="postgres delete insert intermediate replaces cursor window across DAG loads",
-        loader_py=(
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
-            "    {'name': 'event_id', 'type': 'INTEGER'},\n"
-            "    {'name': 'amount', 'type': 'INTEGER'},\n"
-            "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
-            "])\n"
-            "def fetch_events(ctx):\n"
-            "    if ctx.current_cursor_value is None:\n"
-            "        return [\n"
-            "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
-            "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
-            "        ]\n"
-            "    return [\n"
-            "        {'event_id': 2, 'amount': 250, 'load_seq': 1},\n"
-            "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
-            "    ]\n\n"
-            "@loader(depends_on=[fetch_events])\n"
-            "def raw_events(ctx):\n"
-            "    events = ctx.loader(fetch_events)\n"
-            "    cursor = ctx.query(\n"
-            "        f'SELECT event_id, amount FROM {events.destination} '\n"
-            "        'ORDER BY event_id, amount'\n"
-            "    )\n"
-            "    rows = cursor.fetchall()\n"
-            "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
-        ),
-        expected_intermediate_rows=(("2", "250"), ("3", "300")),
-        expected_terminal_rows=(("2", "250"), ("3", "300")),
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES,
-    ids=[case.description for case in POSTGRES_INTERMEDIATE_DAG_STRATEGY_TEST_CASES],
+    [
+        PostgresIntermediateDagStrategyE2ETestCase(
+            description="postgres append intermediate accumulates rows across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "    {'name': 'amount', 'type': 'INTEGER'},\n"
+                "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        next_seq = 1\n"
+                "    else:\n"
+                "        next_seq = ctx.current_cursor_value + 1\n"
+                "    return [\n"
+                "        {'event_id': next_seq, 'amount': next_seq * 100, 'load_seq': next_seq}\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("1", "100"), ("2", "200")),
+            expected_terminal_rows=(("1", "100"), ("2", "200")),
+        ),
+        PostgresIntermediateDagStrategyE2ETestCase(
+            description="postgres merge intermediate updates and adds rows across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(\n"
+                "    write_strategy='merge',\n"
+                "    unique_key='event_id',\n"
+                "    cursor_column='load_seq',\n"
+                "    columns=[\n"
+                "        {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "        {'name': 'amount', 'type': 'INTEGER'},\n"
+                "        {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "    ],\n"
+                ")\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [\n"
+                "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
+                "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
+                "        ]\n"
+                "    return [\n"
+                "        {'event_id': 1, 'amount': 150, 'load_seq': 2},\n"
+                "        {'event_id': 3, 'amount': 300, 'load_seq': 2},\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("1", "150"), ("2", "200"), ("3", "300")),
+            expected_terminal_rows=(("1", "150"), ("2", "200"), ("3", "300")),
+        ),
+        PostgresIntermediateDagStrategyE2ETestCase(
+            description="postgres delete insert intermediate replaces cursor window across DAG loads",
+            loader_py=(
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(write_strategy='delete_insert', cursor_column='load_seq', columns=[\n"
+                "    {'name': 'event_id', 'type': 'INTEGER'},\n"
+                "    {'name': 'amount', 'type': 'INTEGER'},\n"
+                "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
+                "])\n"
+                "def fetch_events(ctx):\n"
+                "    if ctx.current_cursor_value is None:\n"
+                "        return [\n"
+                "            {'event_id': 1, 'amount': 100, 'load_seq': 1},\n"
+                "            {'event_id': 2, 'amount': 200, 'load_seq': 1},\n"
+                "        ]\n"
+                "    return [\n"
+                "        {'event_id': 2, 'amount': 250, 'load_seq': 1},\n"
+                "        {'event_id': 3, 'amount': 300, 'load_seq': 1},\n"
+                "    ]\n\n"
+                "@loader(depends_on=[fetch_events])\n"
+                "def raw_events(ctx):\n"
+                "    events = ctx.loader(fetch_events)\n"
+                "    cursor = ctx.query(\n"
+                "        f'SELECT event_id, amount FROM {events.destination} '\n"
+                "        'ORDER BY event_id, amount'\n"
+                "    )\n"
+                "    rows = cursor.fetchall()\n"
+                "    return [{'event_id': row[0], 'amount': row[1]} for row in rows]\n"
+            ),
+            expected_intermediate_rows=(("2", "250"), ("3", "300")),
+            expected_terminal_rows=(("2", "250"), ("3", "300")),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then_strategy_applies(
     tmp_path: Path,
@@ -1254,7 +1248,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then
             ),
         )
     ],
-    ids=["executes snapshot scd2 matrix on postgres"],
+    ids=lambda case: case.description,
 )
 def test_given_snapshot_project_when_building_on_postgres_then_scd2_history_is_valid(
     tmp_path: Path,
@@ -1365,7 +1359,7 @@ def test_given_snapshot_project_when_building_on_postgres_then_scd2_history_is_v
             ),
         )
     ],
-    ids=["applies existing-target snapshot changes on postgres"],
+    ids=lambda case: case.description,
 )
 def test_given_existing_snapshot_targets_when_building_on_postgres_then_apply_sql_succeeds(
     tmp_path: Path,
@@ -1435,7 +1429,7 @@ def test_given_existing_snapshot_targets_when_building_on_postgres_then_apply_sq
             expected_noop_fragments=("Skipping dbt: no dbt work selected.",),
         )
     ],
-    ids=["postgres dbt seed change reloads, cascades, and round-trips identity"],
+    ids=lambda case: case.description,
 )
 def test_given_postgres_dbt_seed_change_when_building_then_cascades_and_round_trips(
     tmp_path: Path,

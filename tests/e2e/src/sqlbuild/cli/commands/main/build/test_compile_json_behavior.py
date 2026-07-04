@@ -33,7 +33,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_sql_fragments=('__ref("fact_orders")', "DATE_TRUNC"),
         )
     ],
-    ids=["compile json reports offline query sql"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_query_sql(
     test_case: CompileJsonBuildE2ETestCase,
@@ -114,7 +114,7 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
             ),
         )
     ],
-    ids=["compile json reports normalized lifecycle hook metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_metadata(
     test_case: CompileJsonBuildE2ETestCase,

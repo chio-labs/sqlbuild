@@ -15,67 +15,48 @@ from tests.unit.src.sqlbuild.executor.diff.helpers import (
     build_fake_model,
 )
 
-RESOLVE_BOUNDED_CURSORS_TEST_CASES: list[ResolveBoundedCursorsTestCase] = [
-    ResolveBoundedCursorsTestCase(
-        description="returns empty bounds when full diff is requested",
-        config_values={"cursor": "event_time", "cursor_type": "timestamp"},
-        bounded=None,
-        expected_cursor_column=None,
-        expected_start_cursor=None,
-        expected_end_cursor_kind=None,
-        expected_fallback=False,
-    ),
-    ResolveBoundedCursorsTestCase(
-        description="falls back to full when bounded model has no cursor",
-        config_values={},
-        bounded="30d",
-        expected_cursor_column=None,
-        expected_start_cursor=None,
-        expected_end_cursor_kind=None,
-        expected_fallback=True,
-    ),
-    ResolveBoundedCursorsTestCase(
-        description="uses integer bound as lower cursor value",
-        config_values={"cursor": "id", "cursor_type": "integer"},
-        bounded="100",
-        expected_cursor_column="id",
-        expected_start_cursor=CursorValue(kind=CursorKind.INTEGER, value=100),
-        expected_end_cursor_kind=None,
-        expected_fallback=False,
-    ),
-    ResolveBoundedCursorsTestCase(
-        description="uses timestamp duration as bounded window",
-        config_values={"cursor": "event_time", "cursor_type": "timestamp"},
-        bounded="1d",
-        expected_cursor_column="event_time",
-        expected_start_cursor=None,
-        expected_end_cursor_kind=CursorKind.TIMESTAMP,
-        expected_fallback=False,
-    ),
-]
-
-RESOLVE_BOUNDED_CURSORS_ERROR_TEST_CASES: list[ResolveBoundedCursorsErrorTestCase] = [
-    ResolveBoundedCursorsErrorTestCase(
-        description="rejects non integer bound for integer cursor",
-        config_values={"cursor": "id", "cursor_type": "integer"},
-        bounded="30d",
-        expected_error_fragment="requires an integer bound",
-        expected_code="X102",
-    ),
-    ResolveBoundedCursorsErrorTestCase(
-        description="rejects invalid timestamp duration",
-        config_values={"cursor": "event_time", "cursor_type": "timestamp"},
-        bounded="30x",
-        expected_error_fragment="requires duration like",
-        expected_code="X103",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    RESOLVE_BOUNDED_CURSORS_TEST_CASES,
-    ids=[case.description for case in RESOLVE_BOUNDED_CURSORS_TEST_CASES],
+    [
+        ResolveBoundedCursorsTestCase(
+            description="returns empty bounds when full diff is requested",
+            config_values={"cursor": "event_time", "cursor_type": "timestamp"},
+            bounded=None,
+            expected_cursor_column=None,
+            expected_start_cursor=None,
+            expected_end_cursor_kind=None,
+            expected_fallback=False,
+        ),
+        ResolveBoundedCursorsTestCase(
+            description="falls back to full when bounded model has no cursor",
+            config_values={},
+            bounded="30d",
+            expected_cursor_column=None,
+            expected_start_cursor=None,
+            expected_end_cursor_kind=None,
+            expected_fallback=True,
+        ),
+        ResolveBoundedCursorsTestCase(
+            description="uses integer bound as lower cursor value",
+            config_values={"cursor": "id", "cursor_type": "integer"},
+            bounded="100",
+            expected_cursor_column="id",
+            expected_start_cursor=CursorValue(kind=CursorKind.INTEGER, value=100),
+            expected_end_cursor_kind=None,
+            expected_fallback=False,
+        ),
+        ResolveBoundedCursorsTestCase(
+            description="uses timestamp duration as bounded window",
+            config_values={"cursor": "event_time", "cursor_type": "timestamp"},
+            bounded="1d",
+            expected_cursor_column="event_time",
+            expected_start_cursor=None,
+            expected_end_cursor_kind=CursorKind.TIMESTAMP,
+            expected_fallback=False,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_bounded_diff_config_when_resolving_cursors_then_returns_expected_bounds(
     test_case: ResolveBoundedCursorsTestCase,
@@ -105,8 +86,23 @@ def test_given_bounded_diff_config_when_resolving_cursors_then_returns_expected_
 
 @pytest.mark.parametrize(
     "test_case",
-    RESOLVE_BOUNDED_CURSORS_ERROR_TEST_CASES,
-    ids=[case.description for case in RESOLVE_BOUNDED_CURSORS_ERROR_TEST_CASES],
+    [
+        ResolveBoundedCursorsErrorTestCase(
+            description="rejects non integer bound for integer cursor",
+            config_values={"cursor": "id", "cursor_type": "integer"},
+            bounded="30d",
+            expected_error_fragment="requires an integer bound",
+            expected_code="X102",
+        ),
+        ResolveBoundedCursorsErrorTestCase(
+            description="rejects invalid timestamp duration",
+            config_values={"cursor": "event_time", "cursor_type": "timestamp"},
+            bounded="30x",
+            expected_error_fragment="requires duration like",
+            expected_code="X103",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_bounded_diff_config_when_resolving_cursors_then_raises_clear_error(
     test_case: ResolveBoundedCursorsErrorTestCase,

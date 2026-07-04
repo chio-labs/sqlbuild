@@ -36,7 +36,7 @@ from tests.unit.src.sqlbuild.executor.load.helpers import CountingLoaderContextT
             expected_lifecycle_message="external build loader ran",
         )
     ],
-    ids=["runs external source before build connections"],
+    ids=lambda case: case.description,
 )
 def test_given_external_source_load_when_preloading_then_records_progress_and_no_connection(
     test_case: ExternalBuildSourceLoadTestCase,

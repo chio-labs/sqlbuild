@@ -56,46 +56,6 @@ from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
     write_sqb_streaming_command,
 )
 
-SELECTION_TEST_CASES: list[DagsterSqlBuildSelectionE2ETestCase] = [
-    DagsterSqlBuildSelectionE2ETestCase(
-        description="dagster subset selection runs sqlbuild with select file",
-        selected_asset_keys=(("main", "waffle_types"),),
-        expected_success=True,
-        expected_selector_file_contents="waffle_types\n",
-        expected_selector_log_line="waffle_types",
-        expected_table_names=("waffle_types",),
-    ),
-    DagsterSqlBuildSelectionE2ETestCase(
-        description="dagster multi-asset selection writes all sqlbuild selectors",
-        selected_asset_keys=(
-            ("raw_customers",),
-            ("raw_orders",),
-            ("raw_payments",),
-            ("main", "waffle_types"),
-            ("main", "stg_customers"),
-            ("main", "stg_orders"),
-            ("main", "stg_payments"),
-        ),
-        expected_success=True,
-        expected_selector_file_contents=(
-            "raw_customers\nraw_orders\nraw_payments\nwaffle_types\n"
-            "stg_customers\nstg_orders\nstg_payments\n"
-        ),
-        expected_selector_log_line=(
-            "raw_customers raw_orders raw_payments waffle_types "
-            "stg_customers stg_orders stg_payments"
-        ),
-        expected_table_names=(
-            "raw_customers",
-            "raw_orders",
-            "waffle_types",
-            "stg_customers",
-            "stg_orders",
-            "stg_payments",
-        ),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -113,7 +73,7 @@ SELECTION_TEST_CASES: list[DagsterSqlBuildSelectionE2ETestCase] = [
             expected_asset_group="exports",
         )
     ],
-    ids=["dagster consumes real Python-node dag artifact"],
+    ids=lambda case: case.description,
 )
 def test_given_python_nodes_project_when_loading_dagster_assets_then_maps_real_artifact(
     test_case: DagsterPythonNodesArtifactE2ETestCase,
@@ -183,7 +143,7 @@ def test_given_python_nodes_project_when_loading_dagster_assets_then_maps_real_a
             expected_warn_check_name="audit__not_null__order_id",
         )
     ],
-    ids=["dagster loads generated dag artifact and executes sqlbuild build"],
+    ids=lambda case: case.description,
 )
 def test_given_waffle_shop_when_executing_sqlbuild_assets_then_dagster_run_succeeds(
     test_case: DagsterSqlBuildE2ETestCase,
@@ -242,8 +202,46 @@ def test_given_waffle_shop_when_executing_sqlbuild_assets_then_dagster_run_succe
 
 @pytest.mark.parametrize(
     "test_case",
-    SELECTION_TEST_CASES,
-    ids=[case.description for case in SELECTION_TEST_CASES],
+    [
+        DagsterSqlBuildSelectionE2ETestCase(
+            description="dagster subset selection runs sqlbuild with select file",
+            selected_asset_keys=(("main", "waffle_types"),),
+            expected_success=True,
+            expected_selector_file_contents="waffle_types\n",
+            expected_selector_log_line="waffle_types",
+            expected_table_names=("waffle_types",),
+        ),
+        DagsterSqlBuildSelectionE2ETestCase(
+            description="dagster multi-asset selection writes all sqlbuild selectors",
+            selected_asset_keys=(
+                ("raw_customers",),
+                ("raw_orders",),
+                ("raw_payments",),
+                ("main", "waffle_types"),
+                ("main", "stg_customers"),
+                ("main", "stg_orders"),
+                ("main", "stg_payments"),
+            ),
+            expected_success=True,
+            expected_selector_file_contents=(
+                "raw_customers\nraw_orders\nraw_payments\nwaffle_types\n"
+                "stg_customers\nstg_orders\nstg_payments\n"
+            ),
+            expected_selector_log_line=(
+                "raw_customers raw_orders raw_payments waffle_types "
+                "stg_customers stg_orders stg_payments"
+            ),
+            expected_table_names=(
+                "raw_customers",
+                "raw_orders",
+                "waffle_types",
+                "stg_customers",
+                "stg_orders",
+                "stg_payments",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dagster_asset_selection_when_executing_sqlbuild_then_uses_select_file(
     test_case: DagsterSqlBuildSelectionE2ETestCase,
@@ -313,7 +311,7 @@ def test_given_dagster_asset_selection_when_executing_sqlbuild_then_uses_select_
             ),
         )
     ],
-    ids=["dagster selected loader asset runs sqlbuild load"],
+    ids=lambda case: case.description,
 )
 def test_given_source_loader_project_when_executing_sqlbuild_load_asset_then_loader_runs(
     test_case: DagsterSqlBuildLoaderE2ETestCase,
@@ -374,7 +372,7 @@ def test_given_source_loader_project_when_executing_sqlbuild_load_asset_then_loa
             expected_metadata_keys=("kind", "loader", "name", "status"),
         )
     ],
-    ids=["dagster selected chained source reuses existing intermediate target"],
+    ids=lambda case: case.description,
 )
 def test_given_chained_source_loader_when_dagster_selects_source_then_reuses_intermediate_target(
     test_case: DagsterSqlBuildLoaderE2ETestCase,
@@ -465,7 +463,7 @@ def test_given_chained_source_loader_when_dagster_selects_source_then_reuses_int
             expected_metadata_keys=(),
         )
     ],
-    ids=["dagster selected chained source fails when intermediate target is missing"],
+    ids=lambda case: case.description,
 )
 def test_given_chained_source_loader_when_dagster_selects_source_without_intermediate_then_fails(
     test_case: DagsterSqlBuildLoaderE2ETestCase,
@@ -540,7 +538,7 @@ def test_given_chained_source_loader_when_dagster_selects_source_without_interme
             expected_schema="dev",
         )
     ],
-    ids=["generated dagster playground materializes loader-backed waffle shop"],
+    ids=lambda case: case.description,
 )
 def test_given_generated_dagster_playground_when_materializing_assets_then_build_succeeds(
     test_case: DagsterPlaygroundE2ETestCase,
@@ -583,7 +581,7 @@ def test_given_generated_dagster_playground_when_materializing_assets_then_build
             expected_stdout_fragment="streamed before exit\n",
         )
     ],
-    ids=["sqlbuild stdout is visible before process exits"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_process_is_still_running_when_emitting_stdout_then_dagster_streams_output(
     test_case: DagsterSqlBuildStreamingE2ETestCase,
@@ -672,7 +670,7 @@ def test_given_sqlbuild_process_is_still_running_when_emitting_stdout_then_dagst
             ),
         )
     ],
-    ids=["failed warn and error audits stay linked to selected asset"],
+    ids=lambda case: case.description,
 )
 def test_given_failing_sqlbuild_audits_when_executing_dagster_then_links_checks_with_severity(
     test_case: DagsterSqlBuildFailedCheckE2ETestCase,
@@ -739,7 +737,7 @@ def test_given_failing_sqlbuild_audits_when_executing_dagster_then_links_checks_
             ),
         )
     ],
-    ids=["scenario test only runs scenarios attached to selected assets"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_scenarios_when_executing_dagster_then_emits_scenario_checks(
     test_case: DagsterSqlBuildScenarioE2ETestCase,
@@ -798,7 +796,7 @@ def test_given_sqlbuild_scenarios_when_executing_dagster_then_emits_scenario_che
             ),
         )
     ],
-    ids=["scenario helper only runs selected scenario checks"],
+    ids=lambda case: case.description,
 )
 def test_given_scenario_check_selection_when_executing_dagster_then_runs_only_selected_scenarios(
     test_case: DagsterSqlBuildScenarioE2ETestCase,

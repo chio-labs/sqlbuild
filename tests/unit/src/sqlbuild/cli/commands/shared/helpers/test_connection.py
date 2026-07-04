@@ -40,7 +40,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared.helpers._test_types import (
             ),
         )
     ],
-    ids=["uses project target and local connection precedence"],
+    ids=lambda case: case.description,
 )
 def test_given_project_inputs_when_resolving_connection_then_uses_effective_connection(
     test_case: ResolveProjectConnectionConfigTestCase,
@@ -94,7 +94,7 @@ def test_given_project_inputs_when_resolving_connection_then_uses_effective_conn
             expected_warning="",
         )
     ],
-    ids=["does not warn when snowflake adapter has snowflake keys"],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
     test_case: ResolveConnectionConfigWarningTestCase,
@@ -140,7 +140,7 @@ def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
             },
         )
     ],
-    ids=["merges user connection overrides over resolved dbt profile connection"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_profile_connection_when_resolving_then_merges_user_overrides(
     test_case: ResolveDbtProfileConnectionConfigTestCase,
@@ -188,7 +188,7 @@ def test_given_dbt_profile_connection_when_resolving_then_merges_user_overrides(
             },
         )
     ],
-    ids=["resolves target connection with expanded env vars and local overrides"],
+    ids=lambda case: case.description,
 )
 def test_given_target_connection_when_resolving_then_it_expands_effective_config(
     test_case: ResolveEnvironmentConnectionConfigTestCase,

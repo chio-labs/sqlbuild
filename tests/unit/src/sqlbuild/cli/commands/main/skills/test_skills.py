@@ -21,40 +21,38 @@ from tests.unit.src.sqlbuild.cli.commands.main.skills.helpers import (
     write_project_files,
 )
 
-SKILL_UPDATE_TEST_CASES: list[SkillUpdateTestCase] = [
-    SkillUpdateTestCase(
-        description="writes all local skill targets by default",
-        expected_written_paths=(
-            Path(".opencode/skills/sqlbuild/SKILL.md"),
-            Path(".claude/skills/sqlbuild/SKILL.md"),
-            Path(".agents/skills/sqlbuild/SKILL.md"),
-        ),
-    ),
-    SkillUpdateTestCase(
-        description="uses project configured skill targets",
-        project_config='name = "demo"\nadapter = "duckdb"\n\n[skills]\ntargets = ["opencode"]\n',
-        expected_written_paths=(Path(".opencode/skills/sqlbuild/SKILL.md"),),
-    ),
-    SkillUpdateTestCase(
-        description="requested targets override project configured targets",
-        project_config='name = "demo"\nadapter = "duckdb"\n\n[skills]\ntargets = ["claude"]\n',
-        requested_targets=("agents",),
-        expected_written_paths=(Path(".agents/skills/sqlbuild/SKILL.md"),),
-    ),
-    SkillUpdateTestCase(
-        description="force overwrites non generated skill file",
-        requested_targets=("opencode",),
-        existing_files={Path(".opencode/skills/sqlbuild/SKILL.md"): "custom instructions\n"},
-        force=True,
-        expected_written_paths=(Path(".opencode/skills/sqlbuild/SKILL.md"),),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SKILL_UPDATE_TEST_CASES,
-    ids=[case.description for case in SKILL_UPDATE_TEST_CASES],
+    [
+        SkillUpdateTestCase(
+            description="writes all local skill targets by default",
+            expected_written_paths=(
+                Path(".opencode/skills/sqlbuild/SKILL.md"),
+                Path(".claude/skills/sqlbuild/SKILL.md"),
+                Path(".agents/skills/sqlbuild/SKILL.md"),
+            ),
+        ),
+        SkillUpdateTestCase(
+            description="uses project configured skill targets",
+            project_config='name = "demo"\nadapter = "duckdb"\n\n[skills]\ntargets = ["opencode"]\n',
+            expected_written_paths=(Path(".opencode/skills/sqlbuild/SKILL.md"),),
+        ),
+        SkillUpdateTestCase(
+            description="requested targets override project configured targets",
+            project_config='name = "demo"\nadapter = "duckdb"\n\n[skills]\ntargets = ["claude"]\n',
+            requested_targets=("agents",),
+            expected_written_paths=(Path(".agents/skills/sqlbuild/SKILL.md"),),
+        ),
+        SkillUpdateTestCase(
+            description="force overwrites non generated skill file",
+            requested_targets=("opencode",),
+            existing_files={Path(".opencode/skills/sqlbuild/SKILL.md"): "custom instructions\n"},
+            force=True,
+            expected_written_paths=(Path(".opencode/skills/sqlbuild/SKILL.md"),),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_skill_update_options_when_updating_then_writes_expected_targets(
     test_case: SkillUpdateTestCase,
@@ -98,7 +96,7 @@ def test_given_skill_update_options_when_updating_then_writes_expected_targets(
             ),
         )
     ],
-    ids=["writes global skill targets under home directory"],
+    ids=lambda case: case.description,
 )
 def test_given_global_skill_update_when_updating_then_writes_under_home_directory(
     test_case: SkillUpdateTestCase,
@@ -134,7 +132,7 @@ def test_given_global_skill_update_when_updating_then_writes_under_home_director
             expected_error_fragment="refusing to overwrite non-generated skill file",
         )
     ],
-    ids=["rejects non generated existing skill file without force"],
+    ids=lambda case: case.description,
 )
 def test_given_non_generated_skill_file_when_updating_without_force_then_raises_user_error(
     test_case: SkillUpdateErrorTestCase,
@@ -158,7 +156,7 @@ def test_given_non_generated_skill_file_when_updating_without_force_then_raises_
             ),
         )
     ],
-    ids=["keeps skill frontmatter before generated marker"],
+    ids=lambda case: case.description,
 )
 def test_given_skill_frontmatter_when_adding_generated_marker_then_marker_follows_frontmatter(
     test_case: SkillUpdateTestCase,

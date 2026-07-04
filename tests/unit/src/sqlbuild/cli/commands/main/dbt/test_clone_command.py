@@ -34,7 +34,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
             ),
         )
     ],
-    ids=["renders shared clone header progress rows and summary"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_clone_when_streaming_then_renders_native_clone_output_shape(
     test_case: DbtCloneCommandOutputTestCase,

@@ -20,7 +20,7 @@ from tests.unit.src.sqlbuild.executor.pipeline.main.helpers import (
             expected_schemas=((None, "analytics"), (None, "dev"), (None, "raw")),
         )
     ],
-    ids=["prepares model seed source and function schemas once"],
+    ids=lambda case: case.description,
 )
 def test_given_build_plan_when_preparing_schemas_then_all_destination_schemas_are_created_once(
     test_case: BuildSchemaPreflightTestCase,

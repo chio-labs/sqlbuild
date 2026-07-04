@@ -15,30 +15,28 @@ from tests.unit.src.sqlbuild.compiler.pipeline.helpers.target_validation.helpers
     build_project,
 )
 
-REQUIRED_TARGET_NAMESPACE_TEST_CASES: list[ValidateProjectTargetsTestCase] = [
-    ValidateProjectTargetsTestCase(
-        description="snowflake requires explicit database and schema",
-        adapter_name=BuiltinAdapter.SNOWFLAKE,
-        target=CompiledRelationLocation(
-            database=None, schema=None, name="stg_customers", qualified_name=None
-        ),
-        expected_error_fragment="snowflake execution requires explicit target database, schema",
-    ),
-    ValidateProjectTargetsTestCase(
-        description="bigquery requires explicit database and schema",
-        adapter_name=BuiltinAdapter.BIGQUERY,
-        target=CompiledRelationLocation(
-            database=None, schema=None, name="stg_customers", qualified_name=None
-        ),
-        expected_error_fragment="bigquery execution requires explicit target database, schema",
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    REQUIRED_TARGET_NAMESPACE_TEST_CASES,
-    ids=[case.description for case in REQUIRED_TARGET_NAMESPACE_TEST_CASES],
+    [
+        ValidateProjectTargetsTestCase(
+            description="snowflake requires explicit database and schema",
+            adapter_name=BuiltinAdapter.SNOWFLAKE,
+            target=CompiledRelationLocation(
+                database=None, schema=None, name="stg_customers", qualified_name=None
+            ),
+            expected_error_fragment="snowflake execution requires explicit target database, schema",
+        ),
+        ValidateProjectTargetsTestCase(
+            description="bigquery requires explicit database and schema",
+            adapter_name=BuiltinAdapter.BIGQUERY,
+            target=CompiledRelationLocation(
+                database=None, schema=None, name="stg_customers", qualified_name=None
+            ),
+            expected_error_fragment="bigquery execution requires explicit target database, schema",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_adapter_with_missing_target_namespace_when_validating_then_raises_clear_error(
     test_case: ValidateProjectTargetsTestCase,
@@ -64,7 +62,7 @@ def test_given_adapter_with_missing_target_namespace_when_validating_then_raises
             expected_error_fragment="",
         )
     ],
-    ids=["duckdb allows missing database and schema"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_with_missing_target_namespace_when_validating_then_it_passes(
     test_case: ValidateProjectTargetsTestCase,

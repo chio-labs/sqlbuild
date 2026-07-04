@@ -26,21 +26,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-VIRTUAL_RUN_DESPITE_UNCHANGED_ERROR_TEST_CASES: tuple[
-    VirtualSourceFreshnessPlanE2ETestCase, ...
-] = (
-    VirtualSourceFreshnessPlanE2ETestCase(
-        description="virtual duration mode fails without source freshness",
-        expected_unchanged_fragments=(),
-        expected_fragments=("cannot determine upstream source freshness age",),
-    ),
-    VirtualSourceFreshnessPlanE2ETestCase(
-        description="virtual duration mode fails with integer source freshness",
-        expected_unchanged_fragments=(),
-        expected_fragments=("requires timestamp source freshness",),
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
@@ -67,7 +52,7 @@ VIRTUAL_RUN_DESPITE_UNCHANGED_ERROR_TEST_CASES: tuple[
             unexpected_fragments=("dim_customers", "First run"),
         )
     ],
-    ids=["virtual plan shows query changed root and upstream changed descendants"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_virtual_reasons(
     test_case: VirtualPlanE2ETestCase,
@@ -122,7 +107,7 @@ def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_v
             ),
         )
     ],
-    ids=["virtual seed change selects seed and downstream model"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_seed_change_when_planning_changes_only_then_selects_dependent_model(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -203,7 +188,7 @@ def test_given_virtual_seed_change_when_planning_changes_only_then_selects_depen
             ),
         )
     ],
-    ids=["virtual plan observes current source freshness before build persistence"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_change_when_planning_then_selects_downstream_model(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -305,7 +290,7 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
             expected_fragments=("Plan ready (1 selected)", "fact_orders"),
         )
     ],
-    ids=["virtual plan respects timestamp source freshness lag tolerance"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_timestamp_lag_tolerance_when_planning_then_skips_within_tolerance(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -395,7 +380,7 @@ def test_given_virtual_timestamp_lag_tolerance_when_planning_then_skips_within_t
             expected_fragments=("Plan ready (1 selected)", "fact_orders"),
         )
     ],
-    ids=["virtual plan keeps unknown source freshness stale"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_without_freshness_when_planning_then_downstream_stays_stale(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -465,7 +450,7 @@ def test_given_virtual_source_without_freshness_when_planning_then_downstream_st
             ),
         )
     ],
-    ids=["virtual plan propagates source freshness through views"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_through_view_when_planning_then_selects_downstream_path(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -553,7 +538,7 @@ def test_given_virtual_source_freshness_through_view_when_planning_then_selects_
             ),
         )
     ],
-    ids=["virtual plan json explains source freshness currentness"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_source_freshness_when_planning_json_then_metadata_reports_currentness(
     test_case: VirtualPlanJsonE2ETestCase,
@@ -657,7 +642,7 @@ def test_given_virtual_source_freshness_when_planning_json_then_metadata_reports
             unexpected_fragments=("Query changed", "query diff:"),
         )
     ],
-    ids=["virtual plan shows config changed root without query diff"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_with_config_change_when_running_cli_then_it_uses_config_reason(
     test_case: VirtualPlanE2ETestCase,
@@ -728,7 +713,7 @@ def test_given_virtual_plan_with_config_change_when_running_cli_then_it_uses_con
             ),
         )
     ],
-    ids=["virtual changes-only runs configured table despite unchanged freshness"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_run_despite_unchanged_when_planning_changes_only_then_selects_downstream(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -738,7 +723,7 @@ def test_given_virtual_run_despite_unchanged_when_planning_changes_only_then_sel
         tmp_path=tmp_path,
         project_name="virtual_run_despite_unchanged_plan",
         run_despite_unchanged="30d",
-        data_version_sql="TIMESTAMP '2026-06-01 00:00:00'",
+        data_version_sql="CURRENT_TIMESTAMP",
     )
     build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
@@ -777,7 +762,7 @@ def test_given_virtual_run_despite_unchanged_when_planning_changes_only_then_sel
             unexpected_fragments=("Runs despite unchanged", "rolling_orders", "orders_mart"),
         )
     ],
-    ids=["virtual changes-only skips expired run_despite_unchanged duration"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_expired_run_despite_unchanged_when_planning_then_skips_table(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -822,7 +807,7 @@ def test_given_virtual_expired_run_despite_unchanged_when_planning_then_skips_ta
             ),
         )
     ],
-    ids=["virtual changes-only always runs configured unchanged table"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_run_despite_unchanged_always_when_planning_then_selects_downstream(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -859,7 +844,7 @@ def test_given_virtual_run_despite_unchanged_always_when_planning_then_selects_d
             expected_fragments=("rolling_orders", "30d", "raw_orders"),
         )
     ],
-    ids=["virtual JSON exposes run_despite_unchanged metadata"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_run_despite_unchanged_when_planning_json_then_outputs_metadata(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -869,7 +854,7 @@ def test_given_virtual_run_despite_unchanged_when_planning_json_then_outputs_met
         tmp_path=tmp_path,
         project_name="virtual_run_despite_unchanged_json_plan",
         run_despite_unchanged="30d",
-        data_version_sql="TIMESTAMP '2026-06-01 00:00:00'",
+        data_version_sql="CURRENT_TIMESTAMP",
     )
     build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
@@ -913,7 +898,7 @@ def test_given_virtual_run_despite_unchanged_when_planning_json_then_outputs_met
             unexpected_fragments=("Upstream changed (1)",),
         )
     ],
-    ids=["virtual scoped runtime stale root leaves downstream remaining stale"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_scoped_run_despite_unchanged_when_planning_then_downstream_remains_stale(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -923,7 +908,7 @@ def test_given_virtual_scoped_run_despite_unchanged_when_planning_then_downstrea
         tmp_path=tmp_path,
         project_name="virtual_run_despite_unchanged_scoped_plan",
         run_despite_unchanged="30d",
-        data_version_sql="TIMESTAMP '2026-06-01 00:00:00'",
+        data_version_sql="CURRENT_TIMESTAMP",
     )
     build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
@@ -945,8 +930,19 @@ def test_given_virtual_scoped_run_despite_unchanged_when_planning_then_downstrea
 
 @pytest.mark.parametrize(
     "test_case",
-    VIRTUAL_RUN_DESPITE_UNCHANGED_ERROR_TEST_CASES,
-    ids=[case.description for case in VIRTUAL_RUN_DESPITE_UNCHANGED_ERROR_TEST_CASES],
+    (
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual duration mode fails without source freshness",
+            expected_unchanged_fragments=(),
+            expected_fragments=("cannot determine upstream source freshness age",),
+        ),
+        VirtualSourceFreshnessPlanE2ETestCase(
+            description="virtual duration mode fails with integer source freshness",
+            expected_unchanged_fragments=(),
+            expected_fragments=("requires timestamp source freshness",),
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_virtual_duration_without_timestamp_freshness_when_planning_then_fails(
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
@@ -998,7 +994,7 @@ def test_given_virtual_duration_without_timestamp_freshness_when_planning_then_f
             unexpected_fragments=("cause: fact_orders", "stg_orders", "First run"),
         )
     ],
-    ids=["virtual plan shows function-driven query changed root"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_dependents_stale(
     test_case: VirtualPlanE2ETestCase,
@@ -1093,7 +1089,7 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
             unexpected_fragments=("reason: first run", "cause: fact_orders"),
         )
     ],
-    ids=["virtual plan after build shows changed function diff"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_build_then_function_change_when_running_plan_then_it_shows_function_diff(
     test_case: VirtualPlanE2ETestCase,
@@ -1168,7 +1164,7 @@ def test_given_virtual_build_then_function_change_when_running_plan_then_it_show
             unexpected_fragments=("First run", "fact_orders", "dim_customers", "stg_orders"),
         )
     ],
-    ids=["virtual plan selects nothing when all bound refs match expected hashes"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_with_matching_refs_when_running_cli_then_it_selects_nothing(
     test_case: VirtualPlanE2ETestCase,
@@ -1223,7 +1219,7 @@ def test_given_virtual_plan_with_matching_refs_when_running_cli_then_it_selects_
             unexpected_fragments=("static_model",),
         )
     ],
-    ids=["virtual plan with multiple stale roots excludes unaffected branches"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_with_multiple_stale_roots_when_running_cli_then_it_excludes_unaffected(
     test_case: VirtualPlanE2ETestCase,
@@ -1289,7 +1285,7 @@ def test_given_virtual_plan_with_multiple_stale_roots_when_running_cli_then_it_e
             unexpected_fragments=("Upstream changed (1)",),
         )
     ],
-    ids=["virtual plan explicit select bypasses stale-driven selection"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_with_explicit_select_when_running_cli_then_it_bypasses_default_scope(
     test_case: VirtualPlanE2ETestCase,
@@ -1343,7 +1339,7 @@ def test_given_virtual_plan_with_explicit_select_when_running_cli_then_it_bypass
             ),
         )
     ],
-    ids=["selected downstream with stale upstream blocks"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_selected_downstream_with_stale_upstream_when_running_then_it_blocks(
     test_case: VirtualPlanSelectionGuardE2ETestCase,
@@ -1401,7 +1397,7 @@ def test_given_virtual_plan_selected_downstream_with_stale_upstream_when_running
             unexpected_fragments=("dim_customers",),
         )
     ],
-    ids=["include stale upstreams with default pruning narrows scope"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_include_stale_upstreams_when_running_then_it_expands_minimally(
     test_case: VirtualPlanSelectionGuardE2ETestCase,
@@ -1456,7 +1452,7 @@ def test_given_virtual_plan_include_stale_upstreams_when_running_then_it_expands
             ),
         )
     ],
-    ids=["virtual plan json includes metadata fields"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_plan_json_when_running_cli_then_it_includes_virtual_metadata(
     test_case: VirtualPlanJsonE2ETestCase,

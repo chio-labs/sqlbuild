@@ -43,7 +43,7 @@ ORDER_ROLLUP: CompiledObjectKey = CompiledObjectKey(
             expected_upstream_model_names=frozenset({"stg_orders", "fact_orders", "order_rollup"}),
         )
     ],
-    ids=["collects model names in downstream and upstream graph closures"],
+    ids=lambda case: case.description,
 )
 def test_given_dependency_graph_when_building_model_closures_then_returns_reachable_model_names(
     test_case: ModelClosureTestCase,

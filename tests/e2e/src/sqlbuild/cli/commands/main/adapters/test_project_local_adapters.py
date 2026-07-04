@@ -23,7 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             expected_stdout_fragment="duckdb_plus",
         )
     ],
-    ids=["query uses nested project local adapter"],
+    ids=lambda case: case.description,
 )
 def test_given_project_local_adapter_when_running_query_then_uses_local_adapter(
     tmp_path: Path,

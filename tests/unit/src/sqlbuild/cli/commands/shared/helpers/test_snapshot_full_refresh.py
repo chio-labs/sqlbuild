@@ -29,89 +29,50 @@ class _InputStream(StringIO):
         return self._is_tty
 
 
-POLICY_ERROR_TEST_CASES: list[SnapshotFullRefreshPolicyTestCase] = [
-    SnapshotFullRefreshPolicyTestCase(
-        description="denies current-state snapshot full refresh by default",
-        plan_output=PlanOutput(model_entries=(build_snapshot_full_refresh_entry(),)),
-        snapshots_config=SnapshotsConfig(),
-        allow_snapshot_full_refresh=False,
-        expected_error_fragment="full refresh is denied for snapshot model 'customer_snapshot'",
-        expected_help_fragment="snapshot history is recoverable",
-    ),
-    SnapshotFullRefreshPolicyTestCase(
-        description="model deny remains stricter than project allow",
-        plan_output=PlanOutput(
-            model_entries=(build_snapshot_full_refresh_entry(snapshot_full_refresh="deny"),)
-        ),
-        snapshots_config=SnapshotsConfig(current_state_full_refresh="allow"),
-        allow_snapshot_full_refresh=True,
-        expected_error_fragment="full refresh is denied for snapshot model 'customer_snapshot'",
-        expected_help_fragment="snapshot history is recoverable",
-    ),
-    SnapshotFullRefreshPolicyTestCase(
-        description="requires confirmation for historical snapshot in non-interactive run",
-        plan_output=PlanOutput(
-            model_entries=(build_snapshot_full_refresh_entry(observed_at_column="observed_at"),)
-        ),
-        snapshots_config=SnapshotsConfig(),
-        allow_snapshot_full_refresh=False,
-        expected_error_fragment="snapshot full refresh requires confirmation",
-        expected_help_fragment="--allow-snapshot-full-refresh",
-    ),
-    SnapshotFullRefreshPolicyTestCase(
-        description="rejects incorrect interactive confirmation phrase",
-        plan_output=PlanOutput(
-            model_entries=(build_snapshot_full_refresh_entry(observed_at_column="observed_at"),)
-        ),
-        snapshots_config=SnapshotsConfig(),
-        allow_snapshot_full_refresh=False,
-        expected_error_fragment="snapshot full refresh cancelled",
-        input_text="discard everything\n",
-        input_is_tty=True,
-    ),
-]
-
-POLICY_SUCCESS_TEST_CASES: list[SnapshotFullRefreshPolicyTestCase] = [
-    SnapshotFullRefreshPolicyTestCase(
-        description="allows historical snapshot full refresh with CLI confirmation flag",
-        plan_output=PlanOutput(
-            model_entries=(build_snapshot_full_refresh_entry(observed_at_column="observed_at"),)
-        ),
-        snapshots_config=SnapshotsConfig(),
-        allow_snapshot_full_refresh=True,
-        expected_output="",
-    ),
-    SnapshotFullRefreshPolicyTestCase(
-        description="allows current-state snapshot when project and model policy allow",
-        plan_output=PlanOutput(
-            model_entries=(build_snapshot_full_refresh_entry(snapshot_full_refresh="allow"),)
-        ),
-        snapshots_config=SnapshotsConfig(current_state_full_refresh="allow"),
-        allow_snapshot_full_refresh=False,
-        expected_output="",
-    ),
-    SnapshotFullRefreshPolicyTestCase(
-        description="allows historical snapshot full refresh with exact interactive phrase",
-        plan_output=PlanOutput(
-            model_entries=(build_snapshot_full_refresh_entry(observed_at_column="observed_at"),)
-        ),
-        snapshots_config=SnapshotsConfig(),
-        allow_snapshot_full_refresh=False,
-        expected_output=(
-            "Full refresh of snapshot model 'customer_snapshot' may permanently discard "
-            "unrecoverable history.\n\n"
-            "Type `discard snapshot history for customer_snapshot` to continue: "
-        ),
-        input_text="discard snapshot history for customer_snapshot\n",
-        input_is_tty=True,
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    POLICY_ERROR_TEST_CASES,
-    ids=[case.description for case in POLICY_ERROR_TEST_CASES],
+    [
+        SnapshotFullRefreshPolicyTestCase(
+            description="denies current-state snapshot full refresh by default",
+            plan_output=PlanOutput(model_entries=(build_snapshot_full_refresh_entry(),)),
+            snapshots_config=SnapshotsConfig(),
+            allow_snapshot_full_refresh=False,
+            expected_error_fragment="full refresh is denied for snapshot model 'customer_snapshot'",
+            expected_help_fragment="snapshot history is recoverable",
+        ),
+        SnapshotFullRefreshPolicyTestCase(
+            description="model deny remains stricter than project allow",
+            plan_output=PlanOutput(
+                model_entries=(build_snapshot_full_refresh_entry(snapshot_full_refresh="deny"),)
+            ),
+            snapshots_config=SnapshotsConfig(current_state_full_refresh="allow"),
+            allow_snapshot_full_refresh=True,
+            expected_error_fragment="full refresh is denied for snapshot model 'customer_snapshot'",
+            expected_help_fragment="snapshot history is recoverable",
+        ),
+        SnapshotFullRefreshPolicyTestCase(
+            description="requires confirmation for historical snapshot in non-interactive run",
+            plan_output=PlanOutput(
+                model_entries=(build_snapshot_full_refresh_entry(observed_at_column="observed_at"),)
+            ),
+            snapshots_config=SnapshotsConfig(),
+            allow_snapshot_full_refresh=False,
+            expected_error_fragment="snapshot full refresh requires confirmation",
+            expected_help_fragment="--allow-snapshot-full-refresh",
+        ),
+        SnapshotFullRefreshPolicyTestCase(
+            description="rejects incorrect interactive confirmation phrase",
+            plan_output=PlanOutput(
+                model_entries=(build_snapshot_full_refresh_entry(observed_at_column="observed_at"),)
+            ),
+            snapshots_config=SnapshotsConfig(),
+            allow_snapshot_full_refresh=False,
+            expected_error_fragment="snapshot full refresh cancelled",
+            input_text="discard everything\n",
+            input_is_tty=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_unsafe_snapshot_full_refresh_when_enforcing_policy_then_raises_user_error(
     test_case: SnapshotFullRefreshPolicyTestCase,
@@ -133,8 +94,42 @@ def test_given_unsafe_snapshot_full_refresh_when_enforcing_policy_then_raises_us
 
 @pytest.mark.parametrize(
     "test_case",
-    POLICY_SUCCESS_TEST_CASES,
-    ids=[case.description for case in POLICY_SUCCESS_TEST_CASES],
+    [
+        SnapshotFullRefreshPolicyTestCase(
+            description="allows historical snapshot full refresh with CLI confirmation flag",
+            plan_output=PlanOutput(
+                model_entries=(build_snapshot_full_refresh_entry(observed_at_column="observed_at"),)
+            ),
+            snapshots_config=SnapshotsConfig(),
+            allow_snapshot_full_refresh=True,
+            expected_output="",
+        ),
+        SnapshotFullRefreshPolicyTestCase(
+            description="allows current-state snapshot when project and model policy allow",
+            plan_output=PlanOutput(
+                model_entries=(build_snapshot_full_refresh_entry(snapshot_full_refresh="allow"),)
+            ),
+            snapshots_config=SnapshotsConfig(current_state_full_refresh="allow"),
+            allow_snapshot_full_refresh=False,
+            expected_output="",
+        ),
+        SnapshotFullRefreshPolicyTestCase(
+            description="allows historical snapshot full refresh with exact interactive phrase",
+            plan_output=PlanOutput(
+                model_entries=(build_snapshot_full_refresh_entry(observed_at_column="observed_at"),)
+            ),
+            snapshots_config=SnapshotsConfig(),
+            allow_snapshot_full_refresh=False,
+            expected_output=(
+                "Full refresh of snapshot model 'customer_snapshot' may permanently discard "
+                "unrecoverable history.\n\n"
+                "Type `discard snapshot history for customer_snapshot` to continue: "
+            ),
+            input_text="discard snapshot history for customer_snapshot\n",
+            input_is_tty=True,
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_safe_or_confirmed_snapshot_full_refresh_when_enforcing_policy_then_allows_execution(
     test_case: SnapshotFullRefreshPolicyTestCase,

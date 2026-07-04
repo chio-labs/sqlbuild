@@ -9,34 +9,32 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_types import
     ResolveBackfillTestCase,
 )
 
-RESOLVE_QUERY_BACKFILL_TEST_CASES: list[ResolveBackfillTestCase] = [
-    ResolveBackfillTestCase(
-        description="returns full for full policy",
-        raw_value="full",
-        expected_result=BackfillResult(action=BackfillAction.FULL),
-    ),
-    ResolveBackfillTestCase(
-        description="returns bounded with duration for bounded policy",
-        raw_value="bounded-30d",
-        expected_result=BackfillResult(action=BackfillAction.BOUNDED, duration="30d"),
-    ),
-    ResolveBackfillTestCase(
-        description="returns forward only for null policy",
-        raw_value=None,
-        expected_result=BackfillResult(action=BackfillAction.FORWARD_ONLY),
-    ),
-    ResolveBackfillTestCase(
-        description="returns forward only for unrecognized policy value",
-        raw_value="unknown",
-        expected_result=BackfillResult(action=BackfillAction.FORWARD_ONLY),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    RESOLVE_QUERY_BACKFILL_TEST_CASES,
-    ids=[case.description for case in RESOLVE_QUERY_BACKFILL_TEST_CASES],
+    [
+        ResolveBackfillTestCase(
+            description="returns full for full policy",
+            raw_value="full",
+            expected_result=BackfillResult(action=BackfillAction.FULL),
+        ),
+        ResolveBackfillTestCase(
+            description="returns bounded with duration for bounded policy",
+            raw_value="bounded-30d",
+            expected_result=BackfillResult(action=BackfillAction.BOUNDED, duration="30d"),
+        ),
+        ResolveBackfillTestCase(
+            description="returns forward only for null policy",
+            raw_value=None,
+            expected_result=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        ),
+        ResolveBackfillTestCase(
+            description="returns forward only for unrecognized policy value",
+            raw_value="unknown",
+            expected_result=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_policy_when_resolving_replay_on_change_then_returns_expected(
     test_case: ResolveBackfillTestCase,

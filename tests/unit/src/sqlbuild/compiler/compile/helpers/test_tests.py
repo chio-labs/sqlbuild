@@ -16,25 +16,28 @@ from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ExtractSqlTestCtesTestCase,
 )
 
-MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
-    ExtractSqlTestCtesTestCase(
-        description="extracts dbt ref mocks from dbt ref prefixed ctes",
-        sql="""
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExtractSqlTestCtesTestCase(
+            description="extracts dbt ref mocks from dbt ref prefixed ctes",
+            sql="""
         WITH
         __dbt_ref__orders AS (SELECT 1 AS order_id),
         __dbt_ref__stripe__payments AS (SELECT 1 AS payment_id),
         __expected__fact_orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__dbt_ref__orders", "__dbt_ref__stripe__payments"),
-        expected_mock_model_names=(),
-        expected_mock_source_names=(),
-        expected_expected_model_names=("fact_orders",),
-        expected_mock_dbt_ref_names=("orders", "stripe__payments"),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts zero-row assertion ctes",
-        sql="""
+            expected_authored_cte_names=("__dbt_ref__orders", "__dbt_ref__stripe__payments"),
+            expected_mock_model_names=(),
+            expected_mock_source_names=(),
+            expected_expected_model_names=("fact_orders",),
+            expected_mock_dbt_ref_names=("orders", "stripe__payments"),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts zero-row assertion ctes",
+            sql="""
         WITH
         __source__raw_orders AS (SELECT 1 AS order_id, 10 AS amount),
         __assert__no_negative_orders AS (
@@ -42,15 +45,15 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw_orders",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=(),
-        expected_assertion_names=("no_negative_orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts mixed expected and assertion ctes",
-        sql="""
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=(),
+            expected_assertion_names=("no_negative_orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts mixed expected and assertion ctes",
+            sql="""
         WITH
         __source__raw_orders AS (SELECT 1 AS order_id, 10 AS amount),
         __expected__orders AS (SELECT 1 AS order_id, 10 AS amount),
@@ -59,29 +62,29 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw_orders",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-        expected_assertion_names=("no_negative_orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts seed mocks from seed-prefixed ctes",
-        sql="""
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+            expected_assertion_names=("no_negative_orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts seed mocks from seed-prefixed ctes",
+            sql="""
         WITH
         __seed__country_codes AS (SELECT 'US' AS country_code),
         __expected__orders AS (SELECT 'US' AS country_code)
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__seed__country_codes",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=(),
-        expected_expected_model_names=("orders",),
-        expected_mock_seed_names=("country_codes",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts macro mocks from single string literal ctes",
-        sql="""
+            expected_authored_cte_names=("__seed__country_codes",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=(),
+            expected_expected_model_names=("orders",),
+            expected_mock_seed_names=("country_codes",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts macro mocks from single string literal ctes",
+            sql="""
         WITH
         __macro__country AS (SELECT '''US'''),
         __macro__empty AS (SELECT ''),
@@ -90,33 +93,33 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         __expected__orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw_orders",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-        expected_macro_mocks={
-            "country": "'US'",
-            "empty": "",
-            "literal_text": "' + x + '",
-        },
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts ctes from compact single line test sql",
-        sql="""
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+            expected_macro_mocks={
+                "country": "'US'",
+                "empty": "",
+                "literal_text": "' + x + '",
+            },
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts ctes from compact single line test sql",
+            sql="""
         WITH
         helper AS (SELECT 1 AS order_id),
         __ref__orders AS (SELECT * FROM helper),
         __expected__order_items AS (SELECT order_id FROM __ref__orders)
         SELECT 1;
         """.strip(),
-        expected_authored_cte_names=("helper", "__ref__orders"),
-        expected_mock_model_names=("orders",),
-        expected_mock_source_names=(),
-        expected_expected_model_names=("order_items",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts ctes with comments strings and nested parentheses",
-        sql="""
+            expected_authored_cte_names=("helper", "__ref__orders"),
+            expected_mock_model_names=("orders",),
+            expected_mock_source_names=(),
+            expected_expected_model_names=("order_items",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts ctes with comments strings and nested parentheses",
+            sql="""
         WITH /* leading */ helper_orders(order_id, note) AS (
           SELECT
             CAST('value ) inside string' AS VARCHAR) AS note,
@@ -130,14 +133,14 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         -- final comment before ceremonial select
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("helper_orders", "__source__raw_orders"),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts multiple expected targets with mixed whitespace",
-        sql="""
+            expected_authored_cte_names=("helper_orders", "__source__raw_orders"),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts multiple expected targets with mixed whitespace",
+            sql="""
         WITH
         __source__raw_orders AS(SELECT 1 AS order_id),__expected__orders AS(
           SELECT 1 AS order_id
@@ -145,14 +148,14 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         __expected__daily_revenue AS (SELECT SUM(1) AS revenue)
         SELECT 1;
         """.strip(),
-        expected_authored_cte_names=("__source__raw_orders",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders", "daily_revenue"),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts ctes through nested helper chains and awkward comma placement",
-        sql="""
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders", "daily_revenue"),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts ctes through nested helper chains and awkward comma placement",
+            sql="""
         WITH source_seed(seed_id, payload) AS (
           SELECT * FROM (
             SELECT 1 AS seed_id, 'a,b,c' AS payload
@@ -172,19 +175,19 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         __expected__orders AS (SELECT order_id, note FROM expected_rows)
         SELECT 1;
         """.strip(),
-        expected_authored_cte_names=(
-            "source_seed",
-            "normalized_orders",
-            "__source__raw_orders",
-            "expected_rows",
+            expected_authored_cte_names=(
+                "source_seed",
+                "normalized_orders",
+                "__source__raw_orders",
+                "expected_rows",
+            ),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
         ),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts ctes with inline comments around separators",
-        sql="""
+        ExtractSqlTestCtesTestCase(
+            description="extracts ctes with inline comments around separators",
+            sql="""
         WITH helper_a AS (SELECT 1 AS order_id) -- comment before comma
         , helper_b AS (SELECT order_id FROM helper_a /* ) , */)
         , __ref__orders AS (SELECT order_id FROM helper_b), -- trailing comma comment
@@ -193,14 +196,14 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("helper_a", "helper_b", "__ref__orders"),
-        expected_mock_model_names=("orders",),
-        expected_mock_source_names=(),
-        expected_expected_model_names=("orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="allows explicit union branches in expected ctes",
-        sql="""
+            expected_authored_cte_names=("helper_a", "helper_b", "__ref__orders"),
+            expected_mock_model_names=("orders",),
+            expected_mock_source_names=(),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="allows explicit union branches in expected ctes",
+            sql="""
         WITH __source__raw_orders AS (
           SELECT 1 AS order_id, 'new' AS status
         ),
@@ -211,14 +214,14 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw_orders",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="allows plain union with matching aliases in expected ctes",
-        sql="""
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="allows plain union with matching aliases in expected ctes",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (
           SELECT 1 AS order_id, 'created' AS status
@@ -227,27 +230,27 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw_orders",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts model test ctes with sql_analysis fallback syntax",
-        sql="""
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts model test ctes with sql_analysis fallback syntax",
+            sql="""
         WITH
         "__source__raw_orders" AS MATERIALIZED (SELECT 1 AS order_id),
         "__expected__orders" AS (SELECT order_id FROM "__source__raw_orders")
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw_orders",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="allows cast expressions with explicit aliases in expected ctes",
-        sql="""
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="allows cast expressions with explicit aliases in expected ctes",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (
           SELECT
@@ -260,14 +263,14 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("__source__raw_orders",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="allows bare identifiers in expected cte projections",
-        sql="""
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="allows bare identifiers in expected cte projections",
+            sql="""
         WITH expected_rows AS (SELECT 1 AS order_id, 'paid' AS status),
         __source__raw_orders AS (SELECT * FROM expected_rows),
         __expected__orders AS (
@@ -275,18 +278,13 @@ MODEL_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_authored_cte_names=("expected_rows", "__source__raw_orders"),
-        expected_mock_model_names=(),
-        expected_mock_source_names=("raw_orders",),
-        expected_expected_model_names=("orders",),
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    MODEL_TEST_CASES,
-    ids=[case.description for case in MODEL_TEST_CASES],
+            expected_authored_cte_names=("expected_rows", "__source__raw_orders"),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
     test_case: ExtractSqlTestCtesTestCase,
@@ -311,10 +309,12 @@ def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expec
     assert extracted_ctes.payload.macro_mocks == test_case.expected_macro_mocks
 
 
-DIRECT_LOGIC_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
-    ExtractSqlTestCtesTestCase(
-        description="extracts unsuffixed macro actual expected ctes in macro mode",
-        sql="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExtractSqlTestCtesTestCase(
+            description="extracts unsuffixed macro actual expected ctes in macro mode",
+            sql="""
         WITH input_values AS (SELECT '  PAID  ' AS raw_status),
         __macro_actual__ AS (
           SELECT @normalize_status("raw_status") AS status FROM input_values
@@ -322,17 +322,17 @@ DIRECT_LOGIC_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         __macro_expected__ AS (SELECT 'paid' AS status)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.MACRO,
-        expected_authored_cte_names=("input_values",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=(),
-        expected_expected_model_names=(),
-        expected_macro_actual_cte_name="__macro_actual__",
-        expected_macro_expected_cte_name="__macro_expected__",
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts unsuffixed udf actual expected ctes in udf mode",
-        sql="""
+            mode=SqlTestMode.MACRO,
+            expected_authored_cte_names=("input_values",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=(),
+            expected_expected_model_names=(),
+            expected_macro_actual_cte_name="__macro_actual__",
+            expected_macro_expected_cte_name="__macro_expected__",
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts unsuffixed udf actual expected ctes in udf mode",
+            sql="""
         WITH input_values AS (SELECT 1250 AS amount_cents),
         __udf_actual__ AS (
           SELECT __udf("format_cents")(amount_cents) AS formatted FROM input_values
@@ -340,38 +340,33 @@ DIRECT_LOGIC_TEST_CASES: list[ExtractSqlTestCtesTestCase] = [
         __udf_expected__ AS (SELECT '$12.50' AS formatted)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.UDF,
-        expected_authored_cte_names=("input_values",),
-        expected_mock_model_names=(),
-        expected_mock_source_names=(),
-        expected_expected_model_names=(),
-        expected_macro_actual_cte_name="__udf_actual__",
-        expected_macro_expected_cte_name="__udf_expected__",
-    ),
-    ExtractSqlTestCtesTestCase(
-        description="extracts unsuffixed table function actual expected ctes in table_fn mode",
-        sql="""
+            mode=SqlTestMode.UDF,
+            expected_authored_cte_names=("input_values",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=(),
+            expected_expected_model_names=(),
+            expected_macro_actual_cte_name="__udf_actual__",
+            expected_macro_expected_cte_name="__udf_expected__",
+        ),
+        ExtractSqlTestCtesTestCase(
+            description="extracts unsuffixed table function actual expected ctes in table_fn mode",
+            sql="""
         WITH __table_fn_actual__ AS (
           SELECT customer_id, order_id FROM __table_fn("customer_orders")(42)
         ),
         __table_fn_expected__ AS (SELECT 42 AS customer_id, 1 AS order_id)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.TABLE_FN,
-        expected_authored_cte_names=(),
-        expected_mock_model_names=(),
-        expected_mock_source_names=(),
-        expected_expected_model_names=(),
-        expected_macro_actual_cte_name="__table_fn_actual__",
-        expected_macro_expected_cte_name="__table_fn_expected__",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    DIRECT_LOGIC_TEST_CASES,
-    ids=[case.description for case in DIRECT_LOGIC_TEST_CASES],
+            mode=SqlTestMode.TABLE_FN,
+            expected_authored_cte_names=(),
+            expected_mock_model_names=(),
+            expected_mock_source_names=(),
+            expected_expected_model_names=(),
+            expected_macro_actual_cte_name="__table_fn_actual__",
+            expected_macro_expected_cte_name="__table_fn_expected__",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_returns_expected_roles(
     test_case: ExtractSqlTestCtesTestCase,
@@ -391,101 +386,103 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
     assert extracted_ctes.payload.expected_cte.name == test_case.expected_macro_expected_cte_name
 
 
-ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when macro mock returns multiple columns",
-        sql="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when macro mock returns multiple columns",
+            sql="""
         WITH __macro__country AS (SELECT 'US', 'CA'),
         __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment=(
-            "macro mock '__macro__country' must be a single SELECT string literal"
+            expected_error_fragment=(
+                "macro mock '__macro__country' must be a single SELECT string literal"
+            ),
         ),
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when macro mock returns non string literal",
-        sql="""
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when macro mock returns non string literal",
+            sql="""
         WITH __macro__country AS (SELECT 123),
         __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment=(
-            "macro mock '__macro__country' must be a single SELECT string literal"
+            expected_error_fragment=(
+                "macro mock '__macro__country' must be a single SELECT string literal"
+            ),
         ),
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when macro mock reads from a table",
-        sql="""
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when macro mock reads from a table",
+            sql="""
         WITH __macro__country AS (SELECT 'US' FROM values_table),
         __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment="with no FROM, UNION, or additional columns",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when macro mock uses union",
-        sql="""
+            expected_error_fragment="with no FROM, UNION, or additional columns",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when macro mock uses union",
+            sql="""
         WITH __macro__country AS (SELECT 'US' UNION ALL SELECT 'CA'),
         __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment="with no FROM, UNION, or additional columns",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when test sql does not start with top level with",
-        sql="SELECT 1",
-        expected_error_fragment="must declare mock CTEs and one __expected__<model>",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when assertion cte omits assertion name",
-        sql="""
+            expected_error_fragment="with no FROM, UNION, or additional columns",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when test sql does not start with top level with",
+            sql="SELECT 1",
+            expected_error_fragment="must declare mock CTEs and one __expected__<model>",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when assertion cte omits assertion name",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1), __assert__ AS (SELECT 1)
         SELECT 1
         """.strip(),
-        expected_error_fragment="must use __assert__<assertion>",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when cte body is unclosed",
-        sql="""
+            expected_error_fragment="must use __assert__<assertion>",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when cte body is unclosed",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id,
         __expected__orders AS (SELECT 1 AS order_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment="contains an unclosed parenthesis",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when final select is not ceremonial select one",
-        sql="""
+            expected_error_fragment="contains an unclosed parenthesis",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when final select is not ceremonial select one",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1), __expected__orders AS (SELECT 1)
         SELECT 1 FROM __expected__orders
         """.strip(),
-        expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when expected cte omits target name",
-        sql="""
+            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when expected cte omits target name",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1), __expected__ AS (SELECT 1)
         SELECT 1
         """.strip(),
-        expected_error_fragment="must use __expected__<model>",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when expected cte uses select star",
-        sql="""
+            expected_error_fragment="must use __expected__<model>",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when expected cte uses select star",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (SELECT * FROM __source__raw_orders)
         SELECT 1
         """.strip(),
-        expected_error_fragment=r"must not use SELECT \* in __expected__<model> CTEs",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when union branch projection order differs",
-        sql="""
+            expected_error_fragment=r"must not use SELECT \* in __expected__<model> CTEs",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when union branch projection order differs",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (
           SELECT 1 AS order_id, 'paid' AS status
@@ -494,11 +491,11 @@ ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_error_fragment="projection names and order in every set-operation branch",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when union branch projection alias is missing",
-        sql="""
+            expected_error_fragment="projection names and order in every set-operation branch",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when union branch projection alias is missing",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (
           SELECT CAST(1 AS INTEGER) AS order_id, CAST('paid' AS VARCHAR) AS status
@@ -507,22 +504,22 @@ ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_error_fragment="must alias every non-trivial __expected__<model> projection",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when non union projection alias is missing",
-        sql="""
+            expected_error_fragment="must alias every non-trivial __expected__<model> projection",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when non union projection alias is missing",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (
           SELECT CAST(1 AS INTEGER), CAST('paid' AS VARCHAR) AS status
         )
         SELECT 1
         """.strip(),
-        expected_error_fragment="must alias every non-trivial __expected__<model> projection",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when expected branch is not a select query",
-        sql="""
+            expected_error_fragment="must alias every non-trivial __expected__<model> projection",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when expected branch is not a select query",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __expected__orders AS (
           SELECT 1 AS order_id
@@ -531,129 +528,124 @@ ERROR_TEST_CASES: list[ExtractSqlTestCtesErrorTestCase] = [
         )
         SELECT 1
         """.strip(),
-        expected_error_fragment="set-operation branch as a SELECT query",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when model mode includes macro actual cte",
-        sql="""
+            expected_error_fragment="set-operation branch as a SELECT query",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when model mode includes macro actual cte",
+            sql="""
         WITH __macro_actual__ AS (SELECT @normalize_status('paid') AS status),
         __macro_expected__ AS (SELECT 'paid' AS status)
         SELECT 1
         """.strip(),
-        expected_error_fragment=r"use TEST \(mode: macro\)",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when model mode includes udf actual cte",
-        sql="""
+            expected_error_fragment=r"use TEST \(mode: macro\)",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when model mode includes udf actual cte",
+            sql="""
         WITH __udf_actual__ AS (SELECT __udf("format_cents")(1250) AS formatted),
         __udf_expected__ AS (SELECT '$12.50' AS formatted)
         SELECT 1
         """.strip(),
-        expected_error_fragment=r"use TEST \(mode: udf\)",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when model mode includes table function actual cte",
-        sql="""
+            expected_error_fragment=r"use TEST \(mode: udf\)",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when model mode includes table function actual cte",
+            sql="""
         WITH __table_fn_actual__ AS (SELECT * FROM __table_fn("customer_orders")(42)),
         __table_fn_expected__ AS (SELECT 42 AS customer_id)
         SELECT 1
         """.strip(),
-        expected_error_fragment=r"use TEST \(mode: table_fn\)",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when macro mode includes model test cte",
-        sql="""
+            expected_error_fragment=r"use TEST \(mode: table_fn\)",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when macro mode includes model test cte",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __macro_actual__ AS (SELECT @normalize_status('paid') AS status),
         __macro_expected__ AS (SELECT 'paid' AS status)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.MACRO,
-        expected_error_fragment="mode 'macro' but defines model-test CTE",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when macro expected calls macro",
-        sql="""
+            mode=SqlTestMode.MACRO,
+            expected_error_fragment="mode 'macro' but defines model-test CTE",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when macro expected calls macro",
+            sql="""
         WITH __macro_actual__ AS (SELECT @normalize_status('paid') AS status),
         __macro_expected__ AS (SELECT @normalize_status('paid') AS status)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.MACRO,
-        expected_error_fragment="__macro_expected__ must not call macros",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when macro helper calls macro",
-        sql="""
+            mode=SqlTestMode.MACRO,
+            expected_error_fragment="__macro_expected__ must not call macros",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when macro helper calls macro",
+            sql="""
         WITH helper AS (SELECT @normalize_status('paid') AS status),
         __macro_actual__ AS (SELECT status FROM helper),
         __macro_expected__ AS (SELECT 'paid' AS status)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.MACRO,
-        expected_error_fragment="helper CTE 'helper' must not call macros",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when udf mode includes model test cte",
-        sql="""
+            mode=SqlTestMode.MACRO,
+            expected_error_fragment="helper CTE 'helper' must not call macros",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when udf mode includes model test cte",
+            sql="""
         WITH __source__raw_orders AS (SELECT 1 AS order_id),
         __udf_actual__ AS (SELECT __udf("format_cents")(1250) AS formatted),
         __udf_expected__ AS (SELECT '$12.50' AS formatted)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.UDF,
-        expected_error_fragment="mode 'udf' but defines model-test CTE",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when udf expected calls udf",
-        sql="""
+            mode=SqlTestMode.UDF,
+            expected_error_fragment="mode 'udf' but defines model-test CTE",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when udf expected calls udf",
+            sql="""
         WITH __udf_actual__ AS (SELECT __udf("format_cents")(1250) AS formatted),
         __udf_expected__ AS (SELECT __udf("format_cents")(1250) AS formatted)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.UDF,
-        expected_error_fragment="__udf_expected__.*must not call udf",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when udf helper calls udf",
-        sql="""
+            mode=SqlTestMode.UDF,
+            expected_error_fragment="__udf_expected__.*must not call udf",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when udf helper calls udf",
+            sql="""
         WITH helper AS (SELECT __udf("format_cents")(1250) AS formatted),
         __udf_actual__ AS (SELECT formatted FROM helper),
         __udf_expected__ AS (SELECT '$12.50' AS formatted)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.UDF,
-        expected_error_fragment="helper CTE 'helper'.*must not call udf",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when table function expected calls table function",
-        sql="""
+            mode=SqlTestMode.UDF,
+            expected_error_fragment="helper CTE 'helper'.*must not call udf",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when table function expected calls table function",
+            sql="""
         WITH __table_fn_actual__ AS (SELECT * FROM __table_fn("customer_orders")(42)),
         __table_fn_expected__ AS (
           SELECT customer_id FROM __table_fn("customer_orders")(42)
         )
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.TABLE_FN,
-        expected_error_fragment="__table_fn_expected__.*must not call table_fn",
-    ),
-    ExtractSqlTestCtesErrorTestCase(
-        description="raises when table function helper calls table function",
-        sql="""
+            mode=SqlTestMode.TABLE_FN,
+            expected_error_fragment="__table_fn_expected__.*must not call table_fn",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when table function helper calls table function",
+            sql="""
         WITH helper AS (SELECT * FROM __table_fn("customer_orders")(42)),
         __table_fn_actual__ AS (SELECT * FROM helper),
         __table_fn_expected__ AS (SELECT 42 AS customer_id)
         SELECT 1
         """.strip(),
-        mode=SqlTestMode.TABLE_FN,
-        expected_error_fragment="helper CTE 'helper'.*must not call table_fn",
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    ERROR_TEST_CASES,
-    ids=[case.description for case in ERROR_TEST_CASES],
+            mode=SqlTestMode.TABLE_FN,
+            expected_error_fragment="helper CTE 'helper'.*must not call table_fn",
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_sql_test_cte_variants_when_extracting_then_it_raises_clear_errors(
     test_case: ExtractSqlTestCtesErrorTestCase,

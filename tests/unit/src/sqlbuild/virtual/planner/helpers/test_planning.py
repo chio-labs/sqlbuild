@@ -61,38 +61,36 @@ from tests.unit.src.sqlbuild.virtual.planner.helpers.helpers import (
     build_virtual_planner_test_project,
 )
 
-SEED_REF_PLANNING_TEST_CASES: tuple[SeedRefPlanningTestCase, ...] = (
-    SeedRefPlanningTestCase(
-        description="missing bound seed ref is first run",
-        seed_names=("order_amounts",),
-        expected_seed_version_hashes={"order_amounts": "new-seed"},
-        bound_seed_version_hashes={},
-        expected_stale_seed_names=("order_amounts",),
-        expected_seed_plan_reasons={"order_amounts": PlanReason.FIRST_RUN},
-    ),
-    SeedRefPlanningTestCase(
-        description="different bound seed ref is changed",
-        seed_names=("order_amounts",),
-        expected_seed_version_hashes={"order_amounts": "new-seed"},
-        bound_seed_version_hashes={"order_amounts": "old-seed"},
-        expected_stale_seed_names=("order_amounts",),
-        expected_seed_plan_reasons={"order_amounts": PlanReason.CONFIG_CHANGED},
-    ),
-    SeedRefPlanningTestCase(
-        description="matching bound seed ref is current",
-        seed_names=("order_amounts",),
-        expected_seed_version_hashes={"order_amounts": "same-seed"},
-        bound_seed_version_hashes={"order_amounts": "same-seed"},
-        expected_stale_seed_names=(),
-        expected_seed_plan_reasons={"order_amounts": PlanReason.NO_CHANGE},
-    ),
-)
-
 
 @pytest.mark.parametrize(
     "test_case",
-    SEED_REF_PLANNING_TEST_CASES,
-    ids=[case.description for case in SEED_REF_PLANNING_TEST_CASES],
+    (
+        SeedRefPlanningTestCase(
+            description="missing bound seed ref is first run",
+            seed_names=("order_amounts",),
+            expected_seed_version_hashes={"order_amounts": "new-seed"},
+            bound_seed_version_hashes={},
+            expected_stale_seed_names=("order_amounts",),
+            expected_seed_plan_reasons={"order_amounts": PlanReason.FIRST_RUN},
+        ),
+        SeedRefPlanningTestCase(
+            description="different bound seed ref is changed",
+            seed_names=("order_amounts",),
+            expected_seed_version_hashes={"order_amounts": "new-seed"},
+            bound_seed_version_hashes={"order_amounts": "old-seed"},
+            expected_stale_seed_names=("order_amounts",),
+            expected_seed_plan_reasons={"order_amounts": PlanReason.CONFIG_CHANGED},
+        ),
+        SeedRefPlanningTestCase(
+            description="matching bound seed ref is current",
+            seed_names=("order_amounts",),
+            expected_seed_version_hashes={"order_amounts": "same-seed"},
+            bound_seed_version_hashes={"order_amounts": "same-seed"},
+            expected_stale_seed_names=(),
+            expected_seed_plan_reasons={"order_amounts": PlanReason.NO_CHANGE},
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_seed_refs_when_building_virtual_seed_planning_then_returns_stale_names_and_reasons(
     test_case: SeedRefPlanningTestCase,
@@ -112,114 +110,6 @@ def test_given_seed_refs_when_building_virtual_seed_planning_then_returns_stale_
     assert seed_plan_reasons == test_case.expected_seed_plan_reasons
 
 
-VIRTUAL_MODEL_SELECTION_TEST_CASES: tuple[VirtualModelSelectionTestCase, ...] = (
-    VirtualModelSelectionTestCase(
-        description="include stale upstreams expands minimally",
-        select=("fact_orders",),
-        default_selection=("fact_orders", "stg_orders"),
-        stale_model_names=("fact_orders", "stg_orders"),
-        include_stale_upstreams=True,
-        work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
-        expected_selection=("fact_orders", "stg_orders"),
-    ),
-    VirtualModelSelectionTestCase(
-        description="changes only intersects selected models with default stale selection",
-        select=("fact_orders", "dim_customers"),
-        default_selection=("fact_orders", "stg_orders"),
-        stale_model_names=("fact_orders", "stg_orders"),
-        include_stale_upstreams=True,
-        work_selection_policy=WorkSelectionPolicy.STALE_ONLY,
-        expected_selection=("fact_orders", "stg_orders"),
-    ),
-    VirtualModelSelectionTestCase(
-        description="include stale upstreams excludes unchanged upstreams",
-        select=("fact_orders",),
-        default_selection=("fact_orders", "stg_orders"),
-        stale_model_names=("fact_orders", "stg_orders"),
-        include_stale_upstreams=True,
-        work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
-        expected_selection=("fact_orders", "stg_orders"),
-        downstream_depends_on_dim_customers=True,
-    ),
-)
-
-STALE_ROOT_REASONS_TEST_CASES: tuple[StaleRootReasonsTestCase, ...] = (
-    StaleRootReasonsTestCase(
-        description="classifies first run and query changed stale roots",
-        stale_model_names=("stg_orders", "fact_orders", "dim_customers"),
-        expected_local_hashes={
-            "stg_orders": "new-local-a",
-            "fact_orders": "same-local-b",
-            "dim_customers": "new-local-c",
-        },
-        bound_version_hashes={
-            "stg_orders": "old-version-a",
-            "fact_orders": "old-version-b",
-        },
-        bound_local_hashes={
-            "stg_orders": "old-local-a",
-            "fact_orders": "same-local-b",
-        },
-        expected_stale_root_reasons={
-            "stg_orders": PlanReason.QUERY_CHANGED,
-            "dim_customers": PlanReason.FIRST_RUN,
-        },
-    ),
-    StaleRootReasonsTestCase(
-        description="classifies version identity config separately from function changes",
-        stale_model_names=("fact_orders", "orders_rollup"),
-        expected_local_hashes={
-            "fact_orders": "new-local-a",
-            "orders_rollup": "new-local-b",
-        },
-        bound_version_hashes={
-            "fact_orders": "old-version-a",
-            "orders_rollup": "old-version-b",
-        },
-        bound_local_hashes={
-            "fact_orders": "old-local-a",
-            "orders_rollup": "old-local-b",
-        },
-        current_query_sqls={
-            "fact_orders": "SELECT id FROM stg_orders",
-            "orders_rollup": "SELECT COUNT(*) FROM fact_orders",
-        },
-        bound_previous_query_sqls={
-            "fact_orders": "SELECT id FROM stg_orders",
-            "orders_rollup": "SELECT COUNT(*) FROM fact_orders",
-        },
-        expected_metadata_jsons={
-            "fact_orders": '{"config":{},"local_function_hashes":{"is_large_order":"new"}}',
-            "orders_rollup": '{"config":{"materialized":"table"}}',
-        },
-        bound_metadata_jsons={
-            "fact_orders": '{"config":{},"local_function_hashes":{"is_large_order":"old"}}',
-            "orders_rollup": '{"config":{"materialized":"view"}}',
-        },
-        expected_stale_root_reasons={
-            "fact_orders": PlanReason.QUERY_CHANGED,
-            "orders_rollup": PlanReason.CONFIG_CHANGED,
-        },
-    ),
-)
-
-STALE_ROOT_CAUSES_TEST_CASES: tuple[StaleRootCausesTestCase, ...] = (
-    StaleRootCausesTestCase(
-        description="maps downstream stale models to their first stale root cause",
-        stale_model_names=("stg_orders", "fact_orders"),
-        stale_root_reasons={"stg_orders": PlanReason.QUERY_CHANGED},
-        expected_stale_root_causes={"fact_orders": "stg_orders"},
-    ),
-    StaleRootCausesTestCase(
-        description="maps downstream stale models to changed function source cause",
-        stale_model_names=("stg_orders", "fact_orders"),
-        stale_root_reasons={"stg_orders": PlanReason.QUERY_CHANGED},
-        stale_root_source_causes={"stg_orders": "is_large_order"},
-        expected_stale_root_causes={"fact_orders": "is_large_order"},
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -230,7 +120,7 @@ STALE_ROOT_CAUSES_TEST_CASES: tuple[StaleRootCausesTestCase, ...] = (
             expected_hashes_differ=True,
         )
     ],
-    ids=["upstream query change changes downstream expected hash"],
+    ids=lambda case: case.description,
 )
 def test_given_upstream_change_when_building_expected_hashes_then_downstream_hash_changes(
     test_case: ExpectedVersionHashesTestCase,
@@ -268,7 +158,7 @@ def test_given_upstream_change_when_building_expected_hashes_then_downstream_has
             expected_hashes_differ=False,
         )
     ],
-    ids=["unchanged graph produces stable expected hashes"],
+    ids=lambda case: case.description,
 )
 def test_given_unchanged_graph_when_building_expected_hashes_then_hashes_match(
     test_case: ExpectedVersionHashesTestCase,
@@ -306,7 +196,7 @@ def test_given_unchanged_graph_when_building_expected_hashes_then_hashes_match(
             expected_hashes_differ=True,
         )
     ],
-    ids=["function body change updates dependent expected hash"],
+    ids=lambda case: case.description,
 )
 def test_given_function_change_when_building_expected_hashes_then_downstream_hash_changes(
     test_case: ExpectedVersionHashesTestCase,
@@ -346,7 +236,7 @@ def test_given_function_change_when_building_expected_hashes_then_downstream_has
             expected_hashes_differ=True,
         )
     ],
-    ids=["source data version change updates downstream expected hash"],
+    ids=lambda case: case.description,
 )
 def test_given_source_data_version_change_when_building_hashes_then_downstream_hash_changes(
     test_case: ExpectedVersionHashesTestCase,
@@ -385,7 +275,7 @@ def test_given_source_data_version_change_when_building_hashes_then_downstream_h
             expected_hashes_differ=True,
         )
     ],
-    ids=["seed identity change updates dependent expected hash"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_identity_change_when_building_hashes_then_downstream_hash_changes(
     test_case: ExpectedVersionHashesTestCase,
@@ -439,7 +329,7 @@ def test_given_seed_identity_change_when_building_hashes_then_downstream_hash_ch
             expected_hashes_differ=True,
         )
     ],
-    ids=["seed identity change marks dependent closure stale"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_identity_change_when_comparing_bound_hashes_then_dependent_models_are_stale(
     test_case: ExpectedVersionHashesTestCase,
@@ -488,7 +378,7 @@ def test_given_seed_identity_change_when_comparing_bound_hashes_then_dependent_m
             expected_hashes_differ=True,
         )
     ],
-    ids=["old seed-composed bound model versions are stale"],
+    ids=lambda case: case.description,
 )
 def test_given_bound_model_versions_composed_with_old_seed_when_semantics_then_models_are_stale(
     test_case: ExpectedVersionHashesTestCase,
@@ -575,7 +465,7 @@ def test_given_bound_model_versions_composed_with_old_seed_when_semantics_then_m
             expected_hashes_differ=True,
         )
     ],
-    ids=["seed and function identities both affect dependent expected hash"],
+    ids=lambda case: case.description,
 )
 def test_given_seed_and_function_changes_when_building_hashes_then_downstream_hash_changes(
     test_case: ExpectedVersionHashesTestCase,
@@ -625,34 +515,31 @@ def test_given_seed_and_function_changes_when_building_hashes_then_downstream_ha
     ) is test_case.expected_hashes_differ
 
 
-VIRTUAL_LAG_TOLERANCE_TEST_CASES: tuple[VirtualSourceFreshnessLagToleranceTestCase, ...] = (
-    VirtualSourceFreshnessLagToleranceTestCase(
-        description="virtual preserves previous within tolerance",
-        current_data_version="2026-01-15T12:05:00",
-        expected_record_data_version="2026-01-15T12:00:00",
-    ),
-    VirtualSourceFreshnessLagToleranceTestCase(
-        description="virtual preserves previous at tolerance boundary",
-        current_data_version="2026-01-15T12:10:00",
-        expected_record_data_version="2026-01-15T12:00:00",
-    ),
-    VirtualSourceFreshnessLagToleranceTestCase(
-        description="virtual uses current beyond tolerance",
-        current_data_version="2026-01-15T12:11:00",
-        expected_record_data_version="2026-01-15T12:11:00",
-    ),
-    VirtualSourceFreshnessLagToleranceTestCase(
-        description="virtual uses current for backwards timestamp movement",
-        current_data_version="2026-01-15T11:59:00",
-        expected_record_data_version="2026-01-15T11:59:00",
-    ),
-)
-
-
 @pytest.mark.parametrize(
     "test_case",
-    VIRTUAL_LAG_TOLERANCE_TEST_CASES,
-    ids=[case.description for case in VIRTUAL_LAG_TOLERANCE_TEST_CASES],
+    (
+        VirtualSourceFreshnessLagToleranceTestCase(
+            description="virtual preserves previous within tolerance",
+            current_data_version="2026-01-15T12:05:00",
+            expected_record_data_version="2026-01-15T12:00:00",
+        ),
+        VirtualSourceFreshnessLagToleranceTestCase(
+            description="virtual preserves previous at tolerance boundary",
+            current_data_version="2026-01-15T12:10:00",
+            expected_record_data_version="2026-01-15T12:00:00",
+        ),
+        VirtualSourceFreshnessLagToleranceTestCase(
+            description="virtual uses current beyond tolerance",
+            current_data_version="2026-01-15T12:11:00",
+            expected_record_data_version="2026-01-15T12:11:00",
+        ),
+        VirtualSourceFreshnessLagToleranceTestCase(
+            description="virtual uses current for backwards timestamp movement",
+            current_data_version="2026-01-15T11:59:00",
+            expected_record_data_version="2026-01-15T11:59:00",
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_virtual_lag_tolerance_when_building_current_records_then_preserves_baseline(
     test_case: VirtualSourceFreshnessLagToleranceTestCase,
@@ -704,7 +591,7 @@ def test_given_virtual_lag_tolerance_when_building_current_records_then_preserve
             expected_hashes_differ=False,
         )
     ],
-    ids=["unchanged source data version keeps downstream expected hash stable"],
+    ids=lambda case: case.description,
 )
 def test_given_same_source_data_version_when_building_expected_hashes_then_hashes_match(
     test_case: ExpectedVersionHashesTestCase,
@@ -744,7 +631,7 @@ def test_given_same_source_data_version_when_building_expected_hashes_then_hashe
             expected_stale_model_names=("stg_orders", "fact_orders"),
         )
     ],
-    ids=["source data version change marks direct and transitive models stale"],
+    ids=lambda case: case.description,
 )
 def test_given_source_data_version_change_when_building_stale_models_then_marks_downstream_stale(
     test_case: StaleModelNamesTestCase,
@@ -785,7 +672,7 @@ def test_given_source_data_version_change_when_building_stale_models_then_marks_
             expected_stale_upstream_names=("fact_orders", "stg_orders"),
         )
     ],
-    ids=["missing source freshness marks direct and downstream models incomplete"],
+    ids=lambda case: case.description,
 )
 def test_given_missing_source_freshness_when_finding_incomplete_models_then_returns_closure(
     test_case: StaleRequiredUpstreamClosureTestCase,
@@ -813,7 +700,7 @@ def test_given_missing_source_freshness_when_finding_incomplete_models_then_retu
             expected_hashes_differ=False,
         )
     ],
-    ids=["target schema does not change model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_only_target_schema_differs_when_building_expected_hashes_then_hashes_match(
     test_case: ExpectedVersionHashesTestCase,
@@ -855,7 +742,7 @@ def test_given_only_target_schema_differs_when_building_expected_hashes_then_has
             expected_hashes_differ=True,
         )
     ],
-    ids=["model identity changes model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_only_model_name_differs_when_building_expected_hashes_then_hashes_differ(
     test_case: ExpectedVersionHashesTestCase,
@@ -895,7 +782,7 @@ def test_given_only_model_name_differs_when_building_expected_hashes_then_hashes
             expected_hashes_differ=False,
         )
     ],
-    ids=["unknown validation config keys do not change model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_validation_config_keys_when_building_expected_hashes_then_hashes_match(
     test_case: ExpectedVersionHashesTestCase,
@@ -946,7 +833,7 @@ def test_given_validation_config_keys_when_building_expected_hashes_then_hashes_
             expected_hashes_differ=True,
         )
     ],
-    ids=["incremental mode changes model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_incremental_mode_when_building_expected_hashes_then_hashes_differ(
     test_case: ExpectedVersionHashesTestCase,
@@ -986,7 +873,7 @@ def test_given_incremental_mode_when_building_expected_hashes_then_hashes_differ
             expected_hashes_differ=True,
         )
     ],
-    ids=["version identity config key changes model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_version_identity_config_key_when_building_expected_hashes_then_hashes_differ(
     test_case: ExpectedVersionHashesTestCase,
@@ -1026,7 +913,7 @@ def test_given_version_identity_config_key_when_building_expected_hashes_then_ha
             expected_hashes_differ=True,
         )
     ],
-    ids=["enforced contract output shape changes model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_enforced_contract_shape_change_when_building_expected_hashes_then_hashes_differ(
     test_case: ExpectedVersionHashesTestCase,
@@ -1068,7 +955,7 @@ def test_given_enforced_contract_shape_change_when_building_expected_hashes_then
             expected_hashes_differ=True,
         )
     ],
-    ids=["custom materialization config changes model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_custom_materialization_config_change_when_building_hashes_then_hashes_differ(
     test_case: ExpectedVersionHashesTestCase,
@@ -1110,7 +997,7 @@ def test_given_custom_materialization_config_change_when_building_hashes_then_ha
             expected_hashes_differ=True,
         )
     ],
-    ids=["custom materialization placeholder changes model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_custom_placeholder_change_when_building_expected_hashes_then_hashes_differ(
     test_case: ExpectedVersionHashesTestCase,
@@ -1152,7 +1039,7 @@ def test_given_custom_placeholder_change_when_building_expected_hashes_then_hash
             expected_hashes_differ=True,
         )
     ],
-    ids=["pre and post hooks change model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_hook_change_when_building_expected_hashes_then_hashes_differ(
     test_case: ExpectedVersionHashesTestCase,
@@ -1198,7 +1085,7 @@ def test_given_hook_change_when_building_expected_hashes_then_hashes_differ(
             expected_hashes_differ=False,
         )
     ],
-    ids=["validation and backfill metadata does not change model version hash"],
+    ids=lambda case: case.description,
 )
 def test_given_excluded_metadata_change_when_building_expected_hashes_then_hashes_match(
     test_case: ExpectedVersionHashesTestCase,
@@ -1247,7 +1134,7 @@ def test_given_excluded_metadata_change_when_building_expected_hashes_then_hashe
             expected_selection=("fact_orders", "stg_orders"),
         )
     ],
-    ids=["selects stale models plus downstream closure only"],
+    ids=lambda case: case.description,
 )
 def test_given_stale_models_when_building_default_selection_then_it_includes_downstream_only(
     test_case: DefaultVirtualSelectionTestCase,
@@ -1275,7 +1162,7 @@ def test_given_stale_models_when_building_default_selection_then_it_includes_dow
             expected_stale_upstream_names=("stg_orders",),
         )
     ],
-    ids=["finds stale required upstreams for selected downstream"],
+    ids=lambda case: case.description,
 )
 def test_given_selected_downstream_when_building_closure_then_it_returns_stale_ancestors(
     test_case: StaleRequiredUpstreamClosureTestCase,
@@ -1296,8 +1183,37 @@ def test_given_selected_downstream_when_building_closure_then_it_returns_stale_a
 
 @pytest.mark.parametrize(
     "test_case",
-    VIRTUAL_MODEL_SELECTION_TEST_CASES,
-    ids=[case.description for case in VIRTUAL_MODEL_SELECTION_TEST_CASES],
+    (
+        VirtualModelSelectionTestCase(
+            description="include stale upstreams expands minimally",
+            select=("fact_orders",),
+            default_selection=("fact_orders", "stg_orders"),
+            stale_model_names=("fact_orders", "stg_orders"),
+            include_stale_upstreams=True,
+            work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
+            expected_selection=("fact_orders", "stg_orders"),
+        ),
+        VirtualModelSelectionTestCase(
+            description="changes only intersects selected models with default stale selection",
+            select=("fact_orders", "dim_customers"),
+            default_selection=("fact_orders", "stg_orders"),
+            stale_model_names=("fact_orders", "stg_orders"),
+            include_stale_upstreams=True,
+            work_selection_policy=WorkSelectionPolicy.STALE_ONLY,
+            expected_selection=("fact_orders", "stg_orders"),
+        ),
+        VirtualModelSelectionTestCase(
+            description="include stale upstreams excludes unchanged upstreams",
+            select=("fact_orders",),
+            default_selection=("fact_orders", "stg_orders"),
+            stale_model_names=("fact_orders", "stg_orders"),
+            include_stale_upstreams=True,
+            work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
+            expected_selection=("fact_orders", "stg_orders"),
+            downstream_depends_on_dim_customers=True,
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_virtual_selectors_when_resolving_selection_then_it_returns_coherent_scope(
     test_case: VirtualModelSelectionTestCase,
@@ -1334,7 +1250,7 @@ def test_given_virtual_selectors_when_resolving_selection_then_it_returns_cohere
             expected_selection=("stg_orders",),
         )
     ],
-    ids=["blocks selected downstream with stale required upstream"],
+    ids=lambda case: case.description,
 )
 def test_given_virtual_selector_missing_stale_upstream_when_resolving_selection_then_it_raises(
     test_case: VirtualModelSelectionTestCase,
@@ -1369,7 +1285,7 @@ def test_given_virtual_selector_missing_stale_upstream_when_resolving_selection_
             expected_root_reasons={"stg_orders": PlanReason.RUN_DESPITE_UNCHANGED},
         )
     ],
-    ids=["adds run_despite_unchanged root and downstream to stale selection"],
+    ids=lambda case: case.description,
 )
 def test_given_current_vde_versions_and_runtime_stale_model_when_semantics_then_marks_stale(
     test_case: VirtualRunDespiteUnchangedSemanticsTestCase,
@@ -1446,7 +1362,7 @@ def test_given_current_vde_versions_and_runtime_stale_model_when_semantics_then_
             expected_stale_model_names=("stg_orders",),
         )
     ],
-    ids=["marks only mismatched bound hashes as stale"],
+    ids=lambda case: case.description,
 )
 def test_given_bound_hash_mismatch_when_building_stale_models_then_it_marks_only_mismatches(
     test_case: StaleModelNamesTestCase,
@@ -1462,8 +1378,66 @@ def test_given_bound_hash_mismatch_when_building_stale_models_then_it_marks_only
 
 @pytest.mark.parametrize(
     "test_case",
-    STALE_ROOT_REASONS_TEST_CASES,
-    ids=[case.description for case in STALE_ROOT_REASONS_TEST_CASES],
+    (
+        StaleRootReasonsTestCase(
+            description="classifies first run and query changed stale roots",
+            stale_model_names=("stg_orders", "fact_orders", "dim_customers"),
+            expected_local_hashes={
+                "stg_orders": "new-local-a",
+                "fact_orders": "same-local-b",
+                "dim_customers": "new-local-c",
+            },
+            bound_version_hashes={
+                "stg_orders": "old-version-a",
+                "fact_orders": "old-version-b",
+            },
+            bound_local_hashes={
+                "stg_orders": "old-local-a",
+                "fact_orders": "same-local-b",
+            },
+            expected_stale_root_reasons={
+                "stg_orders": PlanReason.QUERY_CHANGED,
+                "dim_customers": PlanReason.FIRST_RUN,
+            },
+        ),
+        StaleRootReasonsTestCase(
+            description="classifies version identity config separately from function changes",
+            stale_model_names=("fact_orders", "orders_rollup"),
+            expected_local_hashes={
+                "fact_orders": "new-local-a",
+                "orders_rollup": "new-local-b",
+            },
+            bound_version_hashes={
+                "fact_orders": "old-version-a",
+                "orders_rollup": "old-version-b",
+            },
+            bound_local_hashes={
+                "fact_orders": "old-local-a",
+                "orders_rollup": "old-local-b",
+            },
+            current_query_sqls={
+                "fact_orders": "SELECT id FROM stg_orders",
+                "orders_rollup": "SELECT COUNT(*) FROM fact_orders",
+            },
+            bound_previous_query_sqls={
+                "fact_orders": "SELECT id FROM stg_orders",
+                "orders_rollup": "SELECT COUNT(*) FROM fact_orders",
+            },
+            expected_metadata_jsons={
+                "fact_orders": '{"config":{},"local_function_hashes":{"is_large_order":"new"}}',
+                "orders_rollup": '{"config":{"materialized":"table"}}',
+            },
+            bound_metadata_jsons={
+                "fact_orders": '{"config":{},"local_function_hashes":{"is_large_order":"old"}}',
+                "orders_rollup": '{"config":{"materialized":"view"}}',
+            },
+            expected_stale_root_reasons={
+                "fact_orders": PlanReason.QUERY_CHANGED,
+                "orders_rollup": PlanReason.CONFIG_CHANGED,
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_stale_models_when_building_stale_root_reasons_then_it_classifies_roots(
     test_case: StaleRootReasonsTestCase,
@@ -1484,8 +1458,22 @@ def test_given_stale_models_when_building_stale_root_reasons_then_it_classifies_
 
 @pytest.mark.parametrize(
     "test_case",
-    STALE_ROOT_CAUSES_TEST_CASES,
-    ids=[case.description for case in STALE_ROOT_CAUSES_TEST_CASES],
+    (
+        StaleRootCausesTestCase(
+            description="maps downstream stale models to their first stale root cause",
+            stale_model_names=("stg_orders", "fact_orders"),
+            stale_root_reasons={"stg_orders": PlanReason.QUERY_CHANGED},
+            expected_stale_root_causes={"fact_orders": "stg_orders"},
+        ),
+        StaleRootCausesTestCase(
+            description="maps downstream stale models to changed function source cause",
+            stale_model_names=("stg_orders", "fact_orders"),
+            stale_root_reasons={"stg_orders": PlanReason.QUERY_CHANGED},
+            stale_root_source_causes={"stg_orders": "is_large_order"},
+            expected_stale_root_causes={"fact_orders": "is_large_order"},
+        ),
+    ),
+    ids=lambda case: case.description,
 )
 def test_given_stale_roots_when_building_root_causes_then_it_maps_downstream_models(
     test_case: StaleRootCausesTestCase,
@@ -1517,7 +1505,7 @@ def test_given_stale_roots_when_building_root_causes_then_it_maps_downstream_mod
             },
         )
     ],
-    ids=["maps function source causes to function changed display reasons"],
+    ids=lambda case: case.description,
 )
 def test_given_function_source_cause_when_building_cause_reasons_then_uses_function_reason(
     test_case: StaleRootCauseReasonsTestCase,
@@ -1545,7 +1533,7 @@ def test_given_function_source_cause_when_building_cause_reasons_then_uses_funct
             expected_stale_root_source_causes={"fact_orders": "is_large_order"},
         ),
     ],
-    ids=["maps function metadata diff to changed function source cause"],
+    ids=lambda case: case.description,
 )
 def test_given_function_metadata_diff_when_building_source_causes_then_maps_root_to_function(
     test_case: StaleRootSourceCausesTestCase,

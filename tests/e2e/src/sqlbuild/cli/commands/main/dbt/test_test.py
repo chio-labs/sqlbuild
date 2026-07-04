@@ -39,149 +39,108 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 
-DBT_TEST_COMMAND_TEST_CASES: list[DbtTestCliTestCase] = [
-    DbtTestCliTestCase(
-        description="test executes mixed dbt and SQLBuild validation work",
-        setup_command=("dbt", "build", "--select", "tag:nightly", "+downstream_orders"),
-        command=("dbt", "test", "--select", "tag:nightly"),
-        expected_stdout_fragments=(
-            "dbt execution",
-            "SQLBuild execution  sqb test",
-            "SQLBuild execution  sqb audit",
-            "test_downstream_orders",
-            "not_null",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="mixed test uses prebuilt downstream relation",
-                sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
-                expected_rows=((1,),),
-            ),
-        ),
-    ),
-    DbtTestCliTestCase(
-        description="test executes dbt only validation work",
-        setup_command=("dbt", "run", "--select", "dbt_only"),
-        command=("dbt", "test", "--select", "dbt_only"),
-        expected_stdout_fragments=("dbt execution", "PASS"),
-        expected_absent_stdout_fragments=("SQLBuild execution",),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="dbt only test uses prebuilt dbt relation",
-                sql="SELECT order_id FROM main.dbt_only",
-                expected_rows=((2,),),
-            ),
-        ),
-    ),
-    DbtTestCliTestCase(
-        description="test executes SQLBuild only validation work",
-        setup_command=("dbt", "build", "--select", "local_only"),
-        command=("dbt", "test", "--select", "local_only"),
-        expected_stdout_fragments=(
-            "Skipping dbt tests: no dbt tests for the selection.",
-            "SQLBuild execution  sqb test",
-            "SQLBuild execution  sqb audit",
-            "test_local_only",
-            "not_null",
-        ),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="sqlbuild only test uses prebuilt local relation",
-                sql="SELECT order_id FROM main.local_only",
-                expected_rows=((10,),),
-            ),
-        ),
-    ),
-    DbtTestCliTestCase(
-        description="test type data maps SQLBuild side to audits only",
-        setup_command=(
-            "dbt",
-            "build",
-            "--select",
-            "stg_orders",
-            "fact_orders",
-            "dbt_only",
-            "local_only",
-        ),
-        command=("dbt", "test", "--select", "test_type:data", "local_only"),
-        expected_stdout_fragments=(
-            "dbt execution",
-            "SQLBuild execution  sqb audit",
-            "not_null",
-        ),
-        expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "test_local_only"),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="data test leaves local relation available for audits",
-                sql="SELECT order_id FROM main.local_only",
-                expected_rows=((10,),),
-            ),
-        ),
-    ),
-    DbtTestCliTestCase(
-        description="test type unit maps SQLBuild side to tests only",
-        setup_command=("dbt", "build", "--select", "local_only"),
-        command=("dbt", "test", "--select", "test_type:unit", "local_only"),
-        expected_stdout_fragments=(
-            "dbt execution",
-            "SQLBuild execution  sqb test",
-            "test_local_only",
-        ),
-        expected_absent_stdout_fragments=("SQLBuild execution  sqb audit", "not_null"),
-        expected_query_assertions=(
-            DbtExecutionQueryAssertion(
-                description="unit test leaves local relation available for SQLBuild tests",
-                sql="SELECT order_id FROM main.local_only",
-                expected_rows=((10,),),
-            ),
-        ),
-    ),
-]
-DBT_SQL_TEST_TARGET_FAILURE_TEST_CASES: list[DbtExecutionFailureCliTestCase] = [
-    DbtExecutionFailureCliTestCase(
-        description="dbt source relation collision fails SQLBuild dbt test target",
-        command=("dbt", "test", "--select", "stg_orders_from_source"),
-        setup=write_dbt_source_relation_collision_sqlbuild_unit_test,
-        expected_stdout_fragments=("same relation as SQLBuild source",),
-        expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
-    ),
-    DbtExecutionFailureCliTestCase(
-        description="dbt seed relation collision fails SQLBuild dbt test target",
-        command=("dbt", "test", "--select", "dim_local_countries"),
-        setup=write_dbt_seed_relation_collision_sqlbuild_unit_test,
-        expected_stdout_fragments=("same relation as SQLBuild seed",),
-        expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
-    ),
-    DbtExecutionFailureCliTestCase(
-        description="unmocked dbt snapshot in chain fails SQLBuild dbt test target",
-        command=("dbt", "test", "--select", "fact_orders_snapshot"),
-        setup=write_unmocked_snapshot_boundary_dbt_sqlbuild_unit_test,
-        expected_stdout_fragments=("snapshot",),
-        expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
-    ),
-]
-DBT_SQL_TEST_FIXTURE_FAILURE_TEST_CASES: list[DbtExecutionFailureCliTestCase] = [
-    DbtExecutionFailureCliTestCase(
-        description="dbt source fixture name collision fails SQLBuild dbt test target",
-        command=("dbt", "test", "--select", "stg_orders_from_source"),
-        setup=write_dbt_source_fixture_name_collision_sqlbuild_unit_test,
-        expected_stdout_fragments=("conflicts with a SQLBuild source",),
-        expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
-    ),
-    DbtExecutionFailureCliTestCase(
-        description="dbt seed fixture name collision fails SQLBuild dbt test target",
-        command=("dbt", "test", "--select", "dim_countries"),
-        setup=write_dbt_seed_fixture_name_collision_sqlbuild_unit_test,
-        expected_stdout_fragments=("conflicts with a SQLBuild seed",),
-        expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_TEST_COMMAND_TEST_CASES,
-    ids=[case.description for case in DBT_TEST_COMMAND_TEST_CASES],
+    [
+        DbtTestCliTestCase(
+            description="test executes mixed dbt and SQLBuild validation work",
+            setup_command=("dbt", "build", "--select", "tag:nightly", "+downstream_orders"),
+            command=("dbt", "test", "--select", "tag:nightly"),
+            expected_stdout_fragments=(
+                "dbt execution",
+                "SQLBuild execution  sqb test",
+                "SQLBuild execution  sqb audit",
+                "test_downstream_orders",
+                "not_null",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="mixed test uses prebuilt downstream relation",
+                    sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
+                    expected_rows=((1,),),
+                ),
+            ),
+        ),
+        DbtTestCliTestCase(
+            description="test executes dbt only validation work",
+            setup_command=("dbt", "run", "--select", "dbt_only"),
+            command=("dbt", "test", "--select", "dbt_only"),
+            expected_stdout_fragments=("dbt execution", "PASS"),
+            expected_absent_stdout_fragments=("SQLBuild execution",),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="dbt only test uses prebuilt dbt relation",
+                    sql="SELECT order_id FROM main.dbt_only",
+                    expected_rows=((2,),),
+                ),
+            ),
+        ),
+        DbtTestCliTestCase(
+            description="test executes SQLBuild only validation work",
+            setup_command=("dbt", "build", "--select", "local_only"),
+            command=("dbt", "test", "--select", "local_only"),
+            expected_stdout_fragments=(
+                "Skipping dbt tests: no dbt tests for the selection.",
+                "SQLBuild execution  sqb test",
+                "SQLBuild execution  sqb audit",
+                "test_local_only",
+                "not_null",
+            ),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="sqlbuild only test uses prebuilt local relation",
+                    sql="SELECT order_id FROM main.local_only",
+                    expected_rows=((10,),),
+                ),
+            ),
+        ),
+        DbtTestCliTestCase(
+            description="test type data maps SQLBuild side to audits only",
+            setup_command=(
+                "dbt",
+                "build",
+                "--select",
+                "stg_orders",
+                "fact_orders",
+                "dbt_only",
+                "local_only",
+            ),
+            command=("dbt", "test", "--select", "test_type:data", "local_only"),
+            expected_stdout_fragments=(
+                "dbt execution",
+                "SQLBuild execution  sqb audit",
+                "not_null",
+            ),
+            expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "test_local_only"),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="data test leaves local relation available for audits",
+                    sql="SELECT order_id FROM main.local_only",
+                    expected_rows=((10,),),
+                ),
+            ),
+        ),
+        DbtTestCliTestCase(
+            description="test type unit maps SQLBuild side to tests only",
+            setup_command=("dbt", "build", "--select", "local_only"),
+            command=("dbt", "test", "--select", "test_type:unit", "local_only"),
+            expected_stdout_fragments=(
+                "dbt execution",
+                "SQLBuild execution  sqb test",
+                "test_local_only",
+            ),
+            expected_absent_stdout_fragments=("SQLBuild execution  sqb audit", "not_null"),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="unit test leaves local relation available for SQLBuild tests",
+                    sql="SELECT order_id FROM main.local_only",
+                    expected_rows=((10,),),
+                ),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_prebuilt_dbt_interop_project_when_running_test_then_executes_expected_validation(
     test_case: DbtTestCliTestCase,
@@ -229,7 +188,7 @@ def test_given_prebuilt_dbt_interop_project_when_running_test_then_executes_expe
             ),
         )
     ],
-    ids=["SQLBuild unit test mocks package-qualified dbt refs"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_manifest_when_running_sqlbuild_test_then_mocks_dbt_refs(
     test_case: DbtTestCliTestCase,
@@ -268,7 +227,7 @@ def test_given_dbt_manifest_when_running_sqlbuild_test_then_mocks_dbt_refs(
             ),
         )
     ],
-    ids=["SQLBuild unit test targets dbt model with mocked upstream"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_test_targets_dbt_model_when_running_dbt_test_then_uses_mocked_upstream(
     test_case: DbtTestCliTestCase,
@@ -308,7 +267,7 @@ def test_given_sqlbuild_test_targets_dbt_model_when_running_dbt_test_then_uses_m
             ),
         )
     ],
-    ids=["SQLBuild unit test targets package-qualified dbt model"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_test_targets_qualified_dbt_model_when_running_dbt_test_then_passes(
     test_case: DbtTestCliTestCase,
@@ -348,7 +307,7 @@ def test_given_sqlbuild_test_targets_qualified_dbt_model_when_running_dbt_test_t
             ),
         )
     ],
-    ids=["SQLBuild dbt test compiles incremental target with full refresh"],
+    ids=lambda case: case.description,
 )
 def test_given_incremental_dbt_test_target_when_running_dbt_test_then_uses_full_refresh_sql(
     test_case: DbtTestCliTestCase,
@@ -388,7 +347,7 @@ def test_given_incremental_dbt_test_target_when_running_dbt_test_then_uses_full_
             ),
         )
     ],
-    ids=["SQLBuild unit test targets dbt model with source mock"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_test_targets_dbt_source_model_when_running_dbt_test_then_uses_source_mock(
     test_case: DbtTestCliTestCase,
@@ -428,7 +387,7 @@ def test_given_sqlbuild_test_targets_dbt_source_model_when_running_dbt_test_then
             ),
         )
     ],
-    ids=["SQLBuild unit test targets dbt model with seed mock"],
+    ids=lambda case: case.description,
 )
 def test_given_sqlbuild_test_targets_dbt_seed_model_when_running_dbt_test_then_uses_seed_mock(
     test_case: DbtTestCliTestCase,
@@ -468,7 +427,7 @@ def test_given_sqlbuild_test_targets_dbt_seed_model_when_running_dbt_test_then_u
             ),
         )
     ],
-    ids=["SQLBuild unit test targets chained dbt source model"],
+    ids=lambda case: case.description,
 )
 def test_given_chained_dbt_source_model_when_running_dbt_test_then_resolves_chain(
     test_case: DbtTestCliTestCase,
@@ -508,7 +467,7 @@ def test_given_chained_dbt_source_model_when_running_dbt_test_then_resolves_chai
             ),
         )
     ],
-    ids=["SQLBuild unit test targets chained dbt seed model"],
+    ids=lambda case: case.description,
 )
 def test_given_chained_dbt_seed_model_when_running_dbt_test_then_resolves_chain(
     test_case: DbtTestCliTestCase,
@@ -548,7 +507,7 @@ def test_given_chained_dbt_seed_model_when_running_dbt_test_then_resolves_chain(
             ),
         )
     ],
-    ids=["SQLBuild unit test mocks dbt snapshot boundary"],
+    ids=lambda case: case.description,
 )
 def test_given_mocked_snapshot_boundary_when_running_dbt_test_then_uses_mock_boundary(
     test_case: DbtTestCliTestCase,
@@ -588,7 +547,7 @@ def test_given_mocked_snapshot_boundary_when_running_dbt_test_then_uses_mock_bou
             ),
         )
     ],
-    ids=["SQLBuild unit test targets dbt model with qualified source mock"],
+    ids=lambda case: case.description,
 )
 def test_given_qualified_dbt_source_fixture_when_running_dbt_test_then_uses_source_mock(
     test_case: DbtTestCliTestCase,
@@ -632,7 +591,7 @@ def test_given_qualified_dbt_source_fixture_when_running_dbt_test_then_uses_sour
             ),
         )
     ],
-    ids=["SQLBuild unit test targets dbt model with qualified seed mock"],
+    ids=lambda case: case.description,
 )
 def test_given_qualified_dbt_seed_fixture_when_running_dbt_test_then_uses_seed_mock(
     test_case: DbtTestCliTestCase,
@@ -664,8 +623,30 @@ def test_given_qualified_dbt_seed_fixture_when_running_dbt_test_then_uses_seed_m
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_SQL_TEST_TARGET_FAILURE_TEST_CASES,
-    ids=[case.description for case in DBT_SQL_TEST_TARGET_FAILURE_TEST_CASES],
+    [
+        DbtExecutionFailureCliTestCase(
+            description="dbt source relation collision fails SQLBuild dbt test target",
+            command=("dbt", "test", "--select", "stg_orders_from_source"),
+            setup=write_dbt_source_relation_collision_sqlbuild_unit_test,
+            expected_stdout_fragments=("same relation as SQLBuild source",),
+            expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
+        ),
+        DbtExecutionFailureCliTestCase(
+            description="dbt seed relation collision fails SQLBuild dbt test target",
+            command=("dbt", "test", "--select", "dim_local_countries"),
+            setup=write_dbt_seed_relation_collision_sqlbuild_unit_test,
+            expected_stdout_fragments=("same relation as SQLBuild seed",),
+            expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
+        ),
+        DbtExecutionFailureCliTestCase(
+            description="unmocked dbt snapshot in chain fails SQLBuild dbt test target",
+            command=("dbt", "test", "--select", "fact_orders_snapshot"),
+            setup=write_unmocked_snapshot_boundary_dbt_sqlbuild_unit_test,
+            expected_stdout_fragments=("snapshot",),
+            expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_relation_collision_when_running_dbt_test_then_fails_before_sqlbuild_test(
     test_case: DbtExecutionFailureCliTestCase,
@@ -697,8 +678,23 @@ def test_given_dbt_relation_collision_when_running_dbt_test_then_fails_before_sq
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_SQL_TEST_FIXTURE_FAILURE_TEST_CASES,
-    ids=[case.description for case in DBT_SQL_TEST_FIXTURE_FAILURE_TEST_CASES],
+    [
+        DbtExecutionFailureCliTestCase(
+            description="dbt source fixture name collision fails SQLBuild dbt test target",
+            command=("dbt", "test", "--select", "stg_orders_from_source"),
+            setup=write_dbt_source_fixture_name_collision_sqlbuild_unit_test,
+            expected_stdout_fragments=("conflicts with a SQLBuild source",),
+            expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
+        ),
+        DbtExecutionFailureCliTestCase(
+            description="dbt seed fixture name collision fails SQLBuild dbt test target",
+            command=("dbt", "test", "--select", "dim_countries"),
+            setup=write_dbt_seed_fixture_name_collision_sqlbuild_unit_test,
+            expected_stdout_fragments=("conflicts with a SQLBuild seed",),
+            expected_absent_stdout_fragments=("SQLBuild execution  sqb test", "PASS"),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_fixture_name_collision_when_running_dbt_test_then_fails_during_compile(
     test_case: DbtExecutionFailureCliTestCase,
@@ -734,7 +730,7 @@ def test_given_dbt_fixture_name_collision_when_running_dbt_test_then_fails_durin
             expected_absent_stdout_fragments=("SQLBuild execution",),
         )
     ],
-    ids=["failing dbt test stops before SQLBuild validation"],
+    ids=lambda case: case.description,
 )
 def test_given_failing_dbt_test_when_running_test_then_sqlbuild_validation_does_not_run(
     test_case: DbtTestCliTestCase,

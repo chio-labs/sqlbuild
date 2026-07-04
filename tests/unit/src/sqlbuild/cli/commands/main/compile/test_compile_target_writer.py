@@ -47,7 +47,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
             expected_summary_line="Compiled 1 model, 1 seed, 2 functions, 1 audit, 1 test",
         )
     ],
-    ids=["writes compiled SQL, manifest, audits, and chain tests"],
+    ids=lambda case: case.description,
 )
 def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     test_case: TargetWriterTestCase,
@@ -89,7 +89,7 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
             expected_summary_line="Compiled 1 model, 1 function",
         )
     ],
-    ids=["writes offline compiled SQL without manifest by default"],
+    ids=lambda case: case.description,
 )
 def test_given_compiled_project_when_writing_static_target_then_expected_files_are_written(
     test_case: TargetWriterTestCase,

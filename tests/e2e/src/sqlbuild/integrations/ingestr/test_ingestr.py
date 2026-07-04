@@ -27,7 +27,7 @@ from tests.e2e.src.sqlbuild.integrations.ingestr.helpers import (
             expected_stdout_fragments=("ingestr execution", "raw_pg_orders", "OK"),
         )
     ],
-    ids=["loads postgres source into duckdb destination"],
+    ids=lambda case: case.description,
 )
 @pytest.mark.postgres
 def test_given_postgres_source_when_loading_with_ingestr_then_duckdb_target_has_rows(
@@ -88,7 +88,7 @@ def test_given_postgres_source_when_loading_with_ingestr_then_duckdb_target_has_
             expected_stdout_fragments=("ingestr execution", "raw_duckdb_orders", "OK"),
         )
     ],
-    ids=["loads duckdb source into duckdb destination without destination lock"],
+    ids=lambda case: case.description,
 )
 def test_given_duckdb_source_when_loading_with_ingestr_to_duckdb_then_target_has_rows(
     tmp_path: Path,
@@ -150,7 +150,7 @@ def test_given_duckdb_source_when_loading_with_ingestr_to_duckdb_then_target_has
             ),
         )
     ],
-    ids=["build runs ingestr duckdb source before building model without lock"],
+    ids=lambda case: case.description,
 )
 def test_given_ingestr_duckdb_source_when_building_with_load_then_model_reads_loaded_source(
     tmp_path: Path,
@@ -219,7 +219,7 @@ SELECT order_id, status FROM __source("raw_duckdb_orders")
             expected_stdout_fragments=("ingestr execution", "raw_pg_orders", "stg_pg_orders"),
         )
     ],
-    ids=["build loads postgres source with ingestr before building model"],
+    ids=lambda case: case.description,
 )
 @pytest.mark.postgres
 def test_given_ingestr_source_when_building_with_load_then_model_reads_loaded_source(
@@ -294,7 +294,7 @@ SELECT order_id, status FROM __source("raw_pg_orders")
             expected_stdout_fragments=("ingestr execution", "raw_duckdb_orders", "OK"),
         )
     ],
-    ids=["loads duckdb source into postgres destination"],
+    ids=lambda case: case.description,
 )
 @pytest.mark.postgres
 def test_given_duckdb_source_when_loading_with_ingestr_then_postgres_target_has_rows(

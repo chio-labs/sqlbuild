@@ -17,63 +17,61 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtInitValidationOrderTestCase,
 )
 
-DBT_INIT_PROMPT_TEST_CASES: list[DbtInitPromptTestCase] = [
-    DbtInitPromptTestCase(
-        description="uses explicit production git ref without prompting",
-        explicit_git_ref="release/prod",
-        input_text="ignored\n",
-        input_is_tty=True,
-        expected_git_ref="release/prod",
-    ),
-    DbtInitPromptTestCase(
-        description="defaults to main in non interactive runs",
-        explicit_git_ref=None,
-        input_text="prod\n",
-        input_is_tty=False,
-        expected_git_ref="main",
-    ),
-    DbtInitPromptTestCase(
-        description="reads production git ref from interactive input",
-        explicit_git_ref=None,
-        input_text="prod\n",
-        input_is_tty=True,
-        expected_git_ref="prod",
-        expected_output_fragments=(
-            "dbt production reuse setup",
-            "Production git ref [main]:",
-        ),
-    ),
-    DbtInitPromptTestCase(
-        description="uses main when interactive input is blank",
-        explicit_git_ref=None,
-        input_text="\n",
-        input_is_tty=True,
-        expected_git_ref="main",
-        expected_output_fragments=("Production git ref [main]:",),
-    ),
-    DbtInitPromptTestCase(
-        description="uses main when interactive input is whitespace",
-        explicit_git_ref=None,
-        input_text="   \t  \n",
-        input_is_tty=True,
-        expected_git_ref="main",
-        expected_output_fragments=("Production git ref [main]:",),
-    ),
-    DbtInitPromptTestCase(
-        description="uses main when interactive input reaches eof",
-        explicit_git_ref=None,
-        input_text="",
-        input_is_tty=True,
-        expected_git_ref="main",
-        expected_output_fragments=("Production git ref [main]:",),
-    ),
-]
-
 
 @pytest.mark.parametrize(
     "test_case",
-    DBT_INIT_PROMPT_TEST_CASES,
-    ids=[case.description for case in DBT_INIT_PROMPT_TEST_CASES],
+    [
+        DbtInitPromptTestCase(
+            description="uses explicit production git ref without prompting",
+            explicit_git_ref="release/prod",
+            input_text="ignored\n",
+            input_is_tty=True,
+            expected_git_ref="release/prod",
+        ),
+        DbtInitPromptTestCase(
+            description="defaults to main in non interactive runs",
+            explicit_git_ref=None,
+            input_text="prod\n",
+            input_is_tty=False,
+            expected_git_ref="main",
+        ),
+        DbtInitPromptTestCase(
+            description="reads production git ref from interactive input",
+            explicit_git_ref=None,
+            input_text="prod\n",
+            input_is_tty=True,
+            expected_git_ref="prod",
+            expected_output_fragments=(
+                "dbt production reuse setup",
+                "Production git ref [main]:",
+            ),
+        ),
+        DbtInitPromptTestCase(
+            description="uses main when interactive input is blank",
+            explicit_git_ref=None,
+            input_text="\n",
+            input_is_tty=True,
+            expected_git_ref="main",
+            expected_output_fragments=("Production git ref [main]:",),
+        ),
+        DbtInitPromptTestCase(
+            description="uses main when interactive input is whitespace",
+            explicit_git_ref=None,
+            input_text="   \t  \n",
+            input_is_tty=True,
+            expected_git_ref="main",
+            expected_output_fragments=("Production git ref [main]:",),
+        ),
+        DbtInitPromptTestCase(
+            description="uses main when interactive input reaches eof",
+            explicit_git_ref=None,
+            input_text="",
+            input_is_tty=True,
+            expected_git_ref="main",
+            expected_output_fragments=("Production git ref [main]:",),
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_init_prompt_inputs_when_resolving_prod_ref_then_returns_expected_ref(
     test_case: DbtInitPromptTestCase,
@@ -125,7 +123,7 @@ def test_given_dbt_init_prompt_inputs_when_resolving_prod_ref_then_returns_expec
             unexpected_fragments=("Add SQLBuild models",),
         )
     ],
-    ids=["init outputs progress and dbt-first next steps"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_init_when_running_then_outputs_progress_and_dbt_first_next_steps(
     test_case: DbtInitOutputTestCase,
@@ -197,7 +195,7 @@ def test_given_dbt_init_when_running_then_outputs_progress_and_dbt_first_next_st
             ),
         )
     ],
-    ids=["dry-run outputs progress and preview document"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
     test_case: DbtInitOutputTestCase,
@@ -281,7 +279,7 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
             ),
         )
     ],
-    ids=["init output uses SQLBuild colors when terminal supports color"],
+    ids=lambda case: case.description,
 )
 def test_given_color_terminal_when_running_dbt_init_then_it_styles_output(
     test_case: DbtInitOutputTestCase,
@@ -344,7 +342,7 @@ def test_given_color_terminal_when_running_dbt_init_then_it_styles_output(
             expected_dbt_project_dir=".",
         )
     ],
-    ids=["defaults project dir to cwd when dbt project file exists"],
+    ids=lambda case: case.description,
 )
 def test_given_dbt_project_in_cwd_when_running_dbt_init_then_project_dir_defaults_to_cwd(
     test_case: DbtInitProjectDirDefaultTestCase,
@@ -403,7 +401,7 @@ def test_given_dbt_project_in_cwd_when_running_dbt_init_then_project_dir_default
             unexpected_output_fragments=("Production git ref",),
         )
     ],
-    ids=["validates init inputs before prompting for production ref"],
+    ids=lambda case: case.description,
 )
 def test_given_invalid_dbt_init_inputs_when_running_then_validation_happens_before_prompt(
     test_case: DbtInitValidationOrderTestCase,
