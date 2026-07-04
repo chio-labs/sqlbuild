@@ -74,6 +74,7 @@ test-virtual:
 
 
 skills:
+	uv run python scripts/generate_docs_skill.py
 	uv run sqb skills update --global --target opencode
 	uv run python -m scripts.skills.update_structure_skill
 

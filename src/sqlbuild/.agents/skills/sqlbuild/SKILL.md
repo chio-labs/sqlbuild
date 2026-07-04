@@ -1752,7 +1752,11 @@ Configuration is layered in this order, with later layers overriding earlier one
 2. **Path defaults** (`path_defaults`) - if the model's path matches
 3. **MODEL() header** - the model's own config
 
-Tags are special: they are *unioned* across layers rather than overridden. A model with `tags [marts]` in its header that matches a path default with `tags [managed]` will have both tags.
+Most keys are overridden by the more specific layer, but three merge instead:
+
+- `tags` are *unioned* across layers. A model with `tags [marts]` in its header that matches a path default with `tags [managed]` will have both tags.
+- `row_diff_exclude_columns` lists are unioned across layers.
+- `row_diff_tolerances` mappings are deep-merged across layers, so a header tolerance for one column adds to (rather than replaces) tolerances declared in defaults or path defaults.
 
 ### Settings
 
@@ -3265,6 +3269,16 @@ At compile time, SQLBuild validates every `python("hook_name")` reference:
 | `post_hooks` | Lifecycle hooks to run after materialization: `sql("...")` and/or `python("hook_name")` entries |
 | `enabled` | Set to `false` to skip the model |
 | `contract` | `enforced` or `none`. When enforced, declared columns are the authoritative output schema. |
+| `sql_validation` | Per-model boolean override of the project `sql_validation` setting |
+
+Four knobs gate compile-time SQL validation, from broadest to narrowest:
+
+1. `settings.sql_analysis` - master switch for all SQL-analysis features
+2. `--no-sql-validation` - per-run CLI kill switch
+3. `settings.sql_validation` - project-level validation setting
+4. `MODEL (sql_validation ...)` - per-model override of the project setting
+
+Validation runs only when every broader knob allows it: `sql_analysis` must be on and `--no-sql-validation` absent before the project/model `sql_validation` values are consulted.
 
 #### Incremental config
 
@@ -4321,6 +4335,8 @@ The planner checks each model against the `reuse_from` target's fingerprints and
 - Source freshness in the `reuse_from` target is current.
 
 For incremental models, reuse clones or copies the prod relation as a baseline, then runs the incremental delta on top.
+
+Custom materializations are reuse-eligible when they define a `prepare_version` function alongside `materialize` - the same hook used for [virtual environment seeding](/concepts/virtual-environments/building). Custom materializations without `prepare_version` are always rebuilt.
 
 Use `reuse_hard_copy = true` on the target to force a full data copy instead of a zero-copy clone. This is useful when the adapter does not support cloning, or when you need an independent copy.
 
@@ -9833,6 +9849,16 @@ Seeds (1)
 ```
 
 When query or schema changes are detected, the plan shows the affected models with backfill actions and cascade information.
+
+### Missing upstream dependencies
+
+Planning a scoped selection whose upstream inputs were never built in the target fails with `S301` rather than producing a plan that would break at build time:
+
+```
+error[S301]: cannot build selected scope: 3 missing upstream dependencies (stg_orders, stg_payments, waffle_types)
+```
+
+Build the upstream chain first, or select it along with the model: `sqb build --select +fact_orders`. On targets with [`reuse_from`](/concepts/reuse-from-production) configured, missing upstream inputs can instead be cloned from the reuse origin.
 
 ## build
 
