@@ -13,6 +13,7 @@ from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.load.selection import select_load_entries
 from sqlbuild.cli.commands.main.commands.audit import run_audit
 from sqlbuild.cli.commands.main.commands.build import run_build
@@ -697,7 +698,9 @@ def test_given_selected_model_references_managed_source_when_build_or_run_then_a
 ) -> None:
     write_repo_files(tmp_path, _BUILD_RUN_AUTO_LOAD_PROJECT_FILES)
 
-    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build(
+        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0
@@ -742,7 +745,9 @@ def test_given_self_managed_source_when_running_build_then_auto_loads_before_mod
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build(
+        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0
@@ -863,10 +868,12 @@ def test_given_managed_source_environment_when_building_or_running_then_reads_co
         setup_connection.close()
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=("stg_orders",),
-        defer_sources_to=test_case.defer_sources_to,
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=("stg_orders",),
+            defer_sources_to=test_case.defer_sources_to,
+        )
     )
 
     assert exit_code == test_case.expected_exit_code
@@ -1069,7 +1076,7 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
 
     command_runners: dict[str, Callable[..., int]] = {
         "audit": run_audit,
-        "build": run_build,
+        "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
         "scenario": run_scenario,
         "test": run_test,
     }
@@ -1219,7 +1226,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
 
     command_runners: dict[str, Callable[..., int]] = {
         "audit": run_audit,
-        "build": run_build,
+        "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
         project_dir=tmp_path,
@@ -1336,14 +1343,20 @@ def test_given_build_or_run_load_flags_when_running_then_applies_loader_control(
         setup_connection.close()
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=(test_case.args[test_case.args.index("--select") + 1],),
-        load_sources=(
-            True if "--load" in test_case.args else False if "--no-load" in test_case.args else None
-        ),
-        reload_sources="--reload" in test_case.args,
-        full_refresh="--full-refresh" in test_case.args,
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=(test_case.args[test_case.args.index("--select") + 1],),
+            load_sources=(
+                True
+                if "--load" in test_case.args
+                else False
+                if "--no-load" in test_case.args
+                else None
+            ),
+            reload_sources="--reload" in test_case.args,
+            full_refresh="--full-refresh" in test_case.args,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -1420,9 +1433,11 @@ def test_given_downstream_selection_when_running_build_then_loads_only_direct_se
         setup_connection.close()
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=(test_case.args[test_case.args.index("--select") + 1],),
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=(test_case.args[test_case.args.index("--select") + 1],),
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -1464,7 +1479,9 @@ def test_given_source_loader_fails_when_running_build_then_downstream_model_is_n
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build(
+        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == test_case.expected_exit_code
@@ -1511,11 +1528,13 @@ def test_given_build_auto_loads_source_when_json_output_then_includes_source_ass
     json_output_path: Path = tmp_path / "target" / "build.json"
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=("stg_orders",),
-        json_output_path=json_output_path,
-        manifest=True,
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=("stg_orders",),
+            json_output_path=json_output_path,
+            manifest=True,
+        )
     )
 
     payload: dict[str, Any] = json.loads(json_output_path.read_text(encoding="utf-8"))
@@ -1684,11 +1703,13 @@ def test_given_build_skips_loader_when_manifest_is_written_then_marks_source_aut
         setup_connection.close()
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=("stg_orders",),
-        load_sources=False,
-        manifest=True,
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=("stg_orders",),
+            load_sources=False,
+            manifest=True,
+        )
     )
 
     manifest: dict[str, Any] = json.loads(

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
@@ -197,40 +198,7 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
-    run_build: Callable[
-        [
-            Path | None,
-            bool,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            CursorOverrides | None,
-            bool,
-            bool,
-            bool,
-            str | None,
-            bool | None,
-            bool,
-            bool,
-            bool,
-            bool,
-            int | None,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-            dict[str, object],
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            Path | None,
-        ],
-        int,
-    ]
+    run_build: Callable[[BuildCommandRequest], int]
     run_freshness: Callable[
         [
             Path | None,
