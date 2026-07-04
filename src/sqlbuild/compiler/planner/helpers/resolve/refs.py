@@ -285,16 +285,19 @@ def apply_deferred_locations(
     seed_locations: dict[str, CompiledRelationLocation],
     deferred_locations: dict[str, CompiledRelationLocation],
     selected_keys: frozenset[CompiledObjectKey],
-) -> None:
-    """Replace non-selected model/seed locations with deferred target locations."""
+) -> tuple[dict[str, CompiledRelationLocation], dict[str, CompiledRelationLocation]]:
+    """Return model/seed locations with non-selected entries pointed at deferred targets."""
 
     selected_names: frozenset[str] = frozenset(k.name for k in selected_keys)
+    updated_model_locations: dict[str, CompiledRelationLocation] = dict(model_locations)
+    updated_seed_locations: dict[str, CompiledRelationLocation] = dict(seed_locations)
     name: str
     deferred_location: CompiledRelationLocation
     for name, deferred_location in deferred_locations.items():
         if name in selected_names:
             continue
-        if name in model_locations:
-            model_locations[name] = deferred_location
-        if name in seed_locations:
-            seed_locations[name] = deferred_location
+        if name in updated_model_locations:
+            updated_model_locations[name] = deferred_location
+        if name in updated_seed_locations:
+            updated_seed_locations[name] = deferred_location
+    return updated_model_locations, updated_seed_locations

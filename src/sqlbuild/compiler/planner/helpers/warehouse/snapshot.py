@@ -269,12 +269,13 @@ def _build_metadata_name_filter(
             selected_model: CompiledModel | None = model_map.get(key.name)
             if selected_model is not None:
                 names.add(selected_model.destination.name)
-                _add_model_upstream_names(
-                    model=selected_model,
-                    model_map=model_map,
-                    seed_map=seed_map,
-                    selected_names=selected_names,
-                    names=names,
+                names.update(
+                    _model_upstream_names(
+                        model=selected_model,
+                        model_map=model_map,
+                        seed_map=seed_map,
+                        selected_names=selected_names,
+                    )
                 )
                 continue
             selected_seed: CompiledSeed | None = seed_map.get(key.name)
@@ -297,14 +298,14 @@ def _build_metadata_name_filter(
     return tuple(sorted(names))
 
 
-def _add_model_upstream_names(
+def _model_upstream_names(
     *,
     model: CompiledModel,
     model_map: dict[str, CompiledModel],
     seed_map: dict[str, CompiledSeed],
     selected_names: frozenset[str],
-    names: set[str],
-) -> None:
+) -> frozenset[str]:
+    names: set[str] = set()
     reference: CompileSqlReference
     for reference in model.references:
         if (
@@ -326,6 +327,7 @@ def _add_model_upstream_names(
             if upstream_seed is not None:
                 names.add(upstream_seed.destination.name)
             continue
+    return frozenset(names)
 
 
 def _gather_relations(

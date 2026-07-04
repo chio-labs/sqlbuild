@@ -18,7 +18,6 @@ from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.identity.standard import (
     build_standard_model_version_identities,
 )
-from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DependencyBaselinePlanEntry,
     ModelPlanEntry,
@@ -48,6 +47,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     StandardSourceFreshnessPlanOutputTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
+    build_execution_plan_from_kwargs,
     build_standard_pruning_project,
     model_definition_hash,
     write_standard_model_state,
@@ -77,7 +77,7 @@ def test_given_direct_plan_when_building_execution_plan_then_source_freshness_is
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        plan_output: PlanOutput = build_execution_plan(
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=CompiledProject(
                 run_id="test_run",
                 effective_target_name=None,
@@ -114,7 +114,7 @@ def test_given_project_with_hook_functions_when_building_execution_plan_then_pla
         return None
 
     try:
-        plan_output: PlanOutput = build_execution_plan(
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=CompiledProject(
                 run_id="test_run",
                 effective_target_name=None,
@@ -409,7 +409,7 @@ def test_given_standard_pruned_selection_when_upstream_changes_then_respects_sel
             connection=connection,
             project=previous_project,
         )
-        plan_output: PlanOutput = build_execution_plan(
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=current_project,
             adapter=adapter,
             connection=connection,
@@ -477,7 +477,7 @@ def test_given_external_blocked_model_when_building_execution_plan_then_only_tha
         }
     )
     try:
-        plan_output: PlanOutput = build_execution_plan(
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=project,
             adapter=adapter,
             connection=connection,
@@ -611,7 +611,7 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
             "TIMESTAMP '2026-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
 
-        plan_output: PlanOutput = build_execution_plan(
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=project,
             adapter=adapter,
             connection=connection,
@@ -753,7 +753,7 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
         )
         adapter.execute(connection, "CREATE TABLE prod_schema.upstream AS SELECT 1 AS id")
 
-        plan_output: PlanOutput = build_execution_plan(
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=project,
             adapter=adapter,
             connection=connection,
@@ -859,7 +859,7 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
                 f"CREATE TABLE prod_schema.{model_name} AS SELECT 1 AS id",
             )
 
-        plan_output: PlanOutput = build_execution_plan(
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=project,
             adapter=adapter,
             connection=connection,
@@ -910,7 +910,7 @@ def test_given_reuse_from_and_source_deferral_when_planning_then_raises(
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
         with pytest.raises(PlannerInputError) as exc_info:
-            build_execution_plan(
+            build_execution_plan_from_kwargs(
                 project=build_standard_reuse_from_target_project(),
                 adapter=adapter,
                 connection=connection,
@@ -954,7 +954,7 @@ def test_given_full_refresh_with_reuse_from_when_planning_then_reuse_state_is_sk
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
         adapter.execute(connection, "CREATE SCHEMA dev_schema")
-        plan_output: PlanOutput = build_execution_plan(
+        plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=build_standard_reuse_from_target_project(),
             adapter=adapter,
             connection=connection,

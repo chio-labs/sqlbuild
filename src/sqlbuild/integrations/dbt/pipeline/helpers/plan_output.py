@@ -19,8 +19,12 @@ from sqlbuild.compiler.planner.main.planning.display_plan import build_display_o
 from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     CursorOverrides,
+    DeferralInputs,
     DependencyBaselinePlanEntry,
     GraphNodeKey,
+    PlannerOverrides,
+    PlannerPolicies,
+    PlannerSelection,
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import StandardScopePruning
@@ -184,18 +188,22 @@ def build_sqlbuild_plan_output(
                 project=planning_project,
                 adapter=adapter,
                 connection=connection,
-                select=selected_model_names,
-                cursor_overrides=cursor_overrides,
-                full_refresh="--full-refresh" in sqlbuild_args,
-                forced_stale_model_names=forced_stale_model_names,
-                external_blocked_model_names=external_blocked_model_names,
-                standard_scope_pruning=(
-                    StandardScopePruning.PRUNE_UNCHANGED
-                    if "--force" not in sqlbuild_args and not disable_scope_pruning
-                    else StandardScopePruning.NONE
+                selection=PlannerSelection(select=selected_model_names),
+                overrides=PlannerOverrides(
+                    cursor_overrides=cursor_overrides,
+                    full_refresh="--full-refresh" in sqlbuild_args,
+                    forced_stale_model_names=forced_stale_model_names,
+                    external_blocked_model_names=external_blocked_model_names,
+                ),
+                deferral=DeferralInputs(deferred_relations=deferred_relations),
+                policies=PlannerPolicies(
+                    standard_scope_pruning=(
+                        StandardScopePruning.PRUNE_UNCHANGED
+                        if "--force" not in sqlbuild_args and not disable_scope_pruning
+                        else StandardScopePruning.NONE
+                    ),
                 ),
                 on_progress=on_progress,
-                deferred_relations=deferred_relations,
             )
             return replace(
                 plan_output,

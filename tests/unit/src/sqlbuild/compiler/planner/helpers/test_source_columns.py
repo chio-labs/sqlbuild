@@ -11,12 +11,15 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.output.plan_entry import (
+    build_planner_relations_context,
     gather_source_columns,
     validate_source_cursor_input_columns,
 )
+from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
+    KnownSourceColumnsReuseTestCase,
     SourceColumnsTestCase,
     SourceCursorInputColumnsTestCase,
 )
@@ -103,6 +106,75 @@ def test_given_sources_when_gathering_columns_then_returns_expected_source_colum
     assert tuple(column.name for column in result.get("raw_payments", ())) == (
         test_case.expected_source_column_names
     )
+
+
+KNOWN_SOURCE_COLUMNS_TEST_CASES = [
+    KnownSourceColumnsReuseTestCase(
+        description="reuses known source columns without warehouse queries",
+        known_source_columns={
+            "raw_payments": ("id", "amount_cents"),
+            "unrelated_source": ("other_id",),
+        },
+        adapter_column_names=("id", "amount_cents", "status"),
+        expected_queried_sql_count=0,
+        expected_source_column_names={"raw_payments": ("id", "amount_cents")},
+    ),
+    KnownSourceColumnsReuseTestCase(
+        description="gathers from the warehouse when no known source columns are provided",
+        known_source_columns=None,
+        adapter_column_names=("id", "amount_cents", "status"),
+        expected_queried_sql_count=1,
+        expected_source_column_names={"raw_payments": ("id", "amount_cents", "status")},
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    KNOWN_SOURCE_COLUMNS_TEST_CASES,
+    ids=[case.description for case in KNOWN_SOURCE_COLUMNS_TEST_CASES],
+)
+def test_given_known_source_columns_when_building_relations_context_then_reuses_prior_gather(
+    test_case: KnownSourceColumnsReuseTestCase,
+) -> None:
+    project: CompiledProject = build_test_project_with_source_entry(
+        SourceEntry(
+            name="raw_payments",
+            expression="SELECT 1 AS id, 1700 AS amount_cents, 'success' AS status",
+            type_enforcement=True,
+        )
+    )
+    adapter: _RecordingAdapter = _RecordingAdapter(test_case.adapter_column_names)
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={},
+        models_by_name={},
+        selected_keys=frozenset(),
+        execution_order=(),
+    )
+    known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = (
+        {
+            source_name: tuple(ColumnInfo(name=name, type="") for name in column_names)
+            for source_name, column_names in test_case.known_source_columns.items()
+        }
+        if test_case.known_source_columns is not None
+        else None
+    )
+
+    context: PlannerRelationsContext = build_planner_relations_context(
+        project=project,
+        adapter=adapter,
+        connection=None,
+        scope=scope,
+        known_source_columns=known_source_columns,
+    )
+
+    assert len(adapter.queried_sql) == test_case.expected_queried_sql_count
+    assert {
+        source_name: tuple(column.name for column in columns)
+        for source_name, columns in context.source_warehouse_columns.items()
+    } == test_case.expected_source_column_names
 
 
 @pytest.mark.parametrize(

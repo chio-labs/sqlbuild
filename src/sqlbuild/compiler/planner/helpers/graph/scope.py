@@ -95,6 +95,7 @@ def build_planner_scope(
             upstream_deps,
             injected_edge_origins=build_execution_edge_origins(project),
         ),
+        user_selected_keys=resolved_selected_keys,
     )
 
 

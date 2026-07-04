@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.pipeline.models import PythonPlanEntry
+from sqlbuild.compiler.pipeline.helpers.python_stale_selection import (
+    filter_python_node_names_for_selected_sql,
+)
+from sqlbuild.compiler.pipeline.models import PythonPlanEntry, PythonRunPlanOutputs
 from sqlbuild.compiler.planner.models import PlanOutput, PlanWarning
-from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.compiler.planner.types import WarningSeverity, WorkSelectionPolicy
+from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
+from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
 from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonNode,
     PythonNodeGraph,
@@ -17,6 +25,60 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonRunPhase,
 )
+
+
+def build_python_run_plan_outputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    plan_output: PlanOutput,
+    run_selection: PythonSqlRunSelection | None,
+    selected_python_node_names: frozenset[str],
+    work_selection_policy: WorkSelectionPolicy,
+) -> PythonRunPlanOutputs:
+    """Attach python-aware selection warnings and plan entries to the plan output."""
+
+    if run_selection is None:
+        return PythonRunPlanOutputs(
+            plan_output=plan_output,
+            python_plan_entries=(),
+            selected_python_node_names=selected_python_node_names,
+        )
+    python_graph: PythonNodeGraph = build_discovered_python_node_graph(
+        discovered_inputs=discovered_inputs
+    )
+    if work_selection_policy == WorkSelectionPolicy.STALE_ONLY:
+        selected_python_node_names = filter_python_node_names_for_selected_sql(
+            python_graph=python_graph,
+            python_node_names=selected_python_node_names,
+            selected_sql_keys=plan_output.selected_keys,
+        )
+    plan_output = replace(
+        plan_output,
+        warnings=(
+            *plan_output.warnings,
+            *build_skipped_task_asset_ingress_warnings(
+                plan_output=plan_output,
+                run_selection=run_selection,
+                python_graph=python_graph,
+            ),
+        ),
+    )
+    lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
+        selection=PythonSqlRunSelection(
+            sql_keys=plan_output.selected_keys,
+            python_node_names=selected_python_node_names,
+        ),
+        python_graph=python_graph,
+    )
+    return PythonRunPlanOutputs(
+        plan_output=plan_output,
+        python_plan_entries=build_python_plan_entries(
+            lifecycle_plan=lifecycle_plan,
+            python_graph=python_graph,
+            previous_identities=plan_output.python_identity_fingerprints,
+        ),
+        selected_python_node_names=selected_python_node_names,
+    )
 
 
 def build_python_plan_entries(
