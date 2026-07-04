@@ -4,6 +4,9 @@ from __future__ import annotations
 
 FINGERPRINT_TABLE_NAME: str = "_sqlbuild_fingerprints"
 
+FINGERPRINT_WRITE_ATTEMPTS: int = 5
+FINGERPRINT_WRITE_RETRY_BASE_SECONDS: float = 0.05
+
 COLUMN_NODE_TYPE: str = "node_type"
 COLUMN_NODE_NAME: str = "node_name"
 COLUMN_TARGET_DATABASE: str = "target_database"

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.compiler.fingerprints.helpers.sql import build_read_latest_sql
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 
 class FakeFingerprintResult:
@@ -36,6 +38,47 @@ class FakeFingerprintWriteExecute:
     def __call__(self, connection: Any, sql: str) -> None:
         del connection
         self.executed_sql.append(sql)
+
+
+class FlakyFingerprintWriteExecute:
+    def __init__(self, *, failing_create_attempts: int, error_message: str) -> None:
+        self._failing_create_attempts: int = failing_create_attempts
+        self._error_message: str = error_message
+        self.create_attempts: int = 0
+        self.executed_sql: list[str] = []
+
+    def __call__(self, connection: Any, sql: str) -> None:
+        del connection
+        self.executed_sql.append(sql)
+        if sql.startswith("CREATE TABLE"):
+            self.create_attempts += 1
+            if self.create_attempts <= self._failing_create_attempts:
+                raise RuntimeError(self._error_message)
+
+
+class RecordingSleeper:
+    def __init__(self) -> None:
+        self.sleep_seconds: list[float] = []
+
+    def __call__(self, seconds: float) -> None:
+        self.sleep_seconds.append(seconds)
+
+
+def build_write_test_fingerprint(*, node_name: str = "orders") -> Fingerprint:
+    return Fingerprint(
+        node_type="model",
+        node_name=node_name,
+        target_database=None,
+        target_schema="main",
+        target_name=node_name,
+        run_id="run_001",
+        definition_hash="definition_hash",
+        version_hash="version_hash",
+        schema_fingerprint="schema_hash",
+        definition="SELECT 1",
+        metadata_json="{}",
+        ts=datetime(2026, 1, 15, 12, 0, 0),
+    )
 
 
 def render_qualified_name(*, database: str | None, schema: str | None, name: str) -> str | None:
