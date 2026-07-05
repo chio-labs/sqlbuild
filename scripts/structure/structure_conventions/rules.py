@@ -58,6 +58,10 @@ _SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
         "schema-change get_columns gated to the first batch by schema_checked (delta is "
         "staged inside the loop); DML get_columns is per window by design"
     ),
+    "src/sqlbuild/virtual/executor/helpers/clone.py": (
+        "destination existence is checked just-in-time under the per-model lease "
+        "(concurrent hydrators); transient probe runs only on actual clones"
+    ),
 }
 _GLOBAL_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "source_fingerprint",
