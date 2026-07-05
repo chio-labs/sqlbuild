@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands.main.commands.playground import run_playground
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     skip_unless_dbt_is_runnable,
@@ -66,7 +67,14 @@ def test_given_virtual_playground_when_running_lifecycle_then_it_succeeds(
     test_case: VirtualPlaygroundLifecycleTestCase,
     tmp_path: Path,
 ) -> None:
-    assert run_playground(tmp_path, test_case.project_name, template="virtual") == 0
+    assert (
+        run_playground(
+            PlaygroundCommandRequest(
+                project_dir=tmp_path, target_path=test_case.project_name, template="virtual"
+            )
+        )
+        == 0
+    )
     project_dir: Path = tmp_path / test_case.project_name
 
     init_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -167,7 +175,14 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
     test_case: PythonNodesPlaygroundLifecycleTestCase,
     tmp_path: Path,
 ) -> None:
-    assert run_playground(tmp_path, test_case.project_name, template="python_nodes") == 0
+    assert (
+        run_playground(
+            PlaygroundCommandRequest(
+                project_dir=tmp_path, target_path=test_case.project_name, template="python_nodes"
+            )
+        )
+        == 0
+    )
     project_dir: Path = tmp_path / test_case.project_name
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -245,7 +260,14 @@ def test_given_dbt_playground_when_building_then_runs_dbt_without_reuse(
     tmp_path: Path,
 ) -> None:
     skip_unless_dbt_is_runnable()
-    assert run_playground(tmp_path, test_case.project_name, template="dbt") == 0
+    assert (
+        run_playground(
+            PlaygroundCommandRequest(
+                project_dir=tmp_path, target_path=test_case.project_name, template="dbt"
+            )
+        )
+        == 0
+    )
     workspace: Path = tmp_path / test_case.project_name
 
     init_result: subprocess.CompletedProcess[str] = run_sqb(
