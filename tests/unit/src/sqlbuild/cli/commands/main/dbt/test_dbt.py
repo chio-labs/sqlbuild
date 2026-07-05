@@ -8,7 +8,12 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.commands.dbt import run_dbt_command
-from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult, DbtInteropPlan
+from sqlbuild.integrations.dbt.models import (
+    DbtInitRequest,
+    DbtInitResult,
+    DbtInteropExecutionRequest,
+    DbtInteropPlan,
+)
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtAutoInitTestCase,
@@ -128,20 +133,8 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
 ) -> None:
     captured_calls: list[tuple[DbtInteropCommand, tuple[str, ...], object]] = []
 
-    def execute_dbt_interop_from_project(
-        *,
-        command: DbtInteropCommand,
-        project_dir: Path,
-        args: tuple[str, ...],
-        on_progress: Callable[[str], None],
-        progress_stream: object,
-        dbt_stdout_stream: object,
-        use_color: bool,
-        verbose: bool,
-        json_output: bool,
-    ) -> int:
-        del project_dir, on_progress, dbt_stdout_stream, use_color, verbose, json_output
-        captured_calls.append((command, args, progress_stream))
+    def execute_dbt_interop_from_project(request: DbtInteropExecutionRequest) -> int:
+        captured_calls.append((request.command, request.args, request.progress_stream))
         return 0
 
     monkeypatch.setattr(
