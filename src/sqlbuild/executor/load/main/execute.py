@@ -271,7 +271,7 @@ def execute_source_load(
             staging=staging,
             statement_recorder=statement_recorder,
         )
-        _apply_source_write_strategy(
+        _ = _apply_source_write_strategy(
             adapter=adapter,
             connection=connection,
             source_entry=source_entry,

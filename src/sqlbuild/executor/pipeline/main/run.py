@@ -121,7 +121,7 @@ def run_build_pipeline(
             providers=providers,
         )
     )
-    _prepare_build_schemas(
+    _ = _prepare_build_schemas(
         plan=plan,
         adapter=adapter,
         connection_config=connection_config,

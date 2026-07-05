@@ -444,7 +444,7 @@ def _staged_lifecycle(
 
     try:
         with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="check_existing"):
-            promote_relation_to_destination(
+            _ = promote_relation_to_destination(
                 adapter=adapter,
                 connection=connection,
                 origin_relation=staging_qualified,
@@ -507,7 +507,7 @@ def _staged_lifecycle(
             hook_results=hook_results,
         )
 
-    try_write_fingerprint(
+    _ = try_write_fingerprint(
         entry=entry,
         adapter=adapter,
         connection=connection,
@@ -698,7 +698,7 @@ def _direct_lifecycle(
             hook_results=hook_results,
         )
 
-    try_write_fingerprint(
+    _ = try_write_fingerprint(
         entry=entry,
         adapter=adapter,
         connection=connection,

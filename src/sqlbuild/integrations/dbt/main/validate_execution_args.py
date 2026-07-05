@@ -20,4 +20,4 @@ def validate_dbt_execution_args(*, command: DbtInteropCommand, args: Sequence[st
     display_free_args: tuple[str, ...] = tuple(
         arg for arg in args if arg not in DBT_EXECUTION_DISPLAY_FLAGS
     )
-    parse_dbt_execution_args(command=command, args=display_free_args)
+    _ = parse_dbt_execution_args(command=command, args=display_free_args)

@@ -174,7 +174,7 @@ def run_load_pipeline(
             sequential_connection: Any = connections[0]
             while state.ready:
                 source_name: str = state.ready.pop(0)
-                complete_dag_source(
+                _ = complete_dag_source(
                     source_name=source_name,
                     result=execute_ready_dag_source(
                         source_name=source_name,
@@ -241,7 +241,7 @@ def run_load_pipeline(
                     break
                 completed_source_name, result = state.completion_queue.get()
                 state.in_flight.discard(completed_source_name)
-                complete_dag_source(
+                _ = complete_dag_source(
                     source_name=completed_source_name,
                     result=result,
                     state=state,

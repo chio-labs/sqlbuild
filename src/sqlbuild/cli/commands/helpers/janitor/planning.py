@@ -139,9 +139,7 @@ def build_janitor_execution_plan(
         ),
         state_backup_candidates=state_backup_candidates(retention=inspection.state),
         expired_lock_candidates=expired_lock_candidates(retention=inspection.state),
-        virtual_state_prune_candidates=virtual_state_prune_candidates(
-            retention=inspection.state
-        ),
+        virtual_state_prune_candidates=virtual_state_prune_candidates(retention=inspection.state),
         direct_state_history_versions=settings.direct_state_history_versions,
     )
     status.complete(

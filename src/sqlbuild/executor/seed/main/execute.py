@@ -47,7 +47,7 @@ def execute_seed(
             statement_recorder=statement_recorder,
         )
         warnings: list[str] = []
-        try_write_seed_fingerprint(
+        _ = try_write_seed_fingerprint(
             seed_entry=seed_entry,
             adapter=adapter,
             connection=connection,

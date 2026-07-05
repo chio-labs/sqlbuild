@@ -23,12 +23,12 @@ def write_node_source_watermark_records(
 
     if not records:
         return
-    execute(connection, render_create_table_sql(database=database, schema=schema))
+    _ = execute(connection, render_create_table_sql(database=database, schema=schema))
     if render_create_index_sqls is not None:
         index_sql: str
         for index_sql in render_create_index_sqls(database=database, schema=schema):
-            execute(connection, index_sql)
-    execute(
+            _ = execute(connection, index_sql)
+    _ = execute(
         connection,
         render_insert_records_sql(database=database, schema=schema, records=records),
     )

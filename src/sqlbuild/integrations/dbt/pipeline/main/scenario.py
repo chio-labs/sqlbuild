@@ -61,13 +61,13 @@ def build_dbt_scenario_project(
         dbt_args=(),
     )
     runner: DbtRunner = dbt_runner or DbtRunner(dbt_executable=dbt_executable)
-    _report(on_progress, "Compiling dbt project...")
+    report_dbt_scenario_progress(on_progress, "Compiling dbt project...")
     compile_result: DbtCommandResult = runner.compile(options=dbt_options, full_refresh=True)
     if compile_result.returncode != 0:
         raise DbtInteropRuntimeError("dbt compile failed", help=dbt_failure_detail(compile_result))
     manifest_path: Path = resolve_dbt_manifest_path(options=dbt_options)
     manifest: DbtManifestIndex = load_dbt_manifest_index(manifest_path=manifest_path)
-    _report(on_progress, "Loaded dbt manifest.")
+    report_dbt_scenario_progress(on_progress, "Loaded dbt manifest.")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -79,7 +79,7 @@ def build_dbt_scenario_project(
         no_sql_validation=no_sql_validation,
         external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
-    _report(on_progress, "Compiled SQLBuild project.")
+    report_dbt_scenario_progress(on_progress, "Compiled SQLBuild project.")
     target_names: tuple[str, ...] = resolve_dbt_scenario_target_names(
         project=project,
         manifest=manifest,
@@ -109,6 +109,6 @@ def build_dbt_scenario_project(
     )
 
 
-def _report(on_progress: Callable[[str], None] | None, message: str) -> None:
+def report_dbt_scenario_progress(on_progress: Callable[[str], None] | None, message: str) -> None:
     if on_progress is not None:
         on_progress(message)
