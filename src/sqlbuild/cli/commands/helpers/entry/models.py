@@ -6,8 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
+from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 
@@ -151,29 +155,7 @@ class CliEntrypointHandlers:
         int,
     ]
     run_dag: Callable[[Path | None, bool, bool, dict[str, object]], int]
-    run_plan: Callable[
-        [
-            Path | None,
-            bool,
-            str | None,
-            str | None,
-            str | None,
-            CursorOverrides | None,
-            bool,
-            bool,
-            str | None,
-            bool | None,
-            bool,
-            bool,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            dict[str, object],
-            bool,
-            bool,
-        ],
-        int,
-    ]
+    run_plan: Callable[[PlanCommandRequest], int]
     run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
@@ -217,20 +199,7 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
-    run_test: Callable[
-        [
-            Path | None,
-            bool,
-            bool,
-            str | None,
-            tuple[str, ...],
-            tuple[str, ...],
-            dict[str, object],
-            bool,
-            Path | None,
-        ],
-        int,
-    ]
+    run_test: Callable[[TestCommandRequest], int]
     run_check: Callable[
         [
             Path | None,
@@ -245,21 +214,7 @@ class CliEntrypointHandlers:
         ],
         int,
     ]
-    run_audit: Callable[
-        [
-            Path | None,
-            bool,
-            str | None,
-            bool,
-            str | None,
-            tuple[str, ...],
-            tuple[str, ...],
-            dict[str, object],
-            bool,
-            Path | None,
-        ],
-        int,
-    ]
+    run_audit: Callable[[AuditCommandRequest], int]
     run_seed: Callable[
         [
             Path | None,
@@ -395,7 +350,7 @@ class CliEntrypointHandlers:
         [Path | None, str, str | None, bool, bool, str | None, str | None, str | None, bool], int
     ]
     run_init: Callable[[Path | None], int]
-    run_playground: Callable[[Path | None, str, str], int]
+    run_playground: Callable[[PlaygroundCommandRequest], int]
     run_skills_update: Callable[[Path | None, bool, tuple[str, ...], bool], int]
     run_scenario: Callable[
         [

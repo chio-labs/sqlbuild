@@ -13,8 +13,11 @@ from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.load.selection import select_load_entries
+from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
+from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.main.commands.audit import run_audit
 from sqlbuild.cli.commands.main.commands.build import run_build
 from sqlbuild.cli.commands.main.commands.load import run_load
@@ -934,10 +937,12 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_plan(
-        project_dir=tmp_path,
-        no_color=True,
-        select=test_case.select,
-        defer_sources_to=test_case.defer_sources_to,
+        PlanCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=test_case.select,
+            defer_sources_to=test_case.defer_sources_to,
+        )
     )
 
     assert exit_code == test_case.expected_exit_code
@@ -1075,10 +1080,10 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
         setup_connection.close()
 
     command_runners: dict[str, Callable[..., int]] = {
-        "audit": run_audit,
+        "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
         "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
         "scenario": run_scenario,
-        "test": run_test,
+        "test": lambda **kwargs: run_test(TestCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
         project_dir=tmp_path,
@@ -1146,10 +1151,12 @@ def test_given_managed_source_without_source_deferral_when_planning_then_errors(
 
     with pytest.raises(PlannerInputError) as exc_info:
         run_plan(
-            project_dir=tmp_path,
-            no_color=True,
-            select=test_case.select,
-            defer_sources_to=test_case.defer_sources_to,
+            PlanCommandRequest(
+                project_dir=tmp_path,
+                no_color=True,
+                select=test_case.select,
+                defer_sources_to=test_case.defer_sources_to,
+            )
         )
 
     assert test_case.expected_error_fragment in str(exc_info.value)
@@ -1225,7 +1232,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
         setup_connection.close()
 
     command_runners: dict[str, Callable[..., int]] = {
-        "audit": run_audit,
+        "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
         "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
@@ -1585,10 +1592,12 @@ def test_given_plan_load_controls_when_running_plan_then_formats_source_load_sec
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_plan(
-        project_dir=tmp_path,
-        no_color=True,
-        select=("stg_orders",),
-        load_sources=test_case.load_sources,
+        PlanCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=("stg_orders",),
+            load_sources=test_case.load_sources,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -1656,11 +1665,13 @@ def test_given_plan_json_output_when_source_auto_loads_then_includes_source_load
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_plan(
-        project_dir=tmp_path,
-        no_color=True,
-        json_output=True,
-        select=("stg_orders",),
-        load_sources=test_case.load_sources,
+        PlanCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            json_output=True,
+            select=("stg_orders",),
+            load_sources=test_case.load_sources,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()

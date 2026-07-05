@@ -5,8 +5,12 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
+from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.main.commands.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -1073,7 +1077,7 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
     received_args: list[tuple[bool, Path | None]] = []
 
     def record_json_handler(*args: object) -> int:
-        if isinstance(args[0], BuildCommandRequest):
+        if isinstance(args[0], (AuditCommandRequest, BuildCommandRequest, TestCommandRequest)):
             received_args.append((bool(args[0].json_output), args[0].json_output_path))
             return test_case.expected_exit_code
         received_args.append((bool(args[-2]), args[-1] if isinstance(args[-1], Path) else None))
@@ -1955,8 +1959,8 @@ def test_given_playground_command_when_running_then_it_dispatches_handler(
 ) -> None:
     received_args: list[tuple[Path | None, str, str]] = []
 
-    def run_playground(project_dir: Path | None, playground_path: str, template: str) -> int:
-        received_args.append((project_dir, playground_path, template))
+    def run_playground(request: PlaygroundCommandRequest) -> int:
+        received_args.append((request.project_dir, request.target_path, request.template))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -2359,47 +2363,27 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             tuple[str, ...],
             tuple[str, ...],
             bool,
-            dict[str, object],
+            dict[str, object] | None,
         ]
     ] = []
 
-    def run_plan(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        defer_to: str | None,
-        defer_sources_to: str | None,
-        selected_target: str | None,
-        cursor_overrides: object,
-        json_output: bool,
-        full_refresh: bool,
-        virtual_env: str | None,
-        load_sources: bool | None,
-        include_python: bool,
-        no_color: bool,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool,
-        cli_vars: dict[str, object],
-        include_stale_upstreams: bool = False,
-        force: bool = False,
-    ) -> int:
-        del include_python, selected_target
+    def run_plan(request: PlanCommandRequest) -> int:
         received_args.append(
             (
-                project_dir,
-                no_sql_validation,
-                defer_to,
-                defer_sources_to,
-                cursor_overrides,
-                json_output,
-                full_refresh,
-                virtual_env,
-                load_sources,
-                no_color,
-                select,
-                exclude,
-                verbose,
-                cli_vars,
+                request.project_dir,
+                request.no_sql_validation,
+                request.defer_to,
+                request.defer_sources_to,
+                request.cursor_overrides,
+                request.json_output,
+                request.full_refresh,
+                request.virtual_env,
+                request.load_sources,
+                request.no_color,
+                request.select,
+                request.exclude,
+                request.verbose,
+                request.cli_vars,
             )
         )
         return test_case.expected_exit_code
@@ -2441,46 +2425,8 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
 ) -> None:
     received_load_sources: list[bool | None] = []
 
-    def run_plan(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        defer_to: str | None,
-        defer_sources_to: str | None,
-        selected_target: str | None,
-        cursor_overrides: object,
-        json_output: bool,
-        full_refresh: bool,
-        virtual_env: str | None,
-        load_sources: bool | None,
-        include_python: bool,
-        no_color: bool,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool,
-        cli_vars: dict[str, object],
-        include_stale_upstreams: bool = False,
-        force: bool = False,
-    ) -> int:
-        del (
-            project_dir,
-            no_sql_validation,
-            defer_to,
-            defer_sources_to,
-            selected_target,
-            cursor_overrides,
-            json_output,
-            full_refresh,
-            virtual_env,
-            include_python,
-            no_color,
-            select,
-            exclude,
-            verbose,
-            cli_vars,
-            include_stale_upstreams,
-            force,
-        )
-        received_load_sources.append(load_sources)
+    def run_plan(request: PlanCommandRequest) -> int:
+        received_load_sources.append(request.load_sources)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -2511,46 +2457,8 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
     (tmp_path / "selectors.txt").write_text("customers\n\n# ignored\npayments\n", encoding="utf-8")
     received_selects: list[tuple[str, ...]] = []
 
-    def run_plan(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        defer_to: str | None,
-        defer_sources_to: str | None,
-        selected_target: str | None,
-        cursor_overrides: object,
-        json_output: bool,
-        full_refresh: bool,
-        virtual_env: str | None,
-        load_sources: bool | None,
-        include_python: bool,
-        no_color: bool,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool,
-        cli_vars: dict[str, object],
-        include_stale_upstreams: bool = False,
-        force: bool = False,
-    ) -> int:
-        del (
-            project_dir,
-            no_sql_validation,
-            defer_to,
-            defer_sources_to,
-            selected_target,
-            cursor_overrides,
-            json_output,
-            full_refresh,
-            virtual_env,
-            include_python,
-            load_sources,
-            no_color,
-            exclude,
-            verbose,
-            cli_vars,
-            include_stale_upstreams,
-            force,
-        )
-        received_selects.append(select)
+    def run_plan(request: PlanCommandRequest) -> int:
+        received_selects.append(request.select)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(

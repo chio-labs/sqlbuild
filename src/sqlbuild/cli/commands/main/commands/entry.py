@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
@@ -20,7 +21,10 @@ from sqlbuild.cli.commands.helpers.entry.errors import (
 )
 from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers, CliNamespace
 from sqlbuild.cli.commands.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
+from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
+from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.shared.helpers.config.parsers import (
     add_cursor_override_args,
@@ -686,31 +690,32 @@ def _main_with_dependencies(
                 args.vars,
             )
         if args.command == CliCommand.PLAN:
-            cursor_overrides: CursorOverrides = CursorOverrides(
-                start_ts=args.start_cursor_ts,
-                end_ts=args.end_cursor_ts,
-                start_int=args.start_cursor_int,
-                end_int=args.end_cursor_int,
-            )
             return handlers.run_plan(
-                project_dir,
-                args.no_sql_validation,
-                args.defer_to,
-                args.defer_sources_to,
-                args.target,
-                cursor_overrides,
-                args.json,
-                args.full_refresh,
-                args.virtual_env,
-                args.load_sources,
-                args.include_python,
-                args.no_color,
-                select,
-                tuple(args.exclude),
-                args.verbose,
-                args.vars,
-                args.include_stale_upstreams,
-                args.force,
+                PlanCommandRequest(
+                    project_dir=project_dir,
+                    no_sql_validation=args.no_sql_validation,
+                    defer_to=args.defer_to,
+                    defer_sources_to=args.defer_sources_to,
+                    selected_target=args.target,
+                    cursor_overrides=CursorOverrides(
+                        start_ts=args.start_cursor_ts,
+                        end_ts=args.end_cursor_ts,
+                        start_int=args.start_cursor_int,
+                        end_int=args.end_cursor_int,
+                    ),
+                    json_output=args.json,
+                    full_refresh=args.full_refresh,
+                    virtual_env=args.virtual_env,
+                    load_sources=args.load_sources,
+                    include_python=args.include_python,
+                    no_color=args.no_color,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    verbose=args.verbose,
+                    cli_vars=args.vars,
+                    include_stale_upstreams=args.include_stale_upstreams,
+                    force=args.force,
+                )
             )
         if args.command == CliCommand.DBT:
             if args.dbt_command == "init":
@@ -802,15 +807,17 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.TEST:
             return handlers.run_test(
-                project_dir,
-                args.no_sql_validation,
-                args.no_color,
-                args.target,
-                select,
-                tuple(args.exclude),
-                args.vars,
-                args.json,
-                args.json_output,
+                TestCommandRequest(
+                    project_dir=project_dir,
+                    no_sql_validation=args.no_sql_validation,
+                    no_color=args.no_color,
+                    selected_target=args.target,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    cli_vars=args.vars,
+                    json_output=args.json,
+                    json_output_path=args.json_output,
+                )
             )
         if args.command == CliCommand.CHECK:
             return handlers.run_check(
@@ -826,16 +833,18 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.AUDIT:
             return handlers.run_audit(
-                project_dir,
-                args.no_sql_validation,
-                args.defer_to,
-                args.no_color,
-                args.target,
-                select,
-                tuple(args.exclude),
-                args.vars,
-                args.json,
-                args.json_output,
+                AuditCommandRequest(
+                    project_dir=project_dir,
+                    no_sql_validation=args.no_sql_validation,
+                    defer_to=args.defer_to,
+                    no_color=args.no_color,
+                    selected_target=args.target,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    cli_vars=args.vars,
+                    json_output=args.json,
+                    json_output_path=args.json_output,
+                )
             )
         if args.command == CliCommand.LOAD:
             cursor_overrides = CursorOverrides(
@@ -1005,7 +1014,11 @@ def _main_with_dependencies(
             return handlers.run_init(project_dir)
         if args.command == CliCommand.PLAYGROUND:
             return handlers.run_playground(
-                project_dir, args.playground_path, args.playground_template
+                PlaygroundCommandRequest(
+                    project_dir=project_dir,
+                    target_path=args.playground_path,
+                    template=args.playground_template,
+                )
             )
         if args.command == CliCommand.SKILLS:
             if args.skills_command == "update":

@@ -19,6 +19,7 @@ from dagster import (
     materialize,
 )
 
+from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands.main.commands.playground import run_playground
 from sqlbuild.integrations.dagster import (
     SqlBuildCliResource,
@@ -546,7 +547,14 @@ def test_given_generated_dagster_playground_when_materializing_assets_then_build
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     playground_name: str = "dagster_waffle_shop"
-    assert run_playground(tmp_path, playground_name, template="dagster") == 0
+    assert (
+        run_playground(
+            PlaygroundCommandRequest(
+                project_dir=tmp_path, target_path=playground_name, template="dagster"
+            )
+        )
+        == 0
+    )
     project_dir: Path = tmp_path / playground_name
     sqb_bin_dir: Path = REPO_ROOT / ".venv" / "bin"
     monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
