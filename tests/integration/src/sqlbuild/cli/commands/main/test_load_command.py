@@ -15,6 +15,7 @@ from duckdb import DuckDBPyConnection
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.load.selection import select_load_entries
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
@@ -1916,11 +1917,13 @@ def test_given_source_loader_when_running_load_then_writes_source_table(
     json_output_path: Path = tmp_path / "target" / "load.json"
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        select=test_case.select,
-        cli_vars=test_case.cli_vars,
-        json_output_path=json_output_path,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=test_case.select,
+            cli_vars=test_case.cli_vars,
+            json_output_path=json_output_path,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -2842,7 +2845,7 @@ def test_given_source_loader_write_strategy_when_running_load_twice_then_writes_
     write_repo_files(tmp_path, test_case.project_files)
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3182,7 +3185,7 @@ def test_given_loader_cursor_context_has_no_value_when_running_load_then_passes_
         connection.close()
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3275,9 +3278,11 @@ def test_given_reload_flag_when_running_load_then_passes_reload_context_to_loade
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        reload=test_case.reload,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            reload=test_case.reload,
+        )
     )
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3322,9 +3327,11 @@ def test_given_cursor_override_flags_when_running_load_then_passes_typed_context
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        cursor_overrides=test_case.cursor_overrides,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            cursor_overrides=test_case.cursor_overrides,
+        )
     )
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3643,7 +3650,7 @@ def test_given_generator_loader_with_inferred_columns_when_running_load_then_wri
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3706,7 +3713,7 @@ def test_given_generator_loader_yields_multiple_rows_when_running_load_then_writ
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4066,9 +4073,11 @@ def test_given_loader_writes_many_rows_when_running_load_then_formats_human_row_
     json_output_path: Path = tmp_path / "target" / "load.json"
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        json_output_path=json_output_path,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            json_output_path=json_output_path,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -4120,7 +4129,7 @@ def test_given_loader_returns_empty_rows_when_running_load_then_writes_empty_dec
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4179,7 +4188,7 @@ def test_given_self_managed_loader_when_running_load_then_uses_loader_written_ta
     write_repo_files(tmp_path, test_case.project_files)
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4276,7 +4285,7 @@ def test_given_loader_returns_conflicting_types_when_running_load_then_fails_cle
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == test_case.expected_exit_code
@@ -4587,10 +4596,12 @@ def test_given_invalid_load_selectors_when_running_load_then_it_raises_clear_err
 
     with pytest.raises(CliUserError) as exc_info:
         run_load(
-            project_dir=tmp_path,
-            no_color=True,
-            select=test_case.select,
-            exclude=test_case.exclude,
+            LoadCommandRequest(
+                project_dir=tmp_path,
+                no_color=True,
+                select=test_case.select,
+                exclude=test_case.exclude,
+            )
         )
 
     assert test_case.expected_error_fragment in str(exc_info.value)
@@ -4655,10 +4666,12 @@ def test_given_no_selected_managed_sources_when_running_load_then_it_does_not_co
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        select=test_case.select,
-        exclude=test_case.exclude,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=test_case.select,
+            exclude=test_case.exclude,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()

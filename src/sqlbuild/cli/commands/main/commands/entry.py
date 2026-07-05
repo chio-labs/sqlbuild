@@ -10,8 +10,12 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands.helpers.check.models import CheckCommandRequest
+from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest
 from sqlbuild.cli.commands.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
+from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
 from sqlbuild.cli.commands.helpers.diff.validation import parse_diff_name_range
 from sqlbuild.cli.commands.helpers.entry.errors import (
     SqlbuildArgumentParser,
@@ -20,10 +24,13 @@ from sqlbuild.cli.commands.helpers.entry.errors import (
     format_expected_error,
 )
 from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers, CliNamespace
+from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
+from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.shared.helpers.config.parsers import (
@@ -105,14 +112,14 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         default=False,
         help="Diagnostic: skip writing target/compiled artifacts",
     )
-    add_vars_args(compile_parser)
-    add_dbt_config_args(compile_parser)
+    _ = add_vars_args(compile_parser)
+    _ = add_dbt_config_args(compile_parser)
 
     dag_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DAG)
     dag_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     dag_parser.add_argument("--json", action="store_true", default=False)
-    add_vars_args(dag_parser)
-    add_dbt_config_args(dag_parser)
+    _ = add_vars_args(dag_parser)
+    _ = add_dbt_config_args(dag_parser)
 
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -136,10 +143,10 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     plan_load_group: argparse._MutuallyExclusiveGroup = plan_parser.add_mutually_exclusive_group()
     plan_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
     plan_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
-    add_cursor_override_args(plan_parser)
-    add_select_args(plan_parser)
-    add_vars_args(plan_parser)
-    add_dbt_config_args(plan_parser)
+    _ = add_cursor_override_args(plan_parser)
+    _ = add_select_args(plan_parser)
+    _ = add_vars_args(plan_parser)
+    _ = add_dbt_config_args(plan_parser)
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -162,16 +169,16 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     build_parser.add_argument("--no-tests", dest="run_tests", action="store_false", default=True)
     build_parser.add_argument("--no-audits", dest="run_audits", action="store_false", default=True)
     build_parser.add_argument("--manifest", action="store_true", default=False)
-    add_execution_json_output_arg(build_parser)
-    add_cursor_override_args(build_parser)
+    _ = add_execution_json_output_arg(build_parser)
+    _ = add_cursor_override_args(build_parser)
     build_load_group: argparse._MutuallyExclusiveGroup = build_parser.add_mutually_exclusive_group()
     build_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
     build_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
     build_load_group.add_argument("--reload", dest="reload", action="store_true", default=False)
-    add_execution_args(build_parser)
-    add_select_args(build_parser)
-    add_vars_args(build_parser)
-    add_dbt_config_args(build_parser)
+    _ = add_execution_args(build_parser)
+    _ = add_select_args(build_parser)
+    _ = add_vars_args(build_parser)
+    _ = add_dbt_config_args(build_parser)
 
     freshness_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FRESHNESS)
     freshness_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -181,56 +188,56 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     freshness_parser.add_argument("--virtual-env", default=None)
     freshness_parser.add_argument("--fail-on-error", action="store_true", default=False)
     freshness_parser.add_argument("--fail-on-stale", action="store_true", default=False)
-    add_execution_json_output_arg(freshness_parser)
-    add_select_args(freshness_parser)
-    add_vars_args(freshness_parser)
-    add_dbt_config_args(freshness_parser)
+    _ = add_execution_json_output_arg(freshness_parser)
+    _ = add_select_args(freshness_parser)
+    _ = add_vars_args(freshness_parser)
+    _ = add_dbt_config_args(freshness_parser)
 
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     test_parser.add_argument("--json", action="store_true", default=False)
     test_parser.add_argument("--target", default=None)
-    add_execution_json_output_arg(test_parser)
-    add_select_args(test_parser)
-    add_vars_args(test_parser)
-    add_dbt_config_args(test_parser)
+    _ = add_execution_json_output_arg(test_parser)
+    _ = add_select_args(test_parser)
+    _ = add_vars_args(test_parser)
+    _ = add_dbt_config_args(test_parser)
 
     check_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CHECK)
     check_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     check_parser.add_argument("--json", action="store_true", default=False)
     check_parser.add_argument("--target", default=None)
-    add_execution_json_output_arg(check_parser)
-    add_select_args(check_parser)
-    add_vars_args(check_parser)
-    add_dbt_config_args(check_parser)
+    _ = add_execution_json_output_arg(check_parser)
+    _ = add_select_args(check_parser)
+    _ = add_vars_args(check_parser)
+    _ = add_dbt_config_args(check_parser)
 
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
     audit_parser.add_argument("--target", default=None)
     audit_parser.add_argument("--json", action="store_true", default=False)
-    add_execution_json_output_arg(audit_parser)
-    add_select_args(audit_parser)
-    add_vars_args(audit_parser)
-    add_dbt_config_args(audit_parser)
+    _ = add_execution_json_output_arg(audit_parser)
+    _ = add_select_args(audit_parser)
+    _ = add_vars_args(audit_parser)
+    _ = add_dbt_config_args(audit_parser)
 
     load_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LOAD)
     load_parser.add_argument("--reload", action="store_true", default=False)
     load_parser.add_argument("--json", action="store_true", default=False)
     load_parser.add_argument("--target", default=None)
     load_parser.add_argument("--concurrency", type=int, default=None)
-    add_execution_json_output_arg(load_parser)
-    add_select_args(load_parser)
-    add_cursor_override_args(load_parser)
-    add_vars_args(load_parser)
+    _ = add_execution_json_output_arg(load_parser)
+    _ = add_select_args(load_parser)
+    _ = add_cursor_override_args(load_parser)
+    _ = add_vars_args(load_parser)
 
     seed_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SEED)
     seed_parser.add_argument("--json", action="store_true", default=False)
     seed_parser.add_argument("--target", default=None)
     seed_parser.add_argument("--concurrency", type=int, default=None)
-    add_execution_json_output_arg(seed_parser)
-    add_select_args(seed_parser)
-    add_vars_args(seed_parser)
+    _ = add_execution_json_output_arg(seed_parser)
+    _ = add_select_args(seed_parser)
+    _ = add_vars_args(seed_parser)
 
     clone_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CLONE)
     clone_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -240,9 +247,9 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     clone_parser.add_argument("--virtual-env", default=None)
     clone_parser.add_argument("--skip-locked", action="store_true", default=False)
     clone_parser.add_argument("--verbose", "-v", action="store_true", default=False)
-    add_select_args(clone_parser)
-    add_vars_args(clone_parser)
-    add_dbt_config_args(clone_parser)
+    _ = add_select_args(clone_parser)
+    _ = add_vars_args(clone_parser)
+    _ = add_dbt_config_args(clone_parser)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
     diff_parser.add_argument("target_range", metavar="FROM:TO")
@@ -254,8 +261,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     diff_parser.add_argument("--max-column-examples", type=int, default=None)
     diff_parser.add_argument("--max-row-only-examples", type=int, default=None)
     diff_parser.add_argument("--allow-partial-diff", action="store_true", default=False)
-    add_select_args(diff_parser)
-    add_vars_args(diff_parser)
+    _ = add_select_args(diff_parser)
+    _ = add_vars_args(diff_parser)
     reconcile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RECONCILE)
     reconcile_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
     reconcile_parser.add_argument("--model", dest="reconcile_model", default=None)
@@ -282,8 +289,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     promote_parser.add_argument("--allow-partial-promotion", action="store_true", default=False)
     promote_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
     promote_parser.add_argument("--verbose", "-v", action="store_true", default=False)
-    add_select_args(promote_parser)
-    add_vars_args(promote_parser)
+    _ = add_select_args(promote_parser)
+    _ = add_vars_args(promote_parser)
     rollback_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.ROLLBACK)
     rollback_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     rollback_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
@@ -291,8 +298,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     rollback_parser.add_argument("--allow-partial-rollback", action="store_true", default=False)
     rollback_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
     rollback_parser.add_argument("--verbose", "-v", action="store_true", default=False)
-    add_select_args(rollback_parser)
-    add_vars_args(rollback_parser)
+    _ = add_select_args(rollback_parser)
+    _ = add_vars_args(rollback_parser)
     debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
     debug_parser.add_argument("--json", action="store_true", default=False)
     debug_parser.add_argument("--target", default=None)
@@ -333,8 +340,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         default=ColumnLineageMode.RICH.value,
         help="Column lineage mode: rich (default) or fast",
     )
-    add_select_args(lineage_parser)
-    add_vars_args(lineage_parser)
+    _ = add_select_args(lineage_parser)
+    _ = add_vars_args(lineage_parser)
     subparsers.add_parser(CliCommand.CLEAN)
     janitor_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.JANITOR)
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
@@ -403,8 +410,8 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     scenario_test_parser.add_argument("--local", dest="scenario_local", action="store_true")
     scenario_test_parser.add_argument("--strict", dest="scenario_strict", action="store_true")
     scenario_test_parser.add_argument("--json", action="store_true", default=False)
-    add_execution_json_output_arg(scenario_test_parser)
-    add_select_args(scenario_test_parser)
+    _ = add_execution_json_output_arg(scenario_test_parser)
+    _ = add_select_args(scenario_test_parser)
     scenario_snapshot_group: argparse._MutuallyExclusiveGroup = (
         scenario_test_parser.add_mutually_exclusive_group()
     )
@@ -412,12 +419,12 @@ def _build_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
         "--sync-snapshots", dest="scenario_sync_snapshots", action="store_true"
     )
     scenario_snapshot_group.add_argument("--refresh", dest="scenario_refresh", action="store_true")
-    add_scenario_snapshot_safety_args(scenario_test_parser)
+    _ = add_scenario_snapshot_safety_args(scenario_test_parser)
     scenario_capture_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("capture")
     scenario_capture_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_capture_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
-    add_select_args(scenario_capture_parser)
-    add_scenario_snapshot_safety_args(scenario_capture_parser)
+    _ = add_select_args(scenario_capture_parser)
+    _ = add_scenario_snapshot_safety_args(scenario_capture_parser)
     dbt_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DBT)
     dbt_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     dbt_subparsers = dbt_parser.add_subparsers(dest="dbt_command")
@@ -491,31 +498,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.commands.state import run_state
     from sqlbuild.cli.commands.main.commands.test import run_test
 
-    def run_dbt_init_positional(
-        cwd: Path,
-        dbt_project_dir: str | None,
-        profiles_dir: str | None,
-        profile_name: str | None,
-        target_name: str | None,
-        sqb_output_dir: str | None,
-        dry_run: bool,
-        overwrite: bool,
-        skip_dbt_debug: bool,
-        production_git_ref: str | None,
-    ) -> int:
-        return run_dbt_init_command(
-            cwd=cwd,
-            dbt_project_dir=dbt_project_dir,
-            profiles_dir=profiles_dir,
-            profile_name=profile_name,
-            target_name=target_name,
-            sqb_output_dir=sqb_output_dir,
-            dry_run=dry_run,
-            overwrite=overwrite,
-            skip_dbt_debug=skip_dbt_debug,
-            production_git_ref=production_git_ref,
-        )
-
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
         run_compile=run_compile,
         run_dag=run_dag,
@@ -574,7 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args=args,
             no_color=no_color,
         ),
-        run_dbt_init=run_dbt_init_positional,
+        run_dbt_init=run_dbt_init_command,
         run_build=run_build,
         run_freshness=run_freshness,
         run_test=run_test,
@@ -656,7 +638,7 @@ def _main_with_dependencies(
             and args.dbt_command != "init"
             and not (effective_project_dir / PROJECT_CONFIG_FILENAME).exists()
         ):
-            configure_diagnostics(
+            _ = configure_diagnostics(
                 target_dir=effective_project_dir / "target",
                 debug=args.debug,
                 use_color=(not args.no_color) and supports_color(),
@@ -720,16 +702,18 @@ def _main_with_dependencies(
         if args.command == CliCommand.DBT:
             if args.dbt_command == "init":
                 return handlers.run_dbt_init(
-                    effective_project_dir,
-                    args.dbt_project_dir,
-                    args.dbt_profiles_dir,
-                    args.dbt_profile,
-                    args.dbt_target,
-                    args.sqb_output_dir,
-                    args.dry_run,
-                    args.overwrite,
-                    args.skip_dbt_debug,
-                    args.dbt_prod_git_ref,
+                    DbtInitCommandRequest(
+                        cwd=effective_project_dir,
+                        dbt_project_dir=args.dbt_project_dir,
+                        profiles_dir=args.dbt_profiles_dir,
+                        profile_name=args.dbt_profile,
+                        target_name=args.dbt_target,
+                        sqb_output_dir=args.sqb_output_dir,
+                        dry_run=args.dry_run,
+                        overwrite=args.overwrite,
+                        skip_dbt_debug=args.skip_dbt_debug,
+                        production_git_ref=args.dbt_prod_git_ref,
+                    )
                 )
             if args.dbt_command == "plan":
                 return handlers.run_dbt_plan(project_dir, tuple(args.dbt_args), args.no_color)
@@ -821,15 +805,17 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.CHECK:
             return handlers.run_check(
-                project_dir,
-                args.no_sql_validation,
-                args.no_color,
-                args.target,
-                select,
-                tuple(args.exclude),
-                args.vars,
-                args.json,
-                args.json_output,
+                CheckCommandRequest(
+                    project_dir=project_dir,
+                    no_sql_validation=args.no_sql_validation,
+                    no_color=args.no_color,
+                    selected_target=args.target,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    cli_vars=args.vars,
+                    json_output=args.json,
+                    json_output_path=args.json_output,
+                )
             )
         if args.command == CliCommand.AUDIT:
             return handlers.run_audit(
@@ -854,29 +840,33 @@ def _main_with_dependencies(
                 end_int=args.end_cursor_int,
             )
             return handlers.run_load(
-                project_dir,
-                args.no_color,
-                args.target,
-                select,
-                tuple(args.exclude),
-                args.reload,
-                args.concurrency,
-                cursor_overrides,
-                args.vars,
-                args.json,
-                args.json_output,
+                LoadCommandRequest(
+                    project_dir=project_dir,
+                    no_color=args.no_color,
+                    selected_target=args.target,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    reload=args.reload,
+                    concurrency=args.concurrency,
+                    cursor_overrides=cursor_overrides,
+                    cli_vars=args.vars,
+                    json_output=args.json,
+                    json_output_path=args.json_output,
+                )
             )
         if args.command == CliCommand.SEED:
             return handlers.run_seed(
-                project_dir,
-                args.no_color,
-                args.target,
-                select,
-                tuple(args.exclude),
-                args.concurrency,
-                args.vars,
-                args.json,
-                args.json_output,
+                SeedCommandRequest(
+                    project_dir=project_dir,
+                    no_color=args.no_color,
+                    selected_target=args.target,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    concurrency=args.concurrency,
+                    cli_vars=args.vars,
+                    json_output=args.json,
+                    json_output_path=args.json_output,
+                )
             )
         if args.command == CliCommand.LINEAGE:
             return handlers.run_lineage(
@@ -895,39 +885,43 @@ def _main_with_dependencies(
             if args.from_target is None or args.to_target is None:
                 raise CliUserError("clone requires --from and --to", code="C406")
             return handlers.run_clone(
-                project_dir,
-                args.no_color,
-                args.no_sql_validation,
-                args.from_target,
-                args.to_target,
-                args.hard_copy,
-                args.virtual_env,
-                args.skip_locked,
-                select,
-                tuple(args.exclude),
-                args.verbose,
-                args.vars,
+                CloneCommandRequest(
+                    project_dir=project_dir,
+                    no_color=args.no_color,
+                    no_sql_validation=args.no_sql_validation,
+                    origin_target_name=args.from_target,
+                    destination_target_name=args.to_target,
+                    hard_copy=args.hard_copy,
+                    virtual_env=args.virtual_env,
+                    skip_locked=args.skip_locked,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    verbose=args.verbose,
+                    cli_vars=args.vars,
+                )
             )
         if args.command == CliCommand.DIFF:
             from_name: str
             to_name: str
             from_name, to_name = parse_diff_name_range(args.target_range)
             return handlers.run_diff(
-                project_dir,
-                args.no_color,
-                args.no_sql_validation,
-                from_name,
-                to_name,
-                args.full,
-                args.schema_only,
-                args.bounded,
-                args.max_column_examples,
-                args.max_row_only_examples,
-                select,
-                tuple(args.exclude),
-                args.verbose,
-                args.vars,
-                args.allow_partial_diff,
+                DiffCommandRequest(
+                    project_dir=project_dir,
+                    no_color=args.no_color,
+                    no_sql_validation=args.no_sql_validation,
+                    from_name=from_name,
+                    to_name=to_name,
+                    full=args.full,
+                    schema_only=args.schema_only,
+                    bounded=args.bounded,
+                    max_column_examples=args.max_column_examples,
+                    max_row_only_examples=args.max_row_only_examples,
+                    select=select,
+                    exclude=tuple(args.exclude),
+                    verbose=args.verbose,
+                    cli_vars=args.vars,
+                    allow_partial_diff=args.allow_partial_diff,
+                )
             )
         if args.command == CliCommand.RECONCILE:
             return handlers.run_reconcile(
@@ -990,11 +984,13 @@ def _main_with_dependencies(
             )
         if args.command == CliCommand.JANITOR:
             return handlers.run_janitor(
-                project_dir,
-                args.no_color,
-                args.auto_approve,
-                args.retention_days,
-                args.direct_state_history_versions,
+                JanitorCommandRequest(
+                    project_dir=project_dir,
+                    no_color=args.no_color,
+                    auto_approve=args.auto_approve,
+                    retention_days=args.retention_days,
+                    direct_state_history_versions=args.direct_state_history_versions,
+                )
             )
         if args.command == CliCommand.STATE:
             if args.state_command is None:

@@ -53,35 +53,35 @@ def execute_janitor_plan(
     if delete_checkpoint is not None:
         checkpoint_candidate: JanitorCheckpointCandidate
         for checkpoint_candidate in plan.checkpoint_candidates:
-            delete_checkpoint(checkpoint_candidate)
+            _ = delete_checkpoint(checkpoint_candidate)
             deleted_checkpoints.append(checkpoint_candidate)
 
     deleted_detached_virtual_environments: list[JanitorDetachedVirtualEnvironmentCandidate] = []
     if delete_detached_virtual_environment is not None:
         detached_candidate: JanitorDetachedVirtualEnvironmentCandidate
         for detached_candidate in plan.detached_virtual_environment_candidates:
-            delete_detached_virtual_environment(detached_candidate)
+            _ = delete_detached_virtual_environment(detached_candidate)
             deleted_detached_virtual_environments.append(detached_candidate)
 
     deleted_expired_virtual_environments: list[JanitorExpiredVirtualEnvironmentCandidate] = []
     if delete_expired_virtual_environment is not None:
         expired_environment_candidate: JanitorExpiredVirtualEnvironmentCandidate
         for expired_environment_candidate in plan.expired_virtual_environment_candidates:
-            delete_expired_virtual_environment(expired_environment_candidate)
+            _ = delete_expired_virtual_environment(expired_environment_candidate)
             deleted_expired_virtual_environments.append(expired_environment_candidate)
 
     deleted_state_backups: list[JanitorStateBackupCandidate] = []
     if delete_state_backup is not None:
         state_backup_candidate: JanitorStateBackupCandidate
         for state_backup_candidate in plan.state_backup_candidates:
-            delete_state_backup(state_backup_candidate)
+            _ = delete_state_backup(state_backup_candidate)
             deleted_state_backups.append(state_backup_candidate)
 
     deleted_expired_locks: list[JanitorExpiredLockCandidate] = []
     if delete_expired_lock is not None:
         expired_lock_candidate: JanitorExpiredLockCandidate
         for expired_lock_candidate in plan.expired_lock_candidates:
-            delete_expired_lock(expired_lock_candidate)
+            _ = delete_expired_lock(expired_lock_candidate)
             deleted_expired_locks.append(expired_lock_candidate)
 
     pruned_direct_state: list[JanitorDirectStatePruneCandidate] = []
@@ -94,7 +94,7 @@ def execute_janitor_plan(
     if prune_virtual_state is not None:
         virtual_state_candidate: JanitorVirtualStatePruneCandidate
         for virtual_state_candidate in plan.virtual_state_prune_candidates:
-            prune_virtual_state(virtual_state_candidate)
+            _ = prune_virtual_state(virtual_state_candidate)
             pruned_virtual_state.append(virtual_state_candidate)
 
     return JanitorExecutionResult(
