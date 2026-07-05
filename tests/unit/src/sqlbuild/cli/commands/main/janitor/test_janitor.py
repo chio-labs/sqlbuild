@@ -8,8 +8,9 @@ from io import StringIO
 import pytest
 
 from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.cli.commands.helpers.janitor.models import JanitorPlanningResult
 from sqlbuild.cli.commands.helpers.janitor.output import write_disabled, write_plan
-from sqlbuild.cli.commands.main.commands.janitor import _confirm
+from sqlbuild.cli.commands.helpers.janitor.outputs import confirm_janitor_plan
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
     JanitorPlan,
@@ -65,7 +66,7 @@ def test_given_janitor_confirmation_when_keyboard_interrupt_then_returns_cancell
 
     monkeypatch.setattr(builtins, "input", interrupting_input)
 
-    result: bool = _confirm(plan=plan)
+    result: bool = confirm_janitor_plan(planning_result=JanitorPlanningResult(plan=plan))
 
     output: str = capsys.readouterr().out
     assert result is test_case.expected_result

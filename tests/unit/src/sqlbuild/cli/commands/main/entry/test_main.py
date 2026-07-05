@@ -7,9 +7,15 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
+from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
+from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
+from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.main.commands.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
@@ -454,47 +460,10 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
 def test_given_dbt_init_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            Path,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            bool,
-            bool,
-            bool,
-            str | None,
-        ]
-    ] = []
+    received_args: list[DbtInitCommandRequest] = []
 
-    def run_dbt_init(
-        cwd: Path,
-        dbt_project_dir: str | None,
-        profiles_dir: str | None,
-        profile_name: str | None,
-        target_name: str | None,
-        sqb_output_dir: str | None,
-        dry_run: bool,
-        overwrite: bool,
-        skip_dbt_debug: bool,
-        production_git_ref: str | None,
-    ) -> int:
-        received_args.append(
-            (
-                cwd,
-                dbt_project_dir,
-                profiles_dir,
-                profile_name,
-                target_name,
-                sqb_output_dir,
-                dry_run,
-                overwrite,
-                skip_dbt_debug,
-                production_git_ref,
-            )
-        )
+    def run_dbt_init(request: DbtInitCommandRequest) -> int:
+        received_args.append(request)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -502,19 +471,20 @@ def test_given_dbt_init_arguments_when_running_with_dependencies_then_it_dispatc
         handlers=build_handlers(run_dbt_init=run_dbt_init),
     )
 
+    assert test_case.expected_project_dir is not None
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (
-            test_case.expected_project_dir,
-            test_case.expected_dbt_init_project_dir,
-            test_case.expected_dbt_init_profiles_dir,
-            test_case.expected_dbt_init_profile_name,
-            test_case.expected_dbt_init_target_name,
-            test_case.expected_dbt_init_sqb_output_dir,
-            test_case.expected_dbt_init_dry_run,
-            test_case.expected_dbt_init_overwrite,
-            test_case.expected_dbt_init_skip_dbt_debug,
-            test_case.expected_dbt_init_production_git_ref,
+        DbtInitCommandRequest(
+            cwd=test_case.expected_project_dir,
+            dbt_project_dir=test_case.expected_dbt_init_project_dir,
+            profiles_dir=test_case.expected_dbt_init_profiles_dir,
+            profile_name=test_case.expected_dbt_init_profile_name,
+            target_name=test_case.expected_dbt_init_target_name,
+            sqb_output_dir=test_case.expected_dbt_init_sqb_output_dir,
+            dry_run=test_case.expected_dbt_init_dry_run,
+            overwrite=test_case.expected_dbt_init_overwrite,
+            skip_dbt_debug=test_case.expected_dbt_init_skip_dbt_debug,
+            production_git_ref=test_case.expected_dbt_init_production_git_ref,
         )
     ]
 
@@ -570,52 +540,10 @@ def test_given_dbt_without_subcommand_when_running_with_dependencies_then_it_ret
 def test_given_clone_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            bool,
-            str,
-            str,
-            bool,
-            str | None,
-            bool,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-        ]
-    ] = []
+    received_args: list[CloneCommandRequest] = []
 
-    def run_clone(
-        project_dir: Path | None,
-        no_color: bool,
-        no_sql_validation: bool,
-        from_environment: str,
-        to_environment: str,
-        hard_copy: bool,
-        virtual_env: str | None,
-        skip_locked: bool,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool,
-        cli_vars: dict[str, object],
-    ) -> int:
-        del cli_vars
-        received_args.append(
-            (
-                project_dir,
-                no_color,
-                no_sql_validation,
-                from_environment,
-                to_environment,
-                hard_copy,
-                virtual_env,
-                skip_locked,
-                select,
-                exclude,
-                verbose,
-            )
-        )
+    def run_clone(request: CloneCommandRequest) -> int:
+        received_args.append(request)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -625,7 +553,20 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (None, False, False, "prod", "dev", False, "preview", True, ("orders",), (), True)
+        CloneCommandRequest(
+            project_dir=None,
+            no_color=False,
+            no_sql_validation=False,
+            origin_target_name="prod",
+            destination_target_name="dev",
+            hard_copy=False,
+            virtual_env="preview",
+            skip_locked=True,
+            select=("orders",),
+            exclude=(),
+            verbose=True,
+            cli_vars={},
+        )
     ]
 
 
@@ -650,61 +591,10 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
 def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            bool,
-            str,
-            str,
-            bool,
-            bool,
-            str | None,
-            int | None,
-            int | None,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-        ]
-    ] = []
+    received_args: list[DiffCommandRequest] = []
 
-    def run_diff(
-        project_dir: Path | None,
-        no_color: bool,
-        no_sql_validation: bool,
-        from_environment: str,
-        to_environment: str,
-        full: bool,
-        schema_only: bool,
-        bounded: str | None,
-        max_column_examples: int | None,
-        max_row_only_examples: int | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool,
-        cli_vars: dict[str, object],
-        allow_partial_diff: bool = False,
-    ) -> int:
-        del cli_vars
-        received_args.append(
-            (
-                project_dir,
-                no_color,
-                no_sql_validation,
-                from_environment,
-                to_environment,
-                full,
-                schema_only,
-                bounded,
-                max_column_examples,
-                max_row_only_examples,
-                select,
-                exclude,
-                verbose,
-                allow_partial_diff,
-            )
-        )
+    def run_diff(request: DiffCommandRequest) -> int:
+        received_args.append(request)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -714,21 +604,22 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (
-            None,
-            False,
-            False,
-            "prod",
-            "dev",
-            True,
-            False,
-            None,
-            None,
-            None,
-            ("orders",),
-            (),
-            False,
-            True,
+        DiffCommandRequest(
+            project_dir=None,
+            no_color=False,
+            no_sql_validation=False,
+            from_name="prod",
+            to_name="dev",
+            full=True,
+            schema_only=False,
+            bounded=None,
+            max_column_examples=None,
+            max_row_only_examples=None,
+            select=("orders",),
+            exclude=(),
+            verbose=False,
+            cli_vars={},
+            allow_partial_diff=True,
         )
     ]
 
@@ -1077,7 +968,16 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
     received_args: list[tuple[bool, Path | None]] = []
 
     def record_json_handler(*args: object) -> int:
-        if isinstance(args[0], (AuditCommandRequest, BuildCommandRequest, TestCommandRequest)):
+        if isinstance(
+            args[0],
+            (
+                AuditCommandRequest,
+                BuildCommandRequest,
+                LoadCommandRequest,
+                SeedCommandRequest,
+                TestCommandRequest,
+            ),
+        ):
             received_args.append((bool(args[0].json_output), args[0].json_output_path))
             return test_case.expected_exit_code
         received_args.append((bool(args[-2]), args[-1] if isinstance(args[-1], Path) else None))
@@ -1288,31 +1188,10 @@ def test_given_freshness_json_arguments_when_running_then_dispatches_expected_ar
 def test_given_load_flags_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[tuple[str, ...], tuple[str, ...], bool, CursorOverrides | None]] = []
+    received_args: list[LoadCommandRequest] = []
 
-    def run_load(
-        project_dir: Path | None,
-        no_color: bool,
-        selected_target: str | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        reload: bool,
-        concurrency: int | None,
-        cursor_overrides: CursorOverrides | None,
-        cli_vars: dict[str, object],
-        json_output: bool,
-        json_output_path: Path | None,
-    ) -> int:
-        del (
-            project_dir,
-            no_color,
-            selected_target,
-            concurrency,
-            cli_vars,
-            json_output,
-            json_output_path,
-        )
-        received_args.append((select, exclude, reload, cursor_overrides))
+    def run_load(request: LoadCommandRequest) -> int:
+        received_args.append(request)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1322,11 +1201,18 @@ def test_given_load_flags_when_running_then_dispatches_expected_arguments(
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (
-            test_case.expected_select,
-            ("raw_events",),
-            test_case.expected_reload,
-            CursorOverrides(start_ts="2026-01-01T00:00:00", end_int="20"),
+        LoadCommandRequest(
+            project_dir=None,
+            no_color=False,
+            selected_target=None,
+            select=test_case.expected_select,
+            exclude=("raw_events",),
+            reload=test_case.expected_reload,
+            concurrency=None,
+            cursor_overrides=CursorOverrides(start_ts="2026-01-01T00:00:00", end_int="20"),
+            cli_vars={},
+            json_output=False,
+            json_output_path=None,
         )
     ]
 
@@ -1677,27 +1563,8 @@ def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_fl
 ) -> None:
     received_verbose: list[bool] = []
 
-    def run_diff(
-        project_dir: Path | None,
-        no_color: bool,
-        no_sql_validation: bool,
-        from_environment: str,
-        to_environment: str,
-        full: bool,
-        schema_only: bool,
-        bounded: str | None,
-        max_column_examples: int | None,
-        max_row_only_examples: int | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool,
-        cli_vars: dict[str, object],
-        allow_partial_diff: bool = False,
-    ) -> int:
-        del cli_vars, allow_partial_diff
-        del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
-        del schema_only, bounded, max_column_examples, max_row_only_examples, select, exclude
-        received_verbose.append(verbose)
+    def run_diff(request: DiffCommandRequest) -> int:
+        received_verbose.append(request.verbose)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1735,27 +1602,8 @@ def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
 ) -> None:
     received_caps: list[tuple[int | None, int | None]] = []
 
-    def run_diff(
-        project_dir: Path | None,
-        no_color: bool,
-        no_sql_validation: bool,
-        from_environment: str,
-        to_environment: str,
-        full: bool,
-        schema_only: bool,
-        bounded: str | None,
-        max_column_examples: int | None,
-        max_row_only_examples: int | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        verbose: bool,
-        cli_vars: dict[str, object],
-        allow_partial_diff: bool = False,
-    ) -> int:
-        del cli_vars, allow_partial_diff
-        del project_dir, no_color, no_sql_validation, from_environment, to_environment, full
-        del schema_only, bounded, select, exclude, verbose
-        received_caps.append((max_column_examples, max_row_only_examples))
+    def run_diff(request: DiffCommandRequest) -> int:
+        received_caps.append((request.max_column_examples, request.max_row_only_examples))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1791,18 +1639,10 @@ def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
 def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, bool, int | None, int | None]] = []
+    received_args: list[JanitorCommandRequest] = []
 
-    def run_janitor(
-        project_dir: Path | None,
-        no_color: bool,
-        auto_approve: bool,
-        retention_days: int | None,
-        direct_state_history_versions: int | None,
-    ) -> int:
-        received_args.append(
-            (project_dir, no_color, auto_approve, retention_days, direct_state_history_versions)
-        )
+    def run_janitor(request: JanitorCommandRequest) -> int:
+        received_args.append(request)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1812,12 +1652,12 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (
-            None,
-            test_case.expected_no_color,
-            True,
-            0,
-            test_case.expected_direct_state_history_versions,
+        JanitorCommandRequest(
+            project_dir=None,
+            no_color=test_case.expected_no_color,
+            auto_approve=True,
+            retention_days=0,
+            direct_state_history_versions=test_case.expected_direct_state_history_versions,
         )
     ]
 
