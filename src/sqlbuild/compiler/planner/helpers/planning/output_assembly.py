@@ -50,7 +50,7 @@ def assemble_base_plan_output(
     pruning: PlannerScopePruningResult,
     reconciliation: PlannerChangeReconciliation,
     entries: PlannerEntryResults,
-    source_freshness: StandardSourceFreshnessPlanningResult | None,
+    source_freshness: StandardSourceFreshnessPlanningResult,
 ) -> PlanOutput:
     """Assemble the base plan output with freshness and pruning metadata attached."""
 
@@ -68,8 +68,7 @@ def assemble_base_plan_output(
         seed_version_hashes=identities.version_identities.seed_version_hashes,
         seed_metadata_jsons=identities.version_identities.seed_metadata_jsons,
     )
-    if source_freshness is not None:
-        plan_output = replace(plan_output, source_freshness=source_freshness)
+    plan_output = replace(plan_output, source_freshness=source_freshness)
     if pruning.pruned_standard_model_names:
         plan_output = replace(
             plan_output,
@@ -90,7 +89,7 @@ def with_plan_warnings(
     stale_warning_changes: PlannerChangeResults,
     reuse: PlannerReuseResolution,
     pruning: PlannerScopePruningResult,
-    source_freshness: StandardSourceFreshnessPlanningResult | None,
+    source_freshness: StandardSourceFreshnessPlanningResult,
     plan_output: PlanOutput,
 ) -> PlanOutput:
     """Append stale-out-of-selection and node-source-watermark warnings to the plan."""
@@ -125,8 +124,6 @@ def with_plan_warnings(
                 connection=runtime.connection,
             ),
         )
-        if source_freshness is not None
-        else ()
     )
     if node_source_watermark_warnings:
         plan_output = replace(
@@ -146,38 +143,36 @@ def with_plan_metadata(
     plan_output: PlanOutput,
     pruning: PlannerScopePruningResult,
     reuse: PlannerReuseResolution,
-    source_freshness: StandardSourceFreshnessPlanningResult | None,
+    source_freshness: StandardSourceFreshnessPlanningResult,
 ) -> PlanOutput:
     """Attach standard source-freshness and reuse metadata to the plan output."""
 
-    if source_freshness is not None:
-        standard_remaining_stale_model_names: tuple[str, ...] = tuple(
-            sorted(
-                (
-                    pruning.standard_identity_stale_model_names
-                    | pruning.run_despite_unchanged.stale_model_names
-                )
-                - frozenset(
-                    key.name
-                    for key in pruning.inspection_scope.selected_keys
-                    if key.resource_type == CompiledResourceType.MODEL
-                )
+    standard_remaining_stale_model_names: tuple[str, ...] = tuple(
+        sorted(
+            (
+                pruning.standard_identity_stale_model_names
+                | pruning.run_despite_unchanged.stale_model_names
+            )
+            - frozenset(
+                key.name
+                for key in pruning.inspection_scope.selected_keys
+                if key.resource_type == CompiledResourceType.MODEL
             )
         )
-        plan_output = replace(
-            plan_output,
-            source_freshness=source_freshness,
-            metadata={
-                **plan_output.metadata,
-                "standard_source_freshness": _serialize_standard_source_freshness_metadata(
-                    source_freshness
-                ),
-                "standard_remaining_stale_model_names": standard_remaining_stale_model_names,
-                "standard_run_despite_unchanged": _serialize_run_despite_unchanged_metadata(
-                    pruning.run_despite_unchanged
-                ),
-            },
-        )
+    )
+    plan_output = replace(
+        plan_output,
+        metadata={
+            **plan_output.metadata,
+            "standard_source_freshness": _serialize_standard_source_freshness_metadata(
+                source_freshness
+            ),
+            "standard_remaining_stale_model_names": standard_remaining_stale_model_names,
+            "standard_run_despite_unchanged": _serialize_run_despite_unchanged_metadata(
+                pruning.run_despite_unchanged
+            ),
+        },
+    )
     if reuse.standard_reuse is not None:
         plan_output = replace(
             plan_output,

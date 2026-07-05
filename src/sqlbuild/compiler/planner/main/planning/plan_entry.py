@@ -40,8 +40,6 @@ def build_plan_output_from_model_changes_phase(
     model_changes: dict[str, ChangeDetectionResult],
     cursor_overrides: CursorOverrides | None = None,
     full_refresh: bool = False,
-    start_cursor_override: str | None = None,
-    end_cursor_override: str | None = None,
     reload_sources: bool = False,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     project_config: ProjectConfig | None = None,
@@ -85,8 +83,6 @@ def build_plan_output_from_model_changes_phase(
         resolved_actions=resolved_actions,
         cursor_overrides=cursor_overrides,
         full_refresh=full_refresh,
-        start_cursor_override=start_cursor_override,
-        end_cursor_override=end_cursor_override,
     )
     return build_plan_output(
         project=project,
