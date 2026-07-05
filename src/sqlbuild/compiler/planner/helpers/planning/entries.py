@@ -44,7 +44,7 @@ def build_planner_entry_results(
     reuse: PlannerReuseResolution,
     pruning: PlannerScopePruningResult,
     reconciliation: PlannerChangeReconciliation,
-    source_freshness: StandardSourceFreshnessPlanningResult | None,
+    source_freshness: StandardSourceFreshnessPlanningResult,
 ) -> PlannerEntryResults:
     """Build execution model entries plus dependency-baseline and reuse-input entries."""
 
@@ -122,7 +122,7 @@ def build_planner_entry_results(
         run_despite_unchanged=pruning.run_despite_unchanged,
         source_freshness_blocked_model_names=(
             source_freshness.propagation.blocked_model_names
-            if source_freshness is not None and source_freshness.propagation is not None
+            if source_freshness.propagation is not None
             else frozenset()
         ),
         external_blocked_model_names=frozenset(overrides.external_blocked_model_names),
