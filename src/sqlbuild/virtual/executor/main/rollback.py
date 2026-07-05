@@ -3,51 +3,36 @@
 from __future__ import annotations
 
 import time
-import uuid
 from collections.abc import Callable
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
-from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
-from sqlbuild.virtual.executor.helpers.functions import decode_function_return_columns
+from sqlbuild.virtual.executor.helpers.environment_views import write_virtual_environment_views
+from sqlbuild.virtual.executor.helpers.project_context import resolve_virtual_project_context
 from sqlbuild.virtual.executor.helpers.rollback import (
-    guard_partial_rollback_scope,
-    publish_function_versions,
-    read_function_versions,
-    read_physical_relations,
-    read_seed_physical_relations,
-    resolve_selected_model_names,
-    resolve_target_checkpoint,
-    selected_upstream_seed_names,
-    stale_after_rollback,
+    build_rollback_ref_update,
+    read_rollback_checkpoint_state,
+    read_rollback_physical_relations,
+    resolve_rollback_final_refs,
     validate_physical_relations_exist,
 )
-from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
-from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
-from sqlbuild.virtual.state.main.locks.locks import acquire_virtual_environment_lease
-from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
-from sqlbuild.virtual.state.models import (
-    FunctionVersionRecord,
-    PhysicalRelationRecord,
-    StateLockLease,
-    VirtualEnvironmentCheckpointFunctionRefRecord,
-    VirtualEnvironmentCheckpointModelRefRecord,
-    VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointSeedRefRecord,
-    VirtualEnvironmentFunctionRefRecord,
-    VirtualEnvironmentModelRefRecord,
-    VirtualEnvironmentNodeRefRecord,
-    VirtualEnvironmentRecord,
-    VirtualEnvironmentSeedRefRecord,
+from sqlbuild.virtual.executor.helpers.state_operations import (
+    acquire_virtual_environment_lease_or_raise,
 )
+from sqlbuild.virtual.executor.models import (
+    RollbackCheckpointState,
+    RollbackRefUpdate,
+    RollbackResolution,
+    VirtualEnvironmentPhysicalRelations,
+    VirtualProjectContext,
+    VirtualViewRefreshHooks,
+)
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
+from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
+from sqlbuild.virtual.state.models import StateLockLease
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 
@@ -73,31 +58,14 @@ def run_virtual_rollback(
 ) -> tuple[str, tuple[str, ...], VirtualEnvironmentStatus]:
     """Rollback a VDE to the previous finalized checkpoint."""
 
-    compile_start: float = time.perf_counter()
-    if on_progress is not None:
-        on_progress("Compiling project...")
-    graph: ProjectGraph = build_project_graph(
+    context: VirtualProjectContext = resolve_virtual_project_context(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        on_progress=on_progress,
     )
-    active_target_name: str | None = resolve_target_name(
-        project_config=discovered_inputs.project_config,
-        local_config=discovered_inputs.local_config,
-        selected_target=None,
-    )
-    unsuffixed_virtual_environment_name: str | None = None
-    if active_target_name is not None:
-        unsuffixed_virtual_environment_name = resolve_target_config(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            target_name=active_target_name,
-        ).state.unsuffixed_virtual_env
-    if on_progress is not None:
-        on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in graph.project.models}
     config, backend = build_state_runtime(
         discovered_inputs=discovered_inputs,
         project_dir=project_dir,
@@ -108,322 +76,88 @@ def run_virtual_rollback(
         inspect_start: float = time.perf_counter()
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
-        lease = acquire_virtual_environment_lease(
+        lease = acquire_virtual_environment_lease_or_raise(
             backend,
             state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
-            owner_id=f"rollback:{uuid.uuid4()}",
-            ttl=timedelta(minutes=10),
+            owner_prefix="rollback",
+            locked_error_code="S019",
         )
-        if lease is None:
-            raise PlannerInputError(
-                f"virtual environment '{virtual_environment_name}' is locked",
-                code="S019",
-            )
-        environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
+        checkpoint_state: RollbackCheckpointState = read_rollback_checkpoint_state(
+            backend,
             state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
-        )
-        if environment is not None and environment.status == VirtualEnvironmentStatus.DETACHED:
-            raise PlannerInputError(
-                f"virtual environment '{virtual_environment_name}' is detached",
-                code="S028",
-            )
-        current_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
-            backend.get_virtual_environment_model_refs(
-                state_connection,
-                schema=config.schema,
-                virtual_environment_name=virtual_environment_name,
-            )
-        )
-        if not current_refs:
-            raise PlannerInputError(
-                f"unknown virtual environment '{virtual_environment_name}'",
-                code="S020",
-            )
-        current_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in current_refs}
-        checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...] = (
-            backend.list_virtual_environment_checkpoints(
-                state_connection,
-                schema=config.schema,
-                virtual_environment_name=virtual_environment_name,
-            )
-        )
-        target_checkpoint, target_checkpoint_model_refs = resolve_target_checkpoint(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            checkpoints=checkpoints,
-            current_ref_map=current_ref_map,
             checkpoint_id=checkpoint_id,
         )
-        if target_checkpoint is None:
-            raise PlannerInputError(
-                "no previous finalized checkpoint is available for rollback",
-                code="S021",
-            )
-        target_checkpoint_function_refs: tuple[
-            VirtualEnvironmentCheckpointFunctionRefRecord, ...
-        ] = backend.get_virtual_environment_checkpoint_function_refs(
+        resolution: RollbackResolution = resolve_rollback_final_refs(
+            backend,
             state_connection,
             schema=config.schema,
-            checkpoint_id=target_checkpoint.checkpoint_id,
-        )
-        target_checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (
-            backend.get_virtual_environment_checkpoint_seed_refs(
-                state_connection,
-                schema=config.schema,
-                checkpoint_id=target_checkpoint.checkpoint_id,
-            )
-        )
-        selected_model_names: tuple[str, ...] = resolve_selected_model_names(
-            graph=graph,
+            graph=context.graph,
+            virtual_environment_name=virtual_environment_name,
+            checkpoint_state=checkpoint_state,
             select=select,
             exclude=exclude,
-            all_model_names=tuple(model.name for model in graph.project.models),
-            target_checkpoint_model_refs=target_checkpoint_model_refs,
+            include_stale_upstreams=include_stale_upstreams,
+            allow_partial_rollback=allow_partial_rollback,
         )
-        checkpoint_ref_map: dict[str, str] = {
-            ref.model_name: ref.version_hash for ref in target_checkpoint_model_refs
-        }
-        checkpoint_seed_ref_map: dict[str, str] = {
-            ref.seed_name: ref.version_hash for ref in target_checkpoint_seed_refs
-        }
-        missing_checkpoint_model_refs: tuple[str, ...] = tuple(
-            model_name
-            for model_name in selected_model_names
-            if model_name not in checkpoint_ref_map
-        )
-        if missing_checkpoint_model_refs:
-            raise PlannerInputError(
-                "checkpoint is missing selected refs: " + ", ".join(missing_checkpoint_model_refs),
-                code="S025",
-            )
-        final_version_hashes: dict[str, str] = dict(current_ref_map)
-        for model_name in selected_model_names:
-            final_version_hashes[model_name] = checkpoint_ref_map[model_name]
-        current_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
-            backend.get_virtual_environment_seed_refs(
-                state_connection,
-                schema=config.schema,
-                virtual_environment_name=virtual_environment_name,
-            )
-        )
-        final_seed_hashes: dict[str, str] = {
-            ref.seed_name: ref.version_hash for ref in current_seed_refs
-        }
-        selected_seed_names: tuple[str, ...] = selected_upstream_seed_names(
-            graph=graph,
-            selected_model_names=selected_model_names,
-            all_seed_names=tuple(seed.name for seed in graph.project.seeds),
-            include_all=not bool(select or exclude),
-        )
-        missing_checkpoint_seed_refs: tuple[str, ...] = tuple(
-            seed_name
-            for seed_name in selected_seed_names
-            if seed_name not in checkpoint_seed_ref_map
-        )
-        if missing_checkpoint_seed_refs:
-            raise PlannerInputError(
-                "checkpoint is missing selected seed refs: "
-                + ", ".join(missing_checkpoint_seed_refs),
-                code="S025",
-            )
-        for seed_name in selected_seed_names:
-            final_seed_hashes[seed_name] = checkpoint_seed_ref_map[seed_name]
-        stale_after: tuple[str, ...] = stale_after_rollback(
-            graph=graph,
-            final_version_hashes=final_version_hashes,
-            expected_version_hashes=checkpoint_ref_map,
-        )
-        is_partial_scope: bool = bool(select or exclude)
-        if is_partial_scope:
-            selected_model_names = guard_partial_rollback_scope(
-                graph=graph,
-                selected_model_names=selected_model_names,
-                stale_after=stale_after,
-                checkpoint_ref_map=checkpoint_ref_map,
-                final_version_hashes=final_version_hashes,
-                include_stale_upstreams=include_stale_upstreams,
-            )
-            stale_after = stale_after_rollback(
-                graph=graph,
-                final_version_hashes=final_version_hashes,
-                expected_version_hashes=checkpoint_ref_map,
-            )
-            if stale_after and not allow_partial_rollback:
-                raise PlannerInputError(
-                    "rollback would leave target virtual environment working; "
-                    "remaining stale models: " + ", ".join(stale_after),
-                    code="S027",
-                    help="Re-run with --allow-partial-rollback to accept a working target VDE.",
-                )
-        physical_relations: dict[str, PhysicalRelationRecord] = read_physical_relations(
-            backend=backend,
-            state_connection=state_connection,
+        relations: VirtualEnvironmentPhysicalRelations = read_rollback_physical_relations(
+            backend,
+            state_connection,
             schema=config.schema,
-            refs=tuple(
-                VirtualEnvironmentCheckpointModelRefRecord(
-                    checkpoint_id=target_checkpoint.checkpoint_id,
-                    model_name=model_name,
-                    version_hash=version_hash,
-                )
-                for model_name, version_hash in sorted(final_version_hashes.items())
-            ),
-        )
-        seed_physical_relations: dict[str, PhysicalRelationRecord] = read_seed_physical_relations(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            refs=tuple(
-                VirtualEnvironmentCheckpointSeedRefRecord(
-                    checkpoint_id=target_checkpoint.checkpoint_id,
-                    seed_name=seed_name,
-                    version_hash=version_hash,
-                )
-                for seed_name, version_hash in sorted(final_seed_hashes.items())
-            ),
+            checkpoint_id=checkpoint_state.target_checkpoint.checkpoint_id,
+            resolution=resolution,
         )
         validate_physical_relations_exist(
             adapter=adapter,
             connection_config=connection_config,
-            models_by_name=models_by_name,
-            physical_relations=physical_relations,
+            models_by_name={model.name: model for model in context.graph.project.models},
+            physical_relations=relations.model_relations,
         )
-        target_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = tuple(
-            VirtualEnvironmentModelRefRecord(
-                virtual_environment_name=virtual_environment_name,
-                model_name=model_name,
-                version_hash=version_hash,
-            )
-            for model_name, version_hash in sorted(final_version_hashes.items())
-        )
-        status: VirtualEnvironmentStatus = (
-            VirtualEnvironmentStatus.FINALIZED
-            if not is_partial_scope or not stale_after
-            else VirtualEnvironmentStatus.ACTIVE
-        )
-        virtual_environment_record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
-            virtual_environment_name=virtual_environment_name,
-            status=status,
-        )
-        destination_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = tuple(
-            VirtualEnvironmentSeedRefRecord(
-                virtual_environment_name=virtual_environment_name,
-                seed_name=seed_name,
-                version_hash=version_hash,
-            )
-            for seed_name, version_hash in sorted(final_seed_hashes.items())
-        )
-        function_versions: dict[str, FunctionVersionRecord] = read_function_versions(
-            backend=backend,
-            state_connection=state_connection,
+        update: RollbackRefUpdate = build_rollback_ref_update(
+            backend,
+            state_connection,
             schema=config.schema,
-            refs=target_checkpoint_function_refs,
+            virtual_environment_name=virtual_environment_name,
+            resolution=resolution,
+            checkpoint_function_refs=checkpoint_state.checkpoint_function_refs,
         )
-        target_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = tuple(
-            VirtualEnvironmentFunctionRefRecord(
-                virtual_environment_name=virtual_environment_name,
-                node_type=(
-                    "table_fn" if decode_function_return_columns(function_version) else "udf"
-                ),
-                function_name=ref.function_name,
-                version_hash=ref.version_hash,
-            )
-            for ref in target_checkpoint_function_refs
-            if (function_version := function_versions.get(ref.function_name)) is not None
-        )
-        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]] = {
-            "model": tuple(
-                VirtualEnvironmentNodeRefRecord(
-                    virtual_environment_name=ref.virtual_environment_name,
-                    node_type="model",
-                    node_name=ref.model_name,
-                    version_hash=ref.version_hash,
-                )
-                for ref in target_refs
-            ),
-            "seed": tuple(
-                VirtualEnvironmentNodeRefRecord(
-                    virtual_environment_name=ref.virtual_environment_name,
-                    node_type="seed",
-                    node_name=ref.seed_name,
-                    version_hash=ref.version_hash,
-                )
-                for ref in destination_seed_refs
-            ),
-        }
-        if not is_partial_scope:
-            refs_by_node_type["udf"] = tuple(
-                VirtualEnvironmentNodeRefRecord(
-                    virtual_environment_name=ref.virtual_environment_name,
-                    node_type=ref.node_type,
-                    node_name=ref.function_name,
-                    version_hash=ref.version_hash,
-                )
-                for ref in target_function_refs
-                if ref.node_type == "udf"
-            )
-            refs_by_node_type["table_fn"] = tuple(
-                VirtualEnvironmentNodeRefRecord(
-                    virtual_environment_name=ref.virtual_environment_name,
-                    node_type=ref.node_type,
-                    node_name=ref.function_name,
-                    version_hash=ref.version_hash,
-                )
-                for ref in target_function_refs
-                if ref.node_type == "table_fn"
-            )
         backend.upsert_virtual_environment_and_replace_node_ref_groups(
             state_connection,
             schema=config.schema,
-            record=virtual_environment_record,
-            refs_by_node_type=refs_by_node_type,
-        )
-        rolled_back_models: tuple[str, ...] = tuple(
-            sorted(
-                model_name
-                for model_name, version_hash in current_ref_map.items()
-                if final_version_hashes.get(model_name) != version_hash
-            )
+            record=update.virtual_environment_record,
+            refs_by_node_type=update.refs_by_node_type,
         )
         if on_progress is not None:
             on_progress(f"Inspected virtual state. ({time.perf_counter() - inspect_start:.2f}s)")
     finally:
         if lease is not None:
-            release_state_lease(
+            _ = release_state_lease(
                 backend,
                 state_connection,
                 schema=config.schema,
                 lease=lease,
             )
         backend.close(state_connection)
-
-    refresh_start: float = time.perf_counter()
-    if on_progress is not None:
-        on_progress("Refreshing target VDE views...")
-    refresh_logical_vde_views(
-        project=graph.project,
+    write_virtual_environment_views(
+        graph=context.graph,
         adapter=adapter,
         connection_config=connection_config,
         virtual_environment_name=virtual_environment_name,
-        unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
-        physical_relations=physical_relations,
-        seed_physical_relations=seed_physical_relations,
-        on_connection_start=on_connection_start,
-        on_connection_complete=on_connection_complete,
-        on_connection_error=on_connection_error,
+        unsuffixed_virtual_environment_name=context.unsuffixed_virtual_environment_name,
+        relations=relations,
+        function_versions=(update.function_versions if not resolution.is_partial_scope else {}),
+        hooks=VirtualViewRefreshHooks(
+            on_progress=on_progress,
+            on_connection_start=on_connection_start,
+            on_connection_complete=on_connection_complete,
+            on_connection_error=on_connection_error,
+        ),
     )
-    if function_versions and not is_partial_scope:
-        publish_function_versions(
-            adapter=adapter,
-            connection_config=connection_config,
-            graph=graph,
-            virtual_environment_name=virtual_environment_name,
-            function_versions=function_versions,
-        )
-    if on_progress is not None:
-        on_progress(f"Refreshed target VDE views. ({time.perf_counter() - refresh_start:.2f}s)")
-    return target_checkpoint.checkpoint_id, rolled_back_models, status
+    return (
+        checkpoint_state.target_checkpoint.checkpoint_id,
+        resolution.rolled_back_model_names,
+        resolution.status,
+    )

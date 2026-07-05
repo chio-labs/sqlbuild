@@ -19,3 +19,4 @@ class VirtualCloneE2ETestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...]
+    expected_registered_artifacts: tuple[tuple[str, str], ...] = ()
