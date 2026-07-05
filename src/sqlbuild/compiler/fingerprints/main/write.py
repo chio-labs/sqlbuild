@@ -68,7 +68,7 @@ def write_fingerprint(
     attempt: int
     for attempt in range(FINGERPRINT_WRITE_ATTEMPTS):
         try:
-            _execute_write_statements(
+            _ = _execute_write_statements(
                 connection=connection,
                 execute=execute,
                 create_sql=create_sql,
@@ -91,11 +91,11 @@ def _execute_write_statements(
     index_sqls: tuple[str, ...],
     insert_sql: str,
 ) -> None:
-    execute(connection, create_sql)
+    _ = execute(connection, create_sql)
     index_sql: str
     for index_sql in index_sqls:
-        execute(connection, index_sql)
-    execute(connection, insert_sql)
+        _ = execute(connection, index_sql)
+    _ = execute(connection, insert_sql)
 
 
 def _log_write_retry(*, fingerprint: Fingerprint, attempt: int, error: Exception) -> None:

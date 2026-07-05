@@ -243,7 +243,7 @@ def run_virtual_build(
                         target_schema=adapter.default_schema(),
                     )
                     check_run_state: PythonNodeRunState = PythonNodeRunState()
-                    record_python_run_state_results(
+                    _ = record_python_run_state_results(
                         discovered_inputs=discovered_inputs,
                         run_state=check_run_state,
                         python_results=result.python_node_results,

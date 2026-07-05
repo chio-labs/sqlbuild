@@ -33,8 +33,7 @@ def execute_load_plan(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
         source_order={
-            source.name: index
-            for index, source in enumerate(invocation.selected_sources, start=1)
+            source.name: index for index, source in enumerate(invocation.selected_sources, start=1)
         },
         total_count=len(invocation.selected_sources),
     )

@@ -51,11 +51,4 @@ class DltProgressEvent:
     label: str | None
 
 
-@dataclass
-class DltProgressCounter:
-    step: str
-    name: str
-    label: str | None
-    count: int = 0
-    total: int | None = None
-    message: str | None = None
+from sqlbuild.integrations.dlt.helpers.progress_counter import DltProgressCounter  # noqa: E402,F401

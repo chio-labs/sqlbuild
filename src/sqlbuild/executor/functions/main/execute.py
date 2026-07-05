@@ -83,7 +83,7 @@ def execute_function(
             source_file_path=function_entry.source_file_path,
             statement_recorder=statement_recorder,
         )
-        _try_write_function_fingerprint(
+        _ = _try_write_function_fingerprint(
             entry=function_entry,
             adapter=adapter,
             connection=connection,

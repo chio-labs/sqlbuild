@@ -25,7 +25,7 @@ def try_write_python_node_identity_fingerprint(
 ) -> None:
     """Append one Python identity row without affecting execution success."""
 
-    _try_write_python_node_identity_fingerprint(
+    _ = _try_write_python_node_identity_fingerprint(
         identity=identity,
         adapter=adapter,
         connection=connection,

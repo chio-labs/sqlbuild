@@ -41,12 +41,12 @@ def write_source_freshness_records(
             transient=transient,
         )
     )
-    execute(connection, create_sql)
+    _ = execute(connection, create_sql)
     if render_create_index_sqls is not None:
         index_sql: str
         for index_sql in render_create_index_sqls(database=database, schema=schema):
-            execute(connection, index_sql)
-    execute(
+            _ = execute(connection, index_sql)
+    _ = execute(
         connection,
         render_insert_records_sql(
             database=database,

@@ -27,9 +27,9 @@ def run_init(project_dir: Path | None) -> int:
 
     project_name: str = base_dir.name.replace("-", "_").replace(" ", "_").lower()
 
-    scaffold_blank_project(base_dir=base_dir, project_name=project_name)
+    _ = scaffold_blank_project(base_dir=base_dir, project_name=project_name)
 
-    update_sqlbuild_skills(project_dir=base_dir)
+    _ = update_sqlbuild_skills(project_dir=base_dir)
 
     use_color: bool = supports_color()
     style: CliStyle = CliStyle(use_color=use_color)

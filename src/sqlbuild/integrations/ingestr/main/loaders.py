@@ -64,9 +64,9 @@ def _build_ingestr_loader(*, source_entry: SourceEntry) -> Any:
             result: IngestrCommandResult = run_ingestr_command(command)
         except IngestrIntegrationError as error:
             if isinstance(error.run_result, IngestrCommandResult):
-                record_ingestr_output(ctx=ctx, result=error.run_result)
+                _ = record_ingestr_output(ctx=ctx, result=error.run_result)
             raise
-        record_ingestr_output(ctx=ctx, result=result)
+        _ = record_ingestr_output(ctx=ctx, result=result)
         return None
 
     run.__name__ = f"ingestr__{source_entry.name}"

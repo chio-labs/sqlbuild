@@ -67,7 +67,7 @@ def run_dbt_clone_command(
         )
     finally:
         progress.finish(blank_line_after=False)
-    render_clone_output(
+    _ = render_clone_output(
         result=clone_run.result,
         use_color=use_color,
     )

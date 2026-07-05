@@ -102,20 +102,7 @@ class PythonNodeFanInDecision:
     skip_mode: SkipMode | None = None
 
 
-@dataclass
-class PythonNodeRunState:
-    """Same-run result store for Python DAG nodes."""
-
-    results_by_function: dict[object, PythonNodeExecutionResult] = field(default_factory=dict)
-
-    def record_result(
-        self,
-        *,
-        node_function: Callable[..., object],
-        result: PythonNodeExecutionResult,
-    ) -> None:
-        self.results_by_function[node_function] = result
-        self.results_by_function[("name", result.node_name)] = result
+from sqlbuild.executor.python_nodes.classes.run_state import PythonNodeRunState  # noqa: E402
 
 
 @dataclass(frozen=True)

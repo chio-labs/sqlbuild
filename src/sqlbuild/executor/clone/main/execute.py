@@ -59,7 +59,7 @@ def execute_clone(
         *destination_seed_entries,
         *destination_model_entries,
     )
-    _ensure_destination_schemas(
+    _ = _ensure_destination_schemas(
         destination_entries=destination_entries,
         adapter=adapter,
         destination_connection=destination_connection,

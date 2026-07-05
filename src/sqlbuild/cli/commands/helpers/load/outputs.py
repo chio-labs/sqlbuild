@@ -29,9 +29,7 @@ def write_load_ready_output(*, invocation: LoadInvocation) -> None:
     invocation.progress_stream.flush()
 
 
-def write_empty_load_output(
-    *, request: LoadCommandRequest, invocation: LoadInvocation
-) -> None:
+def write_empty_load_output(*, request: LoadCommandRequest, invocation: LoadInvocation) -> None:
     """Write successful no-op load output and optional JSON."""
 
     style: CliStyle = CliStyle(use_color=invocation.use_color)

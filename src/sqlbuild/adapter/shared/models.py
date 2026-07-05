@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -181,22 +181,4 @@ class LifeCycleEvent:
     content: str
 
 
-@dataclass
-class StatementRecorder:
-    """Mutable recorder for runtime lifecycle events."""
-
-    events: list[LifeCycleEvent] = field(default_factory=list)
-
-    def record(self, statement: str) -> None:
-        self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=statement))
-
-    def record_many(self, statements: Iterable[str]) -> None:
-        statement: str
-        for statement in statements:
-            self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=statement))
-
-    def log(self, message: str) -> None:
-        self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.LOG, content=message))
-
-    def snapshot(self) -> tuple[LifeCycleEvent, ...]:
-        return tuple(self.events)
+from sqlbuild.adapter.shared.classes.statement_recorder import StatementRecorder  # noqa: E402,F401

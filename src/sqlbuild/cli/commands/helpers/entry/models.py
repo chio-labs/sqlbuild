@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
@@ -13,6 +13,7 @@ from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
+from sqlbuild.cli.commands.helpers.entry.namespace import CliNamespace  # noqa: F401
 from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
@@ -20,122 +21,6 @@ from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandReq
 from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.planner.models import CursorOverrides
-
-
-@dataclass
-class CliNamespace:
-    """Typed namespace for all CLI arguments across all commands."""
-
-    command: str | None = None
-    project_dir: str | None = None
-    dbt_project_dir: str | None = None
-    dbt_profiles_dir: str | None = None
-    dbt_target: str | None = None
-    dbt_target_path: str | None = None
-    dbt_profile: str | None = None
-    dbt_prod_git_ref: str | None = None
-    sqb_output_dir: str | None = None
-    dry_run: bool = False
-    overwrite: bool = False
-    skip_dbt_debug: bool = False
-    no_sql_validation: bool = False
-    defer_to: str | None = None
-    defer_clone_from: str | None = None
-    defer_sources_to: str | None = None
-    target: str | None = None
-    target_range: str | None = None
-    from_target: str | None = None
-    to_target: str | None = None
-    from_virtual_environment: str | None = None
-    to_virtual_environment: str | None = None
-    hard_copy: bool = False
-    json: bool = False
-    json_output: Path | None = None
-    manifest: bool = False
-    dag: str | None = None
-    compile_lineage_mode: CompileLineageMode = CompileLineageMode.FAST
-    profile_skip_discovery_sql_analysis: bool = False
-    profile_skip_column_inference: bool = False
-    profile_skip_contracts: bool = False
-    profile_skip_write: bool = False
-    start_cursor_ts: str | None = None
-    end_cursor_ts: str | None = None
-    start_cursor_int: str | None = None
-    end_cursor_int: str | None = None
-    no_color: bool = False
-    fail_fast: bool = False
-    full_refresh: bool = False
-    virtual_env: str | None = None
-    skip_locked: bool = False
-    include_stale_upstreams: bool = False
-    force: bool = False
-    include_python: bool = True
-    load_sources: bool | None = None
-    reload: bool = False
-    run_tests: bool = True
-    run_audits: bool = True
-    allow_snapshot_full_refresh: bool = False
-    allow_snapshot_schema_change: bool = False
-    allow_partial_promotion: bool = False
-    allow_partial_rollback: bool = False
-    rollback_checkpoint_id: str | None = None
-    concurrency: int | None = None
-    verbose: bool = False
-    debug: bool = False
-    auto_approve: bool = False
-    retention_days: int | None = None
-    direct_state_history_versions: int | None = None
-    state_command: str | None = None
-    state_checkpoint_command: str | None = None
-    state_checkpoint_id: str | None = None
-    state_backup_id: str | None = None
-    bounded: str | None = None
-    max_column_examples: int | None = None
-    max_row_only_examples: int | None = None
-    query_sql: str | None = None
-    query_format: str = "long"
-    query_limit: int | None = 20
-    query_no_limit: bool = False
-    lineage_target: str | None = None
-    lineage_format: str = "tree"
-    lineage_direction: str = "upstream"
-    lineage_depth: str = "all"
-    lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
-    no_connection: bool = False
-    fail_on_error: bool = False
-    fail_on_stale: bool = False
-    state: bool = False
-    full: bool = False
-    schema_only: bool = False
-    allow_partial_diff: bool = False
-    reconcile_command: str | None = None
-    reconcile_model: str | None = None
-    reconcile_physical_relation: str | None = None
-    playground_path: str = "sqlbuild-playground"
-    playground_template: str = "waffle_shop"
-    scenario_command: str | None = None
-    scenario_selector: list[str] = field(default_factory=list)
-    scenario_retain: bool = False
-    scenario_local: bool = False
-    scenario_strict: bool = False
-    scenario_sync_snapshots: bool = False
-    scenario_refresh: bool = False
-    scenario_force: bool = False
-    scenario_max_snapshot_rows: int | None = None
-    scenario_max_snapshot_total_rows: int | None = None
-    scenario_max_snapshot_bytes: int | None = None
-    scenario_max_snapshot_total_bytes: int | None = None
-    skills_command: str | None = None
-    skills_global: bool = False
-    skills_target: list[str] = field(default_factory=list)
-    skills_force: bool = False
-    select: list[str] = field(default_factory=list)
-    select_file: list[str] = field(default_factory=list)
-    exclude: list[str] = field(default_factory=list)
-    dbt_command: str | None = None
-    dbt_args: list[str] = field(default_factory=list)
-    vars: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
