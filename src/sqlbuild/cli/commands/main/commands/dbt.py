@@ -16,7 +16,7 @@ from sqlbuild.cli.commands.main.commands.dbt_lineage import run_dbt_lineage_comm
 from sqlbuild.cli.commands.main.commands.dbt_scenario import run_dbt_scenario_command
 from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.integrations.dbt.main.validate_execution_args import validate_dbt_execution_args
-from sqlbuild.integrations.dbt.models import DbtInteropPlan
+from sqlbuild.integrations.dbt.models import DbtInteropExecutionRequest, DbtInteropPlan
 from sqlbuild.integrations.dbt.pipeline.main.execute import execute_dbt_interop_from_project
 from sqlbuild.integrations.dbt.pipeline.main.plan import plan_dbt_interop_from_project
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import (
@@ -133,13 +133,15 @@ def _run_dbt_execution_command(
     progress_stream.write("\n")
     progress_stream.flush()
     return execute_dbt_interop_from_project(
-        command=command,
-        project_dir=effective_project_dir,
-        args=routed_args,
-        on_progress=planning_progress.on_progress,
-        progress_stream=progress_stream,
-        dbt_stdout_stream=sys.stdout,
-        use_color=use_color,
-        verbose=verbose,
-        json_output=json_output,
+        DbtInteropExecutionRequest(
+            command=command,
+            project_dir=effective_project_dir,
+            args=routed_args,
+            on_progress=planning_progress.on_progress,
+            progress_stream=progress_stream,
+            dbt_stdout_stream=sys.stdout,
+            use_color=use_color,
+            verbose=verbose,
+            json_output=json_output,
+        )
     )

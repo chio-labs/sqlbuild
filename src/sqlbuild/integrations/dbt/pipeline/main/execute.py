@@ -2,795 +2,222 @@
 
 from __future__ import annotations
 
-import sys
-import time
-from collections.abc import Callable
-from dataclasses import replace
-from pathlib import Path
-from typing import Any, TextIO
-
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.types import BuiltinAdapter
-from sqlbuild.cli.commands.main.commands.connection_progress import (
-    build_connection_progress_reporter,
-)
-from sqlbuild.cli.commands.main.commands.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
-from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
-from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
-from sqlbuild.compiler.planner.models import (
-    GraphNodeKey,
-    PlanOutput,
-)
-from sqlbuild.integrations.dbt.exceptions import (
-    DbtInteropArgumentError,
-    DbtInteropRuntimeError,
-)
-from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args
-from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args
-from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
-from sqlbuild.integrations.dbt.helpers.manifest.core import load_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_dbt_node_fingerprint
-from sqlbuild.integrations.dbt.helpers.planning.graph_projection import dbt_graph_node_key
-from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
-    build_dbt_write_identity_hashes,
-)
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
-    build_expected_dbt_model_version_hashes,
-)
-from sqlbuild.integrations.dbt.helpers.planning.orchestration import (
-    plan_dbt_interop_command,
-    resolve_sqlbuild_test_actions,
-)
-from sqlbuild.integrations.dbt.helpers.planning.runtime import (
-    resolve_dbt_interop_adapter,
-    resolve_dbt_manifest_path,
-    resolve_dbt_plan_options,
-    resolve_dbt_vars_mapping,
-)
-from sqlbuild.integrations.dbt.helpers.runtime.node_source_watermarks import (
-    build_dbt_node_source_watermark_context,
-    record_dbt_successful_node_source_watermark,
-    write_dbt_node_source_watermark_records,
-)
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
-    DbtCliOptions,
-    DbtCombinedGraph,
-    DbtCommandExecutionResult,
-    DbtCommandResult,
+    DbtDeferClonePlan,
     DbtExecutionOutcome,
-    DbtInteropPlan,
-    DbtInteropRoutedArgs,
-    DbtModelPlanningResult,
-    DbtNodeExecutionResult,
-)
-from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
-    resolve_dbt_defer_clone_from,
-    resolve_defer_clone_unique_ids,
-    resolve_defer_clone_view_chain_terms,
-    resolve_defer_clone_view_chain_unique_ids,
-    run_dbt_defer_clone_prephase,
-)
-from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone_progress import (
-    run_dbt_defer_clone_view_chain_prephase,
-    selected_dbt_defer_clone_cause_names,
+    DbtInteropCompiledProject,
+    DbtInteropExecutionRequest,
+    DbtInteropInvocation,
+    DbtInteropPlanResolution,
+    DbtPlannedWork,
+    DbtPreExecutionOutputs,
+    DbtSqlbuildReplanResult,
+    DbtTrackedExecution,
+    DbtWriteIdentities,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
-    append_manifest_seed_warnings,
-    append_stale_out_of_selection_warning,
     build_dbt_execution_outcome,
-    build_dbt_non_model_run_unique_ids,
-    build_dbt_pruned_seed_unique_ids,
-    build_dbt_pruned_test_unique_ids,
-    build_deferred_dbt_relations,
     build_merged_dbt_execution_argv,
-    dbt_blocked_exit_code,
-    execute_dbt_commands,
-    render_dbt_execution_summary_footer,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.missing_relations import (
-    find_and_report_missing_dbt_relation_blocks,
-    missing_dbt_relations_exit_code,
+from sqlbuild.integrations.dbt.pipeline.helpers.execution_phases import (
+    build_dbt_write_identities,
+    execute_dbt_with_state_tracking,
+    finalize_dbt_interop_exit,
+    resolve_dbt_defer_clone_plan,
+    resolve_dbt_planned_work,
+    resolve_dbt_pre_execution_outputs,
+    resolve_sqlbuild_execution_plan_output,
+    run_dbt_defer_clone_prephases,
+    run_dbt_sqlbuild_work,
+    write_dbt_execution_plan_text,
+    write_dbt_execution_summary,
+    write_sqlbuild_skip_notice,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
-    build_dbt_model_plan_output,
-    build_sqlbuild_plan_output,
-    dbt_failure_detail,
+from sqlbuild.integrations.dbt.pipeline.helpers.interop_prologue import (
+    compile_dbt_interop_project,
+    load_compiled_dbt_manifest,
+    resolve_dbt_execution_invocation,
+    resolve_dbt_interop_plan,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
-    append_dbt_source_freshness_records,
-)
-from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
-from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
-from sqlbuild.integrations.dbt.types import (
-    DbtInteropCommand,
-    DbtInteropSkipReason,
-    DbtInteropSqlbuildTestAction,
-)
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.helpers.output.display import DisplayOptions
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
-from sqlbuild.spec.models.targets import resolve_effective_force
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 
-def execute_dbt_interop_from_project(
-    *,
-    command: DbtInteropCommand,
-    project_dir: Path,
-    args: tuple[str, ...],
-    dbt_runner: DbtRunner | None = None,
-    dbt_executable: str | None = None,
-    sqlbuild_executable: str = "sqb",
-    no_sql_validation: bool = False,
-    fail_fast: bool = False,
-    on_progress: Callable[[str], None] | None = None,
-    progress_stream: TextIO | None = None,
-    dbt_stdout_stream: TextIO | None = None,
-    use_color: bool = False,
-    verbose: bool = False,
-    json_output: bool = False,
-) -> int:
+def execute_dbt_interop_from_project(request: DbtInteropExecutionRequest) -> int:
     """Execute dbt first, then SQLBuild, for downstream-only interop commands."""
 
-    if command not in (DbtInteropCommand.RUN, DbtInteropCommand.BUILD, DbtInteropCommand.TEST):
-        raise DbtInteropArgumentError(f"unsupported dbt interop execution command: {command}")
-
-    dbt_executable = dbt_executable or resolve_dbt_executable()
-
-    output_stream: TextIO = progress_stream or sys.stdout
-    dbt_output_stream: TextIO = dbt_stdout_stream or output_stream
-    routed: DbtInteropRoutedArgs = route_dbt_interop_args(
-        command=command,
-        parsed=parse_dbt_execution_args(command=command, args=args),
+    if request.command not in (
+        DbtInteropCommand.RUN,
+        DbtInteropCommand.BUILD,
+        DbtInteropCommand.TEST,
+    ):
+        raise DbtInteropArgumentError(
+            f"unsupported dbt interop execution command: {request.command}"
+        )
+    invocation: DbtInteropInvocation = resolve_dbt_execution_invocation(request)
+    manifest: DbtManifestIndex = load_compiled_dbt_manifest(
+        runner=invocation.runner,
+        dbt_options=invocation.dbt_options,
+        full_refresh=request.command == DbtInteropCommand.TEST,
+        on_progress=request.on_progress,
     )
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
-    effective_force: bool = resolve_effective_force(
-        project_config=discovered_inputs.project_config,
-        local_config=discovered_inputs.local_config,
-        selected_target=None,
-        cli_force="--force" in routed.sqlbuild_args,
-    )
-    effective_sqlbuild_args: tuple[str, ...] = _with_effective_force(
-        args=routed.sqlbuild_args,
-        force=effective_force,
-    )
-    dbt_options: DbtCliOptions = resolve_dbt_plan_options(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        dbt_args=routed.dbt_args,
-    )
-    dbt_vars: dict[str, object] = resolve_dbt_vars_mapping(
-        project_config=discovered_inputs.project_config.dbt,
-        local_config=discovered_inputs.local_config.dbt,
-        dbt_args=routed.dbt_args,
-    )
-    runner: DbtRunner = dbt_runner or DbtRunner(dbt_executable=dbt_executable)
-
-    dbt_compile_start: float = time.monotonic()
-    report_progress(on_progress, "Compiling dbt project...")
-    compile_result: DbtCommandResult = runner.compile(
-        options=dbt_options,
-        full_refresh=command == DbtInteropCommand.TEST,
-    )
-    if compile_result.returncode != 0:
-        raise DbtInteropRuntimeError("dbt compile failed", help=dbt_failure_detail(compile_result))
-    report_progress(
-        on_progress, f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
-    )
-
-    manifest_start: float = time.monotonic()
-    report_progress(on_progress, "Loading dbt manifest...")
-    manifest_path: Path = resolve_dbt_manifest_path(options=dbt_options)
-    manifest: DbtManifestIndex = load_dbt_manifest_index(manifest_path=manifest_path)
-    report_progress(on_progress, f"Loaded dbt manifest. ({time.monotonic() - manifest_start:.2f}s)")
-
-    sqlbuild_compile_start: float = time.monotonic()
-    report_progress(on_progress, "Compiling SQLBuild project...")
-    adapter_name: str = resolve_effective_adapter_name(
-        project_config=discovered_inputs.project_config,
-        local_config=discovered_inputs.local_config,
-    )
-    adapter: BaseAdapter = resolve_dbt_interop_adapter(adapter_name, project_dir=project_dir)
-    project: CompiledProject = build_compiled_project(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        no_sql_validation=no_sql_validation,
-        cli_vars=dbt_vars,
-        external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
-    )
-    report_progress(
-        on_progress,
-        f"Compiled SQLBuild project. ({time.monotonic() - sqlbuild_compile_start:.2f}s)",
-    )
-
-    graph_start: float = time.monotonic()
-    report_progress(on_progress, "Building dbt interop graph...")
-    graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
-    report_progress(
-        on_progress, f"Built dbt interop graph. ({time.monotonic() - graph_start:.2f}s)"
-    )
-
-    selection_start: float = time.monotonic()
-    report_progress(on_progress, "Resolving dbt and SQLBuild selection...")
-    plan: DbtInteropPlan = plan_dbt_interop_command(
-        command=command,
-        project=project,
+    compiled: DbtInteropCompiledProject = compile_dbt_interop_project(
+        project_dir=request.project_dir,
+        discovered_inputs=invocation.discovered_inputs,
         manifest=manifest,
-        graph=graph,
-        dbt_runner=runner,
-        dbt_options=dbt_options,
-        select=routed.select,
-        exclude=routed.exclude,
-        dbt_command_args=routed.dbt_args,
-        sqlbuild_command_args=effective_sqlbuild_args,
-        dbt_executable=dbt_executable,
-        sqlbuild_executable=sqlbuild_executable,
+        dbt_vars=invocation.dbt_vars,
+        no_sql_validation=request.no_sql_validation,
+        on_progress=request.on_progress,
     )
-    report_progress(
-        on_progress,
-        f"Resolved dbt and SQLBuild selection. ({time.monotonic() - selection_start:.2f}s)",
-    )
-    connection_progress: Any = build_connection_progress_reporter(
-        adapter_name=adapter_name,
-        stream=output_stream,
-        use_color=use_color,
-    )
-    dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        project=project,
-        adapter=adapter,
-        adapter_name=adapter_name,
+    resolution: DbtInteropPlanResolution = resolve_dbt_interop_plan(
+        command=request.command,
+        invocation=invocation,
+        compiled=compiled,
         manifest=manifest,
-        graph=graph,
-        candidate_unique_ids=tuple(
-            sorted(
-                frozenset(
-                    (
-                        *plan.dbt_selected_unique_ids,
-                        *plan.selection.dbt_required_unique_ids,
-                    )
-                )
-            )
-        ),
-        selected_unique_ids=plan.dbt_selected_unique_ids,
-        full_refresh="--full-refresh" in routed.dbt_args,
-        force=effective_force,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=on_progress,
+        sqlbuild_executable=request.sqlbuild_executable,
+        on_progress=request.on_progress,
     )
-    if dbt_model_plan is not None:
-        plan = replace(plan, dbt_model_plan=dbt_model_plan)
-        plan = append_stale_out_of_selection_warning(plan=plan, dbt_model_plan=dbt_model_plan)
-    plan = append_manifest_seed_warnings(plan=plan, manifest=manifest)
-    connection_config: dict[str, object] = resolve_connection_config(
-        raw_config=build_effective_connection_config(discovered_inputs=discovered_inputs),
-        project_dir=project_dir,
-        adapter_name=adapter_name,
-        discovered_inputs=discovered_inputs,
-    )
-    dbt_fingerprint_warnings: list[str] = []
-    expected_dbt_version_hash_by_unique_id: dict[str, str | None] = (
-        build_expected_dbt_model_version_hashes(manifest=manifest, graph=graph)
-    )
-    dbt_seed_identity_by_unique_id: dict[str, str] = {
-        unique_id: seed.identity_hash
-        for unique_id, seed in manifest.seeds_by_unique_id.items()
-        if seed.identity_hash is not None
-    }
-    previous_dbt_version_hash_by_unique_id: dict[str, str] = {
-        entry.unique_id: entry.previous_version_hash
-        for entry in (plan.dbt_model_plan.entries if plan.dbt_model_plan is not None else ())
-        if entry.previous_version_hash is not None
-    }
-    dbt_write_identity_hashes: dict[GraphNodeKey, str] = build_dbt_write_identity_hashes(
+    planned: DbtPlannedWork = resolve_dbt_planned_work(
+        request=request,
+        invocation=invocation,
+        compiled=compiled,
         manifest=manifest,
-        graph=graph,
-        run_unique_ids=frozenset(
-            plan.dbt_model_plan.run_unique_ids if plan.dbt_model_plan is not None else ()
-        ),
-        expected_version_hash_by_unique_id=expected_dbt_version_hash_by_unique_id,
-        previous_version_hash_by_unique_id=previous_dbt_version_hash_by_unique_id,
+        graph=resolution.graph,
+        plan=resolution.plan,
     )
-    plan = replace(
-        plan,
-        dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
-            command=command,
-            plan=plan,
-        ),
-        dbt_pruned_seed_unique_ids=build_dbt_pruned_seed_unique_ids(
-            command=command,
-            plan=plan,
-        ),
-        dbt_pruned_test_unique_ids=build_dbt_pruned_test_unique_ids(
-            command=command,
-            plan=plan,
-        ),
+    identities: DbtWriteIdentities = build_dbt_write_identities(
+        manifest=manifest,
+        graph=resolution.graph,
+        plan=planned.plan,
     )
-    effective_defer_clone_from: bool = resolve_dbt_defer_clone_from(
-        cli_defer_clone_from=routed.defer_clone_from,
-        project_defer_clone_from=discovered_inputs.project_config.dbt.defer_clone_from,
-        local_defer_clone_from=discovered_inputs.local_config.dbt.defer_clone_from,
-    )
-    defer_clone_unique_ids: frozenset[str] = (
-        resolve_defer_clone_unique_ids(
-            graph=graph,
-            manifest=manifest,
-            project=project,
-            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
-            selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
-            required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
-        )
-        if effective_defer_clone_from
-        else frozenset()
-    )
-    dbt_defer_clone_cause_names: tuple[str, ...] = ()
-    if effective_defer_clone_from:
-        dbt_defer_clone_cause_names = selected_dbt_defer_clone_cause_names(
-            manifest=manifest,
-            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
-            selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
-        )
-    defer_clone_view_chain_terms: tuple[str, ...] = (
-        resolve_defer_clone_view_chain_terms(
-            graph=graph,
-            manifest=manifest,
-            project=project,
-            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
-            selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
-        )
-        if effective_defer_clone_from
-        else ()
-    )
-    defer_clone_view_chain_unique_ids: frozenset[str] = (
-        resolve_defer_clone_view_chain_unique_ids(
-            graph=graph,
-            manifest=manifest,
-            project=project,
-            selected_sqlbuild_model_names=plan.selection.sqlbuild_model_names,
-            selected_dbt_unique_ids=plan.dbt_selected_unique_ids,
-        )
-        if effective_defer_clone_from
-        else frozenset()
+    defer_clone: DbtDeferClonePlan = resolve_dbt_defer_clone_plan(
+        invocation=invocation,
+        compiled=compiled,
+        manifest=manifest,
+        graph=resolution.graph,
+        plan=planned.plan,
     )
     merged_dbt_argv: tuple[str, ...] | None = build_merged_dbt_execution_argv(
-        command=command,
-        options=dbt_options,
-        routed_args=routed.dbt_args,
-        plan=plan,
-        replay_on_change=discovered_inputs.project_config.dbt.replay_on_change,
-        defer_clone_unique_ids=defer_clone_unique_ids,
+        command=request.command,
+        options=invocation.dbt_options,
+        routed_args=invocation.routed.dbt_args,
+        plan=planned.plan,
+        replay_on_change=invocation.discovered_inputs.project_config.dbt.replay_on_change,
+        defer_clone_unique_ids=defer_clone.unique_ids,
     )
-    missing_dbt_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]] = {}
-    if merged_dbt_argv is None and plan.sqlbuild_skip_reason is None:
-        missing_dbt_relation_blocked_models = find_and_report_missing_dbt_relation_blocks(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            project=project,
-            manifest=manifest,
-            adapter=adapter,
-            adapter_name=adapter_name,
-            selected_model_names=plan.selection.sqlbuild_model_names,
-            dbt_unique_ids_selected_for_execution=frozenset(
-                (
-                    *plan.dbt_selected_unique_ids,
-                    *plan.selection.dbt_required_unique_ids,
-                    *defer_clone_unique_ids,
-                    *defer_clone_view_chain_unique_ids,
-                )
-            ),
-            output_stream=output_stream,
-        )
-        sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            project=project,
-            adapter=adapter,
-            adapter_name=adapter_name,
-            selected_model_names=plan.selection.sqlbuild_model_names,
-            required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
-            external_blocked_model_names=(
-                *(
-                    plan.dbt_model_plan.blocked_sqlbuild_model_names
-                    if plan.dbt_model_plan is not None
-                    else ()
-                ),
-                *missing_dbt_relation_blocked_models,
-            ),
-            sqlbuild_args=effective_sqlbuild_args,
-            on_progress=None,
-            on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
-            deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
-            dependency_baseline_entries=(),
-            disable_scope_pruning=command == DbtInteropCommand.TEST,
-            manifest=manifest if command == DbtInteropCommand.TEST else None,
-            dbt_manifest=manifest,
-            dbt_graph=graph,
-            dbt_source_freshness=(
-                plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
-            ),
-        )
-        if sqlbuild_plan_output is not None:
-            plan = replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)
-    if not json_output:
-        display_plan: DbtInteropPlan = plan
-        if merged_dbt_argv is not None:
-            display_plan = replace(
-                plan,
-                dbt_command_argv=merged_dbt_argv,
-                supplemental_dbt_command_argvs=(),
-            )
-        elif (
-            plan.dbt_model_plan is not None
-            and plan.dbt_model_plan.current_unique_ids
-            and not plan.dbt_model_plan.blocked_unique_ids
-        ):
-            display_plan = replace(
-                plan,
-                dbt_skip_reason=DbtInteropSkipReason.DBT_MODELS_CURRENT,
-                supplemental_dbt_command_argvs=(),
-            )
-        rendered_plan: str = render_dbt_interop_plan(
-            display_plan,
-            json_output=False,
-            use_color=use_color,
-            display_options=DisplayOptions(max_entries_per_section=None if verbose else 10),
-        )
-        output_stream.write(rendered_plan + "\n\n")
-        output_stream.flush()
-
-    if effective_defer_clone_from:
-        run_dbt_defer_clone_prephase(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            dbt_options=dbt_options,
-            runner=runner,
-            adapter=adapter,
-            project=project,
-            connection_config=connection_config,
-            current_manifest=manifest,
-            unique_ids=tuple(sorted(defer_clone_unique_ids)),
-            on_progress=on_progress,
-            output_stream=output_stream,
-            use_color=use_color,
-            caused_by_names=dbt_defer_clone_cause_names,
-        )
-    if defer_clone_view_chain_terms:
-        view_chain_execution: DbtCommandExecutionResult = run_dbt_defer_clone_view_chain_prephase(
-            dbt_options=dbt_options,
-            dbt_executable=plan.dbt_command_argv[0],
-            view_chain_terms=defer_clone_view_chain_terms,
-            view_chain_unique_ids=defer_clone_view_chain_unique_ids,
-            caused_by_names=dbt_defer_clone_cause_names,
-            output_stream=output_stream,
-            use_color=use_color,
-            on_progress=on_progress,
-        )
-        if view_chain_execution.returncode != 0:
-            return view_chain_execution.returncode
-    if effective_defer_clone_from or defer_clone_view_chain_terms:
-        output_stream.write("\n")
-        output_stream.flush()
-
-    buffered_dbt_results: list[DbtNodeExecutionResult] = []
-    dbt_state_connection: object | None = None
-    dbt_watermark_context: NodeSourceWatermarkExecutionContext | None = None
-    dbt_query_sql_by_unique_id: dict[str, str] = {
-        unique_id: model.query_sql for unique_id, model in manifest.models_by_unique_id.items()
-    }
-    if (
-        plan.dbt_model_plan is not None
-        and plan.dbt_model_plan.source_freshness is not None
-        and plan.dbt_model_plan.source_freshness.observed_records
-    ):
-        watermark_connect_start: float = time.monotonic()
-        report_progress(on_progress, "Reading dbt node source watermarks...")
-        dbt_watermark_connection: object = adapter.connect(connection_config)
-        try:
-            dbt_watermark_context = build_dbt_node_source_watermark_context(
-                manifest=manifest,
-                graph=graph,
-                source_records=plan.dbt_model_plan.source_freshness.observed_records,
-                adapter=adapter,
-                connection=dbt_watermark_connection,
-                state_database=project.effective_target_database,
-                state_schema=project.effective_target_schema,
-            )
-        finally:
-            adapter.close(dbt_watermark_connection)
-        report_progress(
-            on_progress,
-            f"Read dbt node source watermarks. ({time.monotonic() - watermark_connect_start:.2f}s)",
-        )
-    if project.settings.query_change_tracking and adapter_name != BuiltinAdapter.DUCKDB:
-        state_connect_start: float = time.monotonic()
-        report_progress(on_progress, "Connecting to warehouse for dbt fingerprint writes...")
-        dbt_state_connection = adapter.connect(connection_config)
-        report_progress(
-            on_progress,
-            "Connected for dbt fingerprint writes. "
-            f"({time.monotonic() - state_connect_start:.2f}s)",
-        )
-
-    def record_dbt_node_result(result: DbtNodeExecutionResult) -> None:
-        record_dbt_successful_node_source_watermark(
-            context=dbt_watermark_context,
-            result=result,
-            manifest=manifest,
-            run_id=project.run_id,
-            node_version_hash=dbt_write_identity_hashes.get(dbt_graph_node_key(result.unique_id)),
-        )
-        if not project.settings.query_change_tracking:
-            return
-        version_hash_override: str | None = dbt_write_identity_hashes.get(
-            dbt_graph_node_key(result.unique_id)
-        )
-        if adapter_name == BuiltinAdapter.DUCKDB:
-            buffered_dbt_results.append(result)
-            return
-        if dbt_state_connection is None:
-            return
-        try_write_dbt_node_fingerprint(
-            result=result,
-            adapter=adapter,
-            connection=dbt_state_connection,
-            run_id=project.run_id,
-            fingerprint_database=project.effective_target_database,
-            fingerprint_schema=project.effective_target_schema,
-            target_name=project.effective_target_name,
-            warnings=dbt_fingerprint_warnings,
-            query_sql=dbt_query_sql_by_unique_id.get(result.unique_id),
-            seed_identity_hash=dbt_seed_identity_by_unique_id.get(result.unique_id),
-            version_hash_override=version_hash_override,
-        )
-
-    try:
-        dbt_execution: DbtCommandExecutionResult = execute_dbt_commands(
-            runner=runner,
-            options=dbt_options,
-            merged_argv=merged_dbt_argv,
-            progress_stream=output_stream,
-            stdout_stream=dbt_output_stream,
-            stderr_stream=output_stream,
-            use_color=use_color,
-            skip_message=(
-                "Skipping dbt tests: no dbt tests for the selection."
-                if command == DbtInteropCommand.TEST
-                else "Skipping dbt: no dbt work selected."
-            ),
-            on_node_result=record_dbt_node_result,
-            on_progress=on_progress,
-        )
-    finally:
-        if dbt_state_connection is not None:
-            adapter.close(dbt_state_connection)
-
-    if buffered_dbt_results and project.settings.query_change_tracking:
-        fingerprint_start: float = time.monotonic()
-        report_progress(on_progress, "Recording dbt fingerprints...")
-        duckdb_connection: object = adapter.connect(connection_config)
-        try:
-            dbt_result: DbtNodeExecutionResult
-            for dbt_result in buffered_dbt_results:
-                try_write_dbt_node_fingerprint(
-                    result=dbt_result,
-                    adapter=adapter,
-                    connection=duckdb_connection,
-                    run_id=project.run_id,
-                    fingerprint_database=project.effective_target_database,
-                    fingerprint_schema=project.effective_target_schema,
-                    target_name=project.effective_target_name,
-                    warnings=dbt_fingerprint_warnings,
-                    query_sql=dbt_query_sql_by_unique_id.get(dbt_result.unique_id),
-                    seed_identity_hash=dbt_seed_identity_by_unique_id.get(dbt_result.unique_id),
-                    version_hash_override=dbt_write_identity_hashes.get(
-                        dbt_graph_node_key(dbt_result.unique_id)
-                    ),
-                )
-        finally:
-            adapter.close(duckdb_connection)
-        report_progress(
-            on_progress,
-            f"Recorded dbt fingerprints. ({time.monotonic() - fingerprint_start:.2f}s)",
-        )
-    if dbt_execution.returncode == 0 and dbt_watermark_context is not None:
-        watermark_start: float = time.monotonic()
-        report_progress(on_progress, "Recording dbt node source watermarks...")
-        watermark_connection: object = adapter.connect(connection_config)
-        try:
-            write_dbt_node_source_watermark_records(
-                context=dbt_watermark_context,
-                adapter=adapter,
-                connection=watermark_connection,
-                state_database=project.effective_target_database,
-                state_schema=project.effective_target_schema,
-            )
-        finally:
-            adapter.close(watermark_connection)
-        report_progress(
-            on_progress,
-            f"Recorded dbt node source watermarks. ({time.monotonic() - watermark_start:.2f}s)",
-        )
-    warning: str
-    style: CliStyle = CliStyle(use_color=use_color)
-    for warning in dbt_fingerprint_warnings:
-        output_stream.write(style.warning(f"Warning: {warning}") + "\n")
-    if dbt_fingerprint_warnings:
-        output_stream.flush()
-    dbt_summary_footer: str | None = render_dbt_execution_summary_footer(
-        node_results=dbt_execution.node_results,
-        use_color=use_color,
+    pre_execution: DbtPreExecutionOutputs = resolve_dbt_pre_execution_outputs(
+        request=request,
+        invocation=invocation,
+        compiled=compiled,
+        manifest=manifest,
+        graph=resolution.graph,
+        plan=planned.plan,
+        defer_clone=defer_clone,
+        merged_dbt_argv=merged_dbt_argv,
     )
-    if dbt_summary_footer is not None:
-        output_stream.write("\n" + dbt_summary_footer + "\n")
-        output_stream.flush()
-    dbt_outcome: DbtExecutionOutcome = build_dbt_execution_outcome(
-        plan=plan,
-        graph=graph,
-        node_results=dbt_execution.node_results,
+    write_dbt_execution_plan_text(
+        request=request,
+        invocation=invocation,
+        plan=pre_execution.plan,
+        merged_dbt_argv=merged_dbt_argv,
     )
-    if dbt_execution.returncode != 0 and not dbt_outcome.blocking_unique_ids:
-        return dbt_execution.returncode
-    if plan.sqlbuild_skip_reason is not None:
-        output_stream.write("\n")
-        output_stream.flush()
-        report_progress(on_progress, "No SQLBuild work selected.")
-        exit_code: int = max(
-            dbt_execution.returncode,
-            dbt_blocked_exit_code(plan),
-            missing_dbt_relations_exit_code(missing_dbt_relation_blocked_models),
+    prephase_exit: int | None = run_dbt_defer_clone_prephases(
+        request=request,
+        invocation=invocation,
+        compiled=compiled,
+        manifest=manifest,
+        plan=pre_execution.plan,
+        defer_clone=defer_clone,
+        connection_config=planned.connection_config,
+    )
+    if prephase_exit is not None:
+        return prephase_exit
+    tracked: DbtTrackedExecution = execute_dbt_with_state_tracking(
+        request=request,
+        invocation=invocation,
+        compiled=compiled,
+        manifest=manifest,
+        graph=resolution.graph,
+        plan=pre_execution.plan,
+        identities=identities,
+        merged_dbt_argv=merged_dbt_argv,
+        connection_config=planned.connection_config,
+    )
+    write_dbt_execution_summary(request=request, invocation=invocation, tracked=tracked)
+    outcome: DbtExecutionOutcome = build_dbt_execution_outcome(
+        plan=pre_execution.plan,
+        graph=resolution.graph,
+        node_results=tracked.execution.node_results,
+    )
+    if tracked.execution.returncode != 0 and not outcome.blocking_unique_ids:
+        return tracked.execution.returncode
+    if pre_execution.plan.sqlbuild_skip_reason is not None:
+        write_sqlbuild_skip_notice(
+            request=request,
+            invocation=invocation,
+            skip_reason_message="No SQLBuild work selected.",
+            current_message=None,
         )
-        if exit_code == 0:
-            append_dbt_source_freshness_records(
-                plan=plan,
-                adapter=adapter,
-                connection_config=connection_config,
-                project=project,
-                on_progress=on_progress,
-            )
-        return exit_code
-    output_stream.write("\n")
-    output_stream.flush()
-
-    plan_output: PlanOutput | None = plan.sqlbuild_plan_output
-    if plan_output is None or merged_dbt_argv is not None:
-        missing_dbt_relation_blocked_models = find_and_report_missing_dbt_relation_blocks(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            project=project,
-            manifest=manifest,
-            adapter=adapter,
-            adapter_name=adapter_name,
-            selected_model_names=plan.selection.sqlbuild_model_names,
-            dbt_unique_ids_selected_for_execution=frozenset(
-                (
-                    *plan.dbt_selected_unique_ids,
-                    *plan.selection.dbt_required_unique_ids,
-                    *defer_clone_unique_ids,
-                    *defer_clone_view_chain_unique_ids,
-                )
-            ),
-            output_stream=output_stream,
+        return finalize_dbt_interop_exit(
+            request=request,
+            compiled=compiled,
+            plan=pre_execution.plan,
+            connection_config=planned.connection_config,
+            dbt_returncode=tracked.execution.returncode,
+            missing_relation_blocked_models=pre_execution.missing_relation_blocked_models,
         )
-        execution_plan_connection_progress: Any = build_connection_progress_reporter(
-            adapter_name=adapter_name,
-            stream=output_stream,
-            blank_line_after_complete=True,
-            use_color=use_color,
+    replan: DbtSqlbuildReplanResult = resolve_sqlbuild_execution_plan_output(
+        request=request,
+        invocation=invocation,
+        compiled=compiled,
+        manifest=manifest,
+        graph=resolution.graph,
+        pre_execution=pre_execution,
+        outcome=outcome,
+        defer_clone=defer_clone,
+        merged_dbt_argv=merged_dbt_argv,
+    )
+    if replan.plan_output is None:
+        return finalize_dbt_interop_exit(
+            request=request,
+            compiled=compiled,
+            plan=pre_execution.plan,
+            connection_config=planned.connection_config,
+            dbt_returncode=tracked.execution.returncode,
+            missing_relation_blocked_models=replan.missing_relation_blocked_models,
         )
-        plan_output = build_sqlbuild_plan_output(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
-            project=project,
-            adapter=adapter,
-            adapter_name=adapter_name,
-            selected_model_names=plan.selection.sqlbuild_model_names,
-            required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
-            forced_stale_model_names=dbt_outcome.stale_sqlbuild_model_names,
-            external_blocked_model_names=(
-                *dbt_outcome.blocked_sqlbuild_model_names,
-                *missing_dbt_relation_blocked_models,
-            ),
-            sqlbuild_args=effective_sqlbuild_args,
-            on_progress=None,
-            on_connection_start=execution_plan_connection_progress.on_connection_start,
-            on_connection_complete=execution_plan_connection_progress.on_connection_complete,
-            on_connection_error=execution_plan_connection_progress.on_connection_error,
-            deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
-            dependency_baseline_entries=(),
-            disable_scope_pruning=command == DbtInteropCommand.TEST,
-            manifest=manifest if command == DbtInteropCommand.TEST else None,
-            dbt_manifest=manifest,
-            dbt_graph=graph,
-            dbt_source_freshness=(
-                plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
-            ),
+    if not plan_has_executable_work(replan.plan_output):
+        write_sqlbuild_skip_notice(
+            request=request,
+            invocation=invocation,
+            skip_reason_message=None,
+            current_message="Skipping SQLBuild: selected models are already current.",
         )
-    if plan_output is None:
-        exit_code: int = max(
-            dbt_execution.returncode,
-            dbt_blocked_exit_code(plan),
-            missing_dbt_relations_exit_code(missing_dbt_relation_blocked_models),
+        return finalize_dbt_interop_exit(
+            request=request,
+            compiled=compiled,
+            plan=pre_execution.plan,
+            connection_config=planned.connection_config,
+            dbt_returncode=tracked.execution.returncode,
+            missing_relation_blocked_models=replan.missing_relation_blocked_models,
         )
-        if exit_code == 0:
-            append_dbt_source_freshness_records(
-                plan=plan,
-                adapter=adapter,
-                connection_config=connection_config,
-                project=project,
-                on_progress=on_progress,
-            )
-        return exit_code
-    if not plan_has_executable_work(plan_output):
-        style: CliStyle = CliStyle(use_color=use_color)
-        output_stream.write(
-            style.muted("Skipping SQLBuild: selected models are already current.") + "\n"
-        )
-        output_stream.flush()
-        exit_code = max(
-            dbt_execution.returncode,
-            dbt_blocked_exit_code(plan),
-            missing_dbt_relations_exit_code(missing_dbt_relation_blocked_models),
-        )
-        if exit_code == 0:
-            append_dbt_source_freshness_records(
-                plan=plan,
-                adapter=adapter,
-                connection_config=connection_config,
-                project=project,
-                on_progress=on_progress,
-            )
-        return exit_code
-
-    actions: tuple[DbtInteropSqlbuildTestAction, ...] = ()
-    if command == DbtInteropCommand.TEST:
-        actions = resolve_sqlbuild_test_actions(select=routed.select)
-    sqlbuild_exit_code: int = execute_dbt_sqlbuild_work(
-        command=command,
-        plan_output=plan_output,
-        connection_config=connection_config,
-        adapter=adapter,
-        adapter_name=adapter_name,
-        project=project,
-        project_dir=project_dir,
-        fail_fast=fail_fast,
-        verbose=verbose,
-        actions=actions,
-        output_stream=output_stream,
-        use_color=use_color,
+    sqlbuild_exit_code: int = run_dbt_sqlbuild_work(
+        request=request,
+        invocation=invocation,
+        compiled=compiled,
+        plan_output=replan.plan_output,
+        connection_config=planned.connection_config,
     )
     if sqlbuild_exit_code != 0:
         return sqlbuild_exit_code
-    append_dbt_source_freshness_records(
-        plan=plan,
-        adapter=adapter,
-        connection_config=connection_config,
-        project=project,
-        on_progress=on_progress,
+    return finalize_dbt_interop_exit(
+        request=request,
+        compiled=compiled,
+        plan=pre_execution.plan,
+        connection_config=planned.connection_config,
+        dbt_returncode=tracked.execution.returncode,
+        missing_relation_blocked_models=replan.missing_relation_blocked_models,
+        always_append_freshness=True,
     )
-    return max(
-        dbt_execution.returncode,
-        dbt_blocked_exit_code(plan),
-        missing_dbt_relations_exit_code(missing_dbt_relation_blocked_models),
-    )
-
-
-def _with_effective_force(*, args: tuple[str, ...], force: bool) -> tuple[str, ...]:
-    if not force or "--force" in args:
-        return args
-    return (*args, "--force")
