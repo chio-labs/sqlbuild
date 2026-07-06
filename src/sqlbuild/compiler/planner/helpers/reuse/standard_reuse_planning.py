@@ -25,6 +25,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     RelationReusePlan,
     StandardReuseFromTargetSnapshot,
+    StandardReuseIdentityInputs,
     StandardReusePlanningResult,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
@@ -40,17 +41,20 @@ def build_standard_reuse_planning_result(
     relations: PlannerRelationsContext,
     project_config: ProjectConfig | None,
     local_config: LocalConfig | None,
-    expected_version_hashes: dict[str, str],
-    built_fingerprints: dict[str, Fingerprint],
-    destination_relation_names: frozenset[str] = frozenset(),
-    cursor_snapshots: dict[str, ModelCursorSnapshot],
+    identity_inputs: StandardReuseIdentityInputs,
     full_refresh: bool,
-    custom_prepare_version_materializations: frozenset[str] = frozenset(),
 ) -> StandardReusePlanningResult | None:
     """Build snapshot, freshness, and decisions for standard target reuse."""
 
     if full_refresh:
         return None
+    expected_version_hashes: dict[str, str] = identity_inputs.expected_version_hashes
+    built_fingerprints: dict[str, Fingerprint] = identity_inputs.built_fingerprints
+    destination_relation_names: frozenset[str] = identity_inputs.destination_relation_names
+    cursor_snapshots: dict[str, ModelCursorSnapshot] = identity_inputs.cursor_snapshots
+    custom_prepare_version_materializations: frozenset[str] = (
+        identity_inputs.custom_prepare_version_materializations
+    )
     snapshot: StandardReuseFromTargetSnapshot | None = build_standard_reuse_from_target_snapshot(
         project=project,
         adapter=adapter,

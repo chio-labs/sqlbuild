@@ -43,6 +43,7 @@ from sqlbuild.compiler.planner.main.planning.warehouse_snapshot import (
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
+    ModelChangesPlanInputs,
     ModelPlanEntry,
     PlannerScope,
     PlannerWarehouseSnapshotResult,
@@ -655,15 +656,17 @@ def _plan_virtual_build(
                     bound_physical_relations=reads.bound_physical_relations,
                     full_refresh=options.full_refresh,
                 ),
-                cursor_overrides=options.cursor_overrides,
-                full_refresh=options.full_refresh,
-                reload_sources=options.reload_sources,
-                project_config=runtime.discovered_inputs.project_config,
-                local_config=runtime.discovered_inputs.local_config,
-                defer_sources_to=options.defer_sources_to,
-                seed_version_hashes=reads.semantics.expected_seed_version_hashes,
-                seed_metadata_jsons=reads.semantics.seed_identity_metadata_jsons,
-                seed_plan_reasons=reads.semantics.seed_plan_reasons,
+                inputs=ModelChangesPlanInputs(
+                    cursor_overrides=options.cursor_overrides,
+                    full_refresh=options.full_refresh,
+                    reload_sources=options.reload_sources,
+                    project_config=runtime.discovered_inputs.project_config,
+                    local_config=runtime.discovered_inputs.local_config,
+                    defer_sources_to=options.defer_sources_to,
+                    seed_version_hashes=reads.semantics.expected_seed_version_hashes,
+                    seed_metadata_jsons=reads.semantics.seed_identity_metadata_jsons,
+                    seed_plan_reasons=reads.semantics.seed_plan_reasons,
+                ),
             )
         finally:
             adapter.close(planning_connection)

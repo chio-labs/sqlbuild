@@ -40,6 +40,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerRelationsContext,
     PlannerScope,
     PlanOutput,
+    PlanOutputExtras,
     PlanProviderUsage,
     PlanWarning,
     SeedPlanEntry,
@@ -62,12 +63,18 @@ def build_plan_output(
     changes: PlannerChangeResults,
     model_entry_results: PlannerModelEntryResults,
     reload_sources: bool,
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
-    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = (),
-    seed_version_hashes: dict[str, str] | None = None,
-    seed_metadata_jsons: dict[str, str] | None = None,
-    seed_plan_reasons: dict[str, PlanReason] | None = None,
+    extras: PlanOutputExtras | None = None,
 ) -> PlanOutput:
+    resolved_extras: PlanOutputExtras = extras if extras is not None else PlanOutputExtras()
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
+        resolved_extras.dependency_baseline_entries
+    )
+    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = (
+        resolved_extras.existing_destination_input_entries
+    )
+    seed_version_hashes: dict[str, str] | None = resolved_extras.seed_version_hashes
+    seed_metadata_jsons: dict[str, str] | None = resolved_extras.seed_metadata_jsons
+    seed_plan_reasons: dict[str, PlanReason] | None = resolved_extras.seed_plan_reasons
     seed_entries: list[SeedPlanEntry] = [
         SeedPlanEntry(
             key=seed.key,

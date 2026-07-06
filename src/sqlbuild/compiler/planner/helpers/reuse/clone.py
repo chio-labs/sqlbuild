@@ -29,6 +29,8 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
+    CursorOverridePair,
+    ModelPlanContext,
     ModelPlanEntry,
     PlanOutput,
     SeedPlanEntry,
@@ -120,16 +122,18 @@ def build_clone_model_entries(
                 adapter=adapter,
                 model=model,
                 snapshot=WarehouseSnapshot(),
-                model_locations=model_locations,
-                seed_locations=seed_locations,
-                function_locations=function_locations,
-                source_map=source_map,
-                source_warehouse_columns=source_warehouse_columns,
-                star_exclude_keyword=adapter.star_exclude_keyword(),
+                context=ModelPlanContext(
+                    model_locations=model_locations,
+                    models_by_name={},
+                    seed_locations=seed_locations,
+                    function_locations=function_locations,
+                    source_map=source_map,
+                    source_warehouse_columns=source_warehouse_columns,
+                    star_exclude_keyword=adapter.star_exclude_keyword(),
+                ),
                 backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
                 full_refresh=False,
-                start_cursor_override=None,
-                end_cursor_override=None,
+                cursor_overrides=CursorOverridePair(),
             )
         entries_by_key[model.key] = ModelPlanEntry(
             key=model.key,
