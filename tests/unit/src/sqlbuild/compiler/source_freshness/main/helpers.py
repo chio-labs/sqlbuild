@@ -18,6 +18,7 @@ from sqlbuild.compiler.source_freshness.main.write import write_source_freshness
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
+    SourceFreshnessRenderers,
 )
 from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
@@ -136,9 +137,11 @@ def write_optional_previous_record(
         database=None,
         schema="state_schema",
         records=(previous_record,),
-        render_qualified_name=render_qualified_name,
-        render_framework_type=render_framework_type,
-        render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=render_qualified_name,
+            render_framework_type=render_framework_type,
+            render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+        ),
     )
 
 
@@ -177,9 +180,11 @@ def write_previous_record_to_schema(
                 observed_at=observed_at,
             ),
         ),
-        render_qualified_name=render_qualified_name,
-        render_framework_type=render_framework_type,
-        render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=render_qualified_name,
+            render_framework_type=render_framework_type,
+            render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+        ),
     )
 
 

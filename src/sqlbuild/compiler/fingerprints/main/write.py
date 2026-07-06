@@ -51,18 +51,7 @@ def write_fingerprint(
     insert_sql: str = build_insert_sql(
         database=database,
         schema=schema,
-        node_type=fingerprint.node_type,
-        node_name=fingerprint.node_name,
-        target_database=fingerprint.target_database,
-        target_schema=fingerprint.target_schema,
-        target_name=fingerprint.target_name,
-        run_id=fingerprint.run_id,
-        definition_hash=fingerprint.definition_hash,
-        version_hash=fingerprint.version_hash,
-        schema_fingerprint=fingerprint.schema_fingerprint,
-        definition=fingerprint.definition,
-        metadata_json=fingerprint.metadata_json,
-        ts=fingerprint.ts.isoformat(),
+        fingerprint=fingerprint,
         render_qualified_name=render_qualified_name,
     )
     attempt: int

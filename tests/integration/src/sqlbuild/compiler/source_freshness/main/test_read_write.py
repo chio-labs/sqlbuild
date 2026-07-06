@@ -14,6 +14,7 @@ from sqlbuild.compiler.source_freshness.main.write import write_source_freshness
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
+    SourceFreshnessRenderers,
     SourceFreshnessSet,
 )
 from tests.integration.src.sqlbuild.compiler.source_freshness.main._test_types import (
@@ -96,9 +97,11 @@ def test_given_source_freshness_records_when_writing_and_reading_then_returns_ex
         database=test_case.database,
         schema=test_case.schema,
         records=test_case.records,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
-        render_framework_type=RENDER_FRAMEWORK_TYPE,
-        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        ),
     )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
@@ -198,9 +201,11 @@ def test_given_no_table_when_writing_source_freshness_then_creates_table(
         database=test_case.database,
         schema=test_case.schema,
         records=test_case.records,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
-        render_framework_type=RENDER_FRAMEWORK_TYPE,
-        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        ),
     )
 
     row: Any = connection.execute(
@@ -305,9 +310,11 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
         database=test_case.database,
         schema=test_case.schema,
         records=test_case.records,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
-        render_framework_type=RENDER_FRAMEWORK_TYPE,
-        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        ),
     )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
@@ -440,9 +447,11 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
         database=test_case.database,
         schema=test_case.schema,
         records=test_case.records,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
-        render_framework_type=RENDER_FRAMEWORK_TYPE,
-        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        ),
     )
 
     execute(
@@ -603,9 +612,11 @@ def test_given_same_source_name_with_different_targets_when_reading_then_keeps_i
         database=test_case.database,
         schema=test_case.schema,
         records=test_case.records,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
-        render_framework_type=RENDER_FRAMEWORK_TYPE,
-        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        ),
     )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
@@ -689,9 +700,11 @@ def test_given_source_freshness_edge_values_when_writing_and_reading_then_round_
         database=test_case.database,
         schema=test_case.schema,
         records=test_case.records,
-        render_qualified_name=RENDER_QUALIFIED_NAME,
-        render_framework_type=RENDER_FRAMEWORK_TYPE,
-        render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=RENDER_QUALIFIED_NAME,
+            render_framework_type=RENDER_FRAMEWORK_TYPE,
+            render_insert_records_sql=RENDER_INSERT_RECORDS_SQL,
+        ),
     )
 
     result: SourceFreshnessSet = read_latest_source_freshness(
