@@ -28,13 +28,13 @@ from sqlbuild.compiler.pipeline.main.prepare_versions import (
     load_custom_prepare_version_functions,
 )
 from sqlbuild.compiler.pipeline.models import (
+    CompilePipelineOptions,
     CompilePipelineResult,
     ProjectGraph,
     PythonRunPlanOutputs,
 )
 from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
-    CursorOverrides,
     DeferralInputs,
     PlannerOverrides,
     PlannerPolicies,
@@ -54,7 +54,7 @@ from sqlbuild.compiler.shared.helpers.selector_indexes import (
     build_model_path_index,
     build_model_tag_index,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import TargetConfig
 
 
@@ -62,36 +62,23 @@ def run_compile_pipeline(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
-    selected_target: str | None = None,
-    no_sql_validation: bool = False,
-    defer_to: str | None = None,
-    defer_sources_to: str | None = None,
-    source_deferral_enabled: bool = True,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    cursor_overrides: CursorOverrides | None = None,
-    full_refresh: bool = False,
-    changes_only: bool = False,
-    auto_load_sources: bool = False,
-    reload_sources: bool = False,
-    connection_config: dict[str, object] | None = None,
-    cli_vars: dict[str, object] | None = None,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
-    on_progress: Callable[[str], None] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    resolve_python_run_selectors: bool = False,
+    options: CompilePipelineOptions | None = None,
+    hooks: ConnectionHooks | None = None,
 ) -> CompilePipelineResult:
     """Run compile inputs, assembly, planning, and manifest generation."""
 
+    resolved_options: CompilePipelineOptions = (
+        options if options is not None else CompilePipelineOptions()
+    )
+    resolved_hooks: ConnectionHooks = hooks if hooks is not None else ConnectionHooks()
+    on_progress: Callable[[str], None] | None = resolved_hooks.on_progress
     effective_config: dict[str, object] = (
-        connection_config
-        if connection_config is not None
+        resolved_options.connection_config
+        if resolved_options.connection_config is not None
         else build_effective_connection_config(
             discovered_inputs=discovered_inputs,
-            selected_target=selected_target,
-            cli_vars=cli_vars,
+            selected_target=resolved_options.selected_target,
+            cli_vars=resolved_options.cli_vars,
         )
     )
     if on_progress is not None:
@@ -100,46 +87,33 @@ def run_compile_pipeline(
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        selected_target=selected_target,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=external_sql_reference_resolver,
+        selected_target=resolved_options.selected_target,
+        no_sql_validation=resolved_options.no_sql_validation,
+        cli_vars=resolved_options.cli_vars,
+        external_sql_reference_resolver=resolved_options.external_sql_reference_resolver,
         resolved_connection=effective_config,
     )
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
-    if on_connection_start is not None:
-        on_connection_start(1)
+    if resolved_hooks.on_connection_start is not None:
+        resolved_hooks.on_connection_start(1)
     start: float = time.monotonic()
     try:
         connection: Any = adapter.connect(effective_config)
     except Exception:
-        if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - start)
+        if resolved_hooks.on_connection_error is not None:
+            resolved_hooks.on_connection_error(1, time.monotonic() - start)
         raise
-    if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - start)
+    if resolved_hooks.on_connection_complete is not None:
+        resolved_hooks.on_connection_complete(1, time.monotonic() - start)
     try:
-        work_selection_policy: WorkSelectionPolicy = (
-            WorkSelectionPolicy.STALE_ONLY if changes_only else WorkSelectionPolicy.ALL_SELECTED
-        )
         return _build_result(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             connection=connection,
             project=project,
-            defer_to=defer_to,
-            defer_sources_to=defer_sources_to,
-            source_deferral_enabled=source_deferral_enabled,
-            select=select,
-            exclude=exclude,
-            cursor_overrides=cursor_overrides,
-            full_refresh=full_refresh,
-            work_selection_policy=work_selection_policy,
-            auto_load_sources=auto_load_sources,
-            reload_sources=reload_sources,
+            options=resolved_options,
             on_progress=on_progress,
-            resolve_python_run_selectors=resolve_python_run_selectors,
         )
     finally:
         adapter.close(connection)
@@ -151,25 +125,20 @@ def _build_result(
     adapter: BaseAdapter,
     connection: Any,
     project: CompiledProject,
-    defer_to: str | None = None,
-    defer_sources_to: str | None = None,
-    source_deferral_enabled: bool = True,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    cursor_overrides: CursorOverrides | None = None,
-    full_refresh: bool = False,
-    work_selection_policy: WorkSelectionPolicy = WorkSelectionPolicy.ALL_SELECTED,
-    auto_load_sources: bool = False,
-    reload_sources: bool = False,
+    options: CompilePipelineOptions,
     on_progress: Callable[[str], None] | None = None,
-    resolve_python_run_selectors: bool = False,
 ) -> CompilePipelineResult:
+    work_selection_policy: WorkSelectionPolicy = (
+        WorkSelectionPolicy.STALE_ONLY if options.changes_only else WorkSelectionPolicy.ALL_SELECTED
+    )
+    select: tuple[str, ...] = options.select
+    exclude: tuple[str, ...] = options.exclude
     deferred_locations: dict[str, CompiledRelationLocation] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
-    if defer_to is not None:
+    if options.defer_to is not None:
         deferred_target_config: TargetConfig = resolve_deferred_target_config(
             discovered_inputs=discovered_inputs,
-            defer_to=defer_to,
+            defer_to=options.defer_to,
             current_target_name=project.effective_target_name,
         )
         deferred_locations = build_deferred_locations(
@@ -189,7 +158,7 @@ def _build_result(
     selected_sql_keys: frozenset[CompiledObjectKey] | None = None
     selected_python_node_names: frozenset[str] = frozenset()
     run_selection: PythonSqlRunSelection | None = None
-    if resolve_python_run_selectors:
+    if options.resolve_python_run_selectors:
         run_selection = resolve_python_sql_run_selection_from_inputs(
             select=select,
             exclude=exclude,
@@ -213,15 +182,15 @@ def _build_result(
             selected_keys=selected_sql_keys,
         ),
         overrides=PlannerOverrides(
-            cursor_overrides=cursor_overrides,
-            full_refresh=full_refresh,
-            reload_sources=reload_sources,
+            cursor_overrides=options.cursor_overrides,
+            full_refresh=options.full_refresh,
+            reload_sources=options.reload_sources,
         ),
         deferral=DeferralInputs(
             deferred_locations=deferred_locations,
             deferred_relations=deferred_relations,
-            defer_sources_to=defer_sources_to,
-            source_deferral_enabled=source_deferral_enabled,
+            defer_sources_to=options.defer_sources_to,
+            source_deferral_enabled=options.source_deferral_enabled,
         ),
         policies=PlannerPolicies(
             standard_scope_pruning=(
@@ -229,7 +198,7 @@ def _build_result(
                 if work_selection_policy == WorkSelectionPolicy.STALE_ONLY
                 else StandardScopePruning.NONE
             ),
-            auto_load_sources=auto_load_sources,
+            auto_load_sources=options.auto_load_sources,
             custom_prepare_version_materializations=frozenset(
                 custom_prepare_version_functions.keys()
             ),

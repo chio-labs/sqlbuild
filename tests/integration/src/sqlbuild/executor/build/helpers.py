@@ -10,7 +10,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.models import (
@@ -40,7 +40,7 @@ def run_build_for_project(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
         adapter=adapter,
-        no_sql_validation=True,
+        options=CompilePipelineOptions(no_sql_validation=True),
     )
     plan: PlanOutput = pipeline_result.plan_output
 

@@ -12,7 +12,11 @@ from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
 )
 from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import (
+    CompilePipelineOptions,
+    CompilePipelineResult,
+)
+from sqlbuild.shared.models import ConnectionHooks
 
 
 def prepare_seed_execution(
@@ -30,17 +34,21 @@ def prepare_seed_execution(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=invocation.discovered_inputs,
         adapter=invocation.adapter,
-        selected_target=request.selected_target,
-        select=request.select,
-        exclude=request.exclude,
-        connection_config=invocation.connection_config,
-        cli_vars=request.cli_vars,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=invocation.effective_project_dir,
-            discovered_inputs=invocation.discovered_inputs,
+        options=CompilePipelineOptions(
+            selected_target=request.selected_target,
+            select=request.select,
+            exclude=request.exclude,
+            connection_config=invocation.connection_config,
+            cli_vars=request.cli_vars,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=invocation.effective_project_dir,
+                discovered_inputs=invocation.discovered_inputs,
+            ),
+        ),
+        hooks=ConnectionHooks(
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
         ),
     )
     effective_concurrency: int = max(

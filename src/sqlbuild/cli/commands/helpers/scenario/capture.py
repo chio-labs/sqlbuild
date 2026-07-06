@@ -37,10 +37,14 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import (
+    CompilePipelineOptions,
+    CompilePipelineResult,
+)
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
 from sqlbuild.shared.constants import SCENARIO_CLI_SQL_VALIDATION_REQUIRED
 from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,
@@ -111,15 +115,19 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        no_sql_validation=no_sql_validation,
-        connection_config=connection_config,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=planning_progress.on_progress,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=effective_project_dir,
-            discovered_inputs=discovered_inputs,
+        options=CompilePipelineOptions(
+            no_sql_validation=no_sql_validation,
+            connection_config=connection_config,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
+        ),
+        hooks=ConnectionHooks(
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
         ),
     )
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
