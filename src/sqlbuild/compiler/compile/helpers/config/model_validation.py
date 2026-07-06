@@ -112,46 +112,15 @@ def validate_incremental_config(
             f"valid values: {', '.join(sorted(_VALID_STRATEGIES))}"
         )
 
-    if cursor is not None and cursor_type is None:
-        raise CompileInputError(
-            f"model '{model_name}': cursor requires cursor_type "
-            f"(valid values: {', '.join(sorted(_VALID_CURSOR_TYPES))})"
-        )
-    if cursor_type is not None and cursor_type not in _VALID_CURSOR_TYPES:
-        raise CompileInputError(
-            f"model '{model_name}': unknown cursor_type '{cursor_type}'; "
-            f"valid values: {', '.join(sorted(_VALID_CURSOR_TYPES))}"
-        )
-    if cursor_grain is not None and cursor_type != CursorType.TIMESTAMP:
-        raise CompileInputError(
-            f"model '{model_name}': cursor_grain is only valid with cursor_type=timestamp"
-        )
-    if cursor_grain is not None and cursor_grain not in _VALID_CURSOR_GRAINS:
-        raise CompileInputError(
-            f"model '{model_name}': unknown cursor_grain '{cursor_grain}'; "
-            f"valid values: {', '.join(sorted(_VALID_CURSOR_GRAINS))}"
-        )
-    if cursor is not None and cursor_type == CursorType.TIMESTAMP and cursor_grain is None:
-        raise CompileInputError(
-            f"model '{model_name}': cursor_type=timestamp requires cursor_grain "
-            f"(valid values: {', '.join(sorted(_VALID_CURSOR_GRAINS))})"
-        )
-    if cursor_start is not None and cursor is None:
-        raise CompileInputError(f"model '{model_name}': cursor_start requires cursor")
-    if cursor_start is not None and cursor_type is None:
-        raise CompileInputError(f"model '{model_name}': cursor_start requires cursor_type")
-    if cursor_start is not None and cursor_type == CursorType.TIMESTAMP:
-        _validate_timestamp_cursor_start(cursor_start=cursor_start, model_name=model_name)
-    if cursor_start is not None and cursor_type == CursorType.INTEGER:
-        _validate_integer_cursor_start(cursor_start=cursor_start, model_name=model_name)
-    if append_cursor_inclusive is not None and not isinstance(append_cursor_inclusive, bool):
-        raise CompileInputError(f"model '{model_name}': append_cursor_inclusive must be a boolean")
-    if append_cursor_inclusive is not None and strategy != IncrementalStrategy.APPEND:
-        raise CompileInputError(
-            f"model '{model_name}': append_cursor_inclusive is only valid with append strategy"
-        )
-    if append_cursor_inclusive is not None and cursor is None:
-        raise CompileInputError(f"model '{model_name}': append_cursor_inclusive requires cursor")
+    _validate_incremental_cursor_rules(
+        model_name=model_name,
+        cursor=cursor,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+        cursor_start=cursor_start,
+        append_cursor_inclusive=append_cursor_inclusive,
+        strategy=strategy,
+    )
 
     if cursor_inputs is not None and cursor is None:
         raise CompileInputError(f"model '{model_name}': cursor_inputs requires cursor")
@@ -212,6 +181,58 @@ def validate_incremental_config(
             f"model '{model_name}': batch_concurrency is not supported; "
             f"microbatch processes batches serially"
         )
+
+
+def _validate_incremental_cursor_rules(
+    *,
+    model_name: str,
+    cursor: str | None,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+    cursor_start: object | None,
+    append_cursor_inclusive: object | None,
+    strategy: str | None,
+) -> None:
+    if cursor is not None and cursor_type is None:
+        raise CompileInputError(
+            f"model '{model_name}': cursor requires cursor_type "
+            f"(valid values: {', '.join(sorted(_VALID_CURSOR_TYPES))})"
+        )
+    if cursor_type is not None and cursor_type not in _VALID_CURSOR_TYPES:
+        raise CompileInputError(
+            f"model '{model_name}': unknown cursor_type '{cursor_type}'; "
+            f"valid values: {', '.join(sorted(_VALID_CURSOR_TYPES))}"
+        )
+    if cursor_grain is not None and cursor_type != CursorType.TIMESTAMP:
+        raise CompileInputError(
+            f"model '{model_name}': cursor_grain is only valid with cursor_type=timestamp"
+        )
+    if cursor_grain is not None and cursor_grain not in _VALID_CURSOR_GRAINS:
+        raise CompileInputError(
+            f"model '{model_name}': unknown cursor_grain '{cursor_grain}'; "
+            f"valid values: {', '.join(sorted(_VALID_CURSOR_GRAINS))}"
+        )
+    if cursor is not None and cursor_type == CursorType.TIMESTAMP and cursor_grain is None:
+        raise CompileInputError(
+            f"model '{model_name}': cursor_type=timestamp requires cursor_grain "
+            f"(valid values: {', '.join(sorted(_VALID_CURSOR_GRAINS))})"
+        )
+    if cursor_start is not None and cursor is None:
+        raise CompileInputError(f"model '{model_name}': cursor_start requires cursor")
+    if cursor_start is not None and cursor_type is None:
+        raise CompileInputError(f"model '{model_name}': cursor_start requires cursor_type")
+    if cursor_start is not None and cursor_type == CursorType.TIMESTAMP:
+        _validate_timestamp_cursor_start(cursor_start=cursor_start, model_name=model_name)
+    if cursor_start is not None and cursor_type == CursorType.INTEGER:
+        _validate_integer_cursor_start(cursor_start=cursor_start, model_name=model_name)
+    if append_cursor_inclusive is not None and not isinstance(append_cursor_inclusive, bool):
+        raise CompileInputError(f"model '{model_name}': append_cursor_inclusive must be a boolean")
+    if append_cursor_inclusive is not None and strategy != IncrementalStrategy.APPEND:
+        raise CompileInputError(
+            f"model '{model_name}': append_cursor_inclusive is only valid with append strategy"
+        )
+    if append_cursor_inclusive is not None and cursor is None:
+        raise CompileInputError(f"model '{model_name}': append_cursor_inclusive requires cursor")
 
 
 def validate_contract_config(
