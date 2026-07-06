@@ -44,7 +44,10 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import (
+    CompilePipelineOptions,
+    CompilePipelineResult,
+)
 from sqlbuild.executor.pipeline.main.run import (
     run_scenario_capture_pipeline,
     select_scenario_snapshot_capture_candidates,
@@ -163,16 +166,20 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        no_sql_validation=True if local else no_sql_validation,
-        source_deferral_enabled=False,
-        connection_config=connection_config,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=planning_progress.on_progress,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=effective_project_dir,
-            discovered_inputs=discovered_inputs,
+        options=CompilePipelineOptions(
+            no_sql_validation=True if local else no_sql_validation,
+            source_deferral_enabled=False,
+            connection_config=connection_config,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
+        ),
+        hooks=ConnectionHooks(
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
         ),
     )
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
@@ -335,16 +342,20 @@ def _sync_local_snapshots(
     project_pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=project_adapter,
-        no_sql_validation=no_sql_validation,
-        source_deferral_enabled=False,
-        connection_config=project_connection_config,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=planning_progress.on_progress,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=project_dir,
-            discovered_inputs=discovered_inputs,
+        options=CompilePipelineOptions(
+            no_sql_validation=no_sql_validation,
+            source_deferral_enabled=False,
+            connection_config=project_connection_config,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
+        ),
+        hooks=ConnectionHooks(
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
         ),
     )
     capture_scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(

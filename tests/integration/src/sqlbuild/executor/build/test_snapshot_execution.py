@@ -12,7 +12,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
@@ -3104,7 +3104,7 @@ def test_given_snapshot_initial_validity_config_when_planning_then_plan_entry_pr
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
         adapter=adapter,
-        no_sql_validation=True,
+        options=CompilePipelineOptions(no_sql_validation=True),
     )
     plan: PlanOutput = pipeline_result.plan_output
     entry: ModelPlanEntry = plan.model_entries[0]

@@ -11,7 +11,8 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
+from sqlbuild.shared.models import ConnectionHooks
 
 _SCHEMA_FIXTURE_PATH: Path = (
     Path(__file__).resolve().parents[5] / "fixtures" / "dbt_manifest_v12_schema.json"
@@ -34,12 +35,14 @@ def run_compile_pipeline_for_project(
     return run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        no_sql_validation=True,
-        defer_to=defer_to,
-        select=select,
-        exclude=exclude,
-        on_progress=on_progress,
-        resolve_python_run_selectors=resolve_python_run_selectors,
+        options=CompilePipelineOptions(
+            no_sql_validation=True,
+            defer_to=defer_to,
+            select=select,
+            exclude=exclude,
+            resolve_python_run_selectors=resolve_python_run_selectors,
+        ),
+        hooks=ConnectionHooks(on_progress=on_progress),
     )
 
 
