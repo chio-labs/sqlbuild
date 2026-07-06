@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.build.models import (
     BuildCommandRequest,
     BuildInvocation,
+    DeferClonePrephaseInputs,
     DeferClonePrephaseOutcome,
+    DeferClonePrephaseOutputContext,
 )
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.shared.helpers.connection.core import (
@@ -138,19 +140,23 @@ def run_defer_clone_boundary_prephase(
         auto_load_sources=invocation.should_load_sources,
     )
     run_defer_clone_prephase(
-        discovered_inputs=invocation.discovered_inputs,
-        adapter=invocation.adapter,
-        origin_target_name=origin_target_name,
-        destination_target_name=cloned_project.effective_target_name,
-        no_sql_validation=request.no_sql_validation,
-        select=(*boundary_selectors, *view_chain_selectors),
-        caused_by_names=request.select,
-        cli_vars=request.cli_vars,
-        connection_config=invocation.connection_config,
-        project_dir=invocation.effective_project_dir,
-        on_progress=invocation.planning_progress.on_progress,
-        progress_stream=invocation.progress_stream,
-        use_color=invocation.use_color,
+        inputs=DeferClonePrephaseInputs(
+            discovered_inputs=invocation.discovered_inputs,
+            adapter=invocation.adapter,
+            origin_target_name=origin_target_name,
+            destination_target_name=cloned_project.effective_target_name,
+            no_sql_validation=request.no_sql_validation,
+            select=(*boundary_selectors, *view_chain_selectors),
+            caused_by_names=request.select,
+            cli_vars=request.cli_vars,
+            connection_config=invocation.connection_config,
+            project_dir=invocation.effective_project_dir,
+        ),
+        output_context=DeferClonePrephaseOutputContext(
+            on_progress=invocation.planning_progress.on_progress,
+            progress_stream=invocation.progress_stream,
+            use_color=invocation.use_color,
+        ),
     )
     return DeferClonePrephaseOutcome(
         destination_target_name=cloned_project.effective_target_name,
@@ -161,23 +167,22 @@ def run_defer_clone_boundary_prephase(
 
 def run_defer_clone_prephase(
     *,
-    discovered_inputs: DiscoveredProjectInputs,
-    adapter: BaseAdapter,
-    origin_target_name: str,
-    destination_target_name: str | None,
-    no_sql_validation: bool,
-    select: tuple[str, ...],
-    caused_by_names: tuple[str, ...],
-    cli_vars: dict[str, object] | None,
-    connection_config: dict[str, object],
-    project_dir: Path,
-    on_progress: Any,
-    progress_stream: TextIO | None = None,
-    use_color: bool = False,
+    inputs: DeferClonePrephaseInputs,
+    output_context: DeferClonePrephaseOutputContext | None = None,
 ) -> None:
     """Clone selected boundary relations from origin before build planning."""
 
-    if not select:
+    context: DeferClonePrephaseOutputContext = (
+        output_context if output_context is not None else DeferClonePrephaseOutputContext()
+    )
+    discovered_inputs: DiscoveredProjectInputs = inputs.discovered_inputs
+    adapter: BaseAdapter = inputs.adapter
+    origin_target_name: str = inputs.origin_target_name
+    destination_target_name: str | None = inputs.destination_target_name
+    cli_vars: dict[str, object] | None = inputs.cli_vars
+    project_dir: Path = inputs.project_dir
+    on_progress: Any = context.on_progress
+    if not inputs.select:
         return
     if destination_target_name is None:
         raise CliUserError("--defer-clone-from requires an active target", code="C409")
@@ -197,15 +202,15 @@ def run_defer_clone_prephase(
             cli_vars=cli_vars,
         )
     )
-    destination_connection: Any = adapter.connect(connection_config)
+    destination_connection: Any = adapter.connect(inputs.connection_config)
     try:
         clone_pipeline: ClonePipelineResult = run_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             origin_target_name=origin_target_name,
             destination_target_name=destination_target_name,
-            no_sql_validation=no_sql_validation,
-            select=select,
+            no_sql_validation=inputs.no_sql_validation,
+            select=inputs.select,
             exclude=(),
             cli_vars=cli_vars,
             destination_connection=destination_connection,
@@ -232,12 +237,12 @@ def run_defer_clone_prephase(
 
         result: CloneExecutionResult = (
             run_clone(None)
-            if progress_stream is None
+            if context.progress_stream is None
             else run_prephase_clone_stream(
-                stream=progress_stream,
+                stream=context.progress_stream,
                 title="defer clone",
-                caused_by_names=caused_by_names,
-                use_color=use_color,
+                caused_by_names=inputs.caused_by_names,
+                use_color=context.use_color,
                 run_clone=run_clone,
             )
         )

@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import sys
-from datetime import UTC, datetime
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.cli.commands.helpers.scenario.capture_run import build_scenario_capture_settings
 from sqlbuild.cli.commands.helpers.scenario.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
 from sqlbuild.cli.commands.helpers.scenario.local_run import run_local_scenarios
+from sqlbuild.cli.commands.helpers.scenario.models import (
+    LocalSnapshotSyncInputs,
+    ScenarioRunOutputContext,
+    ScenarioSnapshotLimitInputs,
+    ScenarioTestCommandRequest,
+)
 from sqlbuild.cli.commands.helpers.scenario.result_output import render_result_error
 from sqlbuild.cli.commands.helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.commands.helpers.scenario.snapshot_limits import (
@@ -45,7 +50,6 @@ from sqlbuild.executor.pipeline.main.run import (
     select_scenario_snapshot_capture_candidates,
 )
 from sqlbuild.executor.scenario.models import (
-    ScenarioCaptureSettings,
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureRunResult,
@@ -72,27 +76,22 @@ _CAPTURE_RELATION_KIND_WIDTH: int = 8
 _CAPTURE_RELATION_NAME_WIDTH: int = _SCENARIO_NAME_WIDTH - 4 - _CAPTURE_RELATION_KIND_WIDTH - 1
 
 
-def run_scenario(
-    project_dir: Path | None,
-    no_sql_validation: bool = False,
-    no_color: bool = False,
-    selectors: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    retain: bool = False,
-    local: bool = False,
-    strict: bool = False,
-    sync_snapshots: bool = False,
-    refresh: bool = False,
-    force: bool = False,
-    max_snapshot_rows: int | None = None,
-    max_snapshot_total_rows: int | None = None,
-    max_snapshot_bytes: int | None = None,
-    max_snapshot_total_bytes: int | None = None,
-    json_output: bool = False,
-    json_output_path: Path | None = None,
-) -> int:
+def run_scenario(request: ScenarioTestCommandRequest) -> int:
     """Execute the scenario test command."""
 
+    project_dir: Path | None = request.project_dir
+    no_sql_validation: bool = request.no_sql_validation
+    no_color: bool = request.no_color
+    selectors: tuple[str, ...] = request.selectors
+    exclude: tuple[str, ...] = request.exclude
+    retain: bool = request.retain
+    local: bool = request.local
+    strict: bool = request.strict
+    sync_snapshots: bool = request.sync_snapshots
+    refresh: bool = request.refresh
+    limit_inputs: ScenarioSnapshotLimitInputs = request.limit_inputs
+    json_output: bool = request.json_output
+    json_output_path: Path | None = request.json_output_path
     if local and retain:
         raise CliUserError(
             "scenario test --local does not support --retain",
@@ -185,28 +184,30 @@ def run_scenario(
     if local and (sync_snapshots or refresh):
         capture_results: list[ScenarioSnapshotCaptureRunResult] = []
         capture_exit_code: int = _sync_local_snapshots(
-            project_dir=effective_project_dir,
-            discovered_inputs=discovered_inputs,
-            local_pipeline_result=pipeline_result,
-            local_scenarios=scenarios,
-            local_adapter=adapter,
-            project_adapter=project_adapter,
-            project_adapter_name=project_adapter_name,
-            capture_dialect=local_capture_dialect,
-            project_connection_config=resolve_project_connection_config(
-                discovered_inputs=discovered_inputs,
+            inputs=LocalSnapshotSyncInputs(
                 project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+                local_pipeline_result=pipeline_result,
+                local_scenarios=scenarios,
+                local_adapter=adapter,
+                project_adapter=project_adapter,
+                project_adapter_name=project_adapter_name,
+                capture_dialect=local_capture_dialect,
+                project_connection_config=resolve_project_connection_config(
+                    discovered_inputs=discovered_inputs,
+                    project_dir=effective_project_dir,
+                ),
+                project_name=discovered_inputs.project_config.name,
+                no_sql_validation=no_sql_validation,
+                refresh=refresh,
             ),
-            project_name=discovered_inputs.project_config.name,
-            no_sql_validation=no_sql_validation,
-            refresh=refresh,
-            force=force,
-            max_snapshot_rows=max_snapshot_rows,
-            max_snapshot_total_rows=max_snapshot_total_rows,
-            max_snapshot_bytes=max_snapshot_bytes,
-            max_snapshot_total_bytes=max_snapshot_total_bytes,
-            progress_stream=progress_stream,
-            use_color=use_color,
+            limit_inputs=limit_inputs,
+            output_context=ScenarioRunOutputContext(
+                progress_stream=progress_stream,
+                use_color=use_color,
+                json_output=json_output,
+                json_output_path=json_output_path,
+            ),
             capture_results_out=capture_results,
         )
         if capture_exit_code != 0:
@@ -229,10 +230,12 @@ def run_scenario(
             project_name=discovered_inputs.project_config.name,
             target_dir=effective_project_dir / "target",
             retain=retain,
-            progress_stream=progress_stream,
-            use_color=use_color,
-            json_output=json_output,
-            json_output_path=json_output_path,
+            output_context=ScenarioRunOutputContext(
+                progress_stream=progress_stream,
+                use_color=use_color,
+                json_output=json_output,
+                json_output_path=json_output_path,
+            ),
         )
     return run_local_scenarios(
         project_dir=effective_project_dir,
@@ -244,10 +247,12 @@ def run_scenario(
         capture_adapter=project_adapter_name,
         capture_dialect=local_capture_dialect,
         target_dir=effective_project_dir / "target",
-        progress_stream=progress_stream,
-        use_color=use_color,
-        json_output=json_output,
-        json_output_path=json_output_path,
+        output_context=ScenarioRunOutputContext(
+            progress_stream=progress_stream,
+            use_color=use_color,
+            json_output=json_output,
+            json_output_path=json_output_path,
+        ),
     )
 
 
@@ -286,32 +291,28 @@ def _effective_sql_analysis_and_validation_enabled(
 
 def _sync_local_snapshots(
     *,
-    project_dir: Path,
-    discovered_inputs: DiscoveredProjectInputs,
-    local_pipeline_result: CompilePipelineResult,
-    local_scenarios: tuple[CompiledSqlScenario, ...],
-    local_adapter: BaseAdapter,
-    project_adapter: BaseAdapter,
-    project_adapter_name: str,
-    capture_dialect: str,
-    project_connection_config: dict[str, object],
-    project_name: str,
-    no_sql_validation: bool,
-    refresh: bool,
-    force: bool,
-    max_snapshot_rows: int | None,
-    max_snapshot_total_rows: int | None,
-    max_snapshot_bytes: int | None,
-    max_snapshot_total_bytes: int | None,
-    progress_stream: TextIO,
-    use_color: bool,
+    inputs: LocalSnapshotSyncInputs,
+    limit_inputs: ScenarioSnapshotLimitInputs,
+    output_context: ScenarioRunOutputContext,
     capture_results_out: list[ScenarioSnapshotCaptureRunResult] | None = None,
 ) -> int:
+    project_dir: Path = inputs.project_dir
+    discovered_inputs: DiscoveredProjectInputs = inputs.discovered_inputs
+    project_adapter: BaseAdapter = inputs.project_adapter
+    project_adapter_name: str = inputs.project_adapter_name
+    capture_dialect: str = inputs.capture_dialect
+    project_connection_config: dict[str, object] = inputs.project_connection_config
+    project_name: str = inputs.project_name
+    no_sql_validation: bool = inputs.no_sql_validation
+    refresh: bool = inputs.refresh
+    force: bool = limit_inputs.force
+    progress_stream: TextIO = output_context.progress_stream
+    use_color: bool = output_context.use_color
     capture_names: tuple[str, ...] = select_scenario_snapshot_capture_candidates(
         project_dir=project_dir,
-        pipeline_result=local_pipeline_result,
-        scenarios=local_scenarios,
-        adapter=local_adapter,
+        pipeline_result=inputs.local_pipeline_result,
+        scenarios=inputs.local_scenarios,
+        adapter=inputs.local_adapter,
         project_name=project_name,
         capture_adapter=project_adapter_name,
         capture_dialect=capture_dialect,
@@ -377,11 +378,7 @@ def _sync_local_snapshots(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
-        max_rows_per_relation=max_snapshot_rows,
-        max_total_rows=max_snapshot_total_rows,
-        max_bytes_per_relation=max_snapshot_bytes,
-        max_total_bytes=max_snapshot_total_bytes,
-        force=force,
+        limit_inputs=limit_inputs,
     )
     results: tuple[ScenarioSnapshotCaptureRunResult, ...] = run_scenario_capture_pipeline(
         project_dir=project_dir,
@@ -390,11 +387,9 @@ def _sync_local_snapshots(
         connection_config=project_connection_config,
         adapter=project_adapter,
         project_name=project_name,
-        settings=ScenarioCaptureSettings(
-            captured_at=_captured_at(),
+        settings=build_scenario_capture_settings(
             capture_adapter=project_adapter_name,
             capture_dialect=capture_dialect,
-            sqlbuild_version=_sqlbuild_version(),
             retain=False,
             limits=capture_limits,
         ),
@@ -529,14 +524,3 @@ def _display_snapshot_path(*, manifest_path: Path, project_dir: Path) -> str:
         return manifest_path.relative_to(project_dir).as_posix()
     except ValueError:
         return manifest_path.as_posix()
-
-
-def _captured_at() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _sqlbuild_version() -> str:
-    try:
-        return version("sqlbuild")
-    except PackageNotFoundError:
-        return "unknown"

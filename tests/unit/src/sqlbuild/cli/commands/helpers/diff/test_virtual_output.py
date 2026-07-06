@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.cli.commands.helpers.diff.models import VirtualDiffRunOutcome
 from sqlbuild.cli.commands.helpers.diff.virtual_output import format_virtual_diff_header
+from sqlbuild.executor.diff.models import DiffExecutionResult
 from tests.unit.src.sqlbuild.cli.commands.helpers.diff._test_types import (
     RenderVirtualDiffHeaderTestCase,
 )
@@ -60,15 +62,19 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.diff._test_types import (
 def test_given_virtual_diff_metadata_when_formatting_header_then_expected_details_render(
     test_case: RenderVirtualDiffHeaderTestCase,
 ) -> None:
-    result: str = format_virtual_diff_header(
-        from_virtual_environment="dev",
-        to_virtual_environment="pr",
+    outcome: VirtualDiffRunOutcome = VirtualDiffRunOutcome(
+        result=DiffExecutionResult(),
         selected_names=test_case.selected_names,
         skipped_names=test_case.skipped_names,
         from_stale=test_case.from_stale,
         to_stale=test_case.to_stale,
         from_working=test_case.from_working,
         to_working=test_case.to_working,
+    )
+    result: str = format_virtual_diff_header(
+        from_virtual_environment="dev",
+        to_virtual_environment="pr",
+        outcome=outcome,
         allow_partial_diff=test_case.allow_partial_diff,
         verbose=test_case.verbose,
         use_color=False,
@@ -76,12 +82,7 @@ def test_given_virtual_diff_metadata_when_formatting_header_then_expected_detail
     color_result: str = format_virtual_diff_header(
         from_virtual_environment="dev",
         to_virtual_environment="pr",
-        selected_names=test_case.selected_names,
-        skipped_names=test_case.skipped_names,
-        from_stale=test_case.from_stale,
-        to_stale=test_case.to_stale,
-        from_working=test_case.from_working,
-        to_working=test_case.to_working,
+        outcome=outcome,
         allow_partial_diff=test_case.allow_partial_diff,
         verbose=test_case.verbose,
         use_color=True,

@@ -47,12 +47,7 @@ def write_virtual_diff_output(
     header: str = format_virtual_diff_header(
         from_virtual_environment=preparation.from_virtual_environment,
         to_virtual_environment=preparation.to_virtual_environment,
-        selected_names=outcome.selected_names,
-        skipped_names=outcome.skipped_names,
-        from_stale=outcome.from_stale,
-        to_stale=outcome.to_stale,
-        from_working=outcome.from_working,
-        to_working=outcome.to_working,
+        outcome=outcome,
         allow_partial_diff=request.allow_partial_diff,
         verbose=request.verbose,
         use_color=preparation.use_color,

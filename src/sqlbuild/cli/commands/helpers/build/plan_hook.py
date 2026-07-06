@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.build.models import VirtualBuildPlanHookConfig
 from sqlbuild.cli.commands.helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
 from sqlbuild.cli.commands.shared.helpers.progress.core import (
@@ -33,27 +34,20 @@ class VirtualBuildPlanHook:
         project_dir: Path,
         discovered_inputs: DiscoveredProjectInputs,
         adapter: BaseAdapter,
-        full_refresh: bool,
-        allow_snapshot_full_refresh: bool,
-        use_color: bool,
-        verbose: bool,
-        debug: bool,
-        json_output: bool,
-        execution_command: str,
-        concurrency: int | None,
+        config: VirtualBuildPlanHookConfig,
     ) -> None:
         self._stream = stream
         self._project_dir = project_dir
         self._discovered_inputs = discovered_inputs
         self._adapter = adapter
-        self._full_refresh = full_refresh
-        self._allow_snapshot_full_refresh = allow_snapshot_full_refresh
-        self._use_color = use_color
-        self._verbose = verbose
-        self._debug = debug
-        self._json_output = json_output
-        self._execution_command = execution_command
-        self._concurrency = concurrency
+        self._full_refresh = config.full_refresh
+        self._allow_snapshot_full_refresh = config.allow_snapshot_full_refresh
+        self._use_color = config.use_color
+        self._verbose = config.verbose
+        self._debug = config.debug
+        self._json_output = config.json_output
+        self._execution_command = config.execution_command
+        self._concurrency = config.concurrency
         self.callbacks: BuildProgressCallbacks | None = None
 
     @property

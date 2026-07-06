@@ -7,6 +7,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.scenario.constants import SUCCESS_STATUS
+from sqlbuild.cli.commands.helpers.scenario.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands.helpers.scenario.result_output import complete_scenario_run
 from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
     format_scenario_execution_json,
@@ -33,13 +34,14 @@ def run_warehouse_scenarios(
     project_name: str,
     target_dir: Path,
     retain: bool,
-    progress_stream: TextIO,
-    use_color: bool,
-    json_output: bool = False,
-    json_output_path: Path | None = None,
+    output_context: ScenarioRunOutputContext,
 ) -> int:
     """Run selected scenarios warehouse-direct and render results."""
 
+    progress_stream: TextIO = output_context.progress_stream
+    use_color: bool = output_context.use_color
+    json_output: bool = output_context.json_output
+    json_output_path: Path | None = output_context.json_output_path
     style: CliStyle = CliStyle(use_color=use_color)
     progress_stream.write(f"\n{style.success_strong(f'Scenario ({len(scenarios)} selected)')}\n\n")
     progress_stream.flush()

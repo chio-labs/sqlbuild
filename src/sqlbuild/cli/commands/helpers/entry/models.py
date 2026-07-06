@@ -18,6 +18,10 @@ from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.scenario.models import (
+    ScenarioCaptureCommandRequest,
+    ScenarioTestCommandRequest,
+)
 from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -162,41 +166,5 @@ class CliEntrypointHandlers:
     run_init: Callable[[Path | None], int]
     run_playground: Callable[[PlaygroundCommandRequest], int]
     run_skills_update: Callable[[Path | None, bool, tuple[str, ...], bool], int]
-    run_scenario: Callable[
-        [
-            Path | None,
-            bool,
-            bool,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            int | None,
-            int | None,
-            int | None,
-            int | None,
-            bool,
-            Path | None,
-        ],
-        int,
-    ]
-    run_scenario_capture: Callable[
-        [
-            Path | None,
-            bool,
-            bool,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-            int | None,
-            int | None,
-            int | None,
-            int | None,
-        ],
-        int,
-    ]
+    run_scenario: Callable[[ScenarioTestCommandRequest], int]
+    run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]
