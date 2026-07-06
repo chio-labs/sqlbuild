@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 
 import pytest
 
@@ -14,6 +15,7 @@ from sqlbuild.compiler.fingerprints.helpers.sql import (
     build_qualified_table_name,
     build_read_latest_sql,
 )
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.shared.helpers._test_types import (
     BuildCreateTableSqlTestCase,
     BuildInsertSqlTestCase,
@@ -229,18 +231,20 @@ def test_given_fingerprint_values_when_building_insert_sql_then_contains_expecte
     result: str = build_insert_sql(
         database=test_case.database,
         schema=test_case.schema,
-        node_type=test_case.node_type,
-        node_name=test_case.node_name,
-        target_database=test_case.target_database,
-        target_schema=test_case.target_schema,
-        target_name=test_case.target_name,
-        run_id=test_case.run_id,
-        definition_hash=test_case.definition_hash,
-        version_hash=test_case.version_hash,
-        schema_fingerprint=test_case.schema_fingerprint,
-        definition=test_case.definition,
-        metadata_json=test_case.metadata_json,
-        ts=test_case.ts,
+        fingerprint=Fingerprint(
+            node_type=test_case.node_type,
+            node_name=test_case.node_name,
+            target_database=test_case.target_database,
+            target_schema=test_case.target_schema,
+            target_name=test_case.target_name,
+            run_id=test_case.run_id,
+            definition_hash=test_case.definition_hash,
+            version_hash=test_case.version_hash,
+            schema_fingerprint=test_case.schema_fingerprint,
+            definition=test_case.definition,
+            metadata_json=test_case.metadata_json,
+            ts=datetime.fromisoformat(test_case.ts),
+        ),
         render_qualified_name=RENDER_QUALIFIED_NAME,
     )
 

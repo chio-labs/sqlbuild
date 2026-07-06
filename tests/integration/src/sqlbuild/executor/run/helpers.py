@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
 from sqlbuild.compiler.fingerprints.main.write import build_insert_sql
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
@@ -263,18 +265,20 @@ def write_matching_reuse_origin_fingerprint(
         build_insert_sql(
             database=database,
             schema=schema,
-            node_type="model",
-            node_name=model_name,
-            target_database=target_database,
-            target_schema=schema,
-            target_name=target_name,
-            run_id="reuse_from_run",
-            definition_hash="definition_hash",
-            version_hash=version_hash,
-            schema_fingerprint="schema_hash",
-            definition="SELECT 1 AS id",
-            metadata_json=metadata_json,
-            ts="2026-01-01T00:00:00+00:00",
+            fingerprint=Fingerprint(
+                node_type="model",
+                node_name=model_name,
+                target_database=target_database,
+                target_schema=schema,
+                target_name=target_name,
+                run_id="reuse_from_run",
+                definition_hash="definition_hash",
+                version_hash=version_hash,
+                schema_fingerprint="schema_hash",
+                definition="SELECT 1 AS id",
+                metadata_json=metadata_json,
+                ts=datetime.fromisoformat("2026-01-01T00:00:00+00:00"),
+            ),
             render_qualified_name=adapter.render_qualified_name,
         ),
     )
