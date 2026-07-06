@@ -46,14 +46,12 @@ def execute_seed(
             replace=True,
             statement_recorder=statement_recorder,
         )
-        warnings: list[str] = []
-        _ = try_write_seed_fingerprint(
+        warnings: tuple[str, ...] = try_write_seed_fingerprint(
             seed_entry=seed_entry,
             adapter=adapter,
             connection=connection,
             run_id=run_id,
             query_change_tracking=query_change_tracking,
-            warnings=warnings,
         )
     except Exception as exc:
         return SeedExecutionResult(
@@ -69,5 +67,5 @@ def execute_seed(
         status=ExecutionStatus.SUCCESS,
         duration_ms=int((time.monotonic() - start) * 1000),
         lifecycle_events=statement_recorder.snapshot(),
-        warning_messages=tuple(warnings),
+        warning_messages=warnings,
     )

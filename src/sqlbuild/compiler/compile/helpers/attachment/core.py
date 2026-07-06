@@ -434,7 +434,7 @@ def build_model_config(
     logical_database: str | None = (
         raw_logical_database if isinstance(raw_logical_database, str) else None
     )
-    apply_environment_database_schema_overrides(
+    model_resolved_values = apply_environment_database_schema_overrides(
         values=model_resolved_values,
         effective_vars=effective_vars,
         target_config=target_config,
@@ -780,13 +780,14 @@ def build_layered_model_values(
 
     values: dict[str, object] = project_defaults_to_mapping(defaults)
     if matched_path_default is not None:
-        _merge_with_tag_union(values, path_defaults[matched_path_default])
-    _merge_with_tag_union(values, model_header_values)
-    return values
+        values = _merged_with_tag_union(values, path_defaults[matched_path_default])
+    return _merged_with_tag_union(values, model_header_values)
 
 
-def _merge_with_tag_union(base: dict[str, object], overlay: dict[str, object]) -> None:
-    """Merge overlay into base, preserving special config merge semantics."""
+def _merged_with_tag_union(
+    base: dict[str, object], overlay: dict[str, object]
+) -> dict[str, object]:
+    """Merge overlay into a copy of base, preserving special config merge semantics."""
 
     overlay_tags: object | None = overlay.get("tags")
     base_tags: object | None = base.get("tags")
@@ -794,26 +795,28 @@ def _merge_with_tag_union(base: dict[str, object], overlay: dict[str, object]) -
     base_row_diff_exclude_columns: object | None = base.get("row_diff_exclude_columns")
     overlay_row_diff_tolerances: object | None = overlay.get("row_diff_tolerances")
     base_row_diff_tolerances: object | None = base.get("row_diff_tolerances")
-    base.update(overlay)
+    result: dict[str, object] = dict(base)
+    result.update(overlay)
     if overlay_tags is not None and base_tags is not None:
         merged: list[str] = list(_as_string_list(base_tags))
         tag: str
         for tag in _as_string_list(overlay_tags):
             if tag not in merged:
                 merged.append(tag)
-        base["tags"] = merged
+        result["tags"] = merged
     if overlay_row_diff_exclude_columns is not None and base_row_diff_exclude_columns is not None:
-        base["row_diff_exclude_columns"] = tuple(
+        result["row_diff_exclude_columns"] = tuple(
             _merge_string_sequence(
                 base_row_diff_exclude_columns,
                 overlay_row_diff_exclude_columns,
             )
         )
     if overlay_row_diff_tolerances is not None and base_row_diff_tolerances is not None:
-        base["row_diff_tolerances"] = _merge_row_diff_tolerances_mapping(
+        result["row_diff_tolerances"] = _merge_row_diff_tolerances_mapping(
             base_row_diff_tolerances,
             overlay_row_diff_tolerances,
         )
+    return result
 
 
 def _merge_string_sequence(base: object, overlay: object) -> list[str]:
@@ -1072,8 +1075,10 @@ def _merge_schema_tags(
 
     if not schema_entry.tags:
         return config
-    merged_values: dict[str, object] = dict(config.values)
-    _merge_with_tag_union(merged_values, {"tags": list(schema_entry.tags)})
+    merged_values: dict[str, object] = _merged_with_tag_union(
+        dict(config.values),
+        {"tags": list(schema_entry.tags)},
+    )
     return CompileModelConfig(
         values=merged_values,
         matched_path_default=config.matched_path_default,
@@ -1248,14 +1253,15 @@ def apply_environment_database_schema_overrides(
     effective_vars: dict[str, object],
     target_config: TargetConfig | None,
     model_context_values: dict[str, str | None],
-) -> None:
-    """Apply environment database/schema overrides using the logical config as CTX."""
+) -> dict[str, object]:
+    """Return values with environment database/schema overrides applied."""
 
     if target_config is None:
-        return
+        return dict(values)
 
+    overridden: dict[str, object] = dict(values)
     if target_config.database is not None and target_config.database != PRESERVE_TARGET_VALUE:
-        values["database"] = expand_template_data(
+        overridden["database"] = expand_template_data(
             target_config.database,
             variables=effective_vars,
             context_values=model_context_values,
@@ -1265,7 +1271,7 @@ def apply_environment_database_schema_overrides(
             preserve_unknown_context=False,
         )
     if target_config.schema is not None and target_config.schema != PRESERVE_TARGET_VALUE:
-        values["schema"] = expand_template_data(
+        overridden["schema"] = expand_template_data(
             target_config.schema,
             variables=effective_vars,
             context_values=model_context_values,
@@ -1274,6 +1280,7 @@ def apply_environment_database_schema_overrides(
             preserve_context_tokens=False,
             preserve_unknown_context=False,
         )
+    return overridden
 
 
 def resolve_run_id(*, selected_run_id: str | None) -> str:

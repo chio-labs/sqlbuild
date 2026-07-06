@@ -410,15 +410,16 @@ def execute_snapshot_entry(
             hook_results=hook_results,
         )
 
-    try_write_fingerprint(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        warnings=warnings,
-        model_audits=model_audits,
-        audit_results=tuple(audit_results),
+    warnings.extend(
+        try_write_fingerprint(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            query_change_tracking=query_change_tracking,
+            model_audits=model_audits,
+            audit_results=tuple(audit_results),
+        )
     )
 
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):

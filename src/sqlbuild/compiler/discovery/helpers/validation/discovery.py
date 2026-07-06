@@ -484,7 +484,7 @@ def _validate_unique_logical_relation_names(
     for source_file in source_files:
         source_entry: SourceEntry
         for source_entry in source_file.source_entries:
-            _validate_logical_relation_name_is_available(
+            seen_names[source_entry.name] = _validated_logical_relation_entry(
                 seen_names=seen_names,
                 name=source_entry.name,
                 kind="source",
@@ -495,7 +495,7 @@ def _validate_unique_logical_relation_names(
     for schema_file in schema_files:
         seed_entry: SchemaSeedEntry
         for seed_entry in schema_file.seed_entries:
-            _validate_logical_relation_name_is_available(
+            seen_names[seed_entry.name] = _validated_logical_relation_entry(
                 seen_names=seen_names,
                 name=seed_entry.name,
                 kind="seed",
@@ -503,16 +503,16 @@ def _validate_unique_logical_relation_names(
             )
 
 
-def _validate_logical_relation_name_is_available(
+def _validated_logical_relation_entry(
     *, seen_names: dict[str, tuple[str, str]], name: str, kind: str, path: str
-) -> None:
+) -> tuple[str, str]:
     existing_entry: tuple[str, str] | None = seen_names.get(name)
     if existing_entry is not None:
         raise DiscoveryConflictError(
             f"Logical relation name '{name}' is declared as both {existing_entry[0]} "
             f"in {existing_entry[1]} and {kind} in {path}"
         )
-    seen_names[name] = (kind, path)
+    return (kind, path)
 
 
 def _validate_unique_selectable_resource_names(
@@ -531,7 +531,7 @@ def _validate_unique_selectable_resource_names(
 
     model_file: DiscoveredSqlModelFile
     for model_file in model_files:
-        _validate_selectable_resource_name_is_available(
+        seen_names[model_file.file_path.stem] = _validated_selectable_resource_entry(
             seen_names=seen_names,
             name=model_file.file_path.stem,
             kind="model",
@@ -545,7 +545,7 @@ def _validate_unique_selectable_resource_names(
         for source_entry in source_file.source_entries:
             if source_entry.managed:
                 managed_source_names.add(source_entry.name)
-            _validate_selectable_resource_name_is_available(
+            seen_names[source_entry.name] = _validated_selectable_resource_entry(
                 seen_names=seen_names,
                 name=source_entry.name,
                 kind="source",
@@ -556,7 +556,7 @@ def _validate_unique_selectable_resource_names(
     for schema_file in schema_files:
         seed_entry: SchemaSeedEntry
         for seed_entry in schema_file.seed_entries:
-            _validate_selectable_resource_name_is_available(
+            seen_names[seed_entry.name] = _validated_selectable_resource_entry(
                 seen_names=seen_names,
                 name=seed_entry.name,
                 kind="seed",
@@ -565,7 +565,7 @@ def _validate_unique_selectable_resource_names(
 
     sql_function_file: DiscoveredSqlFunctionFile
     for sql_function_file in sql_function_files:
-        _validate_selectable_resource_name_is_available(
+        seen_names[sql_function_file.file_path.stem] = _validated_selectable_resource_entry(
             seen_names=seen_names,
             name=sql_function_file.file_path.stem,
             kind="function",
@@ -574,7 +574,7 @@ def _validate_unique_selectable_resource_names(
 
     python_function_file: DiscoveredPythonFunctionFile
     for python_function_file in python_function_files:
-        _validate_selectable_resource_name_is_available(
+        seen_names[python_function_file.file_path.stem] = _validated_selectable_resource_entry(
             seen_names=seen_names,
             name=python_function_file.file_path.stem,
             kind="function",
@@ -590,7 +590,7 @@ def _validate_unique_selectable_resource_names(
     for node in (*loader_functions, *task_functions, *asset_functions, *check_functions):
         if isinstance(node, DiscoveredLoaderFunction) and node.name in managed_source_names:
             continue
-        _validate_selectable_resource_name_is_available(
+        seen_names[node.name] = _validated_selectable_resource_entry(
             seen_names=seen_names,
             name=node.name,
             kind=node.__class__.__name__.removeprefix("Discovered")
@@ -600,9 +600,9 @@ def _validate_unique_selectable_resource_names(
         )
 
 
-def _validate_selectable_resource_name_is_available(
+def _validated_selectable_resource_entry(
     *, seen_names: dict[str, tuple[str, str]], name: str, kind: str, path: str
-) -> None:
+) -> tuple[str, str]:
     existing_entry: tuple[str, str] | None = seen_names.get(name)
     if existing_entry is not None:
         raise DiscoveryConflictError(
@@ -610,7 +610,7 @@ def _validate_selectable_resource_name_is_available(
             f"in {existing_entry[1]} and {kind} in {path}; model, source, seed, function, "
             "loader, task, asset, and check names must be globally unique"
         )
-    seen_names[name] = (kind, path)
+    return (kind, path)
 
 
 def _validate_declared_seed_files(

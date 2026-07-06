@@ -39,3 +39,15 @@ class NodeSourceWatermarkExecutionContext:
         self.upstream_node_identities_by_node = upstream_node_identities_by_node
         self.payloads_by_node = payloads_by_node or {}
         self.buffered_records = buffered_records or []
+
+    def record_success(
+        self,
+        *,
+        node_identity: NodeSourceWatermarkIdentity,
+        payload: NodeSourceWatermarkPayload,
+        record: NodeSourceWatermarkRecord,
+    ) -> None:
+        """Store a computed node payload and buffer its persisted record."""
+
+        self.payloads_by_node[node_identity] = payload
+        self.buffered_records.append(record)

@@ -507,13 +507,12 @@ def _staged_lifecycle(
             hook_results=hook_results,
         )
 
-    _ = try_write_fingerprint(
+    fingerprint_warnings: tuple[str, ...] = try_write_fingerprint(
         entry=entry,
         adapter=adapter,
         connection=connection,
         run_id=run_id,
         query_change_tracking=query_change_tracking,
-        warnings=warnings,
         model_audits=model_audits,
         audit_results=tuple(audit_results),
     )
@@ -523,7 +522,7 @@ def _staged_lifecycle(
         status=ExecutionStatus.SUCCESS,
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
-        warning_messages=tuple(warnings),
+        warning_messages=tuple(warnings) + fingerprint_warnings,
         lifecycle_events=statement_recorder.snapshot(),
         hook_results=tuple(hook_results),
     )
@@ -698,13 +697,12 @@ def _direct_lifecycle(
             hook_results=hook_results,
         )
 
-    _ = try_write_fingerprint(
+    fingerprint_warnings: tuple[str, ...] = try_write_fingerprint(
         entry=entry,
         adapter=adapter,
         connection=connection,
         run_id=run_id,
         query_change_tracking=query_change_tracking,
-        warnings=warnings,
         model_audits=model_audits,
         audit_results=tuple(audit_results),
     )
@@ -714,7 +712,7 @@ def _direct_lifecycle(
         status=ExecutionStatus.SUCCESS,
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
-        warning_messages=tuple(warnings),
+        warning_messages=tuple(warnings) + fingerprint_warnings,
         lifecycle_events=statement_recorder.snapshot(),
         hook_results=tuple(hook_results),
     )

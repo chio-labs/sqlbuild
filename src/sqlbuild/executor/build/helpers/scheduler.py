@@ -43,7 +43,7 @@ from sqlbuild.executor.build.constants import (
     BUILD_WORKER_FAILED_CODE,
     INCREMENTAL_ACTIONS,
 )
-from sqlbuild.executor.build.helpers.blocking import block_downstream
+from sqlbuild.executor.build.helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build.helpers.end_audits import run_end_audits
 from sqlbuild.executor.build.helpers.source_audits import run_pending_source_audits
 from sqlbuild.executor.build.helpers.source_node import execute_build_source_node
@@ -52,6 +52,7 @@ from sqlbuild.executor.build.models import (
     FunctionExecutionResult,
     NodeCompletion,
     SeedExecutionResult,
+    SourceAuditRunResult,
     SourceLoadPlanEntry,
 )
 from sqlbuild.executor.build.shared.helpers.node_source_watermarks import (
@@ -299,11 +300,12 @@ class BuildScheduler:
     def _block_initial_failed_keys(self) -> None:
         key: CompiledObjectKey
         for key in self._initial_failed_keys:
-            block_downstream(
-                failed_key=key,
-                downstream_deps=self._plan.downstream_deps,
-                selected_keys=self._plan.selected_keys,
-                blocked_keys=self._blocked_keys,
+            self._blocked_keys.update(
+                downstream_blocked_keys(
+                    failed_key=key,
+                    downstream_deps=self._plan.downstream_deps,
+                    selected_keys=self._plan.selected_keys,
+                )
             )
         if self._fail_fast and self._initial_failed_keys:
             self._stop = True
@@ -401,24 +403,26 @@ class BuildScheduler:
             model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
             if model_entry is None:
                 return False
-            source_blocked: bool = run_pending_source_audits(
+            audit_run: SourceAuditRunResult = run_pending_source_audits(
                 model_key=key,
                 upstream_deps=self._plan.upstream_deps,
                 downstream_deps=self._plan.downstream_deps,
                 selected_keys=self._plan.selected_keys,
                 source_audits_by_source=self._indexes.source_audits_by_source,
-                executed_source_audits=self._executed_source_audits,
-                failed_sources=self._failed_sources,
-                blocked_keys=self._blocked_keys,
+                executed_source_audits=frozenset(self._executed_source_audits),
+                failed_sources=frozenset(self._failed_sources),
                 adapter=self._adapter,
                 connection=self._scheduler_connection,
                 model_locations=self._plan.model_locations,
                 seed_locations=self._plan.seed_locations,
                 source_map=self._plan.source_map,
-                all_source_audit_results=self._source_audit_results,
                 fail_fast=self._fail_fast,
             )
-            if source_blocked:
+            self._executed_source_audits.update(audit_run.executed_source_names)
+            self._failed_sources.update(audit_run.failed_source_names)
+            self._blocked_keys.update(audit_run.newly_blocked_keys)
+            self._source_audit_results.extend(audit_run.audit_results)
+            if audit_run.blocked:
                 self._blocked_keys.add(key)
                 self._model_results.append(
                     ModelExecutionResult(
@@ -712,11 +716,12 @@ class BuildScheduler:
                     dep_key: CompiledObjectKey
                     for dep_key in test_entry.scope_deps:
                         self._blocked_keys.add(dep_key)
-                        block_downstream(
-                            failed_key=dep_key,
-                            downstream_deps=self._plan.downstream_deps,
-                            selected_keys=self._plan.selected_keys,
-                            blocked_keys=self._blocked_keys,
+                        self._blocked_keys.update(
+                            downstream_blocked_keys(
+                                failed_key=dep_key,
+                                downstream_deps=self._plan.downstream_deps,
+                                selected_keys=self._plan.selected_keys,
+                            )
                         )
 
         elif isinstance(result, FunctionExecutionResult):
@@ -740,11 +745,12 @@ class BuildScheduler:
             failed = result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
 
         if failed:
-            block_downstream(
-                failed_key=key,
-                downstream_deps=self._plan.downstream_deps,
-                selected_keys=self._plan.selected_keys,
-                blocked_keys=self._blocked_keys,
+            self._blocked_keys.update(
+                downstream_blocked_keys(
+                    failed_key=key,
+                    downstream_deps=self._plan.downstream_deps,
+                    selected_keys=self._plan.selected_keys,
+                )
             )
             if self._fail_fast:
                 self._stop = True

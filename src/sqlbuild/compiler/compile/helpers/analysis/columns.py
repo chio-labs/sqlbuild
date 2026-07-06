@@ -1695,4 +1695,6 @@ def _copy_table_facts_to_alias(
         return
     table_facts: dict[str, InferredNullability] | None = column_nullability_by_table.get(table_name)
     if table_facts is not None:
-        column_nullability_by_table.setdefault(alias, table_facts)
+        column_nullability_by_table.setdefault(  # sc: allow-param-mutation (alias fact builder)
+            alias, table_facts
+        )

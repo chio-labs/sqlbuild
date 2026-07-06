@@ -73,21 +73,20 @@ def complete_dag_source(
 ) -> None:
     """Record one completed source-loader node and unlock downstream nodes."""
 
-    source_index: int = state.source_index_by_name[source_name]
-    state.results[source_index] = result
-    state.results_by_name[source_name] = result
-    if result.status == ExecutionStatus.FAILED or (
+    hard_failure: bool = result.status == ExecutionStatus.FAILED or (
         result.status == ExecutionStatus.SKIPPED and result.skip_mode == SkipMode.HARD
-    ):
-        state.failed_or_skipped.add(source_name)
+    )
+    state.record_completion(source_name=source_name, result=result, hard_failure=hard_failure)
     if on_load_complete is not None:
         on_load_complete(result)
-    unlock_downstream_python_nodes(
+    updated_in_degree: dict[str, int]
+    newly_ready: tuple[str, ...]
+    updated_in_degree, newly_ready = unlock_downstream_python_nodes(
         completed_node_name=source_name,
         in_degree=state.in_degree,
-        ready=state.ready,
         downstream_names=state.downstream_names,
     )
+    state.apply_unlock(in_degree=updated_in_degree, newly_ready=newly_ready)
 
 
 def execute_ready_dag_source(

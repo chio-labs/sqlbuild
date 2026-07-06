@@ -351,15 +351,16 @@ def execute_microbatch_entry(
                         schema=target_schema,
                         name=target_table,
                     )
-                    _apply_schema_change(
-                        adapter=adapter,
-                        connection=connection,
-                        target_qualified=target_qualified,
-                        target_columns=target_columns,
-                        delta_columns=delta_columns,
-                        on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
-                        warnings=warnings,
-                        statement_recorder=statement_recorder,
+                    warnings.extend(
+                        _apply_schema_change(
+                            adapter=adapter,
+                            connection=connection,
+                            target_qualified=target_qualified,
+                            target_columns=target_columns,
+                            delta_columns=delta_columns,
+                            on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                            statement_recorder=statement_recorder,
+                        )
                     )
             except Exception as exc:
                 return build_failed_result(
@@ -583,15 +584,16 @@ def execute_microbatch_entry(
             hook_results=hook_results,
         )
 
-    try_write_fingerprint(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        warnings=warnings,
-        model_audits=model_audits,
-        audit_results=tuple(audit_results),
+    warnings.extend(
+        try_write_fingerprint(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            query_change_tracking=query_change_tracking,
+            model_audits=model_audits,
+            audit_results=tuple(audit_results),
+        )
     )
 
     return ModelExecutionResult(
