@@ -7,7 +7,11 @@ from typing import Any
 
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
 from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
-from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.models import (
+    NodeResultEnvelope,
+    NodeResultQuery,
+    NodeResultRecord,
+)
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
@@ -587,37 +591,30 @@ class PostgresStateBackend(StateBackend):
         *,
         schema: str,
         virtual_environment_name: str,
-        node_type: str,
-        node_name: str,
-        target_database: str | None,
-        target_schema: str | None,
-        target_name: str | None,
-        statuses: tuple[str, ...] | None,
-        run_id: str | None,
-        limit: int,
+        query: NodeResultQuery,
     ) -> tuple[NodeResultEnvelope, ...]:
-        if limit < 1:
+        if query.limit < 1:
             return ()
         predicates: list[str] = [
             "virtual_environment_name = %s",
             "node_type = %s",
             "node_name = %s",
-            self._optional_equality_sql("target_database", target_database, "%s"),
-            self._optional_equality_sql("target_schema", target_schema, "%s"),
-            self._optional_equality_sql("target_name", target_name, "%s"),
+            self._optional_equality_sql("target_database", query.target_database, "%s"),
+            self._optional_equality_sql("target_schema", query.target_schema, "%s"),
+            self._optional_equality_sql("target_name", query.target_name, "%s"),
         ]
-        params: list[object] = [virtual_environment_name, node_type, node_name]
-        for value in (target_database, target_schema, target_name):
+        params: list[object] = [virtual_environment_name, query.node_type, query.node_name]
+        for value in (query.target_database, query.target_schema, query.target_name):
             if value is not None:
                 params.append(value)
-        if statuses is not None:
-            placeholders: str = ", ".join("%s" for _ in statuses)
+        if query.statuses is not None:
+            placeholders: str = ", ".join("%s" for _ in query.statuses)
             predicates.append(f"status IN ({placeholders})")
-            params.extend(statuses)
-        if run_id is not None:
+            params.extend(query.statuses)
+        if query.run_id is not None:
             predicates.append("run_id = %s")
-            params.append(run_id)
-        params.append(limit)
+            params.append(query.run_id)
+        params.append(query.limit)
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT node_type, node_name, run_id, status, payload_json_b64, "

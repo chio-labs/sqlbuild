@@ -12,7 +12,11 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.main.execute import execute_source_load
-from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoaderContext,
+    LoadExecutionResult,
+    LoadRuntimeParams,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
@@ -78,15 +82,17 @@ def test_given_source_loader_when_executing_then_context_includes_runtime_metada
         adapter=LoaderContextTestAdapter(),
         connection_config={"database": "loader.duckdb"},
         connection=object(),
-        run_id=test_case.run_id,
-        target=test_case.target,
-        vars=test_case.vars,
-        is_reload=test_case.is_reload,
-        start_cursor_ts=test_case.start_cursor_ts,
-        end_cursor_ts=test_case.end_cursor_ts,
-        start_cursor_int=test_case.start_cursor_int,
-        end_cursor_int=test_case.end_cursor_int,
         statement_recorder=StatementRecorder(),
+        runtime=LoadRuntimeParams(
+            run_id=test_case.run_id,
+            target=test_case.target,
+            vars=test_case.vars,
+            is_reload=test_case.is_reload,
+            start_cursor_ts=test_case.start_cursor_ts,
+            end_cursor_ts=test_case.end_cursor_ts,
+            start_cursor_int=test_case.start_cursor_int,
+            end_cursor_int=test_case.end_cursor_int,
+        ),
     )
 
     context: LoaderContext = observed_contexts[0]
@@ -166,12 +172,14 @@ def test_given_provider_parameter_when_executing_source_loader_then_provider_is_
         adapter=LoaderContextTestAdapter(),
         connection_config={},
         connection=object(),
-        run_id=test_case.run_id,
-        target=test_case.target,
-        vars=test_case.vars,
-        is_reload=test_case.is_reload,
         statement_recorder=StatementRecorder(),
-        providers=providers,
+        runtime=LoadRuntimeParams(
+            run_id=test_case.run_id,
+            target=test_case.target,
+            vars=test_case.vars,
+            is_reload=test_case.is_reload,
+            providers=providers,
+        ),
     )
 
     assert result.status == test_case.expected_status
@@ -241,12 +249,14 @@ def test_given_provider_container_when_executing_source_loader_then_context_expo
         adapter=LoaderContextTestAdapter(),
         connection_config={},
         connection=object(),
-        run_id=test_case.run_id,
-        target=test_case.target,
-        vars=test_case.vars,
-        is_reload=test_case.is_reload,
         statement_recorder=StatementRecorder(),
-        providers=providers,
+        runtime=LoadRuntimeParams(
+            run_id=test_case.run_id,
+            target=test_case.target,
+            vars=test_case.vars,
+            is_reload=test_case.is_reload,
+            providers=providers,
+        ),
     )
 
     assert result.status == test_case.expected_status
@@ -307,11 +317,13 @@ def test_given_missing_provider_container_when_executing_source_loader_then_fail
         adapter=LoaderContextTestAdapter(),
         connection_config={},
         connection=object(),
-        run_id=test_case.run_id,
-        target=test_case.target,
-        vars=test_case.vars,
-        is_reload=test_case.is_reload,
         statement_recorder=StatementRecorder(),
+        runtime=LoadRuntimeParams(
+            run_id=test_case.run_id,
+            target=test_case.target,
+            vars=test_case.vars,
+            is_reload=test_case.is_reload,
+        ),
     )
 
     assert result.status == test_case.expected_status
@@ -382,12 +394,14 @@ def test_given_provider_parameter_when_executing_external_source_loader_then_pro
         adapter=LoaderContextTestAdapter(),
         connection_config={},
         connection=object(),
-        run_id=test_case.run_id,
-        target=test_case.target,
-        vars=test_case.vars,
-        is_reload=test_case.is_reload,
         statement_recorder=StatementRecorder(),
-        providers=providers,
+        runtime=LoadRuntimeParams(
+            run_id=test_case.run_id,
+            target=test_case.target,
+            vars=test_case.vars,
+            is_reload=test_case.is_reload,
+            providers=providers,
+        ),
     )
 
     assert result.status == test_case.expected_status
@@ -460,12 +474,14 @@ def test_given_provider_container_when_executing_external_loader_then_context_ex
         adapter=LoaderContextTestAdapter(),
         connection_config={},
         connection=object(),
-        run_id=test_case.run_id,
-        target=test_case.target,
-        vars=test_case.vars,
-        is_reload=test_case.is_reload,
         statement_recorder=StatementRecorder(),
-        providers=providers,
+        runtime=LoadRuntimeParams(
+            run_id=test_case.run_id,
+            target=test_case.target,
+            vars=test_case.vars,
+            is_reload=test_case.is_reload,
+            providers=providers,
+        ),
     )
 
     assert result.status == test_case.expected_status
@@ -520,11 +536,13 @@ def test_given_self_managed_intermediate_loader_when_returning_none_then_applies
         adapter=LoaderContextTestAdapter(),
         connection_config={},
         connection=object(),
-        run_id="run-1",
-        target=None,
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
+        runtime=LoadRuntimeParams(
+            run_id="run-1",
+            target=None,
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert result.status == test_case.expected_status

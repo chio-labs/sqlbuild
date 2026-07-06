@@ -10,7 +10,12 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.main.run import run_load_pipeline
-from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoaderContext,
+    LoadCallbacks,
+    LoadExecutionResult,
+    LoadRuntimeParams,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
@@ -65,11 +70,15 @@ def test_given_external_loader_when_running_load_pipeline_then_does_not_open_con
         ),
         connection_config={},
         adapter=adapter,
-        run_id="run-1",
-        target=None,
-        vars={},
-        is_reload=False,
-        on_load_complete=completed_results.append,
+        runtime=LoadRuntimeParams(
+            run_id="run-1",
+            target=None,
+            vars={},
+            is_reload=False,
+        ),
+        callbacks=LoadCallbacks(
+            on_load_complete=completed_results.append,
+        ),
     )
 
     assert adapter.connection_count == test_case.expected_connection_count
@@ -174,10 +183,12 @@ def test_given_mixed_loader_skips_when_running_pipeline_then_fan_in_matches_mode
         ),
         connection_config={},
         adapter=adapter,
-        run_id="run-1",
-        target=None,
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="run-1",
+            target=None,
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert tuple(result.source_name for result in results) == ("a", "x", "b", "c")

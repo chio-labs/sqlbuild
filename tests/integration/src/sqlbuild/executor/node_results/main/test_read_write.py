@@ -10,7 +10,11 @@ import pytest
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.executor.node_results.main.read import read_node_results
 from sqlbuild.executor.node_results.main.write import write_node_result_record
-from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.models import (
+    NodeResultEnvelope,
+    NodeResultQuery,
+    NodeResultRecord,
+)
 from tests.integration.src.sqlbuild.executor.node_results.main._test_types import (
     NodeResultReadWriteIntegrationTestCase,
 )
@@ -61,14 +65,16 @@ def test_given_node_result_record_when_writing_and_reading_then_round_trips_enve
             relation_exists=adapter.relation_exists,
             database=None,
             schema="main",
-            node_type="task",
-            node_name="produce_result",
-            target_database=None,
-            target_schema="main",
-            target_name=None,
-            statuses=("success",),
-            run_id=None,
-            limit=1,
+            query=NodeResultQuery(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="main",
+                target_name=None,
+                statuses=("success",),
+                run_id=None,
+                limit=1,
+            ),
             render_qualified_name=adapter.render_qualified_name,
         )
     finally:

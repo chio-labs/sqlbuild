@@ -20,7 +20,7 @@ from sqlbuild.compiler.python_nodes.models import (
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.python_nodes.classes.ingress_results import IngressResultAccumulator
@@ -357,23 +357,25 @@ def _execute_ingress_loader(
         adapter=adapter,
         connection_config=connection_config,
         connection=connection,
-        run_id=run_id,
-        target=target,
-        vars=vars,
-        is_reload=is_reload,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
+        runtime=LoadRuntimeParams(
+            run_id=run_id,
+            target=target,
+            vars=vars,
+            is_reload=is_reload,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
+            use_color=use_color,
+            providers=providers,
+            result_store=result_store,
+        ),
         statement_recorder=StatementRecorder(),
-        use_color=use_color,
         loader_ref_entries=_loader_ref_entries(
             loader_by_name=loader_by_name,
             source_by_loader_name=source_by_loader_name,
         ),
         source_ref_entries=source_map,
-        providers=providers,
-        result_store=result_store,
     )
     results.record_load_result(name=node.name, result=result)
     _persist_loader_result(

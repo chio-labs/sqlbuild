@@ -11,7 +11,13 @@ from sqlbuild.executor.load.helpers.dag_runtime import (
     complete_dag_source,
     load_dag_worker,
 )
-from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoadDagState,
+    LoadDispatchInputs,
+    LoadExecutionIndexes,
+    LoadExecutionResult,
+    LoadRuntimeParams,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
@@ -110,29 +116,28 @@ def test_given_ready_source_execution_raises_when_worker_runs_then_publishes_fai
 
     load_dag_worker(
         source_name=test_case.source_name,
-        source_by_name={test_case.source_name: source_entry},
-        indexes=LoadExecutionIndexes(
-            loader_by_name={},
+        dispatch=LoadDispatchInputs(
             source_by_name={test_case.source_name: source_entry},
-            source_by_loader_name={},
-            loader_ref_entries={},
-            loader_name_by_function={},
-            has_loader_dependencies=False,
+            indexes=LoadExecutionIndexes(
+                loader_by_name={},
+                source_by_name={test_case.source_name: source_entry},
+                source_by_loader_name={},
+                loader_ref_entries={},
+                loader_name_by_function={},
+                has_loader_dependencies=False,
+            ),
+            failed_or_hard_skipped=set(),
+            results_by_name={},
         ),
-        failed_or_hard_skipped=set(),
-        results_by_name={},
         adapter=LoaderContextTestAdapter(),
         connection_config={},
         connection_pool=connection_pool,
-        run_id="run-1",
-        target=None,
-        vars={},
-        is_reload=False,
-        start_cursor_ts=None,
-        end_cursor_ts=None,
-        start_cursor_int=None,
-        end_cursor_int=None,
-        use_color=False,
+        runtime=LoadRuntimeParams(
+            run_id="run-1",
+            target=None,
+            vars={},
+            is_reload=False,
+        ),
         completion_queue=completion_queue,
     )
 

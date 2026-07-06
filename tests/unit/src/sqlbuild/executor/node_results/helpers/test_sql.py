@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.executor.node_results.helpers.sql import build_read_history_sql
+from sqlbuild.executor.node_results.models import NodeResultQuery
 from tests.unit.src.sqlbuild.executor.node_results.helpers._test_types import (
     NodeResultSqlTestCase,
 )
@@ -36,13 +37,16 @@ def test_given_node_result_read_request_when_building_sql_then_scopes_and_orders
     sql: str = build_read_history_sql(
         database=None,
         schema="analytics",
-        node_type="task",
-        node_name="produce_result",
-        target_database=None,
-        target_schema="analytics",
-        target_name=None,
-        statuses=("success",),
-        run_id=None,
+        query=NodeResultQuery(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="analytics",
+            target_name=None,
+            statuses=("success",),
+            run_id=None,
+            limit=1,
+        ),
         render_qualified_name=render_test_qualified_name,
     )
 

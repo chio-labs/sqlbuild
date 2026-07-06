@@ -6,7 +6,11 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.models import (
+    NodeResultEnvelope,
+    NodeResultQuery,
+    NodeResultRecord,
+)
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.virtual.state.classes.postgres import PostgresStateBackend
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
@@ -1201,67 +1205,77 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
         postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
-        node_type="task",
-        node_name="produce_result",
-        target_database=None,
-        target_schema="dev",
-        target_name=None,
-        statuses=(NodeResultStatus.SUCCESS.value,),
-        run_id=None,
-        limit=1,
+        query=NodeResultQuery(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            statuses=(NodeResultStatus.SUCCESS.value,),
+            run_id=None,
+            limit=1,
+        ),
     )
     explicit_failed: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
         postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
-        node_type="task",
-        node_name="produce_result",
-        target_database=None,
-        target_schema="dev",
-        target_name=None,
-        statuses=None,
-        run_id="run_3",
-        limit=1,
+        query=NodeResultQuery(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            statuses=None,
+            run_id="run_3",
+            limit=1,
+        ),
     )
     isolated_results: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
         postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.isolated_virtual_environment_name,
-        node_type="task",
-        node_name="produce_result",
-        target_database=None,
-        target_schema="dev",
-        target_name=None,
-        statuses=(NodeResultStatus.SUCCESS.value,),
-        run_id=None,
-        limit=5,
+        query=NodeResultQuery(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            statuses=(NodeResultStatus.SUCCESS.value,),
+            run_id=None,
+            limit=5,
+        ),
     )
     history_results: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
         postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
-        node_type="task",
-        node_name="produce_result",
-        target_database=None,
-        target_schema="dev",
-        target_name=None,
-        statuses=(NodeResultStatus.SUCCESS.value,),
-        run_id=None,
-        limit=5,
+        query=NodeResultQuery(
+            node_type="task",
+            node_name="produce_result",
+            target_database=None,
+            target_schema="dev",
+            target_name=None,
+            statuses=(NodeResultStatus.SUCCESS.value,),
+            run_id=None,
+            limit=5,
+        ),
     )
     target_isolated_results: tuple[NodeResultEnvelope, ...] = (
         postgres_state_backend.read_node_results(
             postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
-            node_type="task",
-            node_name="produce_result",
-            target_database=None,
-            target_schema="prod",
-            target_name=None,
-            statuses=(NodeResultStatus.SUCCESS.value,),
-            run_id=None,
-            limit=1,
+            query=NodeResultQuery(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="prod",
+                target_name=None,
+                statuses=(NodeResultStatus.SUCCESS.value,),
+                run_id=None,
+                limit=1,
+            ),
         )
     )
     rollback_rows: list[tuple[object, ...]] = fetch_all(
