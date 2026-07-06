@@ -29,7 +29,10 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.executor.build.main.execute import execute_build_plan
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    BuildRuntimeParams,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
@@ -319,11 +322,13 @@ def test_given_partial_selected_rebuild_when_executed_then_next_plan_still_repor
         connection_config={"database": ":memory:"},
         connections=(connection,),
         scheduler_connection=connection,
-        promotion_mode=TablePromotionMode.DIRECT,
-        run_id="partial_run",
-        run_audits=False,
-        run_tests=False,
-        query_change_tracking=True,
+        runtime=BuildRuntimeParams(
+            promotion_mode=TablePromotionMode.DIRECT,
+            run_id="partial_run",
+            run_audits=False,
+            run_tests=False,
+            query_change_tracking=True,
+        ),
     )
     target_rows: list[tuple[int]] = connection.execute(
         "SELECT id FROM staging.c ORDER BY id"

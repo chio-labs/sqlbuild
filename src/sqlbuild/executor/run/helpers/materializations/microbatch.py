@@ -3,22 +3,18 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.models import (
-    AuditPlanEntry,
     CursorBounds,
     CursorInputRelation,
     ModelPlanEntry,
@@ -29,10 +25,15 @@ from sqlbuild.compiler.planner.types import (
     IncrementalStrategy,
     OnSchemaChange,
 )
-from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.execution.final_audits import (
+    run_delta_scope_audits,
+    run_final_scope_audits,
+)
+from sqlbuild.executor.run.helpers.execution.hook_phases import (
+    run_post_hook_phase,
+    run_pre_hook_phase,
+)
 from sqlbuild.executor.run.helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
@@ -48,17 +49,22 @@ from sqlbuild.executor.run.helpers.validation.cursor_bounds import (
     resolve_runtime_cursor_bounds,
 )
 from sqlbuild.executor.run.helpers.validation.type_enforcement import enforce_types_staged
-from sqlbuild.executor.run.models import BatchWindow, HookExecutionResult, ModelExecutionResult
-from sqlbuild.executor.run.types import HookPhase
+from sqlbuild.executor.run.models import (
+    BatchWindow,
+    FinalAuditRun,
+    HookExecutionResult,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+    PostHookPhaseOutcome,
+    RuntimeCursorSpec,
+)
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context, log_debug_event
 from sqlbuild.shared.helpers.identity.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.spec.models.source import SourceEntry
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _DURATION_PATTERN_STR: str = (
@@ -67,27 +73,25 @@ _DURATION_PATTERN_STR: str = (
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
+@dataclass(frozen=True)
+class _MicrobatchPlan:
+    """Planned batch windows or the early-exit result when none can run."""
+
+    batches: tuple[BatchWindow, ...] = ()
+    early_exit: ModelExecutionResult | None = None
+
+
 def execute_microbatch_entry(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
+    context: ModelMaterializationContext,
     declared_columns: tuple[ColumnInfo, ...],
-    run_id: str,
-    query_change_tracking: bool,
     is_full_refresh: bool = False,
-    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
-    effective_target_name: str | None = None,
-    effective_vars: Mapping[str, object] | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one microbatch incremental model through batched delta/DML."""
 
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_table: str = entry.destination.name
@@ -105,183 +109,39 @@ def execute_microbatch_entry(
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
-    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
 
-    try:
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
-            pre_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.pre_hooks,
-                phase=HookPhase.PRE_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
-            )
-        if pre_hook_skipped:
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-            )
-    except Exception as exc:
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.PRE_HOOK,
-            error=str(exc),
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-            hook_results=hook_results,
-        )
-
-    microbatch_range: CursorBounds | None = entry.microbatch_range
-    if runtime_owned_cursor_bounds:
-        if entry.cursor_column is None:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.STAGING,
-                error="runtime-owned cursor resolution requires cursor_column",
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
-        try:
-            microbatch_range = resolve_runtime_cursor_bounds(
-                adapter=adapter,
-                connection=connection,
-                target_relation=target_qualified,
-                target_database=target_database,
-                target_schema=target_schema,
-                target_name=target_table,
-                cursor_column=entry.cursor_column,
-                cursor_type=entry.cursor_type,
-                cursor_grain=entry.cursor_grain,
-                cursor_start=entry.cursor_start,
-                cursor_input_relations=entry.cursor_input_relations,
-            )
-        except Exception as exc:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.STAGING,
-                error=f"failed to discover runtime microbatch cursor range: {exc}",
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
-    elif is_full_refresh:
-        try:
-            microbatch_range = _discover_cursor_range(
-                adapter=adapter,
-                connection=connection,
-                cursor_type=entry.cursor_type,
-                cursor_start=entry.cursor_start,
-                cursor_input_relations=entry.cursor_input_relations,
-            )
-        except Exception as exc:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.STAGING,
-                error=f"failed to discover microbatch cursor range: {exc}",
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
-        if microbatch_range is None:
-            return ModelExecutionResult(
-                model_name=entry.name,
-                status=ExecutionStatus.SUCCESS,
-                promoted_relation=target_qualified,
-                audit_results=tuple(audit_results),
-                warning_messages=(
-                    *tuple(warnings),
-                    "microbatch range is empty; no batches to process",
-                ),
-                lifecycle_events=statement_recorder.snapshot(),
-            )
-
-    if microbatch_range is None:
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.STAGING,
-            error="microbatch_range is not available and model is not full refresh",
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-        )
-
-    batch_size: str | None = entry.batch_size
-    cursor_type: str | None = entry.cursor_type
-    if batch_size is None or cursor_type is None:
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.STAGING,
-            error="microbatch requires batch_size and cursor_type",
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-        )
-
-    effective_batch_size: str = batch_size
-    if runtime_owned_cursor_bounds:
-        effective_timestamp_grain: str | None = resolve_effective_timestamp_grain(
-            cursor_type=cursor_type,
-            downstream_grain=entry.cursor_grain,
-            cursor_input_relations=entry.cursor_input_relations,
-        )
-        if effective_timestamp_grain is not None:
-            effective_batch_size = _coarsen_timestamp_batch_size(
-                batch_size=batch_size,
-                effective_grain=effective_timestamp_grain,
-            )
-
-    batches: tuple[BatchWindow, ...] = compute_batch_windows(
-        start=microbatch_range.start,
-        end=microbatch_range.end,
-        batch_size=effective_batch_size,
-        cursor_type=cursor_type,
+    pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
     )
+    if pre_hook_exit is not None:
+        return pre_hook_exit
 
-    if not batches:
-        return ModelExecutionResult(
-            model_name=entry.name,
-            status=ExecutionStatus.SUCCESS,
-            promoted_relation=target_qualified,
-            audit_results=tuple(audit_results),
-            warning_messages=(*tuple(warnings), "no batches to process"),
-            lifecycle_events=statement_recorder.snapshot(),
-        )
+    batch_plan: _MicrobatchPlan = _plan_microbatch_windows(
+        context=context,
+        is_full_refresh=is_full_refresh,
+        target_qualified=target_qualified,
+        warnings=warnings,
+        audit_results=audit_results,
+        statement_recorder=statement_recorder,
+    )
+    if batch_plan.early_exit is not None:
+        return batch_plan.early_exit
+    batches: tuple[BatchWindow, ...] = batch_plan.batches
 
-    if is_full_refresh:
-        try:
-            with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_target"):
-                adapter.drop(
-                    connection,
-                    destination=target_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-        except Exception as exc:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.STAGING,
-                error=f"failed to drop target for full-refresh microbatch: {exc}",
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
+    full_refresh_exit: ModelExecutionResult | None = _drop_target_for_full_refresh(
+        context=context,
+        is_full_refresh=is_full_refresh,
+        target_qualified=target_qualified,
+        warnings=warnings,
+        audit_results=audit_results,
+        statement_recorder=statement_recorder,
+    )
+    if full_refresh_exit is not None:
+        return full_refresh_exit
 
     schema_checked: bool = False
     completed_batches: int = 0
@@ -402,26 +262,12 @@ def execute_microbatch_entry(
                     statement_recorder=statement_recorder,
                 )
 
-        delta_overrides: dict[str, str] = {entry.name: delta_qualified}
-        delta_audit_error: bool = False
-        audit: AuditPlanEntry
-        for audit in model_audits:
-            if audit.effective_run_scope == AuditRunScope.DELTA_AND_FINAL:
-                result: AuditExecutionResult = execute_audit(
-                    audit=audit,
-                    adapter=adapter,
-                    connection=connection,
-                    model_locations=model_locations,
-                    seed_locations=seed_locations,
-                    source_map=source_map,
-                    relation_overrides=delta_overrides,
-                    run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-                )
-                audit_results.append(result)
-                if result.outcome == AuditOutcome.ERROR:
-                    delta_audit_error = True
+        delta_audit_run: FinalAuditRun = run_delta_scope_audits(
+            context=context, delta_qualified=delta_qualified
+        )
+        audit_results.extend(delta_audit_run.results)
 
-        if delta_audit_error:
+        if delta_audit_run.has_error:
             return build_failed_result(
                 entry=entry,
                 phase=ExecutionPhase.AUDIT,
@@ -512,23 +358,10 @@ def execute_microbatch_entry(
         )
         completed_batches += 1
 
-    final_audit_error: bool = False
-    for audit in model_audits:
-        result = execute_audit(
-            audit=audit,
-            adapter=adapter,
-            connection=connection,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            relation_overrides=None,
-            run_scope_phase=AuditRunScope.FINAL,
-        )
-        audit_results.append(result)
-        if result.outcome == AuditOutcome.ERROR:
-            final_audit_error = True
+    final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
+    audit_results.extend(final_audit_run.results)
 
-    if final_audit_error:
+    if final_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
@@ -542,46 +375,24 @@ def execute_microbatch_entry(
             statement_recorder=statement_recorder,
         )
 
-    try:
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            post_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.post_hooks,
-                phase=HookPhase.POST_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
-            )
-        if post_hook_skipped:
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                promoted_relation=target_qualified,
-            )
-    except Exception as exc:
-        return build_failed_result(
+    post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
+        promoted_relation=target_qualified,
+    )
+    if post_hook_outcome.failure is not None:
+        return post_hook_outcome.failure
+    if post_hook_outcome.skipped:
+        return build_skipped_result(
             entry=entry,
-            phase=ExecutionPhase.POST_HOOK,
-            error=str(exc),
-            promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
             hook_results=hook_results,
+            promoted_relation=target_qualified,
         )
 
     warnings.extend(
@@ -589,9 +400,9 @@ def execute_microbatch_entry(
             entry=entry,
             adapter=adapter,
             connection=connection,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
-            model_audits=model_audits,
+            run_id=context.run_id,
+            query_change_tracking=context.query_change_tracking,
+            model_audits=context.model_audits,
             audit_results=tuple(audit_results),
         )
     )
@@ -605,6 +416,189 @@ def execute_microbatch_entry(
         lifecycle_events=statement_recorder.snapshot(),
         hook_results=tuple(hook_results),
     )
+
+
+def _drop_target_for_full_refresh(
+    *,
+    context: ModelMaterializationContext,
+    is_full_refresh: bool,
+    target_qualified: str,
+    warnings: list[str],
+    audit_results: list[AuditExecutionResult],
+    statement_recorder: StatementRecorder,
+) -> ModelExecutionResult | None:
+    """Drop the target before a full-refresh run; return a failure result on error."""
+
+    if not is_full_refresh:
+        return None
+    try:
+        with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_target"):
+            context.adapter.drop(
+                context.connection,
+                destination=target_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.STAGING,
+            error=f"failed to drop target for full-refresh microbatch: {exc}",
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+    return None
+
+
+def _plan_microbatch_windows(
+    *,
+    context: ModelMaterializationContext,
+    is_full_refresh: bool,
+    target_qualified: str,
+    warnings: list[str],
+    audit_results: list[AuditExecutionResult],
+    statement_recorder: StatementRecorder,
+) -> _MicrobatchPlan:
+    """Resolve the microbatch cursor range and compute batch windows."""
+
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
+    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
+    microbatch_range: CursorBounds | None = entry.microbatch_range
+    if runtime_owned_cursor_bounds:
+        if entry.cursor_column is None:
+            return _MicrobatchPlan(
+                early_exit=build_failed_result(
+                    entry=entry,
+                    phase=ExecutionPhase.STAGING,
+                    error="runtime-owned cursor resolution requires cursor_column",
+                    warnings=warnings,
+                    audit_results=audit_results,
+                    statement_recorder=statement_recorder,
+                )
+            )
+        try:
+            microbatch_range = resolve_runtime_cursor_bounds(
+                adapter=adapter,
+                connection=connection,
+                target_relation=target_qualified,
+                target_database=entry.destination.database,
+                target_schema=entry.destination.schema,
+                target_name=entry.destination.name,
+                spec=RuntimeCursorSpec(
+                    cursor_column=entry.cursor_column,
+                    cursor_type=entry.cursor_type,
+                    cursor_grain=entry.cursor_grain,
+                    cursor_start=entry.cursor_start,
+                    cursor_input_relations=entry.cursor_input_relations,
+                ),
+            )
+        except Exception as exc:
+            return _MicrobatchPlan(
+                early_exit=build_failed_result(
+                    entry=entry,
+                    phase=ExecutionPhase.STAGING,
+                    error=f"failed to discover runtime microbatch cursor range: {exc}",
+                    warnings=warnings,
+                    audit_results=audit_results,
+                    statement_recorder=statement_recorder,
+                )
+            )
+    elif is_full_refresh:
+        try:
+            microbatch_range = _discover_cursor_range(
+                adapter=adapter,
+                connection=connection,
+                cursor_type=entry.cursor_type,
+                cursor_start=entry.cursor_start,
+                cursor_input_relations=entry.cursor_input_relations,
+            )
+        except Exception as exc:
+            return _MicrobatchPlan(
+                early_exit=build_failed_result(
+                    entry=entry,
+                    phase=ExecutionPhase.STAGING,
+                    error=f"failed to discover microbatch cursor range: {exc}",
+                    warnings=warnings,
+                    audit_results=audit_results,
+                    statement_recorder=statement_recorder,
+                )
+            )
+        if microbatch_range is None:
+            return _MicrobatchPlan(
+                early_exit=ModelExecutionResult(
+                    model_name=entry.name,
+                    status=ExecutionStatus.SUCCESS,
+                    promoted_relation=target_qualified,
+                    audit_results=tuple(audit_results),
+                    warning_messages=(
+                        *tuple(warnings),
+                        "microbatch range is empty; no batches to process",
+                    ),
+                    lifecycle_events=statement_recorder.snapshot(),
+                )
+            )
+
+    if microbatch_range is None:
+        return _MicrobatchPlan(
+            early_exit=build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.STAGING,
+                error="microbatch_range is not available and model is not full refresh",
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+            )
+        )
+
+    batch_size: str | None = entry.batch_size
+    cursor_type: str | None = entry.cursor_type
+    if batch_size is None or cursor_type is None:
+        return _MicrobatchPlan(
+            early_exit=build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.STAGING,
+                error="microbatch requires batch_size and cursor_type",
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+            )
+        )
+
+    effective_batch_size: str = batch_size
+    if runtime_owned_cursor_bounds:
+        effective_timestamp_grain: str | None = resolve_effective_timestamp_grain(
+            cursor_type=cursor_type,
+            downstream_grain=entry.cursor_grain,
+            cursor_input_relations=entry.cursor_input_relations,
+        )
+        if effective_timestamp_grain is not None:
+            effective_batch_size = _coarsen_timestamp_batch_size(
+                batch_size=batch_size,
+                effective_grain=effective_timestamp_grain,
+            )
+
+    batches: tuple[BatchWindow, ...] = compute_batch_windows(
+        start=microbatch_range.start,
+        end=microbatch_range.end,
+        batch_size=effective_batch_size,
+        cursor_type=cursor_type,
+    )
+
+    if not batches:
+        return _MicrobatchPlan(
+            early_exit=ModelExecutionResult(
+                model_name=entry.name,
+                status=ExecutionStatus.SUCCESS,
+                promoted_relation=target_qualified,
+                audit_results=tuple(audit_results),
+                warning_messages=(*tuple(warnings), "no batches to process"),
+                lifecycle_events=statement_recorder.snapshot(),
+            )
+        )
+    return _MicrobatchPlan(batches=batches)
 
 
 def compute_batch_windows(

@@ -17,7 +17,7 @@ from sqlbuild.executor.run.helpers.materializations.snapshot import (
     _apply_snapshot_schema_change,
     execute_snapshot_entry,
 )
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
@@ -82,19 +82,21 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
-        run_id=test_case.run_id,
-        query_change_tracking=True,
-        hook_functions=tuple(
-            hook_function
-            for hook_function in test_case.hook_functions
-            if isinstance(hook_function, DiscoveredHookFunction)
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id=test_case.run_id,
+            query_change_tracking=True,
+            hook_functions=tuple(
+                hook_function
+                for hook_function in test_case.hook_functions
+                if isinstance(hook_function, DiscoveredHookFunction)
+            ),
         ),
     )
     hook_rows: tuple[tuple[object, ...], ...] = tuple(
@@ -166,21 +168,23 @@ def test_given_python_snapshot_hook_failure_when_executing_then_reports_hook_pha
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
-        run_id="snapshot_hook_failure_run",
-        query_change_tracking=True,
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/snapshot.py"),
-                name="fail_hook",
-                function=fail_snapshot_hook,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="snapshot_hook_failure_run",
+            query_change_tracking=True,
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/snapshot.py"),
+                    name="fail_hook",
+                    function=fail_snapshot_hook,
+                ),
             ),
         ),
     )
@@ -298,15 +302,17 @@ def test_given_snapshot_contract_violation_when_executing_then_fails_before_targ
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
-        run_id=test_case.run_id,
-        query_change_tracking=True,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id=test_case.run_id,
+            query_change_tracking=True,
+        ),
     )
 
     assert result.status == ExecutionStatus.FAILED

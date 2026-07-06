@@ -20,6 +20,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeExecutorResult,
     PythonNodeRunState,
+    PythonNodeRuntime,
 )
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
@@ -90,15 +91,17 @@ def test_given_task_asset_chain_when_executing_python_nodes_then_records_results
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
-        default_schema="default_schema",
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+            default_schema="default_schema",
+        ),
     )
 
     assert (
@@ -158,15 +161,17 @@ def test_given_provider_parameters_when_executing_python_nodes_then_providers_ar
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="run_1",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
-        providers=providers,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="run_1",
+            target="dev",
+            vars={},
+            is_reload=False,
+            providers=providers,
+        ),
     )
 
     assert tuple(item.node_name for item in result.results) == test_case.expected_names
@@ -214,15 +219,17 @@ def test_given_provider_container_when_executing_python_nodes_then_context_expos
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="run_1",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
-        providers=providers,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="run_1",
+            target="dev",
+            vars={},
+            is_reload=False,
+            providers=providers,
+        ),
     )
 
     assert tuple(item.node_name for item in result.results) == test_case.expected_names
@@ -269,14 +276,16 @@ def test_given_missing_provider_container_when_executing_python_nodes_then_failu
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="run_1",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="run_1",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert tuple(item.node_name for item in result.results) == test_case.expected_names
@@ -316,14 +325,16 @@ def test_given_missing_context_provider_when_executing_python_node_then_failure_
                 function=missing_context_provider_task,
             ),
         ),
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="run_1",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="run_1",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert tuple(item.node_name for item in result.results) == test_case.expected_names
@@ -380,33 +391,37 @@ def test_given_ready_python_node_when_executing_then_uses_existing_run_state(
     task_result: PythonNodeExecutionResult = execute_ready_python_node(
         node=task_node,
         upstream_results=(),
-        adapter=adapter,
-        connection_config={},
-        connection=result_store.connection,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
         run_state=run_state,
-        default_schema="default_schema",
-        result_store=result_store,
+        runtime=PythonNodeRuntime(
+            adapter=adapter,
+            connection_config={},
+            connection=result_store.connection,
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+            default_schema="default_schema",
+            result_store=result_store,
+        ),
     )
     run_state.record_result(node_function=task_node.function, result=task_result)
     asset_result: PythonNodeExecutionResult = execute_ready_python_node(
         node=asset_node,
         upstream_results=(task_result,),
-        adapter=adapter,
-        connection_config={},
-        connection=result_store.connection,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
         run_state=run_state,
-        default_schema="default_schema",
-        result_store=result_store,
+        runtime=PythonNodeRuntime(
+            adapter=adapter,
+            connection_config={},
+            connection=result_store.connection,
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+            default_schema="default_schema",
+            result_store=result_store,
+        ),
     )
 
     assert (task_result.node_name, asset_result.node_name) == test_case.expected_names
@@ -452,18 +467,20 @@ def test_given_cursor_overrides_when_executing_python_nodes_then_context_receive
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
-        start_cursor_ts=EXPECTED_START_CURSOR_TS,
-        end_cursor_ts=EXPECTED_END_CURSOR_TS,
-        start_cursor_int=10,
-        end_cursor_int=20,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+            start_cursor_ts=EXPECTED_START_CURSOR_TS,
+            end_cursor_ts=EXPECTED_END_CURSOR_TS,
+            start_cursor_int=10,
+            end_cursor_int=20,
+        ),
     )
 
     assert (
@@ -515,14 +532,16 @@ def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_down
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert (
@@ -625,14 +644,16 @@ def test_given_mixed_python_skips_when_executing_nodes_then_fan_in_matches_mode(
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert (
@@ -684,14 +705,16 @@ def test_given_failed_upstream_when_executing_python_nodes_then_blocks_downstrea
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert (
@@ -750,15 +773,17 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
         sleep=sleeps.append,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert result.results[0].status == test_case.expected_status
@@ -804,15 +829,17 @@ def test_given_retry_policy_when_attempts_exhausted_then_records_final_exception
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
         sleep=sleeps.append,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert result.results[0].status == test_case.expected_status
@@ -856,15 +883,17 @@ def test_given_retry_policy_when_exception_is_not_selected_then_does_not_retry(
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
         sleep=sleeps.append,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert result.results[0].status == test_case.expected_status
@@ -915,15 +944,17 @@ def test_given_retry_policy_when_backoff_exceeds_cap_then_sleep_is_capped(
 
     result: PythonNodeExecutorResult = execute_python_nodes(
         nodes=nodes,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         statement_recorder=StatementRecorder(),
         sleep=sleeps.append,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert result.results[0].status == test_case.expected_status

@@ -16,6 +16,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
+    PythonNodeRuntime,
 )
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
@@ -121,15 +122,17 @@ def test_given_python_check_when_executing_then_returns_expected_result(
         python_graph=graph,
         upstream_python_results=(upstream_result,),
         upstream_load_results=(),
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="run_1",
-        target="dev",
-        vars={},
-        is_reload=False,
         run_state=run_state,
-        result_store=result_store,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="run_1",
+            target="dev",
+            vars={},
+            is_reload=False,
+            result_store=result_store,
+        ),
     )
 
     assert len(results) == 1
@@ -173,15 +176,17 @@ def test_given_provider_parameter_when_executing_python_check_then_provider_is_i
         python_graph=graph,
         upstream_python_results=(),
         upstream_load_results=(),
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="run_1",
-        target="dev",
-        vars={},
-        is_reload=False,
         run_state=PythonNodeRunState(),
-        providers=providers,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="run_1",
+            target="dev",
+            vars={},
+            is_reload=False,
+            providers=providers,
+        ),
     )
 
     assert len(results) == 1
@@ -223,15 +228,17 @@ def test_given_provider_container_when_executing_python_check_then_context_expos
         python_graph=graph,
         upstream_python_results=(),
         upstream_load_results=(),
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="run_1",
-        target="dev",
-        vars={},
-        is_reload=False,
         run_state=PythonNodeRunState(),
-        providers=providers,
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="run_1",
+            target="dev",
+            vars={},
+            is_reload=False,
+            providers=providers,
+        ),
     )
 
     assert len(results) == 1
@@ -274,14 +281,16 @@ def test_given_missing_provider_container_when_executing_python_check_then_failu
         python_graph=graph,
         upstream_python_results=(),
         upstream_load_results=(),
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="run_1",
-        target="dev",
-        vars={},
-        is_reload=False,
         run_state=PythonNodeRunState(),
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="run_1",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert len(results) == 1

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import replace
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
@@ -16,12 +15,14 @@ from sqlbuild.executor.python_nodes.helpers.fingerprinting import (
 )
 from sqlbuild.executor.python_nodes.helpers.ingress_execution import _to_executable_python_node
 from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
-from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult, PythonNodeRunState
+from sqlbuild.executor.python_nodes.models import (
+    PythonNodeExecutionResult,
+    PythonNodeRunState,
+    PythonNodeRuntime,
+)
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.models import SqlResourceRef
 
 
 class ReadSidePythonExecutionTracker:
@@ -32,57 +33,24 @@ class ReadSidePythonExecutionTracker:
         *,
         python_graph: PythonNodeGraph,
         selected_python_names: frozenset[str],
-        adapter: BaseAdapter,
-        connection_config: dict[str, object],
-        connection: Any,
-        run_id: str,
-        target: str | None,
-        vars: dict[str, object],
-        is_reload: bool,
-        default_database: str | None = None,
-        default_schema: str | None = None,
-        relation_targets: dict[SqlResourceRef, str] | None = None,
-        start_cursor_ts: datetime | None = None,
-        end_cursor_ts: datetime | None = None,
-        start_cursor_int: int | None = None,
-        end_cursor_int: int | None = None,
-        providers: ProviderContainer | None = None,
+        runtime: PythonNodeRuntime,
         identity_recorder: PythonIdentityRecorder | None = None,
-        result_store: Any | None = None,
-        persist_node_results: bool = True,
     ) -> None:
         self._python_graph: PythonNodeGraph = python_graph
         self._selected_python_names: frozenset[str] = selected_python_names
-        self._adapter: BaseAdapter = adapter
-        self._connection_config: dict[str, object] = connection_config
-        self._connection: Any = connection
-        self._run_id: str = run_id
-        self._target: str | None = target
-        self._vars: dict[str, object] = vars
-        self._is_reload: bool = is_reload
-        self._default_database: str | None = default_database
-        self._default_schema: str | None = default_schema
-        self._relation_targets: dict[SqlResourceRef, str] = (
-            {} if relation_targets is None else relation_targets
-        )
-        self._start_cursor_ts: datetime | None = start_cursor_ts
-        self._end_cursor_ts: datetime | None = end_cursor_ts
-        self._start_cursor_int: int | None = start_cursor_int
-        self._end_cursor_int: int | None = end_cursor_int
-        self._providers: ProviderContainer | None = providers
+        self._runtime: PythonNodeRuntime = runtime
         self._identity_recorder: PythonIdentityRecorder | None = identity_recorder
-        self._persist_node_results: bool = persist_node_results
         self._result_store: Any | None = (
-            result_store
-            if result_store is not None
+            runtime.result_store
+            if runtime.result_store is not None
             else (
                 build_standard_node_result_store(
-                    adapter=adapter,
-                    connection=connection,
-                    database=default_database,
-                    schema=default_schema,
+                    adapter=runtime.adapter,
+                    connection=runtime.connection,
+                    database=runtime.default_database,
+                    schema=runtime.default_schema,
                 )
-                if persist_node_results
+                if runtime.persist_node_results
                 else None
             )
         )
@@ -170,6 +138,7 @@ class ReadSidePythonExecutionTracker:
         return True
 
     def _execute_python_node(self, node: DiscoveredPythonNode) -> None:
+        runtime: PythonNodeRuntime = replace(self._runtime, result_store=self._result_store)
         result: PythonNodeExecutionResult = run_ready_python_node(
             node=_to_executable_python_node(node),
             upstream_results=tuple(
@@ -177,25 +146,9 @@ class ReadSidePythonExecutionTracker:
                 for upstream_name in self._python_graph.upstream_deps.get(node.name, ())
                 if upstream_name in self._results_by_name
             ),
-            adapter=self._adapter,
-            connection_config=self._connection_config,
-            connection=self._connection,
-            run_id=self._run_id,
-            target=self._target,
-            vars=self._vars,
-            is_reload=self._is_reload,
+            runtime=runtime,
             statement_recorder=StatementRecorder(),
             run_state=self._run_state,
-            default_database=self._default_database,
-            default_schema=self._default_schema,
-            relation_targets=self._relation_targets,
-            start_cursor_ts=self._start_cursor_ts,
-            end_cursor_ts=self._end_cursor_ts,
-            start_cursor_int=self._start_cursor_int,
-            end_cursor_int=self._end_cursor_int,
-            result_store=self._result_store,
-            providers=self._providers,
-            persist_node_results=self._persist_node_results,
         )
         self._run_state.record_result(node_function=node.function, result=result)
         self._results_by_name[node.name] = result
@@ -206,11 +159,11 @@ class ReadSidePythonExecutionTracker:
             else:
                 try_write_python_node_identity_fingerprint(
                     identity=node.identity,
-                    adapter=self._adapter,
-                    connection=self._connection,
-                    run_id=self._run_id,
-                    database=self._default_database,
-                    schema=self._default_schema,
+                    adapter=self._runtime.adapter,
+                    connection=self._runtime.connection,
+                    run_id=self._runtime.run_id,
+                    database=self._runtime.default_database,
+                    schema=self._runtime.default_schema,
                 )
 
     def _unrun_reason(self, node: DiscoveredPythonNode) -> str:

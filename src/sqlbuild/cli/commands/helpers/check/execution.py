@@ -28,9 +28,11 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
 from sqlbuild.executor.python_nodes.main.ingress import execute_ingress_python_loader_nodes
 from sqlbuild.executor.python_nodes.models import (
+    IngressCallbacks,
     PythonCheckExecutionResult,
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
+    PythonNodeRuntime,
 )
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
@@ -111,18 +113,20 @@ def execute_check_plan(
                 source_map=pipeline_result.plan_output.source_map,
                 load_results=ingress_result.load_results,
             ),
-            adapter=invocation.adapter,
-            connection_config=invocation.connection_config,
-            connection=connection,
-            run_id=pipeline_result.project.run_id,
-            target=pipeline_result.project.effective_target_name,
-            vars=pipeline_result.project.effective_vars,
-            is_reload=False,
+            runtime=PythonNodeRuntime(
+                adapter=invocation.adapter,
+                connection_config=invocation.connection_config,
+                connection=connection,
+                run_id=pipeline_result.project.run_id,
+                target=pipeline_result.project.effective_target_name,
+                vars=pipeline_result.project.effective_vars,
+                is_reload=False,
+                default_database=preparation.default_database,
+                default_schema=preparation.default_schema,
+                relation_targets=preparation.relation_targets,
+                providers=providers,
+            ),
             run_state=ingress_result.run_state,
-            default_database=preparation.default_database,
-            default_schema=preparation.default_schema,
-            relation_targets=preparation.relation_targets,
-            providers=providers,
             require_upstream_results=False,
         )
     finally:
@@ -142,18 +146,20 @@ def _execute_check_ingress(
         selected_python_names=preparation.lifecycle_plan.ingress_python_node_names,
         loader_functions=invocation.discovered_inputs.loader_functions,
         source_map=pipeline_result.plan_output.source_map,
-        adapter=invocation.adapter,
-        connection_config=invocation.connection_config,
-        connection=connection,
-        run_id=pipeline_result.project.run_id,
-        target=pipeline_result.project.effective_target_name,
-        vars=pipeline_result.project.effective_vars,
-        is_reload=False,
-        default_database=preparation.default_database,
-        default_schema=preparation.default_schema,
-        use_color=invocation.use_color,
-        relation_targets=preparation.relation_targets,
-        providers=providers,
+        runtime=PythonNodeRuntime(
+            adapter=invocation.adapter,
+            connection_config=invocation.connection_config,
+            connection=connection,
+            run_id=pipeline_result.project.run_id,
+            target=pipeline_result.project.effective_target_name,
+            vars=pipeline_result.project.effective_vars,
+            is_reload=False,
+            default_database=preparation.default_database,
+            default_schema=preparation.default_schema,
+            relation_targets=preparation.relation_targets,
+            providers=providers,
+        ),
+        callbacks=IngressCallbacks(use_color=invocation.use_color),
     )
     record_python_run_state_results(
         discovered_inputs=invocation.discovered_inputs,

@@ -28,7 +28,11 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildCallbacks,
+    BuildExecutionResult,
+    BuildRuntimeParams,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import (
     run_audit_pipeline,
@@ -85,18 +89,22 @@ def execute_sqlbuild_build_work(
         connection_config=connection_config,
         adapter=adapter,
         settings=project.settings,
-        run_id=project.run_id,
-        run_tests=command == DbtInteropCommand.BUILD,
-        run_audits=command == DbtInteropCommand.BUILD,
-        fail_fast=fail_fast,
-        max_concurrency=effective_concurrency,
-        on_node_start=callbacks.on_node_start,
-        on_node_complete=callbacks.on_node_complete,
-        on_sub_progress=callbacks.on_sub_progress,
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
-        use_color=use_color,
+        runtime=BuildRuntimeParams(
+            run_id=project.run_id,
+            run_tests=command == DbtInteropCommand.BUILD,
+            run_audits=command == DbtInteropCommand.BUILD,
+            fail_fast=fail_fast,
+            max_concurrency=effective_concurrency,
+            use_color=use_color,
+        ),
+        callbacks=BuildCallbacks(
+            on_node_start=callbacks.on_node_start,
+            on_node_complete=callbacks.on_node_complete,
+            on_sub_progress=callbacks.on_sub_progress,
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=execution_connection_progress.on_connection_complete,
+            on_connection_error=execution_connection_progress.on_connection_error,
+        ),
     )
     write_runtime_target(target_dir=project_dir / "target", plan_output=plan_output, result=result)
     footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)

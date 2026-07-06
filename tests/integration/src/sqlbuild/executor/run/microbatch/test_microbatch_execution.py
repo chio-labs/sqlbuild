@@ -19,7 +19,7 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
 from sqlbuild.executor.run.helpers.materializations.microbatch import execute_microbatch_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.helpers import (
@@ -815,16 +815,18 @@ def test_given_microbatch_with_origin_proof_when_running_then_audit_executes(
     )
 
     result: ModelExecutionResult = execute_microbatch_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(planned_audit,),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     assert result.status == ExecutionStatus.FAILED

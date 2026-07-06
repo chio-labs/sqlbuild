@@ -18,7 +18,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run.helpers.materializations.snapshot import execute_snapshot_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     SnapshotAdapterRenderingTestCase,
@@ -189,15 +189,17 @@ def test_given_existing_snapshot_target_when_executing_then_uses_adapter_rendere
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
-        run_id="test_run",
-        query_change_tracking=False,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
     )
     rendered_rows: tuple[tuple[object, ...], ...] = tuple(
         tuple(row)
@@ -277,15 +279,17 @@ def test_given_existing_historical_timestamp_snapshot_when_executing_then_uses_a
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
-        run_id="test_run",
-        query_change_tracking=False,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
     )
     rendered_rows: tuple[tuple[object, ...], ...] = tuple(
         tuple(row)
@@ -357,15 +361,17 @@ def test_given_existing_historical_timestamp_changes_snapshot_when_executing_the
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
-        run_id="test_run",
-        query_change_tracking=False,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
     )
     rendered_rows: tuple[tuple[object, ...], ...] = tuple(
         tuple(row)
@@ -427,15 +433,17 @@ def test_given_new_historical_timestamp_changes_when_executing_then_uses_adapter
     )
 
     result: ModelExecutionResult = execute_snapshot_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
-        run_id="test_run",
-        query_change_tracking=False,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
     )
     rendered_rows: tuple[tuple[object, ...], ...] = tuple(
         tuple(row)

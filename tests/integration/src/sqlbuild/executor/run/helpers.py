@@ -35,7 +35,11 @@ from sqlbuild.executor.run.helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
 )
 from sqlbuild.executor.run.main.execute import execute_table_entry
-from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    HookContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
@@ -464,24 +468,28 @@ def _execute_test(
     }
 
     return execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations=model_locations,
-        seed_locations={},
-        source_map={},
-        model_audits=model_audits,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations=model_locations,
+            seed_locations={},
+            source_map={},
+            model_audits=model_audits,
+            run_id="test_run",
+            query_change_tracking=(
+                test_case.query_change_tracking
+                if isinstance(test_case, TableSuccessTestCase)
+                else True
+            ),
+            hook_functions=tuple(
+                hook_function
+                for hook_function in getattr(test_case, "hook_functions", ())
+                if isinstance(hook_function, DiscoveredHookFunction)
+            ),
+        ),
         declared_columns=declared_columns,
         promotion_mode=test_case.promotion_mode,
-        run_id="test_run",
-        query_change_tracking=(
-            test_case.query_change_tracking if isinstance(test_case, TableSuccessTestCase) else True
-        ),
-        hook_functions=tuple(
-            hook_function
-            for hook_function in getattr(test_case, "hook_functions", ())
-            if isinstance(hook_function, DiscoveredHookFunction)
-        ),
     )
 
 

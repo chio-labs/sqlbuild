@@ -20,7 +20,12 @@ from sqlbuild.executor.run.helpers.execution.results import (
     build_skipped_result,
 )
 from sqlbuild.executor.run.helpers.reuse.fingerprinting import try_write_fingerprint
-from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    HookExecutionResult,
+    HookRunContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
@@ -31,23 +36,24 @@ from sqlbuild.spec.models.source import SourceEntry
 
 def execute_view_entry(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
-    run_id: str,
-    query_change_tracking: bool,
-    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
-    effective_target_name: str | None = None,
-    effective_vars: Mapping[str, object] | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
+    context: ModelMaterializationContext,
 ) -> ModelExecutionResult:
     """Execute one view model through its full materialization lifecycle."""
 
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
+    model_locations: dict[str, CompiledRelationLocation] = context.model_locations
+    seed_locations: dict[str, CompiledRelationLocation] = context.seed_locations
+    source_map: dict[str, SourceEntry] = context.source_map
+    model_audits: tuple[AuditPlanEntry, ...] = context.model_audits
+    run_id: str = context.run_id
+    query_change_tracking: bool = context.query_change_tracking
+    hook_functions: tuple[DiscoveredHookFunction, ...] = context.hook_functions
+    effective_target_name: str | None = context.effective_target_name
+    effective_vars: Mapping[str, object] | None = context.effective_vars
+    providers: ProviderContainer | None = context.providers
+    python_identity_recorder: PythonIdentityRecorder | None = context.python_identity_recorder
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_qualified: str = resolve_relation_location_qualified_name(
@@ -69,15 +75,17 @@ def execute_view_entry(
                 hooks=entry.pre_hooks,
                 phase=HookPhase.PRE_HOOKS,
                 hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
                 hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
+                hook_run=HookRunContext(
+                    model_name=entry.name,
+                    destination=entry.destination,
+                    run_id=run_id,
+                    target=effective_target_name,
+                    effective_vars=effective_vars,
+                    statement_recorder=statement_recorder,
+                    providers=providers,
+                    python_identity_recorder=python_identity_recorder,
+                ),
             )
         if pre_hook_skipped:
             return build_skipped_result(
@@ -166,15 +174,17 @@ def execute_view_entry(
                 hooks=entry.post_hooks,
                 phase=HookPhase.POST_HOOKS,
                 hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
                 hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
+                hook_run=HookRunContext(
+                    model_name=entry.name,
+                    destination=entry.destination,
+                    run_id=run_id,
+                    target=effective_target_name,
+                    effective_vars=effective_vars,
+                    statement_recorder=statement_recorder,
+                    providers=providers,
+                    python_identity_recorder=python_identity_recorder,
+                ),
             )
         if post_hook_skipped:
             return build_skipped_result(

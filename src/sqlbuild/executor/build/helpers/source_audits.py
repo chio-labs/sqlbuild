@@ -6,33 +6,24 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-)
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build.models import SourceAuditRunResult
-from sqlbuild.spec.models.source import SourceEntry
 
 
 def run_pending_source_audits(
     *,
     model_key: CompiledObjectKey,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    selected_keys: frozenset[CompiledObjectKey],
+    plan: PlanOutput,
     source_audits_by_source: dict[str, tuple[AuditPlanEntry, ...]],
     executed_source_audits: frozenset[str],
     failed_sources: frozenset[str],
     adapter: BaseAdapter,
     connection: Any,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
     fail_fast: bool,
 ) -> SourceAuditRunResult:
     """Execute pending source audits and return the resulting state changes."""
@@ -43,7 +34,7 @@ def run_pending_source_audits(
     newly_blocked: set[CompiledObjectKey] = set()
     audit_results: list[AuditExecutionResult] = []
     dep_key: CompiledObjectKey
-    for dep_key in upstream_deps.get(model_key, ()):
+    for dep_key in plan.upstream_deps.get(model_key, ()):
         if dep_key.resource_type != CompiledResourceType.SOURCE:
             continue
         source_name: str = dep_key.name
@@ -61,9 +52,9 @@ def run_pending_source_audits(
                 audit=audit,
                 adapter=adapter,
                 connection=connection,
-                model_locations=model_locations,
-                seed_locations=seed_locations,
-                source_map=source_map,
+                model_locations=plan.model_locations,
+                seed_locations=plan.seed_locations,
+                source_map=plan.source_map,
                 relation_overrides=None,
                 run_scope_phase=AuditRunScope.FINAL,
             )
@@ -73,8 +64,8 @@ def run_pending_source_audits(
                 newly_blocked.update(
                     downstream_blocked_keys(
                         failed_key=dep_key,
-                        downstream_deps=downstream_deps,
-                        selected_keys=selected_keys,
+                        downstream_deps=plan.downstream_deps,
+                        selected_keys=plan.selected_keys,
                     )
                 )
                 any_blocked = True

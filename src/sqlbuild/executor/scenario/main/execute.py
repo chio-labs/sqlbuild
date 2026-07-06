@@ -10,7 +10,7 @@ from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction
 from sqlbuild.executor.run.main.execute import execute_table_entry, execute_view_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_MODEL_FAILED
 
@@ -46,16 +46,18 @@ def execute_scenario_model(
     ):
         return _with_scenario_model_error_code(
             execute_view_entry(
-                entry=entry,
-                adapter=adapter,
-                connection=connection,
-                model_locations=scenario_plan.relation_plan.model_locations,
-                seed_locations=scenario_plan.relation_plan.seed_locations,
-                source_map=scenario_plan.relation_plan.source_map,
-                model_audits=(),
-                run_id=run_id,
-                query_change_tracking=False,
-                hook_functions=scenario_plan.hook_functions,
+                context=ModelMaterializationContext(
+                    entry=entry,
+                    adapter=adapter,
+                    connection=connection,
+                    model_locations=scenario_plan.relation_plan.model_locations,
+                    seed_locations=scenario_plan.relation_plan.seed_locations,
+                    source_map=scenario_plan.relation_plan.source_map,
+                    model_audits=(),
+                    run_id=run_id,
+                    query_change_tracking=False,
+                    hook_functions=scenario_plan.hook_functions,
+                )
             )
         )
 
@@ -65,18 +67,20 @@ def execute_scenario_model(
 
     return _with_scenario_model_error_code(
         execute_table_entry(
-            entry=table_entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations=scenario_plan.relation_plan.model_locations,
-            seed_locations=scenario_plan.relation_plan.seed_locations,
-            source_map=scenario_plan.relation_plan.source_map,
-            model_audits=(),
+            context=ModelMaterializationContext(
+                entry=table_entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations=scenario_plan.relation_plan.model_locations,
+                seed_locations=scenario_plan.relation_plan.seed_locations,
+                source_map=scenario_plan.relation_plan.source_map,
+                model_audits=(),
+                run_id=run_id,
+                query_change_tracking=False,
+                hook_functions=scenario_plan.hook_functions,
+            ),
             declared_columns=entry.declared_columns,
             promotion_mode=TablePromotionMode.DIRECT,
-            run_id=run_id,
-            query_change_tracking=False,
-            hook_functions=scenario_plan.hook_functions,
         )
     )
 

@@ -14,7 +14,12 @@ from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildCustomizations,
+    BuildExecutionResult,
+    BuildRuntimeParams,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
 from tests.integration.src.sqlbuild.executor.build.concurrent._test_types import (
@@ -60,19 +65,23 @@ def run_concurrent_build(
         worker_connections.append(adapter.connect(config))
     try:
         return execute_build_plan(
-            plan=plan,
-            adapter=adapter,
-            connection_config=config,
-            connections=tuple(worker_connections),
-            scheduler_connection=scheduler_connection,
+        plan=plan,
+        adapter=adapter,
+        connection_config=config,
+        connections=tuple(worker_connections),
+        scheduler_connection=scheduler_connection,
+        runtime=BuildRuntimeParams(
             promotion_mode=TablePromotionMode.STAGED,
             run_id="test_concurrent",
             query_change_tracking=True,
             run_audits=test_case.run_audits,
             fail_fast=test_case.fail_fast,
-            loader_functions=discovered.loader_functions,
             providers=provider_session.providers if provider_session is not None else None,
-        )
+        ),
+        customizations=BuildCustomizations(
+            loader_functions=discovered.loader_functions,
+        ),
+    )
     finally:
         if provider_session is not None:
             provider_session.close()

@@ -6,10 +6,8 @@ import logging
 import random
 import time
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction
@@ -32,6 +30,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutorResult,
     PythonNodeFanInDecision,
     PythonNodeRunState,
+    PythonNodeRuntime,
     TaskContext,
 )
 from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
@@ -53,26 +52,10 @@ from sqlbuild.tasks import get_task_definition
 def execute_python_nodes(
     *,
     nodes: tuple[ExecutablePythonNode, ...],
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    connection: Any,
-    run_id: str,
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
+    runtime: PythonNodeRuntime,
     statement_recorder: StatementRecorder,
-    default_database: str | None = None,
-    default_schema: str | None = None,
-    relation_targets: dict[SqlResourceRef, str] | None = None,
-    start_cursor_ts: datetime | None = None,
-    end_cursor_ts: datetime | None = None,
-    start_cursor_int: int | None = None,
-    end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     run_state: PythonNodeRunState | None = None,
-    result_store: Any | None = None,
-    providers: ProviderContainer | None = None,
-    persist_node_results: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> PythonNodeExecutorResult:
@@ -83,12 +66,12 @@ def execute_python_nodes(
     )
     result_store: Any | None = (
         build_standard_node_result_store(
-            adapter=adapter,
-            connection=connection,
-            database=default_database,
-            schema=default_schema,
+            adapter=runtime.adapter,
+            connection=runtime.connection,
+            database=runtime.default_database,
+            schema=runtime.default_schema,
         )
-        if persist_node_results
+        if runtime.persist_node_results
         else None
     )
     node_by_name: dict[str, ExecutablePythonNode] = {node.name: node for node in nodes}
@@ -122,25 +105,11 @@ def execute_python_nodes(
         result: PythonNodeExecutionResult = _execute_ready_node(
             node=node,
             upstream_results=tuple(results_by_name[name] for name in upstream_names[node.name]),
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=connection,
-            run_id=run_id,
-            target=target,
-            vars=vars,
-            is_reload=is_reload,
+            runtime=runtime,
             statement_recorder=statement_recorder,
-            default_database=default_database,
-            default_schema=default_schema,
-            relation_targets={} if relation_targets is None else relation_targets,
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
             logger=logger,
             run_state=resolved_run_state,
             result_store=result_store,
-            providers=providers,
             sleep=sleep,
             monotonic=monotonic,
         )
@@ -167,26 +136,10 @@ def execute_ready_python_node(
     *,
     node: ExecutablePythonNode,
     upstream_results: tuple[PythonNodeExecutionResult, ...],
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    connection: Any,
-    run_id: str,
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
+    runtime: PythonNodeRuntime,
     statement_recorder: StatementRecorder,
-    default_database: str | None = None,
-    default_schema: str | None = None,
-    relation_targets: dict[SqlResourceRef, str] | None = None,
-    start_cursor_ts: datetime | None = None,
-    end_cursor_ts: datetime | None = None,
-    start_cursor_int: int | None = None,
-    end_cursor_int: int | None = None,
     logger: logging.Logger | None = None,
     run_state: PythonNodeRunState | None = None,
-    result_store: Any | None = None,
-    providers: ProviderContainer | None = None,
-    persist_node_results: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> PythonNodeExecutionResult:
@@ -195,36 +148,22 @@ def execute_ready_python_node(
     return _execute_ready_node(
         node=node,
         upstream_results=upstream_results,
-        adapter=adapter,
-        connection_config=connection_config,
-        connection=connection,
-        run_id=run_id,
-        target=target,
-        vars=vars,
-        is_reload=is_reload,
+        runtime=runtime,
         statement_recorder=statement_recorder,
-        default_database=default_database,
-        default_schema=default_schema,
-        relation_targets={} if relation_targets is None else relation_targets,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
         logger=logger,
         run_state=run_state if run_state is not None else PythonNodeRunState(),
-        result_store=result_store
-        if result_store is not None
+        result_store=runtime.result_store
+        if runtime.result_store is not None
         else (
             build_standard_node_result_store(
-                adapter=adapter,
-                connection=connection,
-                database=default_database,
-                schema=default_schema,
+                adapter=runtime.adapter,
+                connection=runtime.connection,
+                database=runtime.default_database,
+                schema=runtime.default_schema,
             )
-            if persist_node_results
+            if runtime.persist_node_results
             else None
         ),
-        providers=providers,
         sleep=sleep,
         monotonic=monotonic,
     )
@@ -234,28 +173,16 @@ def _execute_ready_node(
     *,
     node: ExecutablePythonNode,
     upstream_results: tuple[PythonNodeExecutionResult, ...],
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    connection: Any,
-    run_id: str,
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
+    runtime: PythonNodeRuntime,
     statement_recorder: StatementRecorder,
-    default_database: str | None,
-    default_schema: str | None,
-    relation_targets: dict[SqlResourceRef, str],
-    start_cursor_ts: datetime | None,
-    end_cursor_ts: datetime | None,
-    start_cursor_int: int | None,
-    end_cursor_int: int | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
     result_store: Any | None,
-    providers: ProviderContainer | None,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> PythonNodeExecutionResult:
+    run_id: str = runtime.run_id
+    providers: ProviderContainer | None = runtime.providers
     node_kind: PythonNodeKind = _node_kind(node)
     decision: PythonNodeFanInDecision = evaluate_python_node_fan_in(
         upstream_results=upstream_results
@@ -282,25 +209,11 @@ def _execute_ready_node(
     context: TaskContext | AssetContext = _build_context(
         node=node,
         node_kind=node_kind,
-        adapter=adapter,
-        connection_config=connection_config,
-        connection=connection,
-        run_id=run_id,
-        target=target,
-        vars=vars,
-        is_reload=is_reload,
+        runtime=runtime,
         statement_recorder=statement_recorder,
-        default_database=default_database,
-        default_schema=default_schema,
-        relation_targets=relation_targets,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
         logger=logger,
         run_state=run_state,
         result_store=result_store,
-        providers=providers,
     )
     try:
         returned: object = _call_node_with_retry(
@@ -423,79 +336,45 @@ def _build_context(
     *,
     node: ExecutablePythonNode,
     node_kind: PythonNodeKind,
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    connection: Any,
-    run_id: str,
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
+    runtime: PythonNodeRuntime,
     statement_recorder: StatementRecorder,
-    default_database: str | None,
-    default_schema: str | None,
-    relation_targets: dict[SqlResourceRef, str],
-    start_cursor_ts: datetime | None,
-    end_cursor_ts: datetime | None,
-    start_cursor_int: int | None,
-    end_cursor_int: int | None,
     logger: logging.Logger | None,
     run_state: PythonNodeRunState,
     result_store: Any | None,
-    providers: ProviderContainer | None,
 ) -> TaskContext | AssetContext:
     context_logger: logging.Logger = logger or logging.getLogger(
         f"sqlbuild.{node_kind.value}.{node.name}"
     )
-    if node_kind == PythonNodeKind.ASSET:
-        return AssetContext(
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=connection,
-            run_id=run_id,
-            target=target,
-            vars=vars,
-            is_reload=is_reload,
-            logger=context_logger,
-            statement_recorder=statement_recorder,
-            run_state=run_state,
-            result_store=result_store,
-            default_database=default_database,
-            default_schema=default_schema,
-            relation_targets=relation_targets,
-            allowed_sql_refs=frozenset(
-                dependency
-                for dependency in node.depends_on
-                if isinstance(dependency, SqlResourceRef)
-            ),
-            providers=providers if providers is not None else _empty_provider_container(),
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
-        )
-    return TaskContext(
-        adapter=adapter,
-        connection_config=connection_config,
-        connection=connection,
-        run_id=run_id,
-        target=target,
-        vars=vars,
-        is_reload=is_reload,
+    allowed_sql_refs: frozenset[SqlResourceRef] = frozenset(
+        dependency for dependency in node.depends_on if isinstance(dependency, SqlResourceRef)
+    )
+    providers: ProviderContainer = (
+        runtime.providers if runtime.providers is not None else _empty_provider_container()
+    )
+    context_class: type[AssetContext] | type[TaskContext] = (
+        AssetContext if node_kind == PythonNodeKind.ASSET else TaskContext
+    )
+    return context_class(
+        adapter=runtime.adapter,
+        connection_config=runtime.connection_config,
+        connection=runtime.connection,
+        run_id=runtime.run_id,
+        target=runtime.target,
+        vars=runtime.vars,
+        is_reload=runtime.is_reload,
         logger=context_logger,
         statement_recorder=statement_recorder,
         run_state=run_state,
         result_store=result_store,
-        default_database=default_database,
-        default_schema=default_schema,
-        relation_targets=relation_targets,
-        allowed_sql_refs=frozenset(
-            dependency for dependency in node.depends_on if isinstance(dependency, SqlResourceRef)
-        ),
-        providers=providers if providers is not None else _empty_provider_container(),
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
+        default_database=runtime.default_database,
+        default_schema=runtime.default_schema,
+        relation_targets=runtime.resolved_relation_targets,
+        allowed_sql_refs=allowed_sql_refs,
+        providers=providers,
+        start_cursor_ts=runtime.start_cursor_ts,
+        end_cursor_ts=runtime.end_cursor_ts,
+        start_cursor_int=runtime.start_cursor_int,
+        end_cursor_int=runtime.end_cursor_int,
     )
 
 

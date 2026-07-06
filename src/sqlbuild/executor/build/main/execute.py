@@ -2,25 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.adapter.shared.types import TablePromotionMode
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
-from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
 from sqlbuild.executor.build.helpers.output import aggregate_build_result
 from sqlbuild.executor.build.helpers.scheduler import BuildScheduler
 from sqlbuild.executor.build.models import (
+    BuildCallbacks,
+    BuildCustomizations,
     BuildExecutionResult,
-    BuildIndexes,
+    BuildInitialState,
+    BuildRuntimeParams,
     FunctionExecutionResult,
     SeedExecutionResult,
 )
@@ -29,16 +24,11 @@ from sqlbuild.executor.build.shared.helpers.node_source_watermarks import (
     write_native_node_source_watermark_records,
 )
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.main.dependency_baseline import execute_dependency_baseline_entries
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
-from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.types import ExecutionResourceKind
-from sqlbuild.spec.models.project import SnapshotsConfig
 
 
 def execute_build_plan(
@@ -48,42 +38,20 @@ def execute_build_plan(
     connection_config: dict[str, object],
     connections: tuple[Any, ...],
     scheduler_connection: Any,
-    promotion_mode: TablePromotionMode,
-    run_id: str,
-    runtime_dir: Path = Path("target"),
-    query_change_tracking: bool = True,
-    snapshots: SnapshotsConfig | None = None,
-    allow_snapshot_schema_change: bool = False,
-    run_audits: bool = True,
-    run_tests: bool = True,
-    fail_fast: bool = False,
-    on_progress: Callable[[str], None] | None = None,
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
-    on_node_complete: Callable[[object], None] | None = None,
-    before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
-    custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
-    custom_prepare_version_functions: Mapping[str, Callable[[PrepareVersionContext], None]]
-    | None = None,
-    loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
-    loader_is_reload: bool = False,
-    start_cursor_ts: datetime | None = None,
-    end_cursor_ts: datetime | None = None,
-    start_cursor_int: int | None = None,
-    end_cursor_int: int | None = None,
-    target: str = "",
-    effective_vars: dict[str, object] | None = None,
-    warehouse_relations: dict[str, RelationInfo] | None = None,
-    on_sub_progress: Callable[[str], None] | None = None,
-    use_color: bool = False,
-    precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
-    initial_load_results: tuple[LoadExecutionResult, ...] = (),
-    initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
+    runtime: BuildRuntimeParams,
+    callbacks: BuildCallbacks | None = None,
+    customizations: BuildCustomizations | None = None,
+    initial_state: BuildInitialState | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build plan using the DAG scheduler."""
 
-    indexes: BuildIndexes = build_execution_indexes(plan)
+    resolved_callbacks: BuildCallbacks = callbacks if callbacks is not None else BuildCallbacks()
+    resolved_customizations: BuildCustomizations = (
+        customizations if customizations is not None else BuildCustomizations()
+    )
+    resolved_initial_state: BuildInitialState = (
+        initial_state if initial_state is not None else BuildInitialState()
+    )
     node_source_watermark_context: NodeSourceWatermarkExecutionContext | None = (
         build_native_node_source_watermark_context(
             plan=plan,
@@ -93,42 +61,14 @@ def execute_build_plan(
     )
     scheduler: BuildScheduler = BuildScheduler(
         plan=plan,
-        indexes=indexes,
         adapter=adapter,
         connection_config=connection_config,
         connections=connections,
         scheduler_connection=scheduler_connection,
-        promotion_mode=promotion_mode,
-        run_id=run_id,
-        runtime_dir=runtime_dir,
-        query_change_tracking=query_change_tracking,
-        snapshots=snapshots or SnapshotsConfig(),
-        allow_snapshot_schema_change=allow_snapshot_schema_change,
-        run_audits=run_audits,
-        run_tests=run_tests,
-        fail_fast=fail_fast,
-        on_node_start=on_node_start,
-        on_node_complete=on_node_complete,
-        on_progress=on_progress,
-        before_model_materialize=before_model_materialize,
-        custom_materializations=custom_materializations,
-        custom_prepare_version_functions=custom_prepare_version_functions,
-        loader_functions=loader_functions,
-        loader_is_reload=loader_is_reload,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
-        target=target,
-        effective_vars=effective_vars,
-        warehouse_relations=warehouse_relations,
-        on_sub_progress=on_sub_progress,
-        use_color=use_color,
-        precompleted_keys=precompleted_keys,
-        initial_load_results=initial_load_results,
-        initial_failed_keys=initial_failed_keys,
-        providers=providers,
-        python_identity_recorder=python_identity_recorder,
+        runtime=runtime,
+        callbacks=resolved_callbacks,
+        customizations=resolved_customizations,
+        initial_state=resolved_initial_state,
         node_source_watermark_context=node_source_watermark_context,
     )
 
@@ -137,8 +77,8 @@ def execute_build_plan(
             entries=plan.dependency_baseline_entries,
             adapter=adapter,
             connection=scheduler_connection,
-            on_node_start=on_node_start,
-            on_node_complete=on_node_complete,
+            on_node_start=resolved_callbacks.on_node_start,
+            on_node_complete=resolved_callbacks.on_node_complete,
         )
     )
     if any(result.status == ExecutionStatus.FAILED for result in dependency_baseline_results):
@@ -146,7 +86,7 @@ def execute_build_plan(
             model_results=dependency_baseline_results,
             seed_results=(),
             function_results=(),
-            load_results=initial_load_results,
+            load_results=resolved_initial_state.initial_load_results,
             test_results=(),
             source_audit_results=(),
             end_audit_results=(),
