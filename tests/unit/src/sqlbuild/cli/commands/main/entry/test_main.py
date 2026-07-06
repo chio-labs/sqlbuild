@@ -15,6 +15,10 @@ from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.scenario.models import (
+    ScenarioCaptureCommandRequest,
+    ScenarioTestCommandRequest,
+)
 from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.main.commands.entry import _main_with_dependencies, main
@@ -837,44 +841,26 @@ def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispa
         ]
     ] = []
 
-    def run_scenario(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        no_color: bool,
-        selectors: tuple[str, ...],
-        exclude: tuple[str, ...],
-        retain: bool,
-        local: bool,
-        strict: bool,
-        sync_snapshots: bool,
-        refresh: bool,
-        force: bool,
-        max_snapshot_rows: int | None,
-        max_snapshot_total_rows: int | None,
-        max_snapshot_bytes: int | None,
-        max_snapshot_total_bytes: int | None,
-        json_output: bool,
-        json_output_path: Path | None,
-    ) -> int:
+    def run_scenario(request: ScenarioTestCommandRequest) -> int:
         received_args.append(
             (
-                project_dir,
-                no_sql_validation,
-                no_color,
-                selectors,
-                exclude,
-                retain,
-                local,
-                strict,
-                sync_snapshots,
-                refresh,
-                force,
-                max_snapshot_rows,
-                max_snapshot_total_rows,
-                max_snapshot_bytes,
-                max_snapshot_total_bytes,
-                json_output,
-                json_output_path,
+                request.project_dir,
+                request.no_sql_validation,
+                request.no_color,
+                request.selectors,
+                request.exclude,
+                request.retain,
+                request.local,
+                request.strict,
+                request.sync_snapshots,
+                request.refresh,
+                request.limit_inputs.force,
+                request.limit_inputs.max_snapshot_rows,
+                request.limit_inputs.max_snapshot_total_rows,
+                request.limit_inputs.max_snapshot_bytes,
+                request.limit_inputs.max_snapshot_total_bytes,
+                request.json_output,
+                request.json_output_path,
             )
         )
         return test_case.expected_exit_code
@@ -974,6 +960,7 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
                 AuditCommandRequest,
                 BuildCommandRequest,
                 LoadCommandRequest,
+                ScenarioTestCommandRequest,
                 SeedCommandRequest,
                 TestCommandRequest,
             ),
@@ -1318,32 +1305,20 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
         ]
     ] = []
 
-    def run_scenario_capture(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        no_color: bool,
-        selectors: tuple[str, ...],
-        exclude: tuple[str, ...],
-        retain: bool,
-        force: bool,
-        max_snapshot_rows: int | None,
-        max_snapshot_total_rows: int | None,
-        max_snapshot_bytes: int | None,
-        max_snapshot_total_bytes: int | None,
-    ) -> int:
+    def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
         received_args.append(
             (
-                project_dir,
-                no_sql_validation,
-                no_color,
-                selectors,
-                exclude,
-                retain,
-                force,
-                max_snapshot_rows,
-                max_snapshot_total_rows,
-                max_snapshot_bytes,
-                max_snapshot_total_bytes,
+                request.project_dir,
+                request.no_sql_validation,
+                request.no_color,
+                request.selectors,
+                request.exclude,
+                request.retain,
+                request.limit_inputs.force,
+                request.limit_inputs.max_snapshot_rows,
+                request.limit_inputs.max_snapshot_total_rows,
+                request.limit_inputs.max_snapshot_bytes,
+                request.limit_inputs.max_snapshot_total_bytes,
             )
         )
         return test_case.expected_exit_code
@@ -2338,32 +2313,8 @@ def test_given_scenario_select_file_when_running_then_dispatches_file_selectors(
     )
     received_selects: list[tuple[str, ...]] = []
 
-    def run_scenario_capture(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        no_color: bool,
-        selectors: tuple[str, ...],
-        exclude: tuple[str, ...],
-        retain: bool,
-        force: bool,
-        max_snapshot_rows: int | None,
-        max_snapshot_total_rows: int | None,
-        max_snapshot_bytes: int | None,
-        max_snapshot_total_bytes: int | None,
-    ) -> int:
-        del (
-            project_dir,
-            no_sql_validation,
-            no_color,
-            exclude,
-            retain,
-            force,
-            max_snapshot_rows,
-            max_snapshot_total_rows,
-            max_snapshot_bytes,
-            max_snapshot_total_bytes,
-        )
-        received_selects.append(selectors)
+    def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
+        received_selects.append(request.selectors)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(

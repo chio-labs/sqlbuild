@@ -7,8 +7,16 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.scenario.capture_run import run_scenario_capture_run
+from sqlbuild.cli.commands.helpers.scenario.capture_run import (
+    build_scenario_capture_settings,
+    run_scenario_capture_run,
+)
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
+from sqlbuild.cli.commands.helpers.scenario.models import (
+    ScenarioCaptureCommandRequest,
+    ScenarioRunOutputContext,
+    ScenarioSnapshotLimitInputs,
+)
 from sqlbuild.cli.commands.helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.commands.helpers.scenario.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
@@ -39,21 +47,17 @@ from sqlbuild.spec.models.project import (
 )
 
 
-def run_scenario_capture(
-    project_dir: Path | None,
-    no_sql_validation: bool = False,
-    no_color: bool = False,
-    selectors: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    retain: bool = False,
-    force: bool = False,
-    max_snapshot_rows: int | None = None,
-    max_snapshot_total_rows: int | None = None,
-    max_snapshot_bytes: int | None = None,
-    max_snapshot_total_bytes: int | None = None,
-) -> int:
+def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     """Execute the scenario capture command."""
 
+    project_dir: Path | None = request.project_dir
+    no_sql_validation: bool = request.no_sql_validation
+    no_color: bool = request.no_color
+    selectors: tuple[str, ...] = request.selectors
+    exclude: tuple[str, ...] = request.exclude
+    retain: bool = request.retain
+    limit_inputs: ScenarioSnapshotLimitInputs = request.limit_inputs
+    force: bool = limit_inputs.force
     if no_sql_validation:
         raise CliUserError(
             "scenario capture requires SQL analysis and SQL validation",
@@ -129,11 +133,7 @@ def run_scenario_capture(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
-        max_rows_per_relation=max_snapshot_rows,
-        max_total_rows=max_snapshot_total_rows,
-        max_bytes_per_relation=max_snapshot_bytes,
-        max_total_bytes=max_snapshot_total_bytes,
-        force=force,
+        limit_inputs=limit_inputs,
     )
     return run_scenario_capture_run(
         project_dir=effective_project_dir,
@@ -143,11 +143,16 @@ def run_scenario_capture(
         adapter=adapter,
         adapter_name=adapter_name,
         project_name=discovered_inputs.project_config.name,
-        capture_dialect=capture_dialect,
-        capture_limits=capture_limits,
-        retain=retain,
-        progress_stream=progress_stream,
-        use_color=use_color,
+        settings=build_scenario_capture_settings(
+            capture_adapter=adapter_name,
+            capture_dialect=capture_dialect,
+            retain=retain,
+            limits=capture_limits,
+        ),
+        output_context=ScenarioRunOutputContext(
+            progress_stream=progress_stream,
+            use_color=use_color,
+        ),
     )
 
 

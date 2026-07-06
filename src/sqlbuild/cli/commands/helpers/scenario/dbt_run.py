@@ -9,9 +9,16 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.types import BuiltinAdapter
-from sqlbuild.cli.commands.helpers.scenario.capture_run import run_scenario_capture_run
+from sqlbuild.cli.commands.helpers.scenario.capture_run import (
+    build_scenario_capture_settings,
+    run_scenario_capture_run,
+)
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
 from sqlbuild.cli.commands.helpers.scenario.local_run import run_local_scenarios
+from sqlbuild.cli.commands.helpers.scenario.models import (
+    ScenarioRunOutputContext,
+    ScenarioSnapshotLimitInputs,
+)
 from sqlbuild.cli.commands.helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.commands.helpers.scenario.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
@@ -131,10 +138,12 @@ def run_dbt_scenario_test(
                 adapter=project_adapter, adapter_name=discovery.adapter_name
             ),
             target_dir=effective_project_dir / "target",
-            progress_stream=progress_stream,
-            use_color=use_color,
-            json_output=json_output,
-            json_output_path=json_output_path,
+            output_context=ScenarioRunOutputContext(
+                progress_stream=progress_stream,
+                use_color=use_color,
+                json_output=json_output,
+                json_output_path=json_output_path,
+            ),
         )
     return run_warehouse_scenarios(
         pipeline_result=pipeline_result,
@@ -145,10 +154,12 @@ def run_dbt_scenario_test(
         project_name=discovery.project_name,
         target_dir=effective_project_dir / "target",
         retain=retain,
-        progress_stream=progress_stream,
-        use_color=use_color,
-        json_output=json_output,
-        json_output_path=json_output_path,
+        output_context=ScenarioRunOutputContext(
+            progress_stream=progress_stream,
+            use_color=use_color,
+            json_output=json_output,
+            json_output_path=json_output_path,
+        ),
     )
 
 
@@ -223,20 +234,21 @@ def capture_dbt_scenarios(
         adapter=adapter,
         adapter_name=discovery.adapter_name,
         project_name=discovery.project_name,
-        capture_dialect=require_scenario_capture_dialect(
-            adapter=adapter, adapter_name=discovery.adapter_name
+        settings=build_scenario_capture_settings(
+            capture_adapter=discovery.adapter_name,
+            capture_dialect=require_scenario_capture_dialect(
+                adapter=adapter, adapter_name=discovery.adapter_name
+            ),
+            retain=retain,
+            limits=build_scenario_snapshot_capture_limits(
+                scenario_config=discovery.scenario_config,
+                limit_inputs=ScenarioSnapshotLimitInputs(force=force),
+            ),
         ),
-        capture_limits=build_scenario_snapshot_capture_limits(
-            scenario_config=discovery.scenario_config,
-            max_rows_per_relation=None,
-            max_total_rows=None,
-            max_bytes_per_relation=None,
-            max_total_bytes=None,
-            force=force,
+        output_context=ScenarioRunOutputContext(
+            progress_stream=progress_stream,
+            use_color=use_color,
         ),
-        retain=retain,
-        progress_stream=progress_stream,
-        use_color=use_color,
     )
 
 

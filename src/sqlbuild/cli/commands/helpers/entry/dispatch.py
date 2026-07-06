@@ -18,6 +18,11 @@ from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.scenario.models import (
+    ScenarioCaptureCommandRequest,
+    ScenarioSnapshotLimitInputs,
+    ScenarioTestCommandRequest,
+)
 from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
@@ -481,37 +486,45 @@ def _dispatch_scenario_command(
                 ),
             )
         return handlers.run_scenario(
-            project_dir,
-            False,
-            args.no_color,
-            scenario_select,
-            tuple(args.exclude),
-            args.scenario_retain,
-            args.scenario_local,
-            args.scenario_strict,
-            args.scenario_sync_snapshots,
-            args.scenario_refresh,
-            args.scenario_force,
-            args.scenario_max_snapshot_rows,
-            args.scenario_max_snapshot_total_rows,
-            args.scenario_max_snapshot_bytes,
-            args.scenario_max_snapshot_total_bytes,
-            args.json,
-            args.json_output,
+            ScenarioTestCommandRequest(
+                project_dir=project_dir,
+                no_sql_validation=False,
+                no_color=args.no_color,
+                selectors=scenario_select,
+                exclude=tuple(args.exclude),
+                retain=args.scenario_retain,
+                local=args.scenario_local,
+                strict=args.scenario_strict,
+                sync_snapshots=args.scenario_sync_snapshots,
+                refresh=args.scenario_refresh,
+                limit_inputs=ScenarioSnapshotLimitInputs(
+                    max_snapshot_rows=args.scenario_max_snapshot_rows,
+                    max_snapshot_total_rows=args.scenario_max_snapshot_total_rows,
+                    max_snapshot_bytes=args.scenario_max_snapshot_bytes,
+                    max_snapshot_total_bytes=args.scenario_max_snapshot_total_bytes,
+                    force=args.scenario_force,
+                ),
+                json_output=args.json,
+                json_output_path=args.json_output,
+            ),
         )
     if args.scenario_command == "capture":
         return handlers.run_scenario_capture(
-            project_dir,
-            False,
-            args.no_color,
-            scenario_select,
-            tuple(args.exclude),
-            args.scenario_retain,
-            args.scenario_force,
-            args.scenario_max_snapshot_rows,
-            args.scenario_max_snapshot_total_rows,
-            args.scenario_max_snapshot_bytes,
-            args.scenario_max_snapshot_total_bytes,
+            ScenarioCaptureCommandRequest(
+                project_dir=project_dir,
+                no_sql_validation=False,
+                no_color=args.no_color,
+                selectors=scenario_select,
+                exclude=tuple(args.exclude),
+                retain=args.scenario_retain,
+                limit_inputs=ScenarioSnapshotLimitInputs(
+                    max_snapshot_rows=args.scenario_max_snapshot_rows,
+                    max_snapshot_total_rows=args.scenario_max_snapshot_total_rows,
+                    max_snapshot_bytes=args.scenario_max_snapshot_bytes,
+                    max_snapshot_total_bytes=args.scenario_max_snapshot_total_bytes,
+                    force=args.scenario_force,
+                ),
+            ),
         )
     raise CliUserError(
         "scenario requires a subcommand such as 'test'",

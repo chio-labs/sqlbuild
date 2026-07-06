@@ -8,6 +8,7 @@ from sqlbuild.cli.commands.helpers.scenario.constants import (
     DEFAULT_MAX_SNAPSHOT_TOTAL_BYTES,
     DEFAULT_MAX_SNAPSHOT_TOTAL_ROWS,
 )
+from sqlbuild.cli.commands.helpers.scenario.models import ScenarioSnapshotLimitInputs
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
 from sqlbuild.spec.models.project import ScenarioConfig
 
@@ -15,36 +16,32 @@ from sqlbuild.spec.models.project import ScenarioConfig
 def build_scenario_snapshot_capture_limits(
     *,
     scenario_config: ScenarioConfig,
-    max_rows_per_relation: int | None,
-    max_total_rows: int | None,
-    max_bytes_per_relation: int | None,
-    max_total_bytes: int | None,
-    force: bool,
+    limit_inputs: ScenarioSnapshotLimitInputs,
 ) -> ScenarioSnapshotCaptureLimits:
     """Build scenario snapshot capture limits from CLI options."""
 
     return ScenarioSnapshotCaptureLimits(
         max_rows_per_relation=_resolve_limit(
-            cli_value=max_rows_per_relation,
+            cli_value=limit_inputs.max_snapshot_rows,
             config_value=scenario_config.snapshot_limits.max_rows_per_relation,
             default_value=DEFAULT_MAX_SNAPSHOT_ROWS_PER_RELATION,
         ),
         max_total_rows=_resolve_limit(
-            cli_value=max_total_rows,
+            cli_value=limit_inputs.max_snapshot_total_rows,
             config_value=scenario_config.snapshot_limits.max_total_rows,
             default_value=DEFAULT_MAX_SNAPSHOT_TOTAL_ROWS,
         ),
         max_bytes_per_relation=_resolve_limit(
-            cli_value=max_bytes_per_relation,
+            cli_value=limit_inputs.max_snapshot_bytes,
             config_value=scenario_config.snapshot_limits.max_bytes_per_relation,
             default_value=DEFAULT_MAX_SNAPSHOT_BYTES_PER_RELATION,
         ),
         max_total_bytes=_resolve_limit(
-            cli_value=max_total_bytes,
+            cli_value=limit_inputs.max_snapshot_total_bytes,
             config_value=scenario_config.snapshot_limits.max_total_bytes,
             default_value=DEFAULT_MAX_SNAPSHOT_TOTAL_BYTES,
         ),
-        force=force,
+        force=limit_inputs.force,
     )
 
 
