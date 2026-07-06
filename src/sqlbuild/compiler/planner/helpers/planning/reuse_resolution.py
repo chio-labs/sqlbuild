@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerRuntime,
     PlannerScopeResolution,
     PlannerWarehouseState,
+    StandardReuseIdentityInputs,
     StandardReusePlanningResult,
 )
 
@@ -41,14 +42,16 @@ def resolve_standard_reuse(
             relations=warehouse.inspection_relations,
             project_config=runtime.project_config,
             local_config=runtime.local_config,
-            expected_version_hashes=identities.version_identities.model_version_hashes,
-            built_fingerprints=warehouse.snapshot.fingerprints.models,
-            destination_relation_names=frozenset(warehouse.snapshot.existing_relations),
-            cursor_snapshots=warehouse.snapshot.cursor_snapshots,
-            full_refresh=overrides.full_refresh,
-            custom_prepare_version_materializations=(
-                policies.custom_prepare_version_materializations
+            identity_inputs=StandardReuseIdentityInputs(
+                expected_version_hashes=identities.version_identities.model_version_hashes,
+                built_fingerprints=warehouse.snapshot.fingerprints.models,
+                destination_relation_names=frozenset(warehouse.snapshot.existing_relations),
+                cursor_snapshots=warehouse.snapshot.cursor_snapshots,
+                custom_prepare_version_materializations=(
+                    policies.custom_prepare_version_materializations
+                ),
             ),
+            full_refresh=overrides.full_refresh,
         )
         if policies.enable_reuse_planning
         else None

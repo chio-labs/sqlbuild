@@ -389,6 +389,23 @@ class CursorOverridePair:
 
 
 @dataclass(frozen=True)
+class ModelChangesPlanInputs:
+    """Optional planning inputs for building a plan output from model changes."""
+
+    cursor_overrides: CursorOverrides | None = None
+    full_refresh: bool = False
+    reload_sources: bool = False
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None
+    project_config: ProjectConfig | None = None
+    local_config: LocalConfig | None = None
+    defer_sources_to: str | None = None
+    source_deferral_enabled: bool = True
+    seed_version_hashes: dict[str, str] | None = None
+    seed_metadata_jsons: dict[str, str] | None = None
+    seed_plan_reasons: dict[str, PlanReason] | None = None
+
+
+@dataclass(frozen=True)
 class PlanEntryBuildInputs:
     """Reuse decisions, blocked models, and cursor overrides for plan entry building."""
 
@@ -581,6 +598,28 @@ class ExistingDestinationInputPlanEntry:
     status: str
     expected_version_hash: str | None = None
     destination_version_hash: str | None = None
+
+
+@dataclass(frozen=True)
+class StandardReuseIdentityInputs:
+    """Version, fingerprint, and cursor inputs for standard reuse planning."""
+
+    expected_version_hashes: dict[str, str]
+    built_fingerprints: dict[str, Fingerprint]
+    cursor_snapshots: dict[str, ModelCursorSnapshot]
+    destination_relation_names: frozenset[str] = frozenset()
+    custom_prepare_version_materializations: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class PlanOutputExtras:
+    """Optional supplemental entries and seed fingerprints for plan output assembly."""
+
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = ()
+    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = ()
+    seed_version_hashes: dict[str, str] | None = None
+    seed_metadata_jsons: dict[str, str] | None = None
+    seed_plan_reasons: dict[str, PlanReason] | None = None
 
 
 @dataclass(frozen=True)

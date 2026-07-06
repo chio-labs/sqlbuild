@@ -34,6 +34,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScopeResolution,
     PlannerWarehouseState,
     PlanOutput,
+    PlanOutputExtras,
     PlanWarning,
     RunDespiteUnchangedPlanningResult,
 )
@@ -62,11 +63,13 @@ def assemble_base_plan_output(
         relations=warehouse.inspection_relations,
         changes=reconciliation.changes,
         model_entry_results=entries.model_entry_results,
-        dependency_baseline_entries=entries.dependency_baseline_entries,
-        existing_destination_input_entries=entries.existing_destination_input_entries,
         reload_sources=overrides.reload_sources,
-        seed_version_hashes=identities.version_identities.seed_version_hashes,
-        seed_metadata_jsons=identities.version_identities.seed_metadata_jsons,
+        extras=PlanOutputExtras(
+            dependency_baseline_entries=entries.dependency_baseline_entries,
+            existing_destination_input_entries=entries.existing_destination_input_entries,
+            seed_version_hashes=identities.version_identities.seed_version_hashes,
+            seed_metadata_jsons=identities.version_identities.seed_metadata_jsons,
+        ),
     )
     plan_output = replace(plan_output, source_freshness=source_freshness)
     if pruning.pruned_standard_model_names:

@@ -31,7 +31,9 @@ from sqlbuild.compiler.planner.helpers.resolve.sources import (
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
+    CursorOverridePair,
     ModelCursorSnapshot,
+    ModelPlanContext,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, IncrementalMode, MaterializationType
@@ -44,21 +46,21 @@ def resolve_model_sql(
     adapter: BaseAdapter,
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    function_locations: dict[str, CompiledRelationLocation] | None = None,
-    source_map: dict[str, SourceEntry],
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
-    star_exclude_keyword: str,
+    context: ModelPlanContext,
     backfill: BackfillResult,
     full_refresh: bool,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
+    cursor_overrides: CursorOverridePair,
     suppress_runtime_cursor_bounds: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> str:
     """Resolve all references in a model's query SQL to produce executable SQL."""
 
+    model_locations: dict[str, CompiledRelationLocation] = context.model_locations
+    seed_locations: dict[str, CompiledRelationLocation] = context.seed_locations
+    function_locations: dict[str, CompiledRelationLocation] = context.function_locations
+    source_map: dict[str, SourceEntry] = context.source_map
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = context.source_warehouse_columns
+    star_exclude_keyword: str = context.star_exclude_keyword
     query_sql: str = model.query_sql
     cursor_type: str | None = get_config_str(model, "cursor_type")
 
@@ -67,8 +69,8 @@ def resolve_model_sql(
         snapshot=snapshot,
         backfill=backfill,
         full_refresh=full_refresh,
-        start_cursor_override=start_cursor_override,
-        end_cursor_override=end_cursor_override,
+        start_cursor_override=cursor_overrides.start_cursor_override,
+        end_cursor_override=cursor_overrides.end_cursor_override,
         model_locations=model_locations,
         seed_locations=seed_locations,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
