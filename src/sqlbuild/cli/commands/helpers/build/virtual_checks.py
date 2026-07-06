@@ -17,7 +17,11 @@ from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_no
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
-from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult, PythonNodeRunState
+from sqlbuild.executor.python_nodes.models import (
+    PythonCheckExecutionResult,
+    PythonNodeRunState,
+    PythonNodeRuntime,
+)
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.virtual.executor.classes.node_result_store import VirtualNodeResultStore
 from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
@@ -94,18 +98,20 @@ def run_post_virtual_build_checks(
                     source_map=result.display_plan_output.source_map,
                     load_results=result.execution_result.load_results,
                 ),
-                adapter=adapter,
-                connection_config=connection_config,
-                connection=check_connection,
-                run_id=result.project.run_id,
-                target=result.project.effective_target_name,
-                vars=result.project.effective_vars,
-                is_reload=reload_sources,
+                runtime=PythonNodeRuntime(
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection=check_connection,
+                    run_id=result.project.run_id,
+                    target=result.project.effective_target_name,
+                    vars=result.project.effective_vars,
+                    is_reload=reload_sources,
+                    default_database=adapter.default_database(),
+                    default_schema=adapter.default_schema(),
+                    providers=providers,
+                    result_store=check_result_store,
+                ),
                 run_state=check_run_state,
-                default_database=adapter.default_database(),
-                default_schema=adapter.default_schema(),
-                providers=providers,
-                result_store=check_result_store,
             )
         finally:
             state_backend.close(check_state_connection)

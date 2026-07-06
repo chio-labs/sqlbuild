@@ -1,0 +1,134 @@
+"""Shared pre/post hook lifecycle phases for model materializations."""
+
+from __future__ import annotations
+
+from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.execution.results import (
+    build_failed_result,
+    build_skipped_result,
+)
+from sqlbuild.executor.run.models import (
+    HookExecutionResult,
+    HookRunContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+    PostHookPhaseOutcome,
+)
+from sqlbuild.executor.run.types import HookPhase
+from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+
+
+def run_pre_hook_phase(
+    *,
+    context: ModelMaterializationContext,
+    warnings: list[str],
+    audit_results: list[AuditExecutionResult],
+    hook_results: list[HookExecutionResult],
+    statement_recorder: StatementRecorder,
+) -> ModelExecutionResult | None:
+    """Run model pre-hooks and return an early-exit result, or None to continue."""
+
+    entry = context.entry
+    try:
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
+        )
+        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
+            pre_hook_skipped: bool = execute_hooks(
+                connection=context.connection,
+                adapter=context.adapter,
+                hooks=entry.pre_hooks,
+                phase=HookPhase.PRE_HOOKS,
+                hook_functions=context.hook_functions,
+                hook_results=hook_results,
+                hook_run=build_model_hook_run(
+                    context=context, statement_recorder=statement_recorder
+                ),
+            )
+        if pre_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.PRE_HOOK,
+            error=str(exc),
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+            hook_results=hook_results,
+        )
+    return None
+
+
+def run_post_hook_phase(
+    *,
+    context: ModelMaterializationContext,
+    warnings: list[str],
+    audit_results: list[AuditExecutionResult],
+    hook_results: list[HookExecutionResult],
+    statement_recorder: StatementRecorder,
+    staging_relation: str | None = None,
+    promoted_relation: str | None = None,
+) -> PostHookPhaseOutcome:
+    """Run model post-hooks and return the skip/failure phase outcome."""
+
+    entry = context.entry
+    try:
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
+        )
+        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
+            post_hook_skipped: bool = execute_hooks(
+                connection=context.connection,
+                adapter=context.adapter,
+                hooks=entry.post_hooks,
+                phase=HookPhase.POST_HOOKS,
+                hook_functions=context.hook_functions,
+                hook_results=hook_results,
+                hook_run=build_model_hook_run(
+                    context=context, statement_recorder=statement_recorder
+                ),
+            )
+    except Exception as exc:
+        return PostHookPhaseOutcome(
+            failure=build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.POST_HOOK,
+                error=str(exc),
+                staging_relation=staging_relation,
+                promoted_relation=promoted_relation,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+            )
+        )
+    return PostHookPhaseOutcome(skipped=post_hook_skipped)
+
+
+def build_model_hook_run(
+    *,
+    context: ModelMaterializationContext,
+    statement_recorder: StatementRecorder,
+) -> HookRunContext:
+    """Build the hook run context for one model's lifecycle hooks."""
+
+    return HookRunContext(
+        model_name=context.entry.name,
+        destination=context.entry.destination,
+        run_id=context.run_id,
+        target=context.effective_target_name,
+        effective_vars=context.effective_vars,
+        statement_recorder=statement_recorder,
+        providers=context.providers,
+        python_identity_recorder=context.python_identity_recorder,
+    )

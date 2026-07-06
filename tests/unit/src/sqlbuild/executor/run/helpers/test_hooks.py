@@ -13,7 +13,13 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.materializations.view import execute_view_entry
-from sqlbuild.executor.run.models import HookContext, HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    HookContext,
+    HookExecutionResult,
+    HookRunContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -191,17 +197,19 @@ def test_given_python_hook_when_executing_then_invokes_function_with_context_and
                 function=notify,
             ),
         ),
-        model_name="orders",
-        destination=CompiledRelationLocation(
-            database=None,
-            schema="main",
-            name="orders",
-            qualified_name=None,
+        hook_run=HookRunContext(
+            model_name="orders",
+            destination=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders",
+                qualified_name=None,
+            ),
+            run_id="run-1",
+            target="dev",
+            effective_vars={"channel": "alerts"},
+            statement_recorder=statement_recorder,
         ),
-        run_id="run-1",
-        target="dev",
-        effective_vars={"channel": "alerts"},
-        statement_recorder=statement_recorder,
     )
 
     ctx, message, rows = captured[0]
@@ -258,14 +266,16 @@ def test_given_python_hook_returns_skip_when_executing_then_records_skipped_hook
                 function=maybe_skip,
             ),
         ),
-        model_name="orders",
-        destination=CompiledRelationLocation(
-            database=None,
-            schema="main",
-            name="orders",
-            qualified_name=None,
-        ),
         hook_results=hook_results,
+        hook_run=HookRunContext(
+            model_name="orders",
+            destination=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders",
+                qualified_name=None,
+            ),
+        ),
     )
 
     assert skipped is test_case.expected_skipped
@@ -332,12 +342,14 @@ def test_given_python_hook_returns_skip_when_executing_phase_then_later_hooks_do
                 function=should_not_run,
             ),
         ),
-        model_name="orders",
-        destination=CompiledRelationLocation(
-            database=None,
-            schema="main",
-            name="orders",
-            qualified_name=None,
+        hook_run=HookRunContext(
+            model_name="orders",
+            destination=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders",
+                qualified_name=None,
+            ),
         ),
     )
 
@@ -371,21 +383,23 @@ def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_sk
         pre_hooks=(PythonHookEntry(name="maybe_skip", kwargs={}),),
     )
     result: ModelExecutionResult = execute_view_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
-        run_id="run-1",
-        query_change_tracking=False,
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/maybe_skip.py"),
-                name="maybe_skip",
-                function=maybe_skip,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="run-1",
+            query_change_tracking=False,
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/maybe_skip.py"),
+                    name="maybe_skip",
+                    function=maybe_skip,
+                ),
             ),
         ),
     )
@@ -441,12 +455,14 @@ def test_given_python_hook_returns_payload_when_executing_then_it_fails_clearly(
                     function=invalid_return,
                 ),
             ),
-            model_name="orders",
-            destination=CompiledRelationLocation(
-                database=None,
-                schema="main",
-                name="orders",
-                qualified_name=None,
+            hook_run=HookRunContext(
+                model_name="orders",
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name="orders",
+                    qualified_name=None,
+                ),
             ),
         )
 
@@ -511,14 +527,16 @@ def test_given_python_hooks_when_executing_then_injects_supported_context_aliase
                 function=uses_hook_context,
             ),
         ),
-        model_name="orders",
-        destination=CompiledRelationLocation(
-            database=None,
-            schema="main",
-            name="orders",
-            qualified_name=None,
+        hook_run=HookRunContext(
+            model_name="orders",
+            destination=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name="orders",
+                qualified_name=None,
+            ),
+            run_id="run-1",
         ),
-        run_id="run-1",
     )
 
     assert len(captured_contexts) == test_case.expected_context_count
@@ -559,14 +577,16 @@ def test_given_python_hook_raises_when_executing_then_reports_hook_label(
                     function=explode,
                 ),
             ),
-            model_name="orders",
-            destination=CompiledRelationLocation(
-                database=None,
-                schema="main",
-                name="orders",
-                qualified_name=None,
+            hook_run=HookRunContext(
+                model_name="orders",
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name="orders",
+                    qualified_name=None,
+                ),
+                run_id="run-1",
             ),
-            run_id="run-1",
         )
 
 

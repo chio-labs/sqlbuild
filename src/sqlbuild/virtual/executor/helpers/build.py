@@ -65,7 +65,14 @@ from sqlbuild.compiler.python_nodes.models import (
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildCallbacks,
+    BuildCustomizations,
+    BuildExecutionResult,
+    BuildInitialState,
+    BuildRuntimeParams,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
@@ -77,8 +84,10 @@ from sqlbuild.executor.pipeline.main.run import run_build_pipeline
 from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
 from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
 from sqlbuild.executor.python_nodes.models import (
+    IngressCallbacks,
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
+    PythonNodeRuntime,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -571,25 +580,29 @@ def run_virtual_build(
                     selected_python_names=lifecycle_plan.ingress_python_node_names,
                     loader_functions=discovered_inputs.loader_functions,
                     source_map=plan_output.source_map,
-                    adapter=adapter,
-                    connection_config=connection_config,
-                    connection=ingress_connection,
-                    run_id=rewritten_project.run_id,
-                    target=target_vde_name,
-                    vars=rewritten_project.effective_vars,
-                    is_reload=reload_sources,
-                    default_database=adapter.default_database(),
-                    default_schema=adapter.default_schema(),
-                    start_cursor_ts=start_cursor_ts,
-                    end_cursor_ts=end_cursor_ts,
-                    start_cursor_int=start_cursor_int,
-                    end_cursor_int=end_cursor_int,
-                    on_node_start=hooks.on_node_start,
-                    on_node_complete=hooks.on_node_complete,
-                    relation_targets=relation_targets,
-                    providers=providers,
-                    identity_recorder=record_python_identity,
-                    result_store=ingress_result_store,
+                    runtime=PythonNodeRuntime(
+                        adapter=adapter,
+                        connection_config=connection_config,
+                        connection=ingress_connection,
+                        run_id=rewritten_project.run_id,
+                        target=target_vde_name,
+                        vars=rewritten_project.effective_vars,
+                        is_reload=reload_sources,
+                        default_database=adapter.default_database(),
+                        default_schema=adapter.default_schema(),
+                        start_cursor_ts=start_cursor_ts,
+                        end_cursor_ts=end_cursor_ts,
+                        start_cursor_int=start_cursor_int,
+                        end_cursor_int=end_cursor_int,
+                        relation_targets=relation_targets,
+                        providers=providers,
+                        result_store=ingress_result_store,
+                    ),
+                    callbacks=IngressCallbacks(
+                        on_node_start=hooks.on_node_start,
+                        on_node_complete=hooks.on_node_complete,
+                        identity_recorder=record_python_identity,
+                    ),
                 )
             finally:
                 backend.close(ingress_state_connection)
@@ -628,40 +641,48 @@ def run_virtual_build(
             connection_config=connection_config,
             adapter=adapter,
             settings=rewritten_project.settings,
-            snapshots=snapshots or SnapshotsConfig(),
-            allow_snapshot_schema_change=allow_snapshot_schema_change,
-            run_id=rewritten_project.run_id,
-            run_tests=run_tests,
-            run_audits=run_audits,
-            fail_fast=fail_fast,
-            max_concurrency=effective_concurrency,
-            on_node_start=hooks.on_node_start,
-            on_node_complete=hooks.on_node_complete,
-            on_sub_progress=hooks.on_sub_progress,
-            before_model_materialize=before_model_materialize,
-            custom_materializations=custom_materializations,
-            loader_functions=_sql_loader_functions_for_lifecycle_handoff(
-                discovered_inputs=discovered_inputs,
-                ingress_loader_names=lifecycle_plan.ingress_loader_names,
+            runtime=BuildRuntimeParams(
+                snapshots=snapshots or SnapshotsConfig(),
+                allow_snapshot_schema_change=allow_snapshot_schema_change,
+                run_id=rewritten_project.run_id,
+                run_tests=run_tests,
+                run_audits=run_audits,
+                fail_fast=fail_fast,
+                max_concurrency=effective_concurrency,
+                loader_is_reload=reload_sources,
+                start_cursor_ts=start_cursor_ts,
+                end_cursor_ts=end_cursor_ts,
+                start_cursor_int=start_cursor_int,
+                end_cursor_int=end_cursor_int,
+                query_change_tracking=False,
+                providers=providers,
             ),
-            loader_is_reload=reload_sources,
-            precompleted_keys=frozenset(
-                _load_result_key(plan=plan_output, result=load_result)
-                for load_result in ingress_load_results
+            callbacks=BuildCallbacks(
+                on_node_start=hooks.on_node_start,
+                on_node_complete=hooks.on_node_complete,
+                on_sub_progress=hooks.on_sub_progress,
+                before_model_materialize=before_model_materialize,
+                python_identity_recorder=record_python_identity,
             ),
-            initial_load_results=ingress_load_results,
-            initial_failed_keys=frozenset(
-                _load_result_key(plan=plan_output, result=load_result)
-                for load_result in ingress_load_results
-                if load_result.status != ExecutionStatus.SUCCESS
+            customizations=BuildCustomizations(
+                custom_materializations=custom_materializations,
+                loader_functions=_sql_loader_functions_for_lifecycle_handoff(
+                    discovered_inputs=discovered_inputs,
+                    ingress_loader_names=lifecycle_plan.ingress_loader_names,
+                ),
             ),
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
-            query_change_tracking=False,
-            providers=providers,
-            python_identity_recorder=record_python_identity,
+            initial_state=BuildInitialState(
+                precompleted_keys=frozenset(
+                    _load_result_key(plan=plan_output, result=load_result)
+                    for load_result in ingress_load_results
+                ),
+                initial_load_results=ingress_load_results,
+                initial_failed_keys=frozenset(
+                    _load_result_key(plan=plan_output, result=load_result)
+                    for load_result in ingress_load_results
+                    if load_result.status != ExecutionStatus.SUCCESS
+                ),
+            ),
         )
     if result.status == BuildStatus.SUCCESS and available_seed_physical_relations:
         result = replace(
@@ -845,23 +866,25 @@ def _run_read_side_python_nodes(
             tracker: Any = create_read_side_python_execution_tracker(
                 python_graph=python_graph,
                 selected_python_names=lifecycle_plan.read_side_python_node_names,
-                adapter=adapter,
-                connection_config=connection_config,
-                connection=connection,
-                run_id=run_id,
-                target=environment,
-                vars=vars,
-                is_reload=is_reload,
-                default_database=default_database,
-                default_schema=default_schema,
-                relation_targets=relation_targets,
-                start_cursor_ts=start_cursor_ts,
-                end_cursor_ts=end_cursor_ts,
-                start_cursor_int=start_cursor_int,
-                end_cursor_int=end_cursor_int,
-                providers=providers,
+                runtime=PythonNodeRuntime(
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection=connection,
+                    run_id=run_id,
+                    target=environment,
+                    vars=vars,
+                    is_reload=is_reload,
+                    default_database=default_database,
+                    default_schema=default_schema,
+                    relation_targets=relation_targets,
+                    start_cursor_ts=start_cursor_ts,
+                    end_cursor_ts=end_cursor_ts,
+                    start_cursor_int=start_cursor_int,
+                    end_cursor_int=end_cursor_int,
+                    providers=providers,
+                    result_store=result_store,
+                ),
                 identity_recorder=identity_recorder,
-                result_store=result_store,
             )
             load_result: LoadExecutionResult
             for load_result in result.load_results:

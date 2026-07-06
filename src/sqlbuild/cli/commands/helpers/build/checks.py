@@ -24,6 +24,7 @@ from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeRunState,
+    PythonNodeRuntime,
 )
 
 
@@ -76,17 +77,19 @@ def run_post_build_python_checks(
                 source_map=pipeline_result.plan_output.source_map,
                 load_results=outcome.result.load_results,
             ),
-            adapter=invocation.adapter,
-            connection_config=invocation.connection_config,
-            connection=check_connection,
-            run_id=pipeline_result.project.run_id,
-            target=pipeline_result.project.effective_target_name,
-            vars=pipeline_result.project.effective_vars,
-            is_reload=request.reload_sources,
+            runtime=PythonNodeRuntime(
+                adapter=invocation.adapter,
+                connection_config=invocation.connection_config,
+                connection=check_connection,
+                run_id=pipeline_result.project.run_id,
+                target=pipeline_result.project.effective_target_name,
+                vars=pipeline_result.project.effective_vars,
+                is_reload=request.reload_sources,
+                default_database=invocation.adapter.default_database(),
+                default_schema=invocation.adapter.default_schema(),
+                providers=providers,
+            ),
             run_state=check_run_state,
-            default_database=invocation.adapter.default_database(),
-            default_schema=invocation.adapter.default_schema(),
-            providers=providers,
         )
     finally:
         invocation.adapter.close(check_connection)

@@ -19,11 +19,12 @@ from sqlbuild.compiler.python_nodes.types import (
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.shared.types import ExecutionResourceKind, PythonCheckSeverity
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,45 @@ class PythonIngressLoaderExecutorResult:
     python_results: tuple[PythonNodeExecutionResult, ...]
     load_results: tuple[LoadExecutionResult, ...]
     run_state: PythonNodeRunState
+
+
+@dataclass(frozen=True)
+class PythonNodeRuntime:
+    """Runtime-invariant execution inputs shared across Python-node executors."""
+
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    connection: Any
+    run_id: str
+    target: str | None
+    vars: dict[str, object]
+    is_reload: bool
+    default_database: str | None = None
+    default_schema: str | None = None
+    relation_targets: dict[SqlResourceRef, str] | None = None
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
+    providers: ProviderContainer | None = None
+    result_store: Any | None = None
+    persist_node_results: bool = True
+
+    @property
+    def resolved_relation_targets(self) -> dict[SqlResourceRef, str]:
+        """Return relation targets, defaulting to an empty mapping."""
+
+        return {} if self.relation_targets is None else self.relation_targets
+
+
+@dataclass(frozen=True)
+class IngressCallbacks:
+    """Progress callbacks and display flags for Python ingress execution."""
+
+    use_color: bool = False
+    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None
+    on_node_complete: Callable[[object], None] | None = None
+    identity_recorder: PythonIdentityRecorder | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

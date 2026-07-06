@@ -33,8 +33,10 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
 from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
 from sqlbuild.executor.python_nodes.models import (
+    IngressCallbacks,
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
+    PythonNodeRuntime,
 )
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import SqlResourceRef
@@ -112,24 +114,28 @@ def prepare_standard_python_lifecycle(
                 selected_python_names=lifecycle_plan.ingress_python_node_names,
                 loader_functions=discovered_inputs.loader_functions,
                 source_map=ingress_source_map,
-                adapter=adapter,
-                connection_config=connection_config,
-                connection=ingress_connection,
-                run_id=pipeline_result.project.run_id,
-                target=pipeline_result.project.effective_target_name,
-                vars=pipeline_result.project.effective_vars,
-                is_reload=reload_sources,
-                default_database=default_database,
-                default_schema=default_schema,
-                start_cursor_ts=start_cursor_ts,
-                end_cursor_ts=end_cursor_ts,
-                start_cursor_int=start_cursor_int,
-                end_cursor_int=end_cursor_int,
-                use_color=use_color,
-                on_node_start=on_node_start,
-                on_node_complete=on_node_complete,
-                relation_targets=relation_targets,
-                providers=providers,
+                runtime=PythonNodeRuntime(
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection=ingress_connection,
+                    run_id=pipeline_result.project.run_id,
+                    target=pipeline_result.project.effective_target_name,
+                    vars=pipeline_result.project.effective_vars,
+                    is_reload=reload_sources,
+                    default_database=default_database,
+                    default_schema=default_schema,
+                    start_cursor_ts=start_cursor_ts,
+                    end_cursor_ts=end_cursor_ts,
+                    start_cursor_int=start_cursor_int,
+                    end_cursor_int=end_cursor_int,
+                    relation_targets=relation_targets,
+                    providers=providers,
+                ),
+                callbacks=IngressCallbacks(
+                    use_color=use_color,
+                    on_node_start=on_node_start,
+                    on_node_complete=on_node_complete,
+                ),
             )
         finally:
             adapter.close(ingress_connection)
@@ -152,21 +158,23 @@ def prepare_standard_python_lifecycle(
         read_side_tracker = create_read_side_python_execution_tracker(
             python_graph=python_graph,
             selected_python_names=read_side_names,
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=read_side_connection,
-            run_id=pipeline_result.project.run_id,
-            target=pipeline_result.project.effective_target_name,
-            vars=pipeline_result.project.effective_vars,
-            is_reload=reload_sources,
-            default_database=default_database,
-            default_schema=default_schema,
-            relation_targets=relation_targets,
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
-            providers=providers,
+            runtime=PythonNodeRuntime(
+                adapter=adapter,
+                connection_config=connection_config,
+                connection=read_side_connection,
+                run_id=pipeline_result.project.run_id,
+                target=pipeline_result.project.effective_target_name,
+                vars=pipeline_result.project.effective_vars,
+                is_reload=reload_sources,
+                default_database=default_database,
+                default_schema=default_schema,
+                relation_targets=relation_targets,
+                start_cursor_ts=start_cursor_ts,
+                end_cursor_ts=end_cursor_ts,
+                start_cursor_int=start_cursor_int,
+                end_cursor_int=end_cursor_int,
+                providers=providers,
+            ),
         )
         for ingress_load_result in ingress_load_results:
             read_side_tracker.record_sql_result(ingress_load_result)

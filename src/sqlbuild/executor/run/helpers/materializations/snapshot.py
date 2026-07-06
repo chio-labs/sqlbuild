@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, NormalizedType, StatementRecorder
 from sqlbuild.adapter.shared.type_normalization import normalize_type, types_equal
 from sqlbuild.adapter.shared.types import TypeFamily
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     HistoricalInput,
     PlanReason,
@@ -20,10 +16,15 @@ from sqlbuild.compiler.planner.types import (
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
-from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.execution.final_audits import (
+    run_delta_scope_audits,
+    run_final_scope_audits,
+)
+from sqlbuild.executor.run.helpers.execution.hook_phases import (
+    run_post_hook_phase,
+    run_pre_hook_phase,
+)
 from sqlbuild.executor.run.helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run.helpers.execution.results import (
     build_failed_result,
@@ -32,18 +33,21 @@ from sqlbuild.executor.run.helpers.execution.results import (
 from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_plan
 from sqlbuild.executor.run.helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.helpers.validation.contracts import validate_runtime_contract
-from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
-from sqlbuild.executor.run.types import HookPhase
+from sqlbuild.executor.run.models import (
+    FinalAuditRun,
+    HookExecutionResult,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+    PostHookPhaseOutcome,
+)
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
 from sqlbuild.shared.helpers.identity.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.spec.models.project import SnapshotsConfig
-from sqlbuild.spec.models.source import SourceEntry
 
 _DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
 _DEFAULT_VALID_TO_COLUMN: str = "valid_to"
@@ -56,25 +60,15 @@ _SCHEMA_CHANGE_STRICTNESS: dict[SnapshotSchemaChangePolicy, int] = {
 
 def execute_snapshot_entry(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
-    run_id: str,
-    query_change_tracking: bool,
+    context: ModelMaterializationContext,
     snapshots: SnapshotsConfig | None = None,
     allow_snapshot_schema_change: bool = False,
-    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
-    effective_target_name: str | None = None,
-    effective_vars: Mapping[str, object] | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one current-state snapshot model."""
 
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_table: str = entry.destination.name
@@ -108,34 +102,6 @@ def execute_snapshot_entry(
             schema=target_schema,
             statement_recorder=statement_recorder,
         )
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
-            pre_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.pre_hooks,
-                phase=HookPhase.PRE_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
-            )
-        if pre_hook_skipped:
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -146,6 +112,16 @@ def execute_snapshot_entry(
             statement_recorder=statement_recorder,
             hook_results=hook_results,
         )
+
+    pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
+    )
+    if pre_hook_exit is not None:
+        return pre_hook_exit
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
@@ -237,19 +213,12 @@ def execute_snapshot_entry(
             statement_recorder=statement_recorder,
         )
 
-    delta_audit_results: tuple[AuditExecutionResult, ...] = _execute_snapshot_delta_audits(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        source_map=source_map,
-        model_audits=model_audits,
-        delta_qualified=delta_qualified,
+    delta_audit_run: FinalAuditRun = run_delta_scope_audits(
+        context=context, delta_qualified=delta_qualified
     )
-    audit_results.extend(delta_audit_results)
+    audit_results.extend(delta_audit_run.results)
 
-    if any(result.outcome == AuditOutcome.ERROR for result in delta_audit_results):
+    if delta_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
@@ -328,24 +297,10 @@ def execute_snapshot_entry(
             statement_recorder=statement_recorder,
         )
 
-    final_audit_error: bool = False
-    audit: AuditPlanEntry
-    for audit in model_audits:
-        result: AuditExecutionResult = execute_audit(
-            audit=audit,
-            adapter=adapter,
-            connection=connection,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            relation_overrides=None,
-            run_scope_phase=AuditRunScope.FINAL,
-        )
-        audit_results.append(result)
-        if result.outcome == AuditOutcome.ERROR:
-            final_audit_error = True
+    final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
+    audit_results.extend(final_audit_run.results)
 
-    if final_audit_error:
+    if final_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
@@ -360,54 +315,32 @@ def execute_snapshot_entry(
             statement_recorder=statement_recorder,
         )
 
-    try:
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            post_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.post_hooks,
-                phase=HookPhase.POST_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
+    post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
+        staging_relation=delta_qualified,
+        promoted_relation=target_qualified,
+    )
+    if post_hook_outcome.failure is not None:
+        return post_hook_outcome.failure
+    if post_hook_outcome.skipped:
+        with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
+            adapter.drop(
+                connection,
+                destination=delta_qualified,
+                if_exists=True,
                 statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
             )
-        if post_hook_skipped:
-            with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
-                adapter.drop(
-                    connection,
-                    destination=delta_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                promoted_relation=target_qualified,
-            )
-    except Exception as exc:
-        return build_failed_result(
+        return build_skipped_result(
             entry=entry,
-            phase=ExecutionPhase.POST_HOOK,
-            error=str(exc),
-            staging_relation=delta_qualified,
-            promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
             hook_results=hook_results,
+            promoted_relation=target_qualified,
         )
 
     warnings.extend(
@@ -415,9 +348,9 @@ def execute_snapshot_entry(
             entry=entry,
             adapter=adapter,
             connection=connection,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
-            model_audits=model_audits,
+            run_id=context.run_id,
+            query_change_tracking=context.query_change_tracking,
+            model_audits=context.model_audits,
             audit_results=tuple(audit_results),
         )
     )
@@ -439,39 +372,6 @@ def execute_snapshot_entry(
         lifecycle_events=statement_recorder.snapshot(),
         hook_results=tuple(hook_results),
     )
-
-
-def _execute_snapshot_delta_audits(
-    *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
-    delta_qualified: str,
-) -> tuple[AuditExecutionResult, ...]:
-    """Run snapshot delta-and-final audits against the pre-DML delta relation."""
-
-    delta_overrides: dict[str, str] = {entry.name: delta_qualified}
-    audit_results: list[AuditExecutionResult] = []
-    audit: AuditPlanEntry
-    for audit in model_audits:
-        if audit.effective_run_scope != AuditRunScope.DELTA_AND_FINAL:
-            continue
-        result: AuditExecutionResult = execute_audit(
-            audit=audit,
-            adapter=adapter,
-            connection=connection,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            relation_overrides=delta_overrides,
-            run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-        )
-        audit_results.append(result)
-    return tuple(audit_results)
 
 
 def _validate_supported_snapshot(entry: ModelPlanEntry) -> None:
