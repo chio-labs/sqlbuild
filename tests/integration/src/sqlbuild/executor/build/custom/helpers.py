@@ -426,10 +426,10 @@ def run_scheduler_build(
     from sqlbuild.compiler.planner.models import PlanOutput
     from sqlbuild.executor.build.main.execute import execute_build_plan
     from sqlbuild.executor.build.models import (
-    BuildCustomizations,
-    BuildExecutionResult,
-    BuildRuntimeParams,
-)
+        BuildCustomizations,
+        BuildExecutionResult,
+        BuildRuntimeParams,
+    )
 
     config: dict[str, object] = {"database": str(db_path)}
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
@@ -444,21 +444,21 @@ def run_scheduler_build(
     connection: Any = adapter.connect(config)
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config=config,
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.STAGED,
-            run_id="test_scheduler",
-            query_change_tracking=True,
-            run_audits=False,
-        ),
-        customizations=BuildCustomizations(
-            custom_materializations=custom_materializations,
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config=config,
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.STAGED,
+                run_id="test_scheduler",
+                query_change_tracking=True,
+                run_audits=False,
+            ),
+            customizations=BuildCustomizations(
+                custom_materializations=custom_materializations,
+            ),
+        )
         return result, connection
     except Exception:
         adapter.close(connection)

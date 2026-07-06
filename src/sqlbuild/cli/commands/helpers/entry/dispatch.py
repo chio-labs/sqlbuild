@@ -9,15 +9,22 @@ from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.check.models import CheckCommandRequest
 from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest
+from sqlbuild.cli.commands.helpers.compile.models import (
+    CompileCommandRequest,
+    CompileProfileFlags,
+)
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
 from sqlbuild.cli.commands.helpers.diff.validation import parse_diff_name_range
 from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers, CliNamespace
+from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandRequest
 from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.promote.models import PromoteCommandRequest
+from sqlbuild.cli.commands.helpers.rollback.models import RollbackCommandRequest
 from sqlbuild.cli.commands.helpers.scenario.models import (
     ScenarioCaptureCommandRequest,
     ScenarioSnapshotLimitInputs,
@@ -61,20 +68,24 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     select: tuple[str, ...] = (*tuple(args.select), *read_selector_files(args.select_file))
     if args.command == CliCommand.COMPILE:
         return handlers.run_compile(
-            project_dir,
-            args.no_sql_validation,
-            args.defer_to,
-            args.target,
-            args.json,
-            args.manifest,
-            args.dag,
-            args.no_color,
-            CompileLineageMode(args.compile_lineage_mode),
-            args.vars,
-            args.profile_skip_discovery_sql_analysis,
-            args.profile_skip_column_inference,
-            args.profile_skip_contracts,
-            args.profile_skip_write,
+            CompileCommandRequest(
+                project_dir=project_dir,
+                no_sql_validation=args.no_sql_validation,
+                defer_to=args.defer_to,
+                selected_target=args.target,
+                json_output=args.json,
+                manifest=args.manifest,
+                dag_path=args.dag,
+                no_color=args.no_color,
+                lineage_mode=CompileLineageMode(args.compile_lineage_mode),
+                cli_vars=args.vars,
+                profile_flags=CompileProfileFlags(
+                    skip_discovery_sql_analysis=args.profile_skip_discovery_sql_analysis,
+                    skip_column_inference=args.profile_skip_column_inference,
+                    skip_contracts=args.profile_skip_contracts,
+                    skip_write=args.profile_skip_write,
+                ),
+            )
         )
     if args.command == CliCommand.DAG:
         return handlers.run_dag(
@@ -159,19 +170,21 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         )
     if args.command == CliCommand.FRESHNESS:
         return handlers.run_freshness(
-            project_dir,
-            args.no_sql_validation,
-            args.no_color,
-            args.target,
-            select,
-            tuple(args.exclude),
-            args.vars,
-            args.json,
-            args.json_output,
-            args.fail_on_error,
-            args.state,
-            args.fail_on_stale,
-            args.virtual_env,
+            FreshnessCommandRequest(
+                project_dir=project_dir,
+                no_sql_validation=args.no_sql_validation,
+                no_color=args.no_color,
+                selected_target=args.target,
+                select=select,
+                exclude=tuple(args.exclude),
+                cli_vars=args.vars,
+                json_output=args.json,
+                json_output_path=args.json_output,
+                fail_on_error=args.fail_on_error,
+                compare_state=args.state,
+                fail_on_stale=args.fail_on_stale,
+                virtual_environment_name=args.virtual_env,
+            )
         )
     if args.command == CliCommand.TEST:
         return handlers.run_test(
@@ -322,31 +335,35 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         if args.from_virtual_environment is None or args.to_virtual_environment is None:
             raise CliUserError("promote requires --from and --to", code="C244")
         return handlers.run_promote(
-            project_dir,
-            args.no_color,
-            args.no_sql_validation,
-            args.from_virtual_environment,
-            args.to_virtual_environment,
-            select,
-            tuple(args.exclude),
-            args.allow_partial_promotion,
-            args.include_stale_upstreams,
-            args.verbose,
-            args.vars,
+            PromoteCommandRequest(
+                project_dir=project_dir,
+                no_color=args.no_color,
+                no_sql_validation=args.no_sql_validation,
+                from_virtual_environment=args.from_virtual_environment,
+                to_virtual_environment=args.to_virtual_environment,
+                select=select,
+                exclude=tuple(args.exclude),
+                allow_partial_promotion=args.allow_partial_promotion,
+                include_stale_upstreams=args.include_stale_upstreams,
+                verbose=args.verbose,
+                cli_vars=args.vars,
+            )
         )
     if args.command == CliCommand.ROLLBACK:
         return handlers.run_rollback(
-            project_dir,
-            args.no_color,
-            args.no_sql_validation,
-            args.virtual_env,
-            args.verbose,
-            args.rollback_checkpoint_id,
-            select,
-            tuple(args.exclude),
-            args.allow_partial_rollback,
-            args.include_stale_upstreams,
-            args.vars,
+            RollbackCommandRequest(
+                project_dir=project_dir,
+                no_color=args.no_color,
+                no_sql_validation=args.no_sql_validation,
+                virtual_environment=args.virtual_env,
+                verbose=args.verbose,
+                checkpoint_id=args.rollback_checkpoint_id,
+                select=select,
+                exclude=tuple(args.exclude),
+                allow_partial_rollback=args.allow_partial_rollback,
+                include_stale_upstreams=args.include_stale_upstreams,
+                cli_vars=args.vars,
+            )
         )
     if args.command == CliCommand.QUERY:
         query_limit: int | None = None if args.query_no_limit else args.query_limit

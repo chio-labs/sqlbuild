@@ -65,23 +65,23 @@ def run_concurrent_build(
         worker_connections.append(adapter.connect(config))
     try:
         return execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config=config,
-        connections=tuple(worker_connections),
-        scheduler_connection=scheduler_connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.STAGED,
-            run_id="test_concurrent",
-            query_change_tracking=True,
-            run_audits=test_case.run_audits,
-            fail_fast=test_case.fail_fast,
-            providers=provider_session.providers if provider_session is not None else None,
-        ),
-        customizations=BuildCustomizations(
-            loader_functions=discovered.loader_functions,
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config=config,
+            connections=tuple(worker_connections),
+            scheduler_connection=scheduler_connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.STAGED,
+                run_id="test_concurrent",
+                query_change_tracking=True,
+                run_audits=test_case.run_audits,
+                fail_fast=test_case.fail_fast,
+                providers=provider_session.providers if provider_session is not None else None,
+            ),
+            customizations=BuildCustomizations(
+                loader_functions=discovered.loader_functions,
+            ),
+        )
     finally:
         if provider_session is not None:
             provider_session.close()

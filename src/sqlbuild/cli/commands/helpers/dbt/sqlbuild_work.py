@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands.helpers.test.sql_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
@@ -49,18 +50,19 @@ from sqlbuild.shared.main.summary_footer import format_summary_footer
 
 def execute_sqlbuild_build_work(
     *,
+    context: DbtSqlbuildWorkContext,
     command: DbtInteropCommand,
-    plan_output: PlanOutput,
-    connection_config: dict[str, object],
-    adapter: BaseAdapter,
-    adapter_name: str,
     project: CompiledProject,
     project_dir: Path,
     fail_fast: bool,
     verbose: bool,
-    output_stream: TextIO,
-    use_color: bool,
 ) -> int:
+    plan_output: PlanOutput = context.plan_output
+    connection_config: dict[str, object] = context.connection_config
+    adapter: BaseAdapter = context.adapter
+    adapter_name: str = context.adapter_name
+    output_stream: TextIO = context.output_stream
+    use_color: bool = context.use_color
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=plan_output, use_color=use_color, verbose=verbose, debug=False
     )
@@ -115,14 +117,15 @@ def execute_sqlbuild_build_work(
 
 def execute_sqlbuild_test_work(
     *,
-    plan_output: PlanOutput,
-    connection_config: dict[str, object],
-    adapter: BaseAdapter,
-    adapter_name: str,
+    context: DbtSqlbuildWorkContext,
     actions: tuple[DbtInteropSqlbuildTestAction, ...],
-    output_stream: TextIO,
-    use_color: bool,
 ) -> int:
+    plan_output: PlanOutput = context.plan_output
+    connection_config: dict[str, object] = context.connection_config
+    adapter: BaseAdapter = context.adapter
+    adapter_name: str = context.adapter_name
+    output_stream: TextIO = context.output_stream
+    use_color: bool = context.use_color
     exit_code: int = 0
     action: DbtInteropSqlbuildTestAction
     for action in actions:

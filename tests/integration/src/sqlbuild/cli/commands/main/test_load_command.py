@@ -18,6 +18,7 @@ from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.load.selection import select_load_entries
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
+from sqlbuild.cli.commands.helpers.scenario.models import ScenarioTestCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.main.commands.audit import run_audit
 from sqlbuild.cli.commands.main.commands.build import run_build
@@ -1087,7 +1088,7 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
     command_runners: dict[str, Callable[..., int]] = {
         "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
         "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
-        "scenario": run_scenario,
+        "scenario": lambda **kwargs: run_scenario(ScenarioTestCommandRequest(**kwargs)),
         "test": lambda **kwargs: run_test(TestCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](

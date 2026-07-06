@@ -12,7 +12,10 @@ from sqlbuild.cli.commands.shared.helpers.python_nodes.core import (
     task_asset_python_node_names,
     write_python_node_results,
 )
-from sqlbuild.cli.commands.shared.models import StandardPythonLifecycleState
+from sqlbuild.cli.commands.shared.models import (
+    StandardLifecycleCallbacks,
+    StandardPythonLifecycleState,
+)
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -39,7 +42,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRuntime,
 )
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.models import SqlResourceRef
+from sqlbuild.shared.models import CursorWindow, SqlResourceRef
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -53,18 +56,20 @@ def prepare_standard_python_lifecycle(
     connection_config: dict[str, object],
     include_python: bool,
     reload_sources: bool,
-    start_cursor_ts: datetime | None,
-    end_cursor_ts: datetime | None,
-    start_cursor_int: int | None,
-    end_cursor_int: int | None,
-    use_color: bool,
-    progress_stream: TextIO,
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
-    on_node_complete: Callable[[object], None],
+    cursor_window: CursorWindow,
+    callbacks: StandardLifecycleCallbacks,
     providers: ProviderContainer | None = None,
 ) -> StandardPythonLifecycleState:
     """Execute ingress Python and prepare read-side dispatch for standard run/build."""
 
+    start_cursor_ts: datetime | None = cursor_window.start_cursor_ts
+    end_cursor_ts: datetime | None = cursor_window.end_cursor_ts
+    start_cursor_int: int | None = cursor_window.start_cursor_int
+    end_cursor_int: int | None = cursor_window.end_cursor_int
+    use_color: bool = callbacks.use_color
+    progress_stream: TextIO = callbacks.progress_stream
+    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = callbacks.on_node_start
+    on_node_complete: Callable[[object], None] = callbacks.on_node_complete
     selected_task_asset_names: frozenset[str] = (
         task_asset_python_node_names(
             selected_names=pipeline_result.python_node_names,

@@ -3,9 +3,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlbuild.cli.commands.helpers.freshness.types import FreshnessSourceStatus
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
+
+
+@dataclass(frozen=True)
+class FreshnessCommandRequest:
+    """CLI inputs for one `sqb freshness` invocation."""
+
+    project_dir: Path | None = None
+    no_sql_validation: bool = False
+    no_color: bool = False
+    selected_target: str | None = None
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    cli_vars: dict[str, object] | None = None
+    json_output: bool = False
+    json_output_path: Path | None = None
+    fail_on_error: bool = False
+    compare_state: bool = False
+    fail_on_stale: bool = False
+    virtual_environment_name: str | None = None
 
 
 @dataclass(frozen=True)

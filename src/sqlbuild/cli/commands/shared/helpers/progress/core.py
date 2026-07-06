@@ -83,6 +83,20 @@ class _AuditDisplayEntry:
     executed_sql: str | None = None
 
 
+@dataclass(frozen=True)
+class _ExecutionCounts:
+    """Aggregated pass/warn/fail/skip counts for a build footer summary."""
+
+    pass_count: int = 0
+    warn_count: int = 0
+    fail_count: int = 0
+    skip_count: int = 0
+
+    @property
+    def total_count(self) -> int:
+        return self.pass_count + self.warn_count + self.fail_count + self.skip_count
+
+
 class BuildProgressCallbacks:
     """Encapsulates live build progress output state and callbacks."""
 
@@ -545,28 +559,11 @@ def write_execution_header(
     stream.flush()
 
 
-def format_build_footer(
+def _count_build_footer_results(
     *,
     result: BuildExecutionResult,
-    elapsed: float,
-    use_color: bool,
-    python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
-) -> str:
-    lines: list[str] = []
-    style: CliStyle = CliStyle(use_color=use_color)
-    python_fail_count: int = sum(
-        1
-        for python_result in python_node_results
-        if python_result.status == PythonNodeStatus.FAILED
-    )
-
-    if result.status == BuildStatus.FAILED or python_fail_count:
-        lines.append(style.error("Completed with errors."))
-    elif result.warning_count > 0:
-        lines.append(style.warning("Completed with warnings."))
-    else:
-        lines.append(style.success("Completed successfully."))
-
+    python_node_results: tuple[PythonNodeExecutionResult, ...],
+) -> _ExecutionCounts:
     pass_count: int = 0
     warn_count: int = 0
     fail_count: int = 0
@@ -633,16 +630,48 @@ def format_build_footer(
         elif python_result.status == PythonNodeStatus.SKIPPED:
             skip_count += 1
 
-    total_count: int = pass_count + warn_count + fail_count + skip_count
+    return _ExecutionCounts(
+        pass_count=pass_count,
+        warn_count=warn_count,
+        fail_count=fail_count,
+        skip_count=skip_count,
+    )
+
+
+def format_build_footer(
+    *,
+    result: BuildExecutionResult,
+    elapsed: float,
+    use_color: bool,
+    python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
+) -> str:
+    lines: list[str] = []
+    style: CliStyle = CliStyle(use_color=use_color)
+    python_fail_count: int = sum(
+        1
+        for python_result in python_node_results
+        if python_result.status == PythonNodeStatus.FAILED
+    )
+
+    if result.status == BuildStatus.FAILED or python_fail_count:
+        lines.append(style.error("Completed with errors."))
+    elif result.warning_count > 0:
+        lines.append(style.warning("Completed with warnings."))
+    else:
+        lines.append(style.success("Completed successfully."))
+
+    counts: _ExecutionCounts = _count_build_footer_results(
+        result=result, python_node_results=python_node_results
+    )
     elapsed_str: str = f"{elapsed:.2f}s"
     lines.append(
         format_summary_footer(
             counts=(
-                ("PASS", pass_count),
-                ("WARN", warn_count),
-                ("FAIL", fail_count),
-                ("SKIP", skip_count),
-                ("TOTAL", total_count),
+                ("PASS", counts.pass_count),
+                ("WARN", counts.warn_count),
+                ("FAIL", counts.fail_count),
+                ("SKIP", counts.skip_count),
+                ("TOTAL", counts.total_count),
             ),
             use_color=style.use_color,
             elapsed=elapsed_str,
