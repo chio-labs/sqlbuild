@@ -7,14 +7,11 @@ from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
-    CursorOverrides,
     DeferralInputs,
     FunctionPlanEntry,
     ModelPlanEntry,
@@ -27,7 +24,11 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
-from sqlbuild.virtual.planner.models import VirtualBoundState, VirtualPlanSemantics
+from sqlbuild.virtual.planner.models import (
+    VirtualBoundState,
+    VirtualPlanOptions,
+    VirtualPlanSemantics,
+)
 
 
 def rewrite_virtual_plan_entries(
@@ -170,14 +171,8 @@ def build_virtual_plan_output(
     adapter: BaseAdapter,
     connection: Any,
     effective_select_with_seeds: tuple[str, ...],
-    cursor_overrides: CursorOverrides | None,
-    full_refresh: bool,
-    reload_sources: bool,
-    deferred_locations: dict[str, CompiledRelationLocation],
-    deferred_relations: dict[str, RelationInfo],
-    defer_sources_to: str | None,
-    source_deferral_enabled: bool,
-    auto_load_sources: bool,
+    options: VirtualPlanOptions,
+    bound: VirtualBoundState,
     discovered_inputs: DiscoveredProjectInputs,
     on_progress: Callable[[str], None] | None,
 ) -> PlanOutput:
@@ -201,18 +196,18 @@ def build_virtual_plan_output(
         connection=connection,
         selection=PlannerSelection(select=effective_select_with_seeds),
         overrides=PlannerOverrides(
-            cursor_overrides=cursor_overrides,
-            full_refresh=full_refresh,
-            reload_sources=reload_sources,
+            cursor_overrides=options.cursor_overrides,
+            full_refresh=options.full_refresh,
+            reload_sources=options.reload_sources,
         ),
         deferral=DeferralInputs(
-            deferred_locations=deferred_locations,
-            deferred_relations=deferred_relations,
-            defer_sources_to=defer_sources_to,
-            source_deferral_enabled=source_deferral_enabled,
+            deferred_locations=bound.deferred_locations,
+            deferred_relations=bound.deferred_relations,
+            defer_sources_to=options.defer_sources_to,
+            source_deferral_enabled=options.source_deferral_enabled,
         ),
         policies=PlannerPolicies(
-            auto_load_sources=auto_load_sources,
+            auto_load_sources=options.auto_load_sources,
             enable_reuse_planning=False,
         ),
         on_progress=on_progress,

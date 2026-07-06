@@ -20,9 +20,11 @@ from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgr
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.rollback import run_virtual_rollback
+from sqlbuild.virtual.executor.models import RollbackOptions
 
 
 def run_rollback(
@@ -80,21 +82,25 @@ def run_rollback(
         adapter=adapter,
         connection_config=connection_config,
         virtual_environment_name=virtual_environment_name,
-        checkpoint_id=checkpoint_id,
-        select=select,
-        exclude=exclude,
-        allow_partial_rollback=allow_partial_rollback,
-        include_stale_upstreams=include_stale_upstreams,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=effective_project_dir,
-            discovered_inputs=discovered_inputs,
+        options=RollbackOptions(
+            checkpoint_id=checkpoint_id,
+            select=select,
+            exclude=exclude,
+            allow_partial_rollback=allow_partial_rollback,
+            include_stale_upstreams=include_stale_upstreams,
+            no_sql_validation=no_sql_validation,
+            cli_vars=cli_vars,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
         ),
-        on_progress=planning_progress.on_progress,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
+        hooks=ConnectionHooks(
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+        ),
     )
     print(
         format_rollback_output(

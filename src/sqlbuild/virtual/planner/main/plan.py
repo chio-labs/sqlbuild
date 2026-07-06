@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -12,10 +11,10 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.virtual.planner.helpers.bound_state import (
     open_planning_connection,
     read_virtual_bound_state,
@@ -31,7 +30,11 @@ from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_p
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
-from sqlbuild.virtual.planner.models import VirtualBoundState, VirtualPlanSemantics
+from sqlbuild.virtual.planner.models import (
+    VirtualBoundState,
+    VirtualPlanOptions,
+    VirtualPlanSemantics,
+)
 
 
 def run_virtual_plan_pipeline(
@@ -39,46 +42,30 @@ def run_virtual_plan_pipeline(
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
-    selected_target: str | None = None,
-    no_sql_validation: bool = False,
-    defer_sources_to: str | None = None,
-    source_deferral_enabled: bool = True,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    cursor_overrides: CursorOverrides | None = None,
-    full_refresh: bool = False,
-    virtual_environment_name: str | None = None,
-    include_stale_upstreams: bool = False,
-    changes_only: bool = False,
-    auto_load_sources: bool = False,
-    reload_sources: bool = False,
-    include_python: bool = True,
     connection_config: dict[str, object] | None = None,
-    cli_vars: dict[str, object] | None = None,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
-    on_progress: Callable[[str], None] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    options: VirtualPlanOptions | None = None,
+    hooks: ConnectionHooks | None = None,
 ) -> CompilePipelineResult:
     """Run the planner-only virtual pipeline for `sqb plan`."""
 
     if connection_config is None:
         raise PlannerInputError("virtual planning requires explicit connection_config")
+    resolved: VirtualPlanOptions = options if options is not None else VirtualPlanOptions()
+    resolved_hooks: ConnectionHooks = hooks if hooks is not None else ConnectionHooks()
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        selected_target=selected_target,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=external_sql_reference_resolver,
+        selected_target=resolved.selected_target,
+        no_sql_validation=resolved.no_sql_validation,
+        cli_vars=resolved.cli_vars,
+        external_sql_reference_resolver=resolved.external_sql_reference_resolver,
     )
     connection: Any = open_planning_connection(
         adapter=adapter,
         connection_config=connection_config,
-        on_connection_start=on_connection_start,
-        on_connection_complete=on_connection_complete,
-        on_connection_error=on_connection_error,
+        on_connection_start=resolved_hooks.on_connection_start,
+        on_connection_complete=resolved_hooks.on_connection_complete,
+        on_connection_error=resolved_hooks.on_connection_error,
     )
     try:
         bound: VirtualBoundState = read_virtual_bound_state(
@@ -87,8 +74,8 @@ def run_virtual_plan_pipeline(
             adapter=adapter,
             warehouse_connection=connection,
             graph=graph,
-            selected_target=selected_target,
-            virtual_environment_name=virtual_environment_name,
+            selected_target=resolved.selected_target,
+            virtual_environment_name=resolved.virtual_environment_name,
         )
         semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
             graph=graph,
@@ -99,17 +86,19 @@ def run_virtual_plan_pipeline(
         )
         effective_select: tuple[str, ...] = resolve_virtual_model_selection(
             graph=graph,
-            select=select,
-            exclude=exclude,
+            select=resolved.select,
+            exclude=resolved.exclude,
             default_selection=semantics.default_selection,
             stale_model_names=semantics.stale_model_names,
-            include_stale_upstreams=include_stale_upstreams,
+            include_stale_upstreams=resolved.include_stale_upstreams,
             work_selection_policy=(
-                WorkSelectionPolicy.STALE_ONLY if changes_only else WorkSelectionPolicy.ALL_SELECTED
+                WorkSelectionPolicy.STALE_ONLY
+                if resolved.changes_only
+                else WorkSelectionPolicy.ALL_SELECTED
             ),
         )
         selected_seed_names: tuple[str, ...] = (
-            semantics.stale_seed_names if not select and not exclude else ()
+            semantics.stale_seed_names if not resolved.select and not resolved.exclude else ()
         )
         plan_output: PlanOutput = build_virtual_plan_output(
             graph=graph,
@@ -118,16 +107,10 @@ def run_virtual_plan_pipeline(
             effective_select_with_seeds=tuple(
                 sorted(set(effective_select) | set(selected_seed_names))
             ),
-            cursor_overrides=cursor_overrides,
-            full_refresh=full_refresh,
-            reload_sources=reload_sources,
-            deferred_locations=bound.deferred_locations,
-            deferred_relations=bound.deferred_relations,
-            defer_sources_to=defer_sources_to,
-            source_deferral_enabled=source_deferral_enabled,
-            auto_load_sources=auto_load_sources,
+            options=resolved,
+            bound=bound,
             discovered_inputs=discovered_inputs,
-            on_progress=on_progress,
+            on_progress=resolved_hooks.on_progress,
         )
         plan_output = rewrite_virtual_plan_entries(
             plan_output=plan_output,
@@ -148,7 +131,7 @@ def run_virtual_plan_pipeline(
             bound=bound,
             target_name=resolve_virtual_environment_name(
                 physical_target_name=graph.project.effective_target_name,
-                virtual_environment_name=virtual_environment_name,
+                virtual_environment_name=resolved.virtual_environment_name,
             ),
             effective_select=effective_select,
         )
@@ -156,16 +139,16 @@ def run_virtual_plan_pipeline(
             discovered_inputs=discovered_inputs,
             graph=graph,
             plan_output=plan_output,
-            select=select,
-            exclude=exclude,
+            select=resolved.select,
+            exclude=resolved.exclude,
             selected_model_names=effective_select,
-            include_python=include_python,
+            include_python=resolved.include_python,
         )
         previous_python_identities: dict[tuple[str, str], Fingerprint] = (
             read_bound_virtual_python_identities(
                 discovered_inputs=discovered_inputs,
                 project_dir=project_dir,
-                virtual_environment_name=virtual_environment_name,
+                virtual_environment_name=resolved.virtual_environment_name,
             )
         )
         return CompilePipelineResult(

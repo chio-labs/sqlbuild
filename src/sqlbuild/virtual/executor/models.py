@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
@@ -11,12 +12,14 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
+from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
+from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import RelationLookup
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.shared.types import ExecutionResourceKind, ExternalSqlReferenceResolver
+from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
@@ -47,6 +50,104 @@ class VirtualBuildExecutionHooks:
     on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None
     on_node_complete: Callable[[object], None] | None = None
     on_sub_progress: Callable[[str], None] | None = None
+
+
+@dataclass(frozen=True)
+class VirtualBuildOptions:
+    """Planning and execution options for one virtual build run."""
+
+    selected_target: str | None = None
+    no_sql_validation: bool = False
+    defer_sources_to: str | None = None
+    cursor_overrides: CursorOverrides | None = None
+    full_refresh: bool = False
+    virtual_environment_name: str | None = None
+    include_stale_upstreams: bool = False
+    changes_only: bool = False
+    auto_load_sources: bool = False
+    reload_sources: bool = False
+    include_python: bool = True
+    seed_only: bool = False
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    fail_fast: bool = False
+    allow_snapshot_schema_change: bool = False
+    concurrency: int | None = None
+    cli_vars: dict[str, object] | None = None
+    run_tests: bool = True
+    run_audits: bool = True
+    snapshots: SnapshotsConfig | None = None
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+    providers: ProviderContainer | None = None
+
+
+@dataclass(frozen=True)
+class VirtualBuildHooks:
+    """Plan-ready, progress, and connection callbacks for one virtual build run."""
+
+    on_plan_ready: (
+        Callable[
+            [CompiledProject, PlanOutput, tuple[PythonPlanEntry, ...]], VirtualBuildExecutionHooks
+        ]
+        | None
+    ) = None
+    on_progress: Callable[[str], None] | None = None
+    on_connection_start: Callable[[int], None] | None = None
+    on_connection_complete: Callable[[int, float], None] | None = None
+    on_connection_error: Callable[[int, float], None] | None = None
+
+
+@dataclass(frozen=True)
+class VirtualEnvironmentNames:
+    """Resolved target VDE, physical target, and unsuffixed naming context."""
+
+    target_vde_name: str
+    physical_target_name: str | None = None
+    unsuffixed_virtual_environment_name: str | None = None
+
+
+@dataclass(frozen=True)
+class PromoteOptions:
+    """Selection and policy options for one virtual promote run."""
+
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    allow_partial_promotion: bool = False
+    include_stale_upstreams: bool = False
+    no_sql_validation: bool = False
+    cli_vars: dict[str, object] | None = None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+
+
+@dataclass(frozen=True)
+class RollbackOptions:
+    """Selection and policy options for one virtual rollback run."""
+
+    checkpoint_id: str | None = None
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    allow_partial_rollback: bool = False
+    include_stale_upstreams: bool = False
+    no_sql_validation: bool = False
+    cli_vars: dict[str, object] | None = None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+
+
+@dataclass(frozen=True)
+class CloneOptions:
+    """Selection and policy options for one virtual clone run."""
+
+    virtual_environment_name: str | None = None
+    skip_locked: bool = False
+    no_sql_validation: bool = False
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    cli_vars: dict[str, object] | None = None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
 
 
 @dataclass(frozen=True)
@@ -114,16 +215,6 @@ class StateOperationHandle:
 
     operation_id: str
     operation_type: StateOperationType
-
-
-@dataclass(frozen=True)
-class VirtualViewRefreshHooks:
-    """Progress and connection callbacks for VDE view refresh phases."""
-
-    on_progress: Callable[[str], None] | None = None
-    on_connection_start: Callable[[int], None] | None = None
-    on_connection_complete: Callable[[int, float], None] | None = None
-    on_connection_error: Callable[[int, float], None] | None = None
 
 
 @dataclass(frozen=True)

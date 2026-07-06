@@ -14,7 +14,11 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
+from sqlbuild.virtual.executor.models import (
+    VirtualBuildHooks,
+    VirtualBuildOptions,
+    VirtualBuildPipelineResult,
+)
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     build_virtual_wide_dag_repo_files,
 )
@@ -94,7 +98,8 @@ def test_given_virtual_build_when_pipeline_starts_then_physical_schema_is_prepar
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         connection_config=connection_config,
-        concurrency=8,
+        options=VirtualBuildOptions(concurrency=8),
+        hooks=VirtualBuildHooks(),
     )
 
     assert result.execution_result.status == BuildStatus.SUCCESS

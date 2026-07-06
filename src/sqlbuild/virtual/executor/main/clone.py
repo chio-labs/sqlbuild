@@ -8,7 +8,6 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.helpers.clone import (
     attach_origin_database_for_clone,
     build_clone_origin_lookup,
@@ -19,6 +18,7 @@ from sqlbuild.virtual.executor.helpers.clone import (
     resolve_clone_versions,
 )
 from sqlbuild.virtual.executor.models import (
+    CloneOptions,
     CloneOriginLookup,
     CloneProjectContext,
     CloneVersions,
@@ -37,27 +37,22 @@ def run_virtual_clone(
     destination_target_name: str,
     origin_connection_config: dict[str, object],
     destination_connection_config: dict[str, object],
-    virtual_environment_name: str | None = None,
-    skip_locked: bool = False,
-    no_sql_validation: bool = False,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    cli_vars: dict[str, object] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    options: CloneOptions | None = None,
 ) -> VirtualCloneResult:
     """Hydrate target physical versions from matching source warehouse artifacts."""
 
+    resolved_options: CloneOptions = options if options is not None else CloneOptions()
     clone_pipeline: ClonePipelineResult = compile_clone_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         origin_target_name=origin_target_name,
         destination_target_name=destination_target_name,
         destination_connection_config=destination_connection_config,
-        no_sql_validation=no_sql_validation,
-        select=select,
-        exclude=exclude,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=external_sql_reference_resolver,
+        no_sql_validation=resolved_options.no_sql_validation,
+        select=resolved_options.select,
+        exclude=resolved_options.exclude,
+        cli_vars=resolved_options.cli_vars,
+        external_sql_reference_resolver=resolved_options.external_sql_reference_resolver,
     )
     context: CloneProjectContext = build_clone_project_context(clone_pipeline)
     config, backend = build_state_runtime(
@@ -72,7 +67,7 @@ def run_virtual_clone(
             schema=config.schema,
             clone_pipeline=clone_pipeline,
             context=context,
-            virtual_environment_name=virtual_environment_name,
+            virtual_environment_name=resolved_options.virtual_environment_name,
         )
     finally:
         backend.close(state_connection)
@@ -105,7 +100,7 @@ def run_virtual_clone(
             context=context,
             versions=versions,
             origin_lookup=origin_lookup,
-            skip_locked=skip_locked,
+            skip_locked=resolved_options.skip_locked,
         )
         seed_items: tuple[VirtualCloneItemResult, ...] = hydrate_clone_seed_relations(
             backend,
@@ -125,6 +120,6 @@ def run_virtual_clone(
         mode=versions.mode,
         origin_environment=origin_target_name,
         destination_environment=destination_target_name,
-        destination_virtual_environment=virtual_environment_name,
+        destination_virtual_environment=resolved_options.virtual_environment_name,
         item_results=(*model_items, *seed_items),
     )

@@ -31,11 +31,12 @@ def run_load_pipeline(
     connection_config: dict[str, object],
     adapter: BaseAdapter,
     runtime: LoadRuntimeParams,
-    callbacks: LoadCallbacks = LoadCallbacks(),
+    callbacks: LoadCallbacks | None = None,
     max_concurrency: int = 1,
 ) -> tuple[LoadExecutionResult, ...]:
     """Execute selected source loaders."""
 
+    resolved_callbacks: LoadCallbacks = callbacks if callbacks is not None else LoadCallbacks()
     index_sources: tuple[SourceEntry, ...] = (*sources, *reference_sources)
     indexes: LoadExecutionIndexes = build_load_execution_indexes(
         sources=index_sources,
@@ -53,7 +54,7 @@ def run_load_pipeline(
         adapter=adapter,
         connection_config=connection_config,
         runtime=runtime,
-        callbacks=callbacks,
+        callbacks=resolved_callbacks,
     )
     if not external_phase.sqlbuild_sources:
         return external_phase.preloaded_results
@@ -66,9 +67,9 @@ def run_load_pipeline(
         adapter=adapter,
         connection_config=connection_config,
         effective_concurrency=effective_concurrency,
-        on_connection_start=callbacks.on_connection_start,
-        on_connection_complete=callbacks.on_connection_complete,
-        on_connection_error=callbacks.on_connection_error,
+        on_connection_start=resolved_callbacks.on_connection_start,
+        on_connection_complete=resolved_callbacks.on_connection_complete,
+        on_connection_error=resolved_callbacks.on_connection_error,
     )
     try:
         dag_results: tuple[LoadExecutionResult, ...] = run_load_dag(
@@ -81,7 +82,7 @@ def run_load_pipeline(
             effective_concurrency=effective_concurrency,
             initial_failed_or_hard_skipped=external_phase.failed_or_hard_skipped,
             runtime=runtime,
-            callbacks=callbacks,
+            callbacks=resolved_callbacks,
         )
     finally:
         connection: Any

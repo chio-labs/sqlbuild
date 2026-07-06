@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.virtual.executor.helpers.environment_views import write_virtual_environment_views
 from sqlbuild.virtual.executor.helpers.project_context import resolve_virtual_project_context
 from sqlbuild.virtual.executor.helpers.promote import (
@@ -29,6 +29,7 @@ from sqlbuild.virtual.executor.helpers.state_operations import (
 )
 from sqlbuild.virtual.executor.models import (
     PromoteEnvironmentState,
+    PromoteOptions,
     PromoteRefUpdate,
     PromoteResolution,
     PromoteSelection,
@@ -36,7 +37,6 @@ from sqlbuild.virtual.executor.models import (
     StateOperationHandle,
     VirtualEnvironmentPhysicalRelations,
     VirtualProjectContext,
-    VirtualViewRefreshHooks,
 )
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
@@ -52,26 +52,18 @@ def run_virtual_promote(
     connection_config: dict[str, object],
     from_virtual_environment_name: str,
     to_virtual_environment_name: str,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    allow_partial_promotion: bool = False,
-    include_stale_upstreams: bool = False,
-    no_sql_validation: bool = False,
-    cli_vars: dict[str, object] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    on_progress: Callable[[str], None] | None = None,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    options: PromoteOptions,
+    hooks: ConnectionHooks,
 ) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
     """Promote refs from one VDE to another and refresh target views."""
 
+    on_progress: Callable[[str], None] | None = hooks.on_progress
     context: VirtualProjectContext = resolve_virtual_project_context(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=external_sql_reference_resolver,
+        no_sql_validation=options.no_sql_validation,
+        cli_vars=options.cli_vars,
+        external_sql_reference_resolver=options.external_sql_reference_resolver,
         on_progress=on_progress,
     )
     config, backend = build_state_runtime(
@@ -121,18 +113,18 @@ def run_virtual_promote(
             graph=context.graph,
             environment_state=environment_state,
             source_semantics=semantics.source,
-            select=select,
-            exclude=exclude,
-            include_stale_upstreams=include_stale_upstreams,
+            select=options.select,
+            exclude=options.exclude,
+            include_stale_upstreams=options.include_stale_upstreams,
         )
         resolution: PromoteResolution = resolve_promote_final_refs(
             graph=context.graph,
             environment_state=environment_state,
             selection=selection,
             target_semantics=semantics.target,
-            select=select,
-            include_stale_upstreams=include_stale_upstreams,
-            allow_partial_promotion=allow_partial_promotion,
+            select=options.select,
+            include_stale_upstreams=options.include_stale_upstreams,
+            allow_partial_promotion=options.allow_partial_promotion,
         )
         update: PromoteRefUpdate = build_promote_ref_update(
             backend,
@@ -142,7 +134,7 @@ def run_virtual_promote(
             to_virtual_environment_name=to_virtual_environment_name,
             resolution=resolution,
             source_function_refs=environment_state.source_function_refs,
-            select=select,
+            select=options.select,
         )
         write_promote_environment_update(
             backend,
@@ -165,12 +157,7 @@ def run_virtual_promote(
             unsuffixed_virtual_environment_name=context.unsuffixed_virtual_environment_name,
             relations=relations,
             function_versions=update.function_versions,
-            hooks=VirtualViewRefreshHooks(
-                on_progress=on_progress,
-                on_connection_start=on_connection_start,
-                on_connection_complete=on_connection_complete,
-                on_connection_error=on_connection_error,
-            ),
+            hooks=hooks,
         )
         write_state_operation_result(
             backend,

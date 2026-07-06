@@ -14,7 +14,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.virtual.diff.helpers.diff import (
     execute_virtual_diff_between_relations,
     filter_models_with_changed_virtual_refs,
@@ -23,7 +23,7 @@ from sqlbuild.virtual.diff.helpers.diff import (
     resolve_virtual_diff_model_names,
     rewrite_project_to_physical_relations,
 )
-from sqlbuild.virtual.diff.models import VirtualDiffState
+from sqlbuild.virtual.diff.models import VirtualDiffOptions, VirtualDiffState
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 
 
@@ -35,21 +35,8 @@ def run_virtual_diff(
     connection_config: dict[str, object],
     from_virtual_environment_name: str,
     to_virtual_environment_name: str,
-    no_sql_validation: bool = False,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    schema_only: bool = False,
-    bounded: str | None = None,
-    collect_samples: bool = False,
-    max_column_examples: int = 20,
-    max_row_only_examples: int = 20,
-    allow_partial_diff: bool = False,
-    cli_vars: dict[str, object] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    on_progress: Callable[[str], None] | None = None,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    options: VirtualDiffOptions | None = None,
+    hooks: ConnectionHooks | None = None,
 ) -> tuple[
     DiffExecutionResult,
     tuple[str, ...],
@@ -61,22 +48,25 @@ def run_virtual_diff(
 ]:
     """Run a diff between two VDEs in the active physical environment."""
 
+    resolved: VirtualDiffOptions = options if options is not None else VirtualDiffOptions()
+    resolved_hooks: ConnectionHooks = hooks if hooks is not None else ConnectionHooks()
+    on_progress: Callable[[str], None] | None = resolved_hooks.on_progress
     compile_start: float = time.perf_counter()
     if on_progress is not None:
         on_progress("Compiling project...")
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=external_sql_reference_resolver,
+        no_sql_validation=resolved.no_sql_validation,
+        cli_vars=resolved.cli_vars,
+        external_sql_reference_resolver=resolved.external_sql_reference_resolver,
     )
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
     selected_names: tuple[str, ...] = resolve_virtual_diff_model_names(
         graph=graph,
-        select=select,
-        exclude=exclude,
+        select=resolved.select,
+        exclude=resolved.exclude,
     )
     if not selected_names:
         selected_names = tuple(model.name for model in graph.project.models)
@@ -96,7 +86,7 @@ def run_virtual_diff(
             graph=graph,
             from_virtual_environment_name=from_virtual_environment_name,
             to_virtual_environment_name=to_virtual_environment_name,
-            require_finalized=not select and not allow_partial_diff,
+            require_finalized=not resolved.select and not resolved.allow_partial_diff,
         )
         if on_progress is not None:
             on_progress(f"Inspected virtual state. ({time.perf_counter() - inspect_start:.2f}s)")
@@ -148,14 +138,8 @@ def run_virtual_diff(
         left_project=left_project,
         right_project=right_project,
         compared_names=compared_names,
-        schema_only=schema_only,
-        bounded=bounded,
-        collect_samples=collect_samples,
-        max_column_examples=max_column_examples,
-        max_row_only_examples=max_row_only_examples,
-        on_connection_start=on_connection_start,
-        on_connection_complete=on_connection_complete,
-        on_connection_error=on_connection_error,
+        options=resolved,
+        hooks=resolved_hooks,
     )
     return (
         result,

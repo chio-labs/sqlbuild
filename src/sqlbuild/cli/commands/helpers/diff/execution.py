@@ -28,8 +28,10 @@ from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.virtual.diff.main.diff import run_virtual_diff
+from sqlbuild.virtual.diff.models import VirtualDiffOptions
 
 
 def prepare_standard_diff(
@@ -177,24 +179,28 @@ def execute_virtual_diff(
         connection_config=preparation.connection_config,
         from_virtual_environment_name=preparation.from_virtual_environment,
         to_virtual_environment_name=preparation.to_virtual_environment,
-        no_sql_validation=request.no_sql_validation,
-        select=request.select,
-        exclude=request.exclude,
-        schema_only=request.schema_only,
-        bounded=request.bounded,
-        collect_samples=not request.schema_only,
-        max_column_examples=preparation.effective_max_column_examples,
-        max_row_only_examples=preparation.effective_max_row_only_examples,
-        allow_partial_diff=request.allow_partial_diff,
-        cli_vars=request.cli_vars,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=invocation.effective_project_dir,
-            discovered_inputs=invocation.discovered_inputs,
+        options=VirtualDiffOptions(
+            no_sql_validation=request.no_sql_validation,
+            select=request.select,
+            exclude=request.exclude,
+            schema_only=request.schema_only,
+            bounded=request.bounded,
+            collect_samples=not request.schema_only,
+            max_column_examples=preparation.effective_max_column_examples,
+            max_row_only_examples=preparation.effective_max_row_only_examples,
+            allow_partial_diff=request.allow_partial_diff,
+            cli_vars=request.cli_vars,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=invocation.effective_project_dir,
+                discovered_inputs=invocation.discovered_inputs,
+            ),
         ),
-        on_progress=planning_progress.on_progress,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
+        hooks=ConnectionHooks(
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+        ),
     )
     return VirtualDiffRunOutcome(
         result=result,
