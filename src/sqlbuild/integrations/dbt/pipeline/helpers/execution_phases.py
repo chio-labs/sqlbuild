@@ -10,7 +10,10 @@ from sqlbuild.adapter.shared.types import BuiltinAdapter
 from sqlbuild.cli.commands.main.commands.connection_progress import (
     build_connection_progress_reporter,
 )
-from sqlbuild.cli.commands.main.commands.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
+from sqlbuild.cli.commands.main.commands.dbt_sqlbuild_work import (
+    DbtSqlbuildWorkContext,
+    execute_dbt_sqlbuild_work,
+)
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.planner.models import GraphNodeKey, PlanOutput
@@ -751,18 +754,20 @@ def run_dbt_sqlbuild_work(
     if request.command == DbtInteropCommand.TEST:
         actions = resolve_sqlbuild_test_actions(select=invocation.routed.select)
     return execute_dbt_sqlbuild_work(
+        context=DbtSqlbuildWorkContext(
+            plan_output=plan_output,
+            connection_config=connection_config,
+            adapter=compiled.adapter,
+            adapter_name=compiled.adapter_name,
+            output_stream=invocation.output_stream,
+            use_color=request.use_color,
+        ),
         command=request.command,
-        plan_output=plan_output,
-        connection_config=connection_config,
-        adapter=compiled.adapter,
-        adapter_name=compiled.adapter_name,
         project=compiled.project,
         project_dir=request.project_dir,
         fail_fast=request.fail_fast,
         verbose=request.verbose,
         actions=actions,
-        output_stream=invocation.output_stream,
-        use_color=request.use_color,
     )
 
 

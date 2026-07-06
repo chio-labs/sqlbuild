@@ -9,6 +9,7 @@ import pytest
 from sqlbuild.cli.commands.helpers.compile import lineage as compile_lineage
 from sqlbuild.cli.commands.helpers.compile import pipeline as compile_pipeline
 from sqlbuild.cli.commands.helpers.compile import status as compile_status
+from sqlbuild.cli.commands.helpers.compile.models import CompileCommandRequest
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.main.commands.compile import run_compile
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -56,7 +57,9 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
 
-    exit_code: int = run_compile(project_dir=project_dir, no_sql_validation=True)
+    exit_code: int = run_compile(
+        CompileCommandRequest(project_dir=project_dir, no_sql_validation=True)
+    )
     rendered_stdout: str = capsys.readouterr().out
 
     assert exit_code == test_case.expected_exit_code
@@ -127,7 +130,9 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
 
-    exit_code: int = run_compile(project_dir=project_dir, no_sql_validation=True)
+    exit_code: int = run_compile(
+        CompileCommandRequest(project_dir=project_dir, no_sql_validation=True)
+    )
 
     assert exit_code == test_case.expected_exit_code
     assert started_messages == [
@@ -167,9 +172,11 @@ def test_given_dag_flag_when_running_compile_then_writes_dag_artifact(
     )
 
     exit_code: int = run_compile(
-        project_dir=project_dir,
-        no_sql_validation=True,
-        dag_path=test_case.dag_path,
+        CompileCommandRequest(
+            project_dir=project_dir,
+            no_sql_validation=True,
+            dag_path=test_case.dag_path,
+        )
     )
     dag_payload: dict[str, object] = json.loads(
         (project_dir / "target" / "sqlbuild_dag.json").read_text(encoding="utf-8")
@@ -222,9 +229,11 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
     )
 
     exit_code: int = run_compile(
-        project_dir=project_dir,
-        no_sql_validation=True,
-        dag_path=test_case.dag_path,
+        CompileCommandRequest(
+            project_dir=project_dir,
+            no_sql_validation=True,
+            dag_path=test_case.dag_path,
+        )
     )
     dag_payload: dict[str, object] = json.loads(
         (project_dir / "target" / "sqlbuild_dag.json").read_text(encoding="utf-8")
@@ -318,7 +327,9 @@ def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
 
-    exit_code: int = run_compile(project_dir=project_dir, no_sql_validation=True)
+    exit_code: int = run_compile(
+        CompileCommandRequest(project_dir=project_dir, no_sql_validation=True)
+    )
     rendered_stdout: str = capsys.readouterr().out
 
     assert exit_code == test_case.expected_exit_code
@@ -371,9 +382,11 @@ def test_given_contract_errors_when_running_compile_json_then_serializes_diagnos
     )
 
     exit_code: int = run_compile(
-        project_dir=project_dir,
-        no_sql_validation=True,
-        json_output=True,
+        CompileCommandRequest(
+            project_dir=project_dir,
+            no_sql_validation=True,
+            json_output=True,
+        )
     )
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     diagnostics: list[dict[str, object]] = payload["diagnostics"]

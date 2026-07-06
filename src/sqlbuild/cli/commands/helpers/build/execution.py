@@ -27,6 +27,7 @@ from sqlbuild.cli.commands.shared.helpers.progress.core import (
 from sqlbuild.cli.commands.shared.helpers.python_nodes.standard_lifecycle import (
     prepare_standard_python_lifecycle,
 )
+from sqlbuild.cli.commands.shared.models import StandardLifecycleCallbacks
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.build.models import (
@@ -37,6 +38,7 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
 )
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
+from sqlbuild.shared.models import CursorWindow
 
 
 def prepare_build_execution(
@@ -90,14 +92,18 @@ def prepare_build_execution(
             connection_config=invocation.connection_config,
             include_python=request.include_python,
             reload_sources=request.reload_sources,
-            start_cursor_ts=parse_cursor_timestamp(cursor_overrides.start_ts),
-            end_cursor_ts=parse_cursor_timestamp(cursor_overrides.end_ts),
-            start_cursor_int=parse_cursor_integer(cursor_overrides.start_int),
-            end_cursor_int=parse_cursor_integer(cursor_overrides.end_int),
-            use_color=invocation.use_color,
-            progress_stream=invocation.progress_stream,
-            on_node_start=callbacks.on_node_start,
-            on_node_complete=callbacks.on_node_complete,
+            cursor_window=CursorWindow(
+                start_cursor_ts=parse_cursor_timestamp(cursor_overrides.start_ts),
+                end_cursor_ts=parse_cursor_timestamp(cursor_overrides.end_ts),
+                start_cursor_int=parse_cursor_integer(cursor_overrides.start_int),
+                end_cursor_int=parse_cursor_integer(cursor_overrides.end_int),
+            ),
+            callbacks=StandardLifecycleCallbacks(
+                use_color=invocation.use_color,
+                progress_stream=invocation.progress_stream,
+                on_node_start=callbacks.on_node_start,
+                on_node_complete=callbacks.on_node_complete,
+            ),
             providers=providers,
         ),
         start_cursor_ts=parse_cursor_timestamp(cursor_overrides.start_ts),

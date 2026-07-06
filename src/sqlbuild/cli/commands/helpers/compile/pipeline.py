@@ -13,6 +13,7 @@ from sqlbuild.cli.commands.helpers.compile.lineage import (
 )
 from sqlbuild.cli.commands.helpers.compile.models import (
     CompileAnalysis,
+    CompileProfileFlags,
     CompileWriteResult,
     WrittenTarget,
 )
@@ -48,9 +49,7 @@ def analyze_compile_project(
     selected_target: str | None,
     lineage_mode: CompileLineageMode,
     cli_vars: dict[str, object] | None,
-    profile_skip_discovery_sql_analysis: bool,
-    profile_skip_column_inference: bool,
-    profile_skip_contracts: bool,
+    profile_flags: CompileProfileFlags,
     status: TransientStatusReporter | None,
 ) -> CompileAnalysis:
     """Discover, compile, and validate the project into one analysis result."""
@@ -59,7 +58,9 @@ def analyze_compile_project(
     _ = start_compile_phase(status, "Discovering project...")
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=project_dir,
-        sql_analysis_enabled_override=False if profile_skip_discovery_sql_analysis else None,
+        sql_analysis_enabled_override=(
+            False if profile_flags.skip_discovery_sql_analysis else None
+        ),
     )
     discover_ms: int = elapsed_ms(discover_start)
     _ = complete_compile_phase(status, f"Discovered project. ({discover_ms / 1000:.2f}s)")
@@ -77,7 +78,7 @@ def analyze_compile_project(
         adapter=adapter,
         selected_target=selected_target,
         no_sql_validation=no_sql_validation,
-        skip_column_inference=profile_skip_column_inference,
+        skip_column_inference=profile_flags.skip_column_inference,
         column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),
         cli_vars=cli_vars,
     )
@@ -94,7 +95,7 @@ def analyze_compile_project(
     _ = complete_compile_phase(status, f"Analyzed column lineage. ({lineage_ms / 1000:.2f}s)")
     contracts_start: float = time.monotonic()
     contract_result: ContractValidationResult
-    if profile_skip_contracts:
+    if profile_flags.skip_contracts:
         contract_result = ContractValidationResult(diagnostics=())
     else:
         _ = start_compile_phase(status, "Validating model contracts...")
@@ -103,7 +104,7 @@ def analyze_compile_project(
             dialect=adapter.sql_analysis_dialect(),
         )
     contract_ms: int = elapsed_ms(contracts_start)
-    if not profile_skip_contracts:
+    if not profile_flags.skip_contracts:
         _ = complete_compile_phase(
             status, f"Validated model contracts. ({contract_ms / 1000:.2f}s)"
         )

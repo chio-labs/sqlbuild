@@ -115,21 +115,21 @@ def test_given_dag_when_building_concurrently_then_no_node_starts_before_deps_co
         worker_connections.append(adapter.connect(config))
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config=config,
-        connections=tuple(worker_connections),
-        scheduler_connection=scheduler_connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.STAGED,
-            run_id="test_ordering",
-            query_change_tracking=True,
-        ),
-        callbacks=BuildCallbacks(
-            on_node_start=on_start,
-            on_node_complete=on_complete,
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config=config,
+            connections=tuple(worker_connections),
+            scheduler_connection=scheduler_connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.STAGED,
+                run_id="test_ordering",
+                query_change_tracking=True,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=on_start,
+                on_node_complete=on_complete,
+            ),
+        )
     finally:
         conn: Any
         for conn in worker_connections:

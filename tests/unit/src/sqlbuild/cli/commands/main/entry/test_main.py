@@ -8,13 +8,17 @@ from _pytest.capture import CaptureResult
 from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest
+from sqlbuild.cli.commands.helpers.compile.models import CompileCommandRequest
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
+from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandRequest
 from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands.helpers.promote.models import PromoteCommandRequest
+from sqlbuild.cli.commands.helpers.rollback.models import RollbackCommandRequest
 from sqlbuild.cli.commands.helpers.scenario.models import (
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
@@ -668,32 +672,19 @@ def test_given_promote_command_arguments_when_running_with_dependencies_then_it_
         ]
     ] = []
 
-    def run_promote(
-        project_dir: Path | None,
-        no_color: bool,
-        no_sql_validation: bool,
-        from_virtual_environment: str,
-        to_virtual_environment: str,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        allow_partial_promotion: bool,
-        include_stale_upstreams: bool,
-        verbose: bool,
-        cli_vars: dict[str, object],
-    ) -> int:
-        del cli_vars
+    def run_promote(request: PromoteCommandRequest) -> int:
         received_args.append(
             (
-                project_dir,
-                no_color,
-                no_sql_validation,
-                from_virtual_environment,
-                to_virtual_environment,
-                select,
-                exclude,
-                allow_partial_promotion,
-                include_stale_upstreams,
-                verbose,
+                request.project_dir,
+                request.no_color,
+                request.no_sql_validation,
+                request.from_virtual_environment,
+                request.to_virtual_environment,
+                request.select,
+                request.exclude,
+                request.allow_partial_promotion,
+                request.include_stale_upstreams,
+                request.verbose,
             )
         )
         return test_case.expected_exit_code
@@ -749,32 +740,19 @@ def test_given_rollback_command_arguments_when_running_with_dependencies_then_it
         ]
     ] = []
 
-    def run_rollback(
-        project_dir: Path | None,
-        no_color: bool,
-        no_sql_validation: bool,
-        virtual_environment: str | None,
-        verbose: bool,
-        checkpoint_id: str | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        allow_partial_rollback: bool,
-        include_stale_upstreams: bool,
-        cli_vars: dict[str, object],
-    ) -> int:
-        del cli_vars
+    def run_rollback(request: RollbackCommandRequest) -> int:
         received_args.append(
             (
-                project_dir,
-                no_color,
-                no_sql_validation,
-                virtual_environment,
-                verbose,
-                checkpoint_id,
-                select,
-                exclude,
-                allow_partial_rollback,
-                include_stale_upstreams,
+                request.project_dir,
+                request.no_color,
+                request.no_sql_validation,
+                request.virtual_environment,
+                request.verbose,
+                request.checkpoint_id,
+                request.select,
+                request.exclude,
+                request.allow_partial_rollback,
+                request.include_stale_upstreams,
             )
         )
         return test_case.expected_exit_code
@@ -1027,7 +1005,7 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
             bool,
             tuple[str, ...],
             tuple[str, ...],
-            dict[str, object],
+            dict[str, object] | None,
             bool,
             bool,
             bool,
@@ -1035,32 +1013,17 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
         ]
     ] = []
 
-    def run_freshness(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        no_color: bool,
-        selected_target: str | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        cli_vars: dict[str, object],
-        json_output: bool,
-        json_output_path: Path | None,
-        fail_on_error: bool,
-        compare_state: bool,
-        fail_on_stale: bool,
-        virtual_env: str | None,
-    ) -> int:
-        del project_dir, no_color, selected_target, json_output, json_output_path
+    def run_freshness(request: FreshnessCommandRequest) -> int:
         received_args.append(
             (
-                no_sql_validation,
-                select,
-                exclude,
-                cli_vars,
-                fail_on_error,
-                compare_state,
-                fail_on_stale,
-                virtual_env,
+                request.no_sql_validation,
+                request.select,
+                request.exclude,
+                request.cli_vars,
+                request.fail_on_error,
+                request.compare_state,
+                request.fail_on_stale,
+                request.virtual_environment_name,
             )
         )
         return test_case.expected_exit_code
@@ -1108,35 +1071,8 @@ def test_given_freshness_json_arguments_when_running_then_dispatches_expected_ar
 ) -> None:
     received_args: list[tuple[bool, Path | None]] = []
 
-    def run_freshness(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        no_color: bool,
-        selected_target: str | None,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        cli_vars: dict[str, object],
-        json_output: bool,
-        json_output_path: Path | None,
-        fail_on_error: bool,
-        compare_state: bool,
-        fail_on_stale: bool,
-        virtual_env: str | None,
-    ) -> int:
-        del (
-            project_dir,
-            no_sql_validation,
-            no_color,
-            selected_target,
-            select,
-            exclude,
-            cli_vars,
-            fail_on_error,
-            compare_state,
-            fail_on_stale,
-            virtual_env,
-        )
-        received_args.append((json_output, json_output_path))
+    def run_freshness(request: FreshnessCommandRequest) -> int:
+        received_args.append((request.json_output, request.json_output_path))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1922,7 +1858,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             str | None,
             bool,
             CompileLineageMode,
-            dict[str, object],
+            dict[str, object] | None,
             bool,
             bool,
             bool,
@@ -1930,38 +1866,22 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         ]
     ] = []
 
-    def run_compile(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        defer_to: str | None,
-        selected_target: str | None,
-        json_output: bool,
-        manifest: bool,
-        dag_path: str | None,
-        no_color: bool,
-        lineage_mode: CompileLineageMode,
-        cli_vars: dict[str, object],
-        profile_skip_discovery_sql_analysis: bool,
-        profile_skip_column_inference: bool,
-        profile_skip_contracts: bool,
-        profile_skip_write: bool,
-    ) -> int:
-        del selected_target
+    def run_compile(request: CompileCommandRequest) -> int:
         received_args.append(
             (
-                project_dir,
-                no_sql_validation,
-                defer_to,
-                json_output,
-                manifest,
-                dag_path,
-                no_color,
-                lineage_mode,
-                cli_vars,
-                profile_skip_discovery_sql_analysis,
-                profile_skip_column_inference,
-                profile_skip_contracts,
-                profile_skip_write,
+                request.project_dir,
+                request.no_sql_validation,
+                request.defer_to,
+                request.json_output,
+                request.manifest,
+                request.dag_path,
+                request.no_color,
+                request.lineage_mode,
+                request.cli_vars,
+                request.profile_flags.skip_discovery_sql_analysis,
+                request.profile_flags.skip_column_inference,
+                request.profile_flags.skip_contracts,
+                request.profile_flags.skip_write,
             )
         )
         return test_case.expected_exit_code
@@ -2492,37 +2412,9 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
     test_case: MainErrorRenderingTestCase,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def run_compile(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        defer_to: str | None,
-        selected_target: str | None,
-        json_output: bool,
-        manifest: bool,
-        dag_path: str | None,
-        no_color: bool,
-        lineage_mode: CompileLineageMode,
-        cli_vars: dict[str, object],
-        profile_skip_discovery_sql_analysis: bool,
-        profile_skip_column_inference: bool,
-        profile_skip_contracts: bool,
-        profile_skip_write: bool,
-    ) -> int:
-        del no_sql_validation
-        del defer_to
-        del selected_target
-        del json_output
-        del manifest
-        del dag_path
-        del no_color
-        del lineage_mode
-        del cli_vars
-        del profile_skip_discovery_sql_analysis
-        del profile_skip_column_inference
-        del profile_skip_contracts
-        del profile_skip_write
-        assert project_dir is not None
-        raise test_case.error_factory(project_dir)
+    def run_compile(request: CompileCommandRequest) -> int:
+        assert request.project_dir is not None
+        raise test_case.error_factory(request.project_dir)
 
     def run_query(
         project_dir: Path | None,
