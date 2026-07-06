@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.virtual.executor.helpers.environment_views import write_virtual_environment_views
 from sqlbuild.virtual.executor.helpers.project_context import resolve_virtual_project_context
 from sqlbuild.virtual.executor.helpers.rollback import (
@@ -24,11 +24,11 @@ from sqlbuild.virtual.executor.helpers.state_operations import (
 )
 from sqlbuild.virtual.executor.models import (
     RollbackCheckpointState,
+    RollbackOptions,
     RollbackRefUpdate,
     RollbackResolution,
     VirtualEnvironmentPhysicalRelations,
     VirtualProjectContext,
-    VirtualViewRefreshHooks,
 )
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
@@ -43,27 +43,18 @@ def run_virtual_rollback(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     virtual_environment_name: str,
-    checkpoint_id: str | None = None,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    allow_partial_rollback: bool = False,
-    include_stale_upstreams: bool = False,
-    no_sql_validation: bool = False,
-    cli_vars: dict[str, object] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    on_progress: Callable[[str], None] | None = None,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    options: RollbackOptions,
+    hooks: ConnectionHooks,
 ) -> tuple[str, tuple[str, ...], VirtualEnvironmentStatus]:
     """Rollback a VDE to the previous finalized checkpoint."""
 
+    on_progress: Callable[[str], None] | None = hooks.on_progress
     context: VirtualProjectContext = resolve_virtual_project_context(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=external_sql_reference_resolver,
+        no_sql_validation=options.no_sql_validation,
+        cli_vars=options.cli_vars,
+        external_sql_reference_resolver=options.external_sql_reference_resolver,
         on_progress=on_progress,
     )
     config, backend = build_state_runtime(
@@ -89,7 +80,7 @@ def run_virtual_rollback(
             state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
-            checkpoint_id=checkpoint_id,
+            checkpoint_id=options.checkpoint_id,
         )
         resolution: RollbackResolution = resolve_rollback_final_refs(
             backend,
@@ -98,10 +89,10 @@ def run_virtual_rollback(
             graph=context.graph,
             virtual_environment_name=virtual_environment_name,
             checkpoint_state=checkpoint_state,
-            select=select,
-            exclude=exclude,
-            include_stale_upstreams=include_stale_upstreams,
-            allow_partial_rollback=allow_partial_rollback,
+            select=options.select,
+            exclude=options.exclude,
+            include_stale_upstreams=options.include_stale_upstreams,
+            allow_partial_rollback=options.allow_partial_rollback,
         )
         relations: VirtualEnvironmentPhysicalRelations = read_rollback_physical_relations(
             backend,
@@ -149,12 +140,7 @@ def run_virtual_rollback(
         unsuffixed_virtual_environment_name=context.unsuffixed_virtual_environment_name,
         relations=relations,
         function_versions=(update.function_versions if not resolution.is_partial_scope else {}),
-        hooks=VirtualViewRefreshHooks(
-            on_progress=on_progress,
-            on_connection_start=on_connection_start,
-            on_connection_complete=on_connection_complete,
-            on_connection_error=on_connection_error,
-        ),
+        hooks=hooks,
     )
     return (
         checkpoint_state.target_checkpoint.checkpoint_id,

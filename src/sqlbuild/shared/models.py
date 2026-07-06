@@ -318,3 +318,13 @@ class ParsedScenarioArtifactName:
     hash_prefix: str
     kind: str
     logical_name: str
+
+
+@dataclass(frozen=True)
+class ConnectionHooks:
+    """Progress and connection lifecycle callbacks for long-running operations."""
+
+    on_progress: Callable[[str], None] | None = None
+    on_connection_start: Callable[[int], None] | None = None
+    on_connection_complete: Callable[[int, float], None] | None = None
+    on_connection_error: Callable[[int, float], None] | None = None

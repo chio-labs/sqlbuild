@@ -37,7 +37,11 @@ from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
-from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
+from sqlbuild.virtual.executor.models import (
+    VirtualBuildHooks,
+    VirtualBuildOptions,
+    VirtualBuildPipelineResult,
+)
 
 
 def run_virtual_build(
@@ -111,38 +115,46 @@ def run_virtual_build(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         connection_config=connection_config,
-        selected_target=selected_target,
-        no_sql_validation=no_sql_validation,
-        defer_sources_to=defer_sources_to,
-        cursor_overrides=cursor_overrides,
-        full_refresh=full_refresh,
-        virtual_environment_name=virtual_environment_name,
-        include_stale_upstreams=include_stale_upstreams,
-        changes_only=changes_only,
-        auto_load_sources=auto_load_sources,
-        reload_sources=reload_sources,
-        include_python=include_python,
-        seed_only=seed_only,
-        select=select,
-        exclude=exclude,
-        fail_fast=fail_fast,
-        allow_snapshot_schema_change=allow_snapshot_schema_change,
-        concurrency=concurrency,
-        cli_vars=cli_vars,
-        run_tests=run_tests,
-        run_audits=run_audits,
-        snapshots=discovered_inputs.project_config.snapshots,
-        start_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).start_ts),
-        end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
-        start_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).start_int),
-        end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
-        on_plan_ready=plan_hook.on_plan_ready,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=planning_progress.on_progress,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-        providers=providers,
+        options=VirtualBuildOptions(
+            selected_target=selected_target,
+            no_sql_validation=no_sql_validation,
+            defer_sources_to=defer_sources_to,
+            cursor_overrides=cursor_overrides,
+            full_refresh=full_refresh,
+            virtual_environment_name=virtual_environment_name,
+            include_stale_upstreams=include_stale_upstreams,
+            changes_only=changes_only,
+            auto_load_sources=auto_load_sources,
+            reload_sources=reload_sources,
+            include_python=include_python,
+            seed_only=seed_only,
+            select=select,
+            exclude=exclude,
+            fail_fast=fail_fast,
+            allow_snapshot_schema_change=allow_snapshot_schema_change,
+            concurrency=concurrency,
+            cli_vars=cli_vars,
+            run_tests=run_tests,
+            run_audits=run_audits,
+            snapshots=discovered_inputs.project_config.snapshots,
+            start_cursor_ts=parse_cursor_timestamp(
+                (cursor_overrides or CursorOverrides()).start_ts
+            ),
+            end_cursor_ts=parse_cursor_timestamp((cursor_overrides or CursorOverrides()).end_ts),
+            start_cursor_int=parse_cursor_integer(
+                (cursor_overrides or CursorOverrides()).start_int
+            ),
+            end_cursor_int=parse_cursor_integer((cursor_overrides or CursorOverrides()).end_int),
+            external_sql_reference_resolver=external_sql_reference_resolver,
+            providers=providers,
+        ),
+        hooks=VirtualBuildHooks(
+            on_plan_ready=plan_hook.on_plan_ready,
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+        ),
     )
     plan_output: PlanOutput = result.display_plan_output
     write_python_node_results(

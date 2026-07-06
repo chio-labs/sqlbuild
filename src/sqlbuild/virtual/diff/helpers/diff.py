@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -18,7 +17,8 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.virtual.diff.models import VirtualDiffState
+from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.virtual.diff.models import VirtualDiffOptions, VirtualDiffState
 from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_locations
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
@@ -255,29 +255,23 @@ def execute_virtual_diff_between_relations(
     left_project: CompiledProject,
     right_project: CompiledProject,
     compared_names: tuple[str, ...],
-    schema_only: bool,
-    bounded: str | None,
-    collect_samples: bool,
-    max_column_examples: int,
-    max_row_only_examples: int,
-    on_connection_start: Callable[[int], None] | None,
-    on_connection_complete: Callable[[int, float], None] | None,
-    on_connection_error: Callable[[int, float], None] | None,
+    options: VirtualDiffOptions,
+    hooks: ConnectionHooks,
 ) -> DiffExecutionResult:
     """Open a warehouse connection with progress callbacks and run the diff."""
 
     started_at: float = time.perf_counter()
-    if on_connection_start is not None:
-        on_connection_start(1)
+    if hooks.on_connection_start is not None:
+        hooks.on_connection_start(1)
     connection: Any
     try:
         connection = adapter.connect(connection_config)
     except Exception:
-        if on_connection_error is not None:
-            on_connection_error(1, time.perf_counter() - started_at)
+        if hooks.on_connection_error is not None:
+            hooks.on_connection_error(1, time.perf_counter() - started_at)
         raise
-    if on_connection_complete is not None:
-        on_connection_complete(1, time.perf_counter() - started_at)
+    if hooks.on_connection_complete is not None:
+        hooks.on_connection_complete(1, time.perf_counter() - started_at)
     try:
         return execute_diff(
             adapter=adapter,
@@ -285,11 +279,11 @@ def execute_virtual_diff_between_relations(
             left_project=left_project,
             right_project=right_project,
             selected_names=compared_names,
-            schema_only=schema_only,
-            bounded=bounded,
-            collect_samples=collect_samples,
-            max_column_examples=max_column_examples,
-            max_row_only_examples=max_row_only_examples,
+            schema_only=options.schema_only,
+            bounded=options.bounded,
+            collect_samples=options.collect_samples,
+            max_column_examples=options.max_column_examples,
+            max_row_only_examples=options.max_row_only_examples,
         )
     finally:
         adapter.close(connection)

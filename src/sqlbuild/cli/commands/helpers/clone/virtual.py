@@ -17,7 +17,7 @@ from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
 )
 from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.virtual.executor.main.clone import run_virtual_clone
-from sqlbuild.virtual.executor.models import VirtualCloneResult
+from sqlbuild.virtual.executor.models import CloneOptions, VirtualCloneResult
 
 
 def execute_virtual_clone(*, request: CloneCommandRequest, invocation: CloneInvocation) -> int:
@@ -47,15 +47,17 @@ def execute_virtual_clone(*, request: CloneCommandRequest, invocation: CloneInvo
             target_name=request.destination_target_name,
             cli_vars=request.cli_vars,
         ),
-        virtual_environment_name=request.virtual_env,
-        skip_locked=request.skip_locked,
-        no_sql_validation=request.no_sql_validation,
-        select=request.select,
-        exclude=request.exclude,
-        cli_vars=request.cli_vars,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=invocation.effective_project_dir,
-            discovered_inputs=invocation.discovered_inputs,
+        options=CloneOptions(
+            virtual_environment_name=request.virtual_env,
+            skip_locked=request.skip_locked,
+            no_sql_validation=request.no_sql_validation,
+            select=request.select,
+            exclude=request.exclude,
+            cli_vars=request.cli_vars,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=invocation.effective_project_dir,
+                discovered_inputs=invocation.discovered_inputs,
+            ),
         ),
     )
     progress.complete(f"Cloned virtual environment. ({time.monotonic() - clone_start:.2f}s)")

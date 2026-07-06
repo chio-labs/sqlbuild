@@ -6,14 +6,37 @@ from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import RunDespiteUnchangedPlanningResult
+from sqlbuild.compiler.planner.models import CursorOverrides, RunDespiteUnchangedPlanningResult
 from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentSeedRefRecord,
 )
+
+
+@dataclass(frozen=True)
+class VirtualPlanOptions:
+    """Selection, deferral, and cursor options for one virtual planning run."""
+
+    selected_target: str | None = None
+    no_sql_validation: bool = False
+    defer_sources_to: str | None = None
+    source_deferral_enabled: bool = True
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    cursor_overrides: CursorOverrides | None = None
+    full_refresh: bool = False
+    virtual_environment_name: str | None = None
+    include_stale_upstreams: bool = False
+    changes_only: bool = False
+    auto_load_sources: bool = False
+    reload_sources: bool = False
+    include_python: bool = True
+    cli_vars: dict[str, object] | None = None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
 
 
 @dataclass(frozen=True)

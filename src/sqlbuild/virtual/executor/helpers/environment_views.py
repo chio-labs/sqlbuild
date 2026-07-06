@@ -6,12 +6,10 @@ import time
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.virtual.executor.helpers.rollback import publish_function_versions
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
-from sqlbuild.virtual.executor.models import (
-    VirtualEnvironmentPhysicalRelations,
-    VirtualViewRefreshHooks,
-)
+from sqlbuild.virtual.executor.models import VirtualEnvironmentPhysicalRelations
 from sqlbuild.virtual.state.models import FunctionVersionRecord
 
 
@@ -24,7 +22,7 @@ def write_virtual_environment_views(
     unsuffixed_virtual_environment_name: str | None,
     relations: VirtualEnvironmentPhysicalRelations,
     function_versions: dict[str, FunctionVersionRecord],
-    hooks: VirtualViewRefreshHooks,
+    hooks: ConnectionHooks,
 ) -> None:
     """Refresh target VDE views and publish the given function versions."""
 
