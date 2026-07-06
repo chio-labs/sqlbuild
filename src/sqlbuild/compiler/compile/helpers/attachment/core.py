@@ -55,6 +55,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
     LoadedMacro,
     MacroContext,
+    ModelInputBuildContext,
 )
 from sqlbuild.compiler.compile.types import (
     CompileContextKey,
@@ -95,19 +96,20 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 def build_model_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
-    effective_vars: dict[str, object],
-    effective_settings: SettingsConfig,
-    target_config: TargetConfig | None,
-    effective_target_name: str | None,
-    run_id: str,
-    macro_context: MacroContext,
-    loaded_macros: dict[str, LoadedMacro],
+    context: ModelInputBuildContext,
     no_sql_validation: bool = False,
     defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
+    effective_vars: dict[str, object] = context.effective_vars
+    effective_settings: SettingsConfig = context.effective_settings
+    target_config: TargetConfig | None = context.target_config
+    effective_target_name: str | None = context.effective_target_name
+    run_id: str = context.run_id
+    macro_context: MacroContext = context.macro_context
+    loaded_macros: dict[str, LoadedMacro] = context.loaded_macros
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)

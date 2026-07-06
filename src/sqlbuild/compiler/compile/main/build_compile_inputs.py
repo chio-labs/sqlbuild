@@ -32,6 +32,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioInput,
     LoadedMacro,
     MacroContext,
+    ModelInputBuildContext,
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompileSqlTestInput
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
@@ -102,13 +103,15 @@ def build_compile_inputs(
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
         discovered_inputs,
-        effective_vars=effective_vars,
-        effective_settings=effective_settings,
-        target_config=effective_target,
-        effective_target_name=effective_target_name,
-        run_id=resolved_run_id,
-        macro_context=macro_context,
-        loaded_macros=loaded_macros,
+        context=ModelInputBuildContext(
+            effective_vars=effective_vars,
+            effective_settings=effective_settings,
+            target_config=effective_target,
+            effective_target_name=effective_target_name,
+            run_id=resolved_run_id,
+            macro_context=macro_context,
+            loaded_macros=loaded_macros,
+        ),
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
