@@ -16,6 +16,7 @@ from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     DependencyBaselinePlanEntry,
     ExistingDestinationInputPlanEntry,
+    PlanEntryBuildInputs,
     PlannerChangeReconciliation,
     PlannerEntryResults,
     PlannerIdentityContext,
@@ -81,13 +82,15 @@ def build_planner_entry_results(
         resolved_actions=reconciliation.resolved_actions,
         cursor_overrides=overrides.cursor_overrides,
         full_refresh=overrides.full_refresh,
-        standard_reuse_decisions=(
-            reuse.standard_reuse.decisions if reuse.standard_reuse is not None else None
+        build_inputs=PlanEntryBuildInputs(
+            standard_reuse_decisions=(
+                reuse.standard_reuse.decisions if reuse.standard_reuse is not None else None
+            ),
+            run_despite_unchanged=RunDespiteUnchangedPlanningResult(),
+            custom_prepare_version_materializations=(
+                policies.custom_prepare_version_materializations
+            ),
         ),
-        run_despite_unchanged=RunDespiteUnchangedPlanningResult(),
-        source_freshness_blocked_model_names=frozenset(),
-        external_blocked_model_names=frozenset(),
-        custom_prepare_version_materializations=policies.custom_prepare_version_materializations,
     )
     dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
         build_dependency_baseline_entries(
@@ -116,17 +119,21 @@ def build_planner_entry_results(
         resolved_actions=reconciliation.resolved_actions,
         cursor_overrides=overrides.cursor_overrides,
         full_refresh=overrides.full_refresh,
-        standard_reuse_decisions=(
-            reuse.standard_reuse.decisions if reuse.standard_reuse is not None else None
+        build_inputs=PlanEntryBuildInputs(
+            standard_reuse_decisions=(
+                reuse.standard_reuse.decisions if reuse.standard_reuse is not None else None
+            ),
+            run_despite_unchanged=pruning.run_despite_unchanged,
+            source_freshness_blocked_model_names=(
+                source_freshness.propagation.blocked_model_names
+                if source_freshness.propagation is not None
+                else frozenset()
+            ),
+            external_blocked_model_names=frozenset(overrides.external_blocked_model_names),
+            custom_prepare_version_materializations=(
+                policies.custom_prepare_version_materializations
+            ),
         ),
-        run_despite_unchanged=pruning.run_despite_unchanged,
-        source_freshness_blocked_model_names=(
-            source_freshness.propagation.blocked_model_names
-            if source_freshness.propagation is not None
-            else frozenset()
-        ),
-        external_blocked_model_names=frozenset(overrides.external_blocked_model_names),
-        custom_prepare_version_materializations=policies.custom_prepare_version_materializations,
     )
     return PlannerEntryResults(
         model_entry_results=model_entry_results,

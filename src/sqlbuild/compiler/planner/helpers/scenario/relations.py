@@ -40,7 +40,9 @@ from sqlbuild.compiler.planner.helpers.output.plan_entry import extract_seed_col
 from sqlbuild.compiler.planner.helpers.resolve.refs import build_function_locations
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.models import (
+    CursorOverridePair,
     FunctionPlanEntry,
+    ModelPlanContext,
     ModelPlanEntry,
     PlanWarning,
     ScenarioArtifactIdentity,
@@ -338,18 +340,19 @@ def build_scenario_execution_plan(
             model=replace(model, destination=scenario_target, query_sql=scenario_query_sql),
             snapshot=effective_snapshot,
             adapter=adapter,
-            model_locations=relation_plan.model_locations,
-            models_by_name=models_by_name,
-            seed_locations=relation_plan.seed_locations,
-            function_locations=function_locations,
-            source_map=relation_plan.source_map,
-            source_warehouse_columns=effective_source_warehouse_columns,
-            star_exclude_keyword=adapter.star_exclude_keyword(),
+            context=ModelPlanContext(
+                model_locations=relation_plan.model_locations,
+                models_by_name=models_by_name,
+                seed_locations=relation_plan.seed_locations,
+                function_locations=function_locations,
+                source_map=relation_plan.source_map,
+                source_warehouse_columns=effective_source_warehouse_columns,
+                star_exclude_keyword=adapter.star_exclude_keyword(),
+            ),
             sql_analysis_enabled=sql_analysis_enabled,
             query_change_tracking=False,
             full_refresh=True,
-            start_cursor_override=None,
-            end_cursor_override=None,
+            cursor_overrides=CursorOverridePair(),
         )
         model_entries.append(entry)
         warnings.extend(model_warnings)

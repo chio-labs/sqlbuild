@@ -368,6 +368,40 @@ class PlannerRelationsContext:
 
 
 @dataclass(frozen=True)
+class ModelPlanContext:
+    """Relation lookups and source columns for building one model plan entry."""
+
+    model_locations: dict[str, CompiledRelationLocation]
+    models_by_name: dict[str, CompiledModel]
+    seed_locations: dict[str, CompiledRelationLocation]
+    function_locations: dict[str, CompiledRelationLocation]
+    source_map: dict[str, SourceEntry]
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
+    star_exclude_keyword: str
+
+
+@dataclass(frozen=True)
+class CursorOverridePair:
+    """Resolved per-model cursor start/end overrides for plan entry construction."""
+
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
+
+
+@dataclass(frozen=True)
+class PlanEntryBuildInputs:
+    """Reuse decisions, blocked models, and cursor overrides for plan entry building."""
+
+    standard_reuse_decisions: StandardReuseDecisionResults | None = None
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None
+    source_freshness_blocked_model_names: frozenset[str] = frozenset()
+    external_blocked_model_names: frozenset[str] = frozenset()
+    custom_prepare_version_materializations: frozenset[str] = frozenset()
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
+
+
+@dataclass(frozen=True)
 class FunctionChangeResult:
     """Per-function output from change detection."""
 

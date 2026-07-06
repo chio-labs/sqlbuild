@@ -50,10 +50,13 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     CursorBounds,
     CursorInputRelation,
+    CursorOverridePair,
     CursorOverrides,
     DeferralInputs,
     ModelCursorSnapshot,
+    ModelPlanContext,
     ModelPlanEntry,
+    PlanEntryBuildInputs,
     PlannerModelEntryResults,
     PlannerRelationsContext,
     PlannerResolvedActions,
@@ -188,18 +191,11 @@ def plan_model(
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
-    model_locations: dict[str, CompiledRelationLocation],
-    models_by_name: dict[str, CompiledModel],
-    seed_locations: dict[str, CompiledRelationLocation],
-    function_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
-    star_exclude_keyword: str,
+    context: ModelPlanContext,
     sql_analysis_enabled: bool,
     query_change_tracking: bool,
     full_refresh: bool,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
+    cursor_overrides: CursorOverridePair,
     backfill_override: BackfillResult | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
@@ -217,17 +213,10 @@ def plan_model(
         model=model,
         snapshot=snapshot,
         adapter=adapter,
-        model_locations=model_locations,
-        models_by_name=models_by_name,
-        seed_locations=seed_locations,
-        function_locations=function_locations,
-        source_map=source_map,
-        source_warehouse_columns=source_warehouse_columns,
-        star_exclude_keyword=star_exclude_keyword,
+        context=context,
         sql_analysis_enabled=sql_analysis_enabled,
         full_refresh=full_refresh,
-        start_cursor_override=start_cursor_override,
-        end_cursor_override=end_cursor_override,
+        cursor_overrides=cursor_overrides,
         change_result=change_result,
         backfill_override=backfill_override,
         external_sql_reference_resolver=external_sql_reference_resolver,
@@ -244,16 +233,24 @@ def build_plan_entries(
     resolved_actions: PlannerResolvedActions,
     cursor_overrides: CursorOverrides | None,
     full_refresh: bool,
-    standard_reuse_decisions: StandardReuseDecisionResults | None = None,
-    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
-    source_freshness_blocked_model_names: frozenset[str] = frozenset(),
-    external_blocked_model_names: frozenset[str] = frozenset(),
-    custom_prepare_version_materializations: frozenset[str] = frozenset(),
-    start_cursor_override: str | None = None,
-    end_cursor_override: str | None = None,
+    build_inputs: PlanEntryBuildInputs | None = None,
 ) -> PlannerModelEntryResults:
     """Build model plan entries from snapshot and cascade-resolved actions."""
 
+    inputs: PlanEntryBuildInputs = (
+        build_inputs if build_inputs is not None else PlanEntryBuildInputs()
+    )
+    standard_reuse_decisions: StandardReuseDecisionResults | None = inputs.standard_reuse_decisions
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = inputs.run_despite_unchanged
+    source_freshness_blocked_model_names: frozenset[str] = (
+        inputs.source_freshness_blocked_model_names
+    )
+    external_blocked_model_names: frozenset[str] = inputs.external_blocked_model_names
+    custom_prepare_version_materializations: frozenset[str] = (
+        inputs.custom_prepare_version_materializations
+    )
+    start_cursor_override: str | None = inputs.start_cursor_override
+    end_cursor_override: str | None = inputs.end_cursor_override
     entries: list[ModelPlanEntry] = []
     warnings: list[PlanWarning] = []
     key: CompiledObjectKey
@@ -281,17 +278,21 @@ def build_plan_entries(
             model=model,
             snapshot=snapshot,
             adapter=adapter,
-            model_locations=relations.model_locations,
-            models_by_name=scope.models_by_name,
-            seed_locations=relations.seed_locations,
-            function_locations=relations.function_locations,
-            source_map=relations.source_read_map,
-            source_warehouse_columns=relations.source_warehouse_columns,
-            star_exclude_keyword=relations.star_exclude_keyword,
+            context=ModelPlanContext(
+                model_locations=relations.model_locations,
+                models_by_name=scope.models_by_name,
+                seed_locations=relations.seed_locations,
+                function_locations=relations.function_locations,
+                source_map=relations.source_read_map,
+                source_warehouse_columns=relations.source_warehouse_columns,
+                star_exclude_keyword=relations.star_exclude_keyword,
+            ),
             sql_analysis_enabled=project.settings.sql_analysis,
             full_refresh=full_refresh,
-            start_cursor_override=resolved_start,
-            end_cursor_override=resolved_end,
+            cursor_overrides=CursorOverridePair(
+                start_cursor_override=resolved_start,
+                end_cursor_override=resolved_end,
+            ),
             change_result=resolved.change,
             backfill_override=backfill_override,
             external_sql_reference_resolver=project.external_sql_reference_resolver,
@@ -450,17 +451,10 @@ def plan_model_from_change(
     model: CompiledModel,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
-    model_locations: dict[str, CompiledRelationLocation],
-    models_by_name: dict[str, CompiledModel],
-    seed_locations: dict[str, CompiledRelationLocation],
-    function_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
-    star_exclude_keyword: str,
+    context: ModelPlanContext,
     sql_analysis_enabled: bool,
     full_refresh: bool,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
+    cursor_overrides: CursorOverridePair,
     change_result: ChangeDetectionResult,
     backfill_override: BackfillResult | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
@@ -470,6 +464,9 @@ def plan_model_from_change(
     if backfill_override is not None:
         change_result = replace(change_result, backfill=backfill_override)
 
+    models_by_name: dict[str, CompiledModel] = context.models_by_name
+    start_cursor_override: str | None = cursor_overrides.start_cursor_override
+    end_cursor_override: str | None = cursor_overrides.end_cursor_override
     backfill: BackfillResult = change_result.backfill
     suppress_runtime_cursor_bounds: bool = (
         backfill_override is not None and backfill_override.action == BackfillAction.FULL
@@ -479,12 +476,12 @@ def plan_model_from_change(
         adapter=adapter,
         model=model,
         snapshot=snapshot,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        function_locations=function_locations,
-        source_map=source_map,
-        source_warehouse_columns=source_warehouse_columns,
-        star_exclude_keyword=star_exclude_keyword,
+        model_locations=context.model_locations,
+        seed_locations=context.seed_locations,
+        function_locations=context.function_locations,
+        source_map=context.source_map,
+        source_warehouse_columns=context.source_warehouse_columns,
+        star_exclude_keyword=context.star_exclude_keyword,
         backfill=backfill,
         full_refresh=full_refresh,
         start_cursor_override=start_cursor_override,
@@ -536,18 +533,18 @@ def plan_model_from_change(
         cursor_input_relations = _build_cursor_input_relations(
             model=model,
             adapter=adapter,
-            model_locations=model_locations,
+            model_locations=context.model_locations,
             models_by_name=models_by_name,
-            seed_locations=seed_locations,
-            source_map=source_map,
+            seed_locations=context.seed_locations,
+            source_map=context.source_map,
             cursor_column=cursor_column,
         )
     validate_source_cursor_input_columns(
         model=model,
         cursor_column=cursor_column,
         models_by_name=models_by_name,
-        source_map=source_map,
-        source_warehouse_columns=source_warehouse_columns,
+        source_map=context.source_map,
+        source_warehouse_columns=context.source_warehouse_columns,
     )
     runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_inputs(cursor_input_relations)
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
