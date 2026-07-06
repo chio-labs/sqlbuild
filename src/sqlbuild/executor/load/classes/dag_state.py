@@ -49,3 +49,18 @@ class LoadDagState:
 
         self.in_degree = in_degree
         self.ready.extend(newly_ready)
+
+    def pop_next_ready(self) -> str:
+        """Dequeue the next ready source name."""
+
+        return self.ready.pop(0)
+
+    def mark_in_flight(self, source_name: str) -> None:
+        """Track one source as submitted to a worker."""
+
+        self.in_flight.add(source_name)
+
+    def finish_in_flight(self, source_name: str) -> None:
+        """Stop tracking one source as in flight."""
+
+        self.in_flight.discard(source_name)

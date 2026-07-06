@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
@@ -19,30 +18,18 @@ from sqlbuild.executor.load.helpers.cursors import (
     load_staging_cursor_bounds,
 )
 from sqlbuild.executor.load.helpers.external import execute_external_source_load
-from sqlbuild.executor.load.helpers.relation_refs import (
-    build_loader_relation_refs,
-    build_source_relation_refs,
+from sqlbuild.executor.load.helpers.loader_invocation import (
+    build_loader_context,
+    interpret_loader_return,
+    validate_source_write_strategy,
 )
 from sqlbuild.executor.load.helpers.schema import validate_and_evolve_existing_target
 from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
-from sqlbuild.executor.load.models import (
-    LoaderContext,
-    LoaderResult,
-    LoaderSkipResult,
-    LoadExecutionResult,
-)
-from sqlbuild.executor.node_results.models import NodeResultEnvelope
+from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.helpers.load_execution import (
-    is_untargeted_self_managed_intermediate,
-    load_resource_kind,
-)
+from sqlbuild.executor.shared.helpers.load_execution import load_resource_kind
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import (
-    ProviderContainer,
-    _empty_provider_container,
-    invoke_with_providers,
-)
+from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
 from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -78,7 +65,6 @@ def execute_source_load(
     destination_name: str = (
         source_entry.table if source_entry.table is not None else source_entry.name
     )
-    staging_name: str = f"{destination_name}__staging"
     destination_relation: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=source_entry.database,
@@ -89,7 +75,7 @@ def execute_source_load(
         adapter=adapter,
         database=source_entry.database,
         schema=source_entry.schema,
-        name=staging_name,
+        name=f"{destination_name}__staging",
     )
     start: float = time.monotonic()
     try:
@@ -119,37 +105,20 @@ def execute_source_load(
                 providers=providers,
                 result_store=result_store,
             )
-        supported_write_strategies: frozenset[SourceWriteStrategy] = frozenset(
-            {
-                SourceWriteStrategy.APPEND,
-                SourceWriteStrategy.DELETE_INSERT,
-                SourceWriteStrategy.MERGE,
-                SourceWriteStrategy.TABLE,
-            }
-        )
-        if (
-            source_entry.write_strategy is not None
-            and source_entry.write_strategy not in supported_write_strategies
-        ):
-            raise ExecutorInputError(
-                f"Source '{source_entry.name}' uses write_strategy "
-                f"'{source_entry.write_strategy}', "
-                "but sqb load currently supports only write_strategy append, delete_insert, "
-                "merge, and table"
-            )
+        validate_source_write_strategy(source_entry)
         adapter.ensure_schema(
             connection,
             database=source_entry.database,
             schema=source_entry.schema,
             statement_recorder=statement_recorder,
         )
-        context: LoaderContext = LoaderContext(
+        context: LoaderContext = build_loader_context(
+            source_entry=source_entry,
+            loader_function=loader_function,
             adapter=adapter,
             connection_config=connection_config,
             connection=connection,
-            destination=destination_relation,
-            destination_database=source_entry.database,
-            destination_schema=source_entry.schema,
+            destination_relation=destination_relation,
             destination_name=destination_name,
             run_id=run_id,
             runtime_dir=runtime_dir,
@@ -157,112 +126,33 @@ def execute_source_load(
             vars=vars,
             is_reload=is_reload,
             use_color=use_color,
-            current_cursor_value=_load_current_cursor_value(
-                adapter=adapter,
-                connection=connection,
-                source_entry=source_entry,
-                target=destination_relation,
-                target_name=destination_name,
-                statement_recorder=statement_recorder,
-            ),
-            logger=logging.getLogger(f"sqlbuild.loader.{loader_function.name}"),
-            statement_recorder=statement_recorder,
             start_cursor_ts=start_cursor_ts,
             end_cursor_ts=end_cursor_ts,
             start_cursor_int=start_cursor_int,
             end_cursor_int=end_cursor_int,
-            loader_refs=build_loader_relation_refs(
-                adapter=adapter,
-                connection=connection,
-                entries=loader_ref_entries or {},
-                statement_recorder=statement_recorder,
-            ),
-            source_refs=build_source_relation_refs(
-                adapter=adapter,
-                connection=connection,
-                entries=source_ref_entries or {},
-                statement_recorder=statement_recorder,
-            ),
-            providers=providers if providers is not None else _empty_provider_container(),
-            result_store=result_store,
+            statement_recorder=statement_recorder,
+            loader_ref_entries=loader_ref_entries,
+            source_ref_entries=source_ref_entries,
             on_progress=on_progress,
+            providers=providers,
+            result_store=result_store,
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,
             context=context,
             providers=providers,
         )
-        if isinstance(raw_rows, LoaderSkipResult):
-            return LoadExecutionResult(
-                source_name=source_entry.name,
-                loader_name=loader_function.name,
-                status=ExecutionStatus.SKIPPED,
-                target=destination_relation,
-                resource_kind=resource_kind,
-                staging_relation=None,
-                rows_loaded=0,
-                duration_ms=int((time.monotonic() - start) * 1000),
-                lifecycle_events=statement_recorder.snapshot(),
-                skip_mode=raw_rows.mode,
-                skip_reason=raw_rows.reason,
-            )
-        if isinstance(raw_rows, LoaderResult):
-            if source_entry.write_strategy is not None:
-                raise ExecutorInputError(
-                    f"Managed source '{source_entry.name}' loader '{loader_function.name}' "
-                    "returned ctx.result(...); managed loaders must return dict rows "
-                    "or ctx.skip(...)"
-                )
-            return LoadExecutionResult(
-                source_name=source_entry.name,
-                loader_name=loader_function.name,
-                status=ExecutionStatus.SUCCESS,
-                target=destination_relation,
-                resource_kind=resource_kind,
-                staging_relation=None,
-                rows_loaded=0,
-                duration_ms=int((time.monotonic() - start) * 1000),
-                lifecycle_events=statement_recorder.snapshot(),
-                result_payload=raw_rows.payload,
-                result_metadata=raw_rows.metadata,
-                result_materialized=raw_rows.materialized,
-            )
-        if isinstance(raw_rows, NodeResultEnvelope):
-            raise ExecutorInputError(
-                f"Loader '{loader_function.name}' returned a node result envelope; "
-                "use ctx.result(...) to return this loader's own result"
-            )
-        if raw_rows is None:
-            if is_untargeted_self_managed_intermediate(
-                source_entry=source_entry,
-                loader_function=loader_function,
-            ):
-                raise ExecutorInputError(
-                    f"Loader '{loader_function.name}' returned no rows and has no destination "
-                    "declared"
-                )
-            if source_entry.write_strategy is not None:
-                raise ExecutorInputError(
-                    f"Source '{source_entry.name}' defines write_strategy but loader "
-                    f"'{loader_function.name}' returned no rows"
-                )
-            rows_loaded: int = 0
-            return LoadExecutionResult(
-                source_name=source_entry.name,
-                loader_name=loader_function.name,
-                status=ExecutionStatus.SUCCESS,
-                target=destination_relation,
-                resource_kind=resource_kind,
-                staging_relation=None,
-                rows_loaded=rows_loaded,
-                duration_ms=int((time.monotonic() - start) * 1000),
-                lifecycle_events=statement_recorder.snapshot(),
-            )
-        if source_entry.write_strategy is None:
-            raise ExecutorInputError(
-                f"Source '{source_entry.name}' loader '{loader_function.name}' returned rows "
-                "but source has no write_strategy"
-            )
+        early_result: LoadExecutionResult | None = interpret_loader_return(
+            raw_rows=raw_rows,
+            source_entry=source_entry,
+            loader_function=loader_function,
+            destination_relation=destination_relation,
+            resource_kind=resource_kind,
+            statement_recorder=statement_recorder,
+            start=start,
+        )
+        if early_result is not None:
+            return early_result
         rows_loaded: int = write_loader_rows_to_staging(
             loader_return_value=raw_rows,
             source_entry=source_entry,
@@ -407,31 +297,3 @@ def _apply_source_write_strategy(
         )
         return
     raise ExecutorInputError(f"unsupported source write_strategy: {source_entry.write_strategy}")
-
-
-def _load_current_cursor_value(
-    *,
-    adapter: BaseAdapter,
-    connection: Any,
-    source_entry: SourceEntry,
-    target: str,
-    target_name: str,
-    statement_recorder: StatementRecorder,
-) -> object | None:
-    if source_entry.cursor_column is None:
-        return None
-    target_exists: bool = adapter.relation_exists(
-        connection,
-        database=source_entry.database,
-        schema=source_entry.schema,
-        name=target_name,
-    )
-    if not target_exists:
-        return None
-    sql: str = f"SELECT MAX({adapter.render_identifier(source_entry.cursor_column)}) FROM {target}"
-    statement_recorder.record(sql)
-    cursor: Any = adapter.execute(connection, sql)
-    row: object | None = cursor.fetchone()
-    if row is None:
-        return None
-    return row[0]

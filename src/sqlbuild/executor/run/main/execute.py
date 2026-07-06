@@ -8,13 +8,11 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.adapter.shared.types import TablePromotionMode
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import RelationReuseKind
-from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
@@ -38,10 +36,7 @@ from sqlbuild.executor.run.helpers.materializations.snapshot import (
 from sqlbuild.executor.run.helpers.materializations.view import (
     execute_view_entry as execute_view_entry,
 )
-from sqlbuild.executor.run.helpers.reuse.audit import (
-    audit_plan_binding_key,
-    reused_final_audit_results_by_binding_key,
-)
+from sqlbuild.executor.run.helpers.execution.final_audits import run_final_model_audits
 from sqlbuild.executor.run.helpers.reuse.core import (
     create_relation_from_reuse_plan,
 )
@@ -53,7 +48,11 @@ from sqlbuild.executor.run.helpers.validation.cursor_bounds import (
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run.helpers.validation.type_enforcement import enforce_types_staged
-from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    FinalAuditRun,
+    HookExecutionResult,
+    ModelExecutionResult,
+)
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
@@ -396,39 +395,19 @@ def _staged_lifecycle(
             hook_results=hook_results,
         )
 
-    overrides: dict[str, str] = {entry.name: staging_qualified}
-    reused_audit_results_by_binding_key: dict[str, AuditExecutionResult] = (
-        reused_final_audit_results_by_binding_key(
-            metadata_json=reuse_origin_fingerprint.metadata_json,
-            model_audits=model_audits,
-        )
-        if reuse_origin_fingerprint is not None
-        else {}
+    final_audit_run: FinalAuditRun = run_final_model_audits(
+        relation_overrides={entry.name: staging_qualified},
+        model_audits=model_audits,
+        reuse_origin_fingerprint=reuse_origin_fingerprint,
+        adapter=adapter,
+        connection=connection,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        source_map=source_map,
     )
-    audit_error: bool = False
-    audit: AuditPlanEntry
-    for audit in model_audits:
-        reused_result: AuditExecutionResult | None = reused_audit_results_by_binding_key.get(
-            audit_plan_binding_key(audit)
-        )
-        if reused_result is not None:
-            audit_results.append(reused_result)
-            continue
-        result: AuditExecutionResult = execute_audit(
-            audit=audit,
-            adapter=adapter,
-            connection=connection,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            relation_overrides=overrides,
-            run_scope_phase=AuditRunScope.FINAL,
-        )
-        audit_results.append(result)
-        if result.outcome == AuditOutcome.ERROR:
-            audit_error = True
+    audit_results.extend(final_audit_run.results)
 
-    if audit_error:
+    if final_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
@@ -609,38 +588,19 @@ def _direct_lifecycle(
             hook_results=hook_results,
         )
 
-    reused_audit_results_by_binding_key: dict[str, AuditExecutionResult] = (
-        reused_final_audit_results_by_binding_key(
-            metadata_json=reuse_origin_fingerprint.metadata_json,
-            model_audits=model_audits,
-        )
-        if reuse_origin_fingerprint is not None
-        else {}
+    direct_audit_run: FinalAuditRun = run_final_model_audits(
+        relation_overrides=None,
+        model_audits=model_audits,
+        reuse_origin_fingerprint=reuse_origin_fingerprint,
+        adapter=adapter,
+        connection=connection,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        source_map=source_map,
     )
-    audit_error: bool = False
-    audit: AuditPlanEntry
-    for audit in model_audits:
-        reused_result: AuditExecutionResult | None = reused_audit_results_by_binding_key.get(
-            audit_plan_binding_key(audit)
-        )
-        if reused_result is not None:
-            audit_results.append(reused_result)
-            continue
-        result: AuditExecutionResult = execute_audit(
-            audit=audit,
-            adapter=adapter,
-            connection=connection,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            relation_overrides=None,
-            run_scope_phase=AuditRunScope.FINAL,
-        )
-        audit_results.append(result)
-        if result.outcome == AuditOutcome.ERROR:
-            audit_error = True
+    audit_results.extend(direct_audit_run.results)
 
-    if audit_error:
+    if direct_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,

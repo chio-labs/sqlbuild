@@ -24,6 +24,14 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)
+class ParsedCliInvocation:
+    """Outcome of parsing CLI arguments: either a namespace or an exit code."""
+
+    args: CliNamespace | None
+    exit_code: int | None
+
+
+@dataclass(frozen=True)
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 

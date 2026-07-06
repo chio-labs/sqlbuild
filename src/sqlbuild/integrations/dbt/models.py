@@ -16,7 +16,7 @@ from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPla
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_selector_term
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestModel
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
@@ -28,7 +28,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.spec.models.project import ScenarioConfig
+from sqlbuild.spec.models.project import DbtProductionRefConfig, ScenarioConfig
 from sqlbuild.spec.models.source import SourceColumnEntry
 
 
@@ -253,6 +253,29 @@ class DbtCloneRun:
 
 
 @dataclass(frozen=True)
+class DbtComparisonPreparation:
+    """Current and production-ref manifests prepared for clone/diff commands."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    production_ref: DbtProductionRefConfig
+    production_git_ref: str
+    dbt_options: DbtCliOptions
+    runner: Any
+    current_manifest: DbtManifestIndex
+    reuse_manifest: DbtManifestIndex
+
+
+@dataclass(frozen=True)
+class DbtInteropConnection:
+    """Open warehouse connection resolved for a dbt interop command."""
+
+    adapter: BaseAdapter
+    adapter_name: str
+    connection_config: dict[str, object]
+    connection: Any
+
+
+@dataclass(frozen=True)
 class DbtNodeMessage:
     """One dbt log message attached to a dbt node."""
 
@@ -442,6 +465,18 @@ class DbtLineageArgs:
     depth: int | None = None
     no_sql_validation: bool = False
     dbt_args: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtLineagePreparation:
+    """Compiled dbt/SQLBuild inputs shared by lineage selection and rendering."""
+
+    lineage_args: DbtLineageArgs
+    manifest: DbtManifestIndex
+    adapter: BaseAdapter
+    project: CompiledProject
+    graph: DbtCombinedGraph
+    connection_config: dict[str, object]
 
 
 @dataclass(frozen=True)

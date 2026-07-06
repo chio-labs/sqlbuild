@@ -5,6 +5,35 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.lineage.models import ProjectColumnLineage
+from sqlbuild.compiler.pipeline.models import ProjectGraph
+
+
+@dataclass(frozen=True)
+class CompileAnalysis:
+    """Compiled project analysis shared by compile output phases."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    adapter: BaseAdapter
+    graph: ProjectGraph
+    lineage: ProjectColumnLineage | None
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    discover_ms: int
+    graph_ms: int
+    lineage_ms: int
+    contract_ms: int
+
+
+@dataclass(frozen=True)
+class CompileWriteResult:
+    """Result of writing compiled artifacts with its elapsed time."""
+
+    written: WrittenTarget
+    write_ms: int
+
 
 @dataclass(frozen=True)
 class WrittenTarget:
