@@ -2,31 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-from fnmatch import fnmatchcase
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.planner.main.planning.is_scenario_artifact_physical_name import (
-    is_scenario_artifact_physical_name,
-)
-from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
-from sqlbuild.executor.janitor.helpers.plan import (
-    collect_desired_keys,
-    collect_source_schemas,
-    collect_target_schemas,
-    list_target_schema_relations,
-    relation_age_timestamp,
+from sqlbuild.executor.janitor.helpers.classification import (
+    classify_janitor_relations,
+    collect_direct_state_prune_candidates,
+    gather_janitor_warehouse_facts,
 )
-from sqlbuild.executor.janitor.helpers.plan import (
-    relation_key as build_relation_key,
-)
-from sqlbuild.executor.janitor.helpers.tracking import collect_tracked_relation_keys
+from sqlbuild.executor.janitor.helpers.plan import collect_target_schemas
 from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
@@ -35,13 +22,14 @@ from sqlbuild.executor.janitor.models import (
     JanitorExpiredLockCandidate,
     JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
+    JanitorRelationClassification,
     JanitorRelationKey,
     JanitorSkippedRelation,
     JanitorSkippedSchema,
     JanitorStateBackupCandidate,
     JanitorVirtualStatePruneCandidate,
+    JanitorWarehouseFacts,
 )
-from sqlbuild.shared.models import RelationLookup
 
 
 def build_janitor_plan(
@@ -86,69 +74,30 @@ def build_janitor_plan(
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
 
-    desired_keys: set[JanitorRelationKey] = collect_desired_keys(project)
-    source_schema_names: dict[tuple[str | None, str | None], set[str]] = collect_source_schemas(
+    facts: JanitorWarehouseFacts = gather_janitor_warehouse_facts(
         project=project,
-        default_database=adapter.default_database(),
-        default_schema=adapter.default_schema(),
+        adapter=adapter,
+        connection=connection,
+        target_schemas=target_schemas,
+        delete_tracked_only=delete_tracked_only,
     )
-    relations_by_schema: dict[tuple[str | None, str | None], tuple[RelationInfo, ...]] = (
-        list_target_schema_relations(
+    direct_state_prune_candidates: tuple[JanitorDirectStatePruneCandidate, ...] = (
+        collect_direct_state_prune_candidates(
             adapter=adapter,
             connection=connection,
             target_schemas=target_schemas,
+            direct_state_history_versions=direct_state_history_versions,
         )
     )
-    tracked_relation_keys: set[JanitorRelationKey] = (
-        collect_tracked_relation_keys(
-            adapter=adapter,
-            connection=connection,
-            target_schemas=target_schemas,
-        )
-        if delete_tracked_only
-        else set()
-    )
-
     skipped_schemas: list[JanitorSkippedSchema] = []
     candidates: list[JanitorDeleteCandidate] = []
-    direct_state_prune_candidates: list[JanitorDirectStatePruneCandidate] = []
     skipped_relations: list[JanitorSkippedRelation] = []
     now: datetime = datetime.now(UTC)
     age_supported: bool = adapter.supports_relation_age_metadata()
-    effective_exclude_patterns: tuple[str, ...] = BUILT_IN_EXCLUDE_PATTERNS + exclude_patterns
-    protection_reasons: dict[JanitorRelationKey, str] = protected_relation_reasons or {}
-    state_table_locations: list[tuple[str | None, str | None, str]] = []
-    state_table_database: str | None
-    state_table_schema: str | None
-    for state_table_database, state_table_schema in target_schemas:
-        if state_table_schema is None:
-            continue
-        state_table_locations.append(
-            (state_table_database, state_table_schema, FINGERPRINT_TABLE_NAME)
-        )
-        state_table_locations.append(
-            (state_table_database, state_table_schema, SOURCE_FRESHNESS_TABLE_NAME)
-        )
-    state_table_lookup: RelationLookup = build_relation_lookup(
-        adapter=adapter,
-        connection=connection,
-        locations=tuple(state_table_locations),
-    )
-
     schema_key: tuple[str | None, str | None]
     for schema_key in sorted(target_schemas, key=lambda key: (key[0] or "", key[1] or "")):
-        if direct_state_history_versions > 0 and schema_key[1] is not None:
-            direct_state_prune_candidates.extend(
-                _direct_state_prune_candidates(
-                    adapter=adapter,
-                    database=schema_key[0],
-                    schema=schema_key[1],
-                    retain_versions=direct_state_history_versions,
-                    state_table_lookup=state_table_lookup,
-                )
-            )
-        schema_relations: tuple[RelationInfo, ...] = relations_by_schema.get(schema_key, ())
-        source_names: set[str] | None = source_schema_names.get(schema_key)
+        schema_relations = facts.relations_by_schema.get(schema_key, ())
+        source_names: set[str] | None = facts.source_schema_names.get(schema_key)
         if source_names:
             skipped_schemas.append(
                 JanitorSkippedSchema(
@@ -159,87 +108,19 @@ def build_janitor_plan(
                 )
             )
             continue
-
-        relation: RelationInfo
-        for relation in schema_relations:
-            relation_key: JanitorRelationKey = build_relation_key(relation)
-            scenario_artifact: bool = is_scenario_artifact_physical_name(relation_key.name)
-            if relation_key in desired_keys:
-                continue
-            if relation_key in protected_relation_keys:
-                skipped_relations.append(
-                    JanitorSkippedRelation(
-                        key=relation_key,
-                        relation=relation,
-                        reason=protection_reasons.get(
-                            relation_key,
-                            "relation is referenced by a retained virtual checkpoint",
-                        ),
-                    )
-                )
-                continue
-            exclude_pattern: str | None = _matching_exclude_pattern(
-                key=relation_key,
-                patterns=effective_exclude_patterns,
-            )
-            if exclude_pattern is not None:
-                skipped_relations.append(
-                    JanitorSkippedRelation(
-                        key=relation_key,
-                        relation=relation,
-                        reason=f"relation matches exclude pattern {exclude_pattern!r}",
-                    )
-                )
-                continue
-            if (
-                delete_tracked_only
-                and relation_key not in tracked_relation_keys
-                and not scenario_artifact
-            ):
-                skipped_relations.append(
-                    JanitorSkippedRelation(
-                        key=relation_key,
-                        relation=relation,
-                        reason="relation is not tracked by SQLBuild",
-                    )
-                )
-                continue
-            age_timestamp: datetime | None = relation_age_timestamp(relation)
-            if retention_days > 0:
-                if not age_supported:
-                    skipped_relations.append(
-                        JanitorSkippedRelation(
-                            key=relation_key,
-                            relation=relation,
-                            reason="adapter does not expose relation age metadata",
-                        )
-                    )
-                    continue
-                if age_timestamp is None:
-                    skipped_relations.append(
-                        JanitorSkippedRelation(
-                            key=relation_key,
-                            relation=relation,
-                            reason="relation age is unavailable",
-                        )
-                    )
-                    continue
-                if age_timestamp > now - timedelta(days=retention_days):
-                    skipped_relations.append(
-                        JanitorSkippedRelation(
-                            key=relation_key,
-                            relation=relation,
-                            reason=f"relation is newer than {retention_days} days",
-                        )
-                    )
-                    continue
-            candidates.append(
-                JanitorDeleteCandidate(
-                    key=relation_key,
-                    relation=relation,
-                    age_timestamp=age_timestamp,
-                )
-            )
+        classification: JanitorRelationClassification = classify_janitor_relations(
+            schema_relations=schema_relations,
+            facts=facts,
+            protected_relation_keys=protected_relation_keys,
+            protection_reasons=protected_relation_reasons or {},
+            effective_exclude_patterns=BUILT_IN_EXCLUDE_PATTERNS + exclude_patterns,
+            delete_tracked_only=delete_tracked_only,
+            retention_days=retention_days,
+            age_supported=age_supported,
+            now=now,
+        )
+        candidates.extend(classification.candidates)
+        skipped_relations.extend(classification.skipped_relations)
 
     return JanitorPlan(
         target_name=project.effective_target_name,
@@ -251,64 +132,9 @@ def build_janitor_plan(
         state_backup_candidates=state_backup_candidates,
         expired_lock_candidates=expired_lock_candidates,
         virtual_state_prune_candidates=virtual_state_prune_candidates,
-        direct_state_prune_candidates=tuple(direct_state_prune_candidates),
+        direct_state_prune_candidates=direct_state_prune_candidates,
         skipped_relations=tuple(skipped_relations),
         skipped_schemas=tuple(skipped_schemas),
         scanned_schema_count=len(target_schemas),
         age_metadata_supported=age_supported,
     )
-
-
-def _matching_exclude_pattern(
-    *,
-    key: JanitorRelationKey,
-    patterns: tuple[str, ...],
-) -> str | None:
-    display_name: str = key.display_name()
-    pattern: str
-    for pattern in patterns:
-        if fnmatchcase(key.name, pattern) or fnmatchcase(display_name, pattern):
-            return pattern
-    return None
-
-
-def _direct_state_prune_candidates(
-    *,
-    adapter: BaseAdapter,
-    database: str | None,
-    schema: str,
-    retain_versions: int,
-    state_table_lookup: RelationLookup,
-) -> tuple[JanitorDirectStatePruneCandidate, ...]:
-    candidates: list[JanitorDirectStatePruneCandidate] = []
-    if state_table_lookup.exists(database=database, schema=schema, name=FINGERPRINT_TABLE_NAME):
-        candidates.append(
-            JanitorDirectStatePruneCandidate(
-                database=database,
-                schema=schema,
-                table_name=FINGERPRINT_TABLE_NAME,
-                retain_versions=retain_versions,
-                prune_sql=adapter.render_prune_fingerprint_history_sql(
-                    database=database,
-                    schema=schema,
-                    retain_versions=retain_versions,
-                ),
-            )
-        )
-    if state_table_lookup.exists(
-        database=database, schema=schema, name=SOURCE_FRESHNESS_TABLE_NAME
-    ):
-        candidates.append(
-            JanitorDirectStatePruneCandidate(
-                database=database,
-                schema=schema,
-                table_name=SOURCE_FRESHNESS_TABLE_NAME,
-                retain_versions=retain_versions,
-                prune_sql=adapter.render_prune_source_freshness_history_sql(
-                    database=database,
-                    schema=schema,
-                    retain_versions=retain_versions,
-                ),
-            )
-        )
-    return tuple(candidates)

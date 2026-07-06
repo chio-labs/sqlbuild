@@ -58,11 +58,24 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
     DbtCommandResult,
+    DbtInteropCompiledProject,
+    DbtInteropPlan,
     DbtModelPlanningResult,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+    append_stale_out_of_selection_warning,
+    build_dbt_non_model_run_unique_ids,
+    build_dbt_pruned_seed_unique_ids,
+    build_dbt_pruned_test_unique_ids,
+    build_unblocked_sqlbuild_model_names,
 )
 from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
-from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
+from sqlbuild.integrations.dbt.types import (
+    DbtCombinedGraphOwner,
+    DbtCombinedGraphResourceType,
+    DbtInteropCommand,
+)
 from sqlbuild.shared.models import RelationLookup
 
 
@@ -444,3 +457,126 @@ def _parse_value(args: tuple[str, ...], flag: str) -> str | None:
     if index + 1 >= len(args):
         return None
     return args[index + 1]
+
+
+def attach_dbt_model_plan(
+    *,
+    plan: DbtInteropPlan,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    compiled: DbtInteropCompiledProject,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    full_refresh: bool,
+    force: bool,
+    connection_progress: Any | None,
+    on_progress: Callable[[str], None] | None,
+) -> DbtInteropPlan:
+    """Attach dbt model planning output and stale-selection warnings to the plan."""
+
+    dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        project=compiled.project,
+        adapter=compiled.adapter,
+        adapter_name=compiled.adapter_name,
+        manifest=manifest,
+        graph=graph,
+        candidate_unique_ids=tuple(
+            sorted(
+                frozenset(
+                    (
+                        *plan.dbt_selected_unique_ids,
+                        *plan.selection.dbt_required_unique_ids,
+                    )
+                )
+            )
+        ),
+        selected_unique_ids=plan.dbt_selected_unique_ids,
+        full_refresh=full_refresh,
+        force=force,
+        on_connection_start=(
+            None if connection_progress is None else connection_progress.on_connection_start
+        ),
+        on_connection_complete=(
+            None if connection_progress is None else connection_progress.on_connection_complete
+        ),
+        on_connection_error=(
+            None if connection_progress is None else connection_progress.on_connection_error
+        ),
+        on_progress=on_progress,
+    )
+    if dbt_model_plan is None:
+        return plan
+    updated_plan: DbtInteropPlan = replace(plan, dbt_model_plan=dbt_model_plan)
+    return append_stale_out_of_selection_warning(plan=updated_plan, dbt_model_plan=dbt_model_plan)
+
+
+def apply_dbt_build_pruning(plan: DbtInteropPlan) -> DbtInteropPlan:
+    """Attach non-model run ids and pruned seed/test ids for build execution."""
+
+    return replace(
+        plan,
+        dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+        dbt_pruned_seed_unique_ids=build_dbt_pruned_seed_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+        dbt_pruned_test_unique_ids=build_dbt_pruned_test_unique_ids(
+            command=DbtInteropCommand.BUILD,
+            plan=plan,
+        ),
+    )
+
+
+def attach_sqlbuild_plan_output(
+    *,
+    plan: DbtInteropPlan,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    compiled: DbtInteropCompiledProject,
+    manifest: DbtManifestIndex,
+    graph: DbtCombinedGraph,
+    sqlbuild_args: tuple[str, ...],
+    connection_progress: Any | None,
+    on_progress: Callable[[str], None] | None,
+) -> DbtInteropPlan:
+    """Attach the SQLBuild-side plan output to the interop plan when present."""
+
+    sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        project=compiled.project,
+        adapter=compiled.adapter,
+        adapter_name=compiled.adapter_name,
+        selected_model_names=build_unblocked_sqlbuild_model_names(plan),
+        required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+        forced_stale_model_names=(
+            plan.dbt_model_plan.stale_sqlbuild_model_names
+            if plan.dbt_model_plan is not None
+            else ()
+        ),
+        sqlbuild_args=sqlbuild_args,
+        on_progress=on_progress,
+        on_connection_start=(
+            None if connection_progress is None else connection_progress.on_connection_start
+        ),
+        on_connection_complete=(
+            None if connection_progress is None else connection_progress.on_connection_complete
+        ),
+        on_connection_error=(
+            None if connection_progress is None else connection_progress.on_connection_error
+        ),
+        dependency_baseline_entries=(),
+        dbt_manifest=manifest,
+        dbt_graph=graph,
+        dbt_source_freshness=(
+            plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
+        ),
+    )
+    if sqlbuild_plan_output is None:
+        return plan
+    return replace(plan, sqlbuild_plan_output=sqlbuild_plan_output)

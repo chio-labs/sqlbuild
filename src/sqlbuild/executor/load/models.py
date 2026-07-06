@@ -283,4 +283,40 @@ class LoadExecutionIndexes:
     has_loader_dependencies: bool
 
 
+@dataclass(frozen=True)
+class LoadRuntimeParams:
+    """Execution-invariant parameters shared by all loader runs in one pipeline."""
+
+    run_id: str
+    target: str | None
+    vars: dict[str, object]
+    is_reload: bool
+    runtime_dir: Path = Path("target")
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
+    use_color: bool = False
+    providers: ProviderContainer | None = None
+    result_store: Any | None = None
+
+
+@dataclass(frozen=True)
+class LoadCallbacks:
+    """Progress callbacks for one load pipeline run."""
+
+    on_load_start: Callable[[SourceEntry], None] | None = None
+    on_load_progress: Callable[[SourceEntry, str], None] | None = None
+    on_load_complete: Callable[[LoadExecutionResult], None] | None = None
+
+
+@dataclass(frozen=True)
+class ExternalLoadPhaseResult:
+    """Outcome of running external-connection loaders before warehouse connect."""
+
+    preloaded_results: tuple[LoadExecutionResult, ...]
+    failed_or_hard_skipped: frozenset[str]
+    sqlbuild_sources: tuple[SourceEntry, ...]
+
+
 from sqlbuild.executor.load.classes.dag_state import LoadDagState  # noqa: E402,F401

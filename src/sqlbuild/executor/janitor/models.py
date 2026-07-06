@@ -142,6 +142,24 @@ class JanitorSkippedSchema:
 
 
 @dataclass(frozen=True)
+class JanitorWarehouseFacts:
+    """Desired, discovered, and tracked relation facts for planning."""
+
+    desired_keys: frozenset[JanitorRelationKey]
+    source_schema_names: dict[tuple[str | None, str | None], set[str]]
+    relations_by_schema: dict[tuple[str | None, str | None], tuple[RelationInfo, ...]]
+    tracked_relation_keys: frozenset[JanitorRelationKey]
+
+
+@dataclass(frozen=True)
+class JanitorRelationClassification:
+    """Delete candidates and skipped relations for one target schema."""
+
+    candidates: tuple[JanitorDeleteCandidate, ...]
+    skipped_relations: tuple[JanitorSkippedRelation, ...]
+
+
+@dataclass(frozen=True)
 class JanitorPlan:
     """Complete janitor preview and execution plan."""
 

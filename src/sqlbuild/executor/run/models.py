@@ -108,6 +108,14 @@ class ModelExecutionResult:
 
 
 @dataclass(frozen=True)
+class FinalAuditRun:
+    """Final-audit outcomes for one model before promotion."""
+
+    results: tuple[AuditExecutionResult, ...]
+    has_error: bool
+
+
+@dataclass(frozen=True)
 class AuditGateReuseDecision:
     """Conservative same-target audit gate proof reuse decision."""
 

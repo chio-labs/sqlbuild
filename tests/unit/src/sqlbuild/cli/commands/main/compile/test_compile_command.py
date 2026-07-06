@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.cli.commands.helpers.compile import lineage as compile_lineage
 from sqlbuild.cli.commands.helpers.compile import status as compile_status
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.main.commands import compile as compile_command
+from sqlbuild.cli.commands.helpers.compile import pipeline as compile_pipeline
 from sqlbuild.cli.commands.main.commands.compile import run_compile
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -51,7 +51,7 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
     monkeypatch.setattr(
-        compile_command,
+        compile_pipeline,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -122,7 +122,7 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
     monkeypatch.setattr(compile_status.sys, "stdout", FakeStdout())
     monkeypatch.setattr(compile_status, "TransientStatusReporter", FakeStatusReporter)
     monkeypatch.setattr(
-        compile_command,
+        compile_pipeline,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -161,7 +161,7 @@ def test_given_dag_flag_when_running_compile_then_writes_dag_artifact(
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
     monkeypatch.setattr(
-        compile_command,
+        compile_pipeline,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -216,7 +216,7 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
 ) -> None:
     project_dir: Path = prepare_python_compile_project(tmp_path)
     monkeypatch.setattr(
-        compile_command,
+        compile_pipeline,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -313,7 +313,7 @@ def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        compile_command,
+        compile_pipeline,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -365,7 +365,7 @@ def test_given_contract_errors_when_running_compile_json_then_serializes_diagnos
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        compile_command,
+        compile_pipeline,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )

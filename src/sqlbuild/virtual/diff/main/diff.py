@@ -13,26 +13,18 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.diff.helpers.diff import (
+    execute_virtual_diff_between_relations,
     filter_models_with_changed_virtual_refs,
     is_working_environment,
-    non_finalized_target_names,
-    read_physical_relations_for_refs,
+    read_virtual_diff_state,
     resolve_virtual_diff_model_names,
     rewrite_project_to_physical_relations,
 )
-from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
-from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.diff.models import VirtualDiffState
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
-from sqlbuild.virtual.state.models import (
-    ModelVersionRecord,
-    PhysicalRelationRecord,
-    VirtualEnvironmentModelRefRecord,
-    VirtualEnvironmentRecord,
-)
 
 
 def run_virtual_diff(
@@ -97,87 +89,14 @@ def run_virtual_diff(
         inspect_start: float = time.perf_counter()
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
-        from_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=from_virtual_environment_name,
-        )
-        to_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-            state_connection,
-            schema=config.schema,
-            virtual_environment_name=to_virtual_environment_name,
-        )
-        from_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
-            backend.get_virtual_environment_model_refs(
-                state_connection,
-                schema=config.schema,
-                virtual_environment_name=from_virtual_environment_name,
-            )
-        )
-        to_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
-            backend.get_virtual_environment_model_refs(
-                state_connection,
-                schema=config.schema,
-                virtual_environment_name=to_virtual_environment_name,
-            )
-        )
-        if not from_refs:
-            raise PlannerInputError(
-                f"unknown virtual environment '{from_virtual_environment_name}'",
-                code="S011",
-            )
-        if not to_refs:
-            raise PlannerInputError(
-                f"unknown virtual environment '{to_virtual_environment_name}'",
-                code="S011",
-            )
-        from_model_versions: dict[str, ModelVersionRecord | None] = _read_model_versions(
+        state: VirtualDiffState = read_virtual_diff_state(
             backend=backend,
             state_connection=state_connection,
             schema=config.schema,
-            refs=from_refs,
-        )
-        to_model_versions: dict[str, ModelVersionRecord | None] = _read_model_versions(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            refs=to_refs,
-        )
-        from_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
             graph=graph,
-            bound_refs=from_refs,
-            bound_model_versions=from_model_versions,
-        )
-        to_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
-            graph=graph,
-            bound_refs=to_refs,
-            bound_model_versions=to_model_versions,
-        )
-        if not select and not allow_partial_diff:
-            non_finalized: tuple[str, ...] = non_finalized_target_names(
-                (
-                    (from_virtual_environment_name, from_environment),
-                    (to_virtual_environment_name, to_environment),
-                )
-            )
-            if non_finalized:
-                raise PlannerInputError(
-                    "whole-VDE virtual diff requires finalized VDEs; non-finalized VDEs: "
-                    + ", ".join(non_finalized),
-                    code="S012",
-                    help="Re-run with --allow-partial-diff to inspect a working VDE.",
-                )
-        from_relations: dict[str, PhysicalRelationRecord] = read_physical_relations_for_refs(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            refs=from_refs,
-        )
-        to_relations: dict[str, PhysicalRelationRecord] = read_physical_relations_for_refs(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            refs=to_refs,
+            from_virtual_environment_name=from_virtual_environment_name,
+            to_virtual_environment_name=to_virtual_environment_name,
+            require_finalized=not select and not allow_partial_diff,
         )
         if on_progress is not None:
             on_progress(f"Inspected virtual state. ({time.perf_counter() - inspect_start:.2f}s)")
@@ -188,11 +107,13 @@ def run_virtual_diff(
     skipped_names: tuple[str, ...]
     compared_names, skipped_names = filter_models_with_changed_virtual_refs(
         selected_names=selected_names,
-        from_refs=from_refs,
-        to_refs=to_refs,
+        from_refs=state.from_refs,
+        to_refs=state.to_refs,
     )
     missing: tuple[str, ...] = tuple(
-        name for name in compared_names if name not in from_relations or name not in to_relations
+        name
+        for name in compared_names
+        if name not in state.from_relations or name not in state.to_relations
     )
     if missing:
         raise PlannerInputError(
@@ -205,73 +126,43 @@ def run_virtual_diff(
             DiffExecutionResult(),
             selected_names,
             skipped_names,
-            from_semantics.stale_model_names,
-            to_semantics.stale_model_names,
-            is_working_environment(from_environment),
-            is_working_environment(to_environment),
+            state.from_semantics.stale_model_names,
+            state.to_semantics.stale_model_names,
+            is_working_environment(state.from_environment),
+            is_working_environment(state.to_environment),
         )
 
     left_project: CompiledProject = rewrite_project_to_physical_relations(
         adapter=adapter,
         project=graph.project,
-        relations=from_relations,
+        relations=state.from_relations,
     )
     right_project: CompiledProject = rewrite_project_to_physical_relations(
         adapter=adapter,
         project=graph.project,
-        relations=to_relations,
+        relations=state.to_relations,
     )
-    started_at: float = time.perf_counter()
-    if on_connection_start is not None:
-        on_connection_start(1)
-    connection: Any
-    try:
-        connection = adapter.connect(connection_config)
-    except Exception:
-        if on_connection_error is not None:
-            on_connection_error(1, time.perf_counter() - started_at)
-        raise
-    if on_connection_complete is not None:
-        on_connection_complete(1, time.perf_counter() - started_at)
-    try:
-        result: DiffExecutionResult = execute_diff(
-            adapter=adapter,
-            connection=connection,
-            left_project=left_project,
-            right_project=right_project,
-            selected_names=compared_names,
-            schema_only=schema_only,
-            bounded=bounded,
-            collect_samples=collect_samples,
-            max_column_examples=max_column_examples,
-            max_row_only_examples=max_row_only_examples,
-        )
-    finally:
-        adapter.close(connection)
+    result: DiffExecutionResult = execute_virtual_diff_between_relations(
+        adapter=adapter,
+        connection_config=connection_config,
+        left_project=left_project,
+        right_project=right_project,
+        compared_names=compared_names,
+        schema_only=schema_only,
+        bounded=bounded,
+        collect_samples=collect_samples,
+        max_column_examples=max_column_examples,
+        max_row_only_examples=max_row_only_examples,
+        on_connection_start=on_connection_start,
+        on_connection_complete=on_connection_complete,
+        on_connection_error=on_connection_error,
+    )
     return (
         result,
         selected_names,
         skipped_names,
-        from_semantics.stale_model_names,
-        to_semantics.stale_model_names,
-        is_working_environment(from_environment),
-        is_working_environment(to_environment),
+        state.from_semantics.stale_model_names,
+        state.to_semantics.stale_model_names,
+        is_working_environment(state.from_environment),
+        is_working_environment(state.to_environment),
     )
-
-
-def _read_model_versions(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
-) -> dict[str, ModelVersionRecord | None]:
-    return {
-        ref.model_name: backend.get_model_version(
-            state_connection,
-            schema=schema,
-            model_name=ref.model_name,
-            version_hash=ref.version_hash,
-        )
-        for ref in refs
-    }

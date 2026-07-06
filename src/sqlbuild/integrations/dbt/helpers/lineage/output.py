@@ -18,7 +18,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineageGraph,
     DbtLineageNode,
 )
-from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtLineageDirection
+from sqlbuild.integrations.dbt.types import (
+    DbtCombinedGraphOwner,
+    DbtLineageDirection,
+    DbtLineageOutputFormat,
+)
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 
 _HUMAN_COLUMN_TRACE_LIMIT: int = 25
@@ -283,3 +287,33 @@ def _format_graph_summary(*, graph: DbtLineageGraph, use_color: bool) -> str:
         lines.append("")
         lines.extend(_format_node(node, style=style) for node in graph.nodes)
     return "\n".join(lines)
+
+
+def render_dbt_column_lineage(
+    trace: DbtColumnLineageTrace,
+    *,
+    output_format: DbtLineageOutputFormat,
+    use_color: bool,
+) -> str:
+    """Render a column lineage trace in the requested output format."""
+
+    if output_format == DbtLineageOutputFormat.JSON:
+        return format_dbt_column_lineage_json(trace)
+    if output_format == DbtLineageOutputFormat.LIST:
+        return "\n" + format_dbt_column_lineage_list(trace, use_color=use_color) + "\n"
+    return "\n" + format_dbt_column_lineage_tree(trace, use_color=use_color) + "\n"
+
+
+def render_dbt_lineage_graph(
+    graph: DbtLineageGraph,
+    *,
+    output_format: DbtLineageOutputFormat,
+    use_color: bool,
+) -> str:
+    """Render a lineage graph in the requested output format."""
+
+    if output_format == DbtLineageOutputFormat.JSON:
+        return format_dbt_lineage_json(graph)
+    if output_format == DbtLineageOutputFormat.LIST:
+        return "\n" + format_dbt_lineage_list(graph, use_color=use_color) + "\n"
+    return "\n" + format_dbt_lineage_tree(graph, use_color=use_color) + "\n"
