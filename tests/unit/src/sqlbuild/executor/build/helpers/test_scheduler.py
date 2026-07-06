@@ -120,24 +120,24 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
 
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config={"database": str(tmp_path / "scheduler.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-        callbacks=BuildCallbacks(
-            on_node_start=lambda name, _kind: node_starts.append(name),
-        ),
-        customizations=BuildCustomizations(
-            loader_functions=(loader_function,),
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "scheduler.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=lambda name, _kind: node_starts.append(name),
+            ),
+            customizations=BuildCustomizations(
+                loader_functions=(loader_function,),
+            ),
+        )
         loaded_rows: tuple[tuple[object, ...], ...] = fetch_rows_or_empty(
             connection,
             "SELECT id, status FROM stg_orders ORDER BY id",
@@ -201,22 +201,22 @@ def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_
 
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config={"database": str(tmp_path / "scheduler_hook.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-        callbacks=BuildCallbacks(
-            on_node_start=lambda name, _kind: events.append(f"start:{name}"),
-            before_model_materialize=before_model_materialize,
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "scheduler_hook.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=lambda name, _kind: events.append(f"start:{name}"),
+                before_model_materialize=before_model_materialize,
+            ),
+        )
         loaded_rows: tuple[tuple[object, ...], ...] = fetch_rows_or_empty(
             connection,
             "SELECT id FROM hook_model ORDER BY id",
@@ -279,18 +279,18 @@ def test_given_source_freshness_when_model_succeeds_then_writes_node_source_wate
 
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config={"database": str(tmp_path / "watermarks.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "watermarks.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         rows: tuple[tuple[object, ...], ...] = tuple(
             connection.execute(
                 f"SELECT node_type, node_name, run_id FROM {NODE_SOURCE_WATERMARK_TABLE_NAME}"
@@ -347,18 +347,18 @@ def test_given_upstream_table_runs_before_downstream_when_build_succeeds_then_in
 
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config={"database": str(tmp_path / "same_run.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "same_run.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
             connection=connection,
@@ -425,18 +425,18 @@ def test_given_downstream_depends_on_view_over_source_when_built_then_records_di
 
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config={"database": str(tmp_path / "view_source.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "view_source.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
             connection=connection,
@@ -526,31 +526,31 @@ def test_given_downstream_depends_on_view_over_table_when_built_then_inherits_ta
 
     try:
         b_result: BuildExecutionResult = execute_build_plan(
-        plan=b_plan,
-        adapter=adapter,
-        connection_config={"database": str(database_path)},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-b",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=b_plan,
+            adapter=adapter,
+            connection_config={"database": str(database_path)},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-b",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         a_result: BuildExecutionResult = execute_build_plan(
-        plan=a_plan,
-        adapter=adapter,
-        connection_config={"database": str(database_path)},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-a",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=a_plan,
+            adapter=adapter,
+            connection_config={"database": str(database_path)},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-a",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
             connection=connection,
@@ -634,31 +634,31 @@ def test_given_only_downstream_runs_when_upstream_watermark_exists_then_inherits
 
     try:
         first_result: BuildExecutionResult = execute_build_plan(
-        plan=first_plan,
-        adapter=adapter,
-        connection_config={"database": str(database_path)},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=first_plan,
+            adapter=adapter,
+            connection_config={"database": str(database_path)},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         second_result: BuildExecutionResult = execute_build_plan(
-        plan=second_plan,
-        adapter=adapter,
-        connection_config={"database": str(database_path)},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-2",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=second_plan,
+            adapter=adapter,
+            connection_config={"database": str(database_path)},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-2",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
             connection=connection,
@@ -724,18 +724,18 @@ def test_given_upstream_table_without_watermark_when_downstream_runs_then_record
     try:
         adapter.execute(connection, "CREATE TABLE b AS SELECT 1 AS id")
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config={"database": str(tmp_path / "missing.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "missing.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
             connection=connection,
@@ -863,44 +863,44 @@ def test_given_downstream_depends_on_two_frontier_tables_when_built_then_merges_
 
     try:
         b_result: BuildExecutionResult = execute_build_plan(
-        plan=b_plan,
-        adapter=adapter,
-        connection_config={"database": str(database_path)},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-b",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=b_plan,
+            adapter=adapter,
+            connection_config={"database": str(database_path)},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-b",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         c_result: BuildExecutionResult = execute_build_plan(
-        plan=c_plan,
-        adapter=adapter,
-        connection_config={"database": str(database_path)},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-c",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=c_plan,
+            adapter=adapter,
+            connection_config={"database": str(database_path)},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-c",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         a_result: BuildExecutionResult = execute_build_plan(
-        plan=a_plan,
-        adapter=adapter,
-        connection_config={"database": str(database_path)},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-a",
-            run_audits=False,
-            run_tests=False,
-        ),
-    )
+            plan=a_plan,
+            adapter=adapter,
+            connection_config={"database": str(database_path)},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-a",
+                run_audits=False,
+                run_tests=False,
+            ),
+        )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
             connection=connection,
@@ -986,21 +986,21 @@ def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_ski
 
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config={"database": str(tmp_path / "scheduler_skip.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-        callbacks=BuildCallbacks(
-            on_node_start=lambda name, _kind: node_starts.append(name),
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "scheduler_skip.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=lambda name, _kind: node_starts.append(name),
+            ),
+        )
     finally:
         adapter.close(connection)
 
@@ -1060,21 +1060,21 @@ def test_given_model_plan_action_skip_when_build_runs_then_downstream_model_is_s
 
     try:
         result: BuildExecutionResult = execute_build_plan(
-        plan=plan,
-        adapter=adapter,
-        connection_config={"database": str(tmp_path / "scheduler_planned_skip.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-        ),
-        callbacks=BuildCallbacks(
-            on_node_start=lambda name, _kind: node_starts.append(name),
-        ),
-    )
+            plan=plan,
+            adapter=adapter,
+            connection_config={"database": str(tmp_path / "scheduler_planned_skip.duckdb")},
+            connections=(connection,),
+            scheduler_connection=connection,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=lambda name, _kind: node_starts.append(name),
+            ),
+        )
     finally:
         adapter.close(connection)
 
