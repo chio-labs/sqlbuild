@@ -22,29 +22,28 @@ def collect_scenario_cleanup_targets(
 ) -> tuple[ScenarioCleanupTarget, ...]:
     """Collect only current-plan scenario relations eligible for cleanup."""
 
-    targets: list[ScenarioCleanupTarget] = []
-    seen: set[str] = set()
+    candidates: list[ScenarioCleanupTarget] = []
 
     fixture_plan: ScenarioFixturePlan
     for fixture_plan in scenario_plan.fixture_plans:
-        _append_target(
-            targets=targets,
-            seen=seen,
-            kind=fixture_plan.kind,
-            logical_name=fixture_plan.logical_name,
-            target=fixture_plan.destination,
-            adapter=adapter,
+        candidates.append(
+            _cleanup_target(
+                kind=fixture_plan.kind,
+                logical_name=fixture_plan.logical_name,
+                target=fixture_plan.destination,
+                adapter=adapter,
+            )
         )
 
     seed_entry: SeedPlanEntry
     for seed_entry in scenario_plan.seed_entries:
-        _append_target(
-            targets=targets,
-            seen=seen,
-            kind=ScenarioArtifactKind.SEED,
-            logical_name=seed_entry.name,
-            target=seed_entry.destination,
-            adapter=adapter,
+        candidates.append(
+            _cleanup_target(
+                kind=ScenarioArtifactKind.SEED,
+                logical_name=seed_entry.name,
+                target=seed_entry.destination,
+                adapter=adapter,
+            )
         )
 
     model_entry_map: dict[str, ModelPlanEntry] = {
@@ -59,40 +58,41 @@ def collect_scenario_cleanup_targets(
         materialization_type: MaterializationType = MaterializationType.TABLE
         if model_entry is not None:
             materialization_type = model_entry.materialization_type
-        _append_target(
-            targets=targets,
-            seen=seen,
-            kind=ScenarioArtifactKind.MODEL,
-            logical_name=model_name,
-            target=model_target,
-            adapter=adapter,
-            materialization_type=materialization_type,
+        candidates.append(
+            _cleanup_target(
+                kind=ScenarioArtifactKind.MODEL,
+                logical_name=model_name,
+                target=model_target,
+                adapter=adapter,
+                materialization_type=materialization_type,
+            )
         )
 
+    targets: list[ScenarioCleanupTarget] = []
+    seen: set[str] = set()
+    candidate: ScenarioCleanupTarget
+    for candidate in candidates:
+        if candidate.target_relation in seen:
+            continue
+        seen.add(candidate.target_relation)
+        targets.append(candidate)
     return tuple(targets)
 
 
-def _append_target(
+def _cleanup_target(
     *,
-    targets: list[ScenarioCleanupTarget],
-    seen: set[str],
     kind: ScenarioArtifactKind,
     logical_name: str,
     target: CompiledRelationLocation,
     adapter: BaseAdapter,
     materialization_type: MaterializationType = MaterializationType.TABLE,
-) -> None:
+) -> ScenarioCleanupTarget:
     target_relation: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=target
     )
-    if target_relation in seen:
-        return
-    seen.add(target_relation)
-    targets.append(
-        ScenarioCleanupTarget(
-            kind=kind,
-            logical_name=logical_name,
-            target_relation=target_relation,
-            materialization_type=materialization_type,
-        )
+    return ScenarioCleanupTarget(
+        kind=kind,
+        logical_name=logical_name,
+        target_relation=target_relation,
+        materialization_type=materialization_type,
     )

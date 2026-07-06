@@ -52,6 +52,17 @@ class FunctionExecutionResult:
 
 
 @dataclass(frozen=True)
+class SourceAuditRunResult:
+    """Outcome of running pending source audits for one model."""
+
+    blocked: bool
+    executed_source_names: tuple[str, ...] = field(default_factory=tuple)
+    failed_source_names: tuple[str, ...] = field(default_factory=tuple)
+    newly_blocked_keys: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+    audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class BuildIndexes:
     """Precomputed lookup structures for build execution loop."""
 

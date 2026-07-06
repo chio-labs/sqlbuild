@@ -42,12 +42,18 @@ def build_node_source_watermark_payload(
     direct_record: SourceFreshnessRecord
     for direct_identity, direct_record in direct_source_records.items():
         if direct_identity in required_identities:
-            _merge_known_entry(
-                known_by_identity=known_by_identity,
-                unknown_by_identity=unknown_by_identity,
-                identity=direct_identity,
-                entry=_direct_entry_from_record(direct_record),
+            direct_outcome: SourceWatermarkEntry | UnknownSourceWatermarkEntry = (
+                _merged_known_entry(
+                    existing_entry=known_by_identity.get(direct_identity),
+                    identity=direct_identity,
+                    entry=_direct_entry_from_record(direct_record),
+                )
             )
+            if isinstance(direct_outcome, UnknownSourceWatermarkEntry):
+                unknown_by_identity[direct_identity] = direct_outcome
+                known_by_identity.pop(direct_identity, None)
+            else:
+                known_by_identity[direct_identity] = direct_outcome
 
     inherited_payload: NodeSourceWatermarkPayload
     for inherited_payload in inherited_payloads:
@@ -55,12 +61,18 @@ def build_node_source_watermark_payload(
         for source_entry in inherited_payload.sources:
             inherited_identity: SourceFreshnessIdentity = _identity_from_entry(source_entry)
             if inherited_identity in required_identities:
-                _merge_known_entry(
-                    known_by_identity=known_by_identity,
-                    unknown_by_identity=unknown_by_identity,
-                    identity=inherited_identity,
-                    entry=replace(source_entry, watermark_kind="inherited"),
+                inherited_outcome: SourceWatermarkEntry | UnknownSourceWatermarkEntry = (
+                    _merged_known_entry(
+                        existing_entry=known_by_identity.get(inherited_identity),
+                        identity=inherited_identity,
+                        entry=replace(source_entry, watermark_kind="inherited"),
+                    )
                 )
+                if isinstance(inherited_outcome, UnknownSourceWatermarkEntry):
+                    unknown_by_identity[inherited_identity] = inherited_outcome
+                    known_by_identity.pop(inherited_identity, None)
+                else:
+                    known_by_identity[inherited_identity] = inherited_outcome
         unknown_entry: UnknownSourceWatermarkEntry
         for unknown_entry in inherited_payload.unknown_sources:
             unknown_identity: SourceFreshnessIdentity = _identity_from_unknown_entry(unknown_entry)
@@ -173,31 +185,25 @@ def record_successful_node_source_watermark(
         payload=payload,
         created_at=created_at,
     )
-    context.payloads_by_node[node_identity] = payload
-    context.buffered_records.append(record)
+    context.record_success(node_identity=node_identity, payload=payload, record=record)
     return record
 
 
-def _merge_known_entry(
+def _merged_known_entry(
     *,
-    known_by_identity: dict[SourceFreshnessIdentity, SourceWatermarkEntry],
-    unknown_by_identity: dict[SourceFreshnessIdentity, UnknownSourceWatermarkEntry],
+    existing_entry: SourceWatermarkEntry | None,
     identity: SourceFreshnessIdentity,
     entry: SourceWatermarkEntry,
-) -> None:
-    existing_entry: SourceWatermarkEntry | None = known_by_identity.get(identity)
+) -> SourceWatermarkEntry | UnknownSourceWatermarkEntry:
     if existing_entry is None:
-        known_by_identity[identity] = entry
-        return
+        return entry
     merged_entry: SourceWatermarkEntry | None = _merge_source_entries(existing_entry, entry)
     if merged_entry is None:
-        unknown_by_identity[identity] = _unknown_entry(
+        return _unknown_entry(
             identity,
             reason=_UNKNOWN_MIXED_NON_ORDERABLE_WATERMARK,
         )
-        known_by_identity.pop(identity, None)
-        return
-    known_by_identity[identity] = merged_entry
+    return merged_entry
 
 
 def _merge_source_entries(

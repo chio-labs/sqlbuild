@@ -55,30 +55,25 @@ def format_node_source_watermark_staleness_report(
     if not report.has_entries:
         return ""
     lines: list[str] = ["Stale inputs detected", ""]
-    _append_section(
-        lines,
-        heading="Affected selected models",
-        values=report.affected_root_names,
-        section_limit=section_limit,
+    sections: tuple[tuple[str, Sequence[str]], ...] = (
+        ("Affected selected models", report.affected_root_names),
+        ("Stale frontier tables", report.stale_frontier_names),
+        ("Changed sources", report.changed_source_names),
+        ("Unknown freshness proofs", report.unknown_frontier_names),
     )
-    _append_section(
-        lines,
-        heading="Stale frontier tables",
-        values=report.stale_frontier_names,
-        section_limit=section_limit,
-    )
-    _append_section(
-        lines,
-        heading="Changed sources",
-        values=report.changed_source_names,
-        section_limit=section_limit,
-    )
-    _append_section(
-        lines,
-        heading="Unknown freshness proofs",
-        values=report.unknown_frontier_names,
-        section_limit=section_limit,
-    )
+    heading: str
+    values: Sequence[str]
+    for heading, values in sections:
+        section_lines: list[str] = _section_lines(
+            heading=heading,
+            values=values,
+            section_limit=section_limit,
+        )
+        if not section_lines:
+            continue
+        if lines[-1] != "":
+            lines.append("")
+        lines.extend(section_lines)
     if lines[-1] != "":
         lines.append("")
     lines.append("  To refresh these inputs:")
@@ -86,25 +81,23 @@ def format_node_source_watermark_staleness_report(
     return "\n".join(lines).rstrip()
 
 
-def _append_section(
-    lines: list[str],
+def _section_lines(
     *,
     heading: str,
     values: Sequence[str],
     section_limit: int,
-) -> None:
+) -> list[str]:
     if not values:
-        return
-    if lines[-1] != "":
-        lines.append("")
-    lines.append(f"  {heading}:")
+        return []
+    section_lines: list[str] = [f"  {heading}:"]
     visible_values: Sequence[str] = values[:section_limit]
     value: str
     for value in visible_values:
-        lines.append(f"    {value}")
+        section_lines.append(f"    {value}")
     hidden_count: int = len(values) - len(visible_values)
     if hidden_count > 0:
-        lines.append(f"    +{hidden_count} more")
+        section_lines.append(f"    +{hidden_count} more")
+    return section_lines
 
 
 def _unknown_frontier_label(classification: NodeSourceWatermarkStaleness) -> str:

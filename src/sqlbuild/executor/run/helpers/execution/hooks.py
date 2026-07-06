@@ -360,7 +360,7 @@ def _record_hook_result(
 ) -> None:
     if hook_results is None:
         return
-    hook_results.append(
+    hook_results.append(  # sc: allow-param-mutation (deliberate optional hook-result accumulator)
         HookExecutionResult(
             phase=phase,
             index=hook_index,

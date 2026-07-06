@@ -145,7 +145,7 @@ def _visit_object(
     key: tuple[str, str] = (str(source_path.resolve()), qualname)
     if key in visited:
         return
-    visited.add(key)
+    visited.add(key)  # sc: allow-param-mutation (deliberate recursive DFS accumulator)
 
     if include_current:
         dependency: PythonIdentityDependency | None = _dependency_for_object(
@@ -154,7 +154,7 @@ def _visit_object(
             allowed_roots=allowed_roots,
         )
         if dependency is not None:
-            dependencies[key] = dependency
+            dependencies[key] = dependency  # sc: allow-param-mutation (deliberate DFS accumulator)
 
     source: str = _normalized_source(obj)
     module: ModuleType | None = inspect.getmodule(obj)

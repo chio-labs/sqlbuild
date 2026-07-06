@@ -495,43 +495,48 @@ def _build_relation_replacements(
     }
     source_name: str
     for source_name, target in scenario_plan.relation_plan.source_fixture_locations.items():
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=loaded_names[(ScenarioArtifactKind.SOURCE, source_name)],
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=loaded_names[(ScenarioArtifactKind.SOURCE, source_name)],
+            )
         )
     ref_name: str
     for ref_name, target in scenario_plan.relation_plan.ref_fixture_locations.items():
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=loaded_names[(ScenarioArtifactKind.REF, ref_name)],
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=loaded_names[(ScenarioArtifactKind.REF, ref_name)],
+            )
         )
     dbt_ref_name: str
     for dbt_ref_name, target in scenario_plan.relation_plan.dbt_ref_fixture_locations.items():
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=loaded_names[(ScenarioArtifactKind.DBT_REF, dbt_ref_name)],
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=loaded_names[(ScenarioArtifactKind.DBT_REF, dbt_ref_name)],
+            )
         )
     seed_name: str
     for seed_name, target in scenario_plan.relation_plan.seed_locations.items():
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=loaded_names[(ScenarioArtifactKind.SEED, seed_name)],
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=loaded_names[(ScenarioArtifactKind.SEED, seed_name)],
+            )
         )
     model_name: str
     for model_name, target in scenario_plan.relation_plan.model_locations.items():
         if model_name in scenario_plan.graph_plan.ref_fixture_names:
             continue
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=local_snapshot_table_name(
-                kind=ScenarioArtifactKind.MODEL,
-                logical_name=model_name,
-            ),
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=local_snapshot_table_name(
+                    kind=ScenarioArtifactKind.MODEL,
+                    logical_name=model_name,
+                ),
+            )
         )
     return replacements
 
@@ -602,12 +607,8 @@ def _local_target(table_name: str) -> CompiledRelationLocation:
     )
 
 
-def _add_target_replacements(
-    replacements: dict[str, str], *, target: CompiledRelationLocation, local_name: str
-) -> None:
-    original: str
-    for original in _target_name_variants(target):
-        replacements[original] = local_name
+def _target_replacements(*, target: CompiledRelationLocation, local_name: str) -> dict[str, str]:
+    return {original: local_name for original in _target_name_variants(target)}
 
 
 def _target_name_variants(target: CompiledRelationLocation) -> tuple[str, ...]:

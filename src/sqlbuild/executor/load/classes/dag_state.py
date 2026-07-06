@@ -32,3 +32,20 @@ class LoadDagState:
         self.source_index_by_name = source_index_by_name
         self.downstream_names = downstream_names
         self.completion_queue = completion_queue
+
+    def record_completion(
+        self, *, source_name: str, result: LoadExecutionResult, hard_failure: bool
+    ) -> None:
+        """Store one finished source-loader result and track hard failures."""
+
+        source_index: int = self.source_index_by_name[source_name]
+        self.results[source_index] = result
+        self.results_by_name[source_name] = result
+        if hard_failure:
+            self.failed_or_skipped.add(source_name)
+
+    def apply_unlock(self, *, in_degree: dict[str, int], newly_ready: tuple[str, ...]) -> None:
+        """Adopt updated in-degrees and enqueue newly ready nodes."""
+
+        self.in_degree = in_degree
+        self.ready.extend(newly_ready)

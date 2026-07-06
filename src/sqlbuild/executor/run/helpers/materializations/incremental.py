@@ -233,15 +233,16 @@ def execute_incremental_entry(
                 schema=target_schema,
                 name=target_table,
             )
-            _apply_schema_change(
-                adapter=adapter,
-                connection=connection,
-                target_qualified=target_qualified,
-                target_columns=target_columns,
-                delta_columns=delta_columns,
-                on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
-                warnings=warnings,
-                statement_recorder=statement_recorder,
+            warnings.extend(
+                _apply_schema_change(
+                    adapter=adapter,
+                    connection=connection,
+                    target_qualified=target_qualified,
+                    target_columns=target_columns,
+                    delta_columns=delta_columns,
+                    on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                    statement_recorder=statement_recorder,
+                )
             )
             target_columns = adapter.get_columns(
                 connection,
@@ -453,15 +454,16 @@ def execute_incremental_entry(
             hook_results=hook_results,
         )
 
-    try_write_fingerprint(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        warnings=warnings,
-        model_audits=model_audits,
-        audit_results=tuple(audit_results),
+    warnings.extend(
+        try_write_fingerprint(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            query_change_tracking=query_change_tracking,
+            model_audits=model_audits,
+            audit_results=tuple(audit_results),
+        )
     )
 
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
@@ -491,10 +493,9 @@ def _apply_schema_change(
     target_columns: tuple[ColumnInfo, ...],
     delta_columns: tuple[ColumnInfo, ...],
     on_schema_change: OnSchemaChange,
-    warnings: list[str],
     statement_recorder: StatementRecorder,
-) -> None:
-    """Inspect runtime schema diff and apply on_schema_change policy."""
+) -> tuple[str, ...]:
+    """Inspect runtime schema diff, apply on_schema_change policy, return new warnings."""
 
     target_map: dict[str, str] = {col.name.lower(): col.type for col in target_columns}
     delta_map: dict[str, str] = {col.name.lower(): col.type for col in delta_columns}
@@ -519,7 +520,7 @@ def _apply_schema_change(
     has_diff: bool = bool(added or removed or type_changed)
 
     if not has_diff:
-        return
+        return ()
 
     if on_schema_change == OnSchemaChange.FAIL:
         diff_parts: list[str] = []
@@ -534,21 +535,22 @@ def _apply_schema_change(
         )
 
     if on_schema_change == OnSchemaChange.IGNORE:
+        ignored_warnings: list[str] = []
         if added:
-            warnings.append(
+            ignored_warnings.append(
                 f"schema change ignored: new columns in delta not added to target: "
                 f"{', '.join(c.name for c in added)}"
             )
         if removed:
-            warnings.append(
+            ignored_warnings.append(
                 f"schema change ignored: target columns not in delta: {', '.join(removed)}"
             )
         if type_changed:
-            warnings.append(
+            ignored_warnings.append(
                 f"schema change ignored: type changes detected: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return
+        return tuple(ignored_warnings)
 
     if on_schema_change == OnSchemaChange.APPEND_NEW_COLUMNS:
         if added:
@@ -563,7 +565,7 @@ def _apply_schema_change(
                 f"append_new_columns does not support type changes: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return
+        return ()
 
     if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:
         if added:
@@ -587,9 +589,9 @@ def _apply_schema_change(
                 columns=tuple(type_changed),
                 statement_recorder=statement_recorder,
             )
-        return
+        return ()
 
-    return
+    return ()
 
 
 def _execute_dml(
@@ -621,7 +623,7 @@ def _execute_dml(
     dml_sql: str = f"SELECT {projection} FROM {delta_qualified}"
 
     if strategy == IncrementalStrategy.APPEND:
-        adapter.append(
+        adapter.append(  # sc: allow-param-mutation (adapter SQL APPEND, not container mutation)
             connection,
             destination=target_qualified,
             sql=dml_sql,

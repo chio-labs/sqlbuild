@@ -5,15 +5,15 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 
 
-def block_downstream(
+def downstream_blocked_keys(
     *,
     failed_key: CompiledObjectKey,
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     selected_keys: frozenset[CompiledObjectKey],
-    blocked_keys: set[CompiledObjectKey],
-) -> None:
-    """Add all selected transitive downstream keys to the blocked set."""
+) -> frozenset[CompiledObjectKey]:
+    """Return all selected transitive downstream keys to block."""
 
+    blocked: set[CompiledObjectKey] = set()
     stack: list[CompiledObjectKey] = [failed_key]
     visited: set[CompiledObjectKey] = set()
     while stack:
@@ -24,5 +24,6 @@ def block_downstream(
                 continue
             visited.add(neighbor)
             if neighbor in selected_keys:
-                blocked_keys.add(neighbor)
+                blocked.add(neighbor)
             stack.append(neighbor)
+    return frozenset(blocked)

@@ -100,11 +100,12 @@ def _build_star_lineage(
     existing_columns: set[str],
 ) -> tuple[ColumnLineage, ...]:
     lineages: list[ColumnLineage] = []
+    seen_columns: set[str] = set(existing_columns)
     for resource in physical_resources:
         for column_name in schema.get(resource.physical_name, {}):
-            if column_name in existing_columns:
+            if column_name in seen_columns:
                 continue
-            existing_columns.add(column_name)
+            seen_columns.add(column_name)
             lineages.append(
                 ColumnLineage(
                     output_column=column_name,

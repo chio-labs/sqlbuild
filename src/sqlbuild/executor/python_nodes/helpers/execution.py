@@ -147,12 +147,13 @@ def execute_python_nodes(
         resolved_run_state.record_result(node_function=node.function, result=result)
         results_by_name[node.name] = result
         ordered_results.append(result)
-        unlock_downstream_python_nodes(
+        newly_ready: tuple[str, ...]
+        in_degree, newly_ready = unlock_downstream_python_nodes(
             completed_node_name=node.name,
             in_degree=in_degree,
-            ready=ready,
             downstream_names=downstream_names,
         )
+        ready.extend(newly_ready)
 
     if len(ordered_results) != len(nodes):
         raise ExecutorInputError("Python node executor could not resolve all dependencies")
