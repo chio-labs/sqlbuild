@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_scenario_capture_pipeline
 from sqlbuild.executor.scenario.models import (
+    ScenarioCaptureSettings,
     ScenarioFixtureExecutionResult,
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRelationResult,
@@ -26,6 +27,7 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.shared.models import ConnectionHooks
 
 _SCENARIO_NAME_WIDTH: int = 64
 _CAPTURE_RELATION_KIND_WIDTH: int = 8
@@ -75,15 +77,19 @@ def run_scenario_capture_run(
         connection_config=connection_config,
         adapter=adapter,
         project_name=project_name,
-        captured_at=_captured_at(),
-        capture_adapter=adapter_name,
-        capture_dialect=capture_dialect,
-        sqlbuild_version=_sqlbuild_version(),
-        retain=retain,
-        capture_limits=capture_limits,
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
+        settings=ScenarioCaptureSettings(
+            captured_at=_captured_at(),
+            capture_adapter=adapter_name,
+            capture_dialect=capture_dialect,
+            sqlbuild_version=_sqlbuild_version(),
+            retain=retain,
+            limits=capture_limits,
+        ),
+        connection_hooks=ConnectionHooks(
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=execution_connection_progress.on_connection_complete,
+            on_connection_error=execution_connection_progress.on_connection_error,
+        ),
         on_scenario_start=lambda _scenario: (
             scenario_status.start("Capturing scenarios...") if status_is_tty else None
         ),

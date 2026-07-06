@@ -40,7 +40,12 @@ from sqlbuild.cli.commands.helpers.janitor.state_cleanup import (
     virtual_state_prune_candidates,
 )
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
-from sqlbuild.executor.janitor.models import JanitorPlan, JanitorRelationKey
+from sqlbuild.executor.janitor.models import (
+    JanitorPlan,
+    JanitorRelationKey,
+    JanitorRelationScope,
+    JanitorStateCandidates,
+)
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.spec.models.targets import resolve_target_config
 
@@ -124,22 +129,28 @@ def build_janitor_execution_plan(
         retention_days=settings.retention_days,
         delete_tracked_only=invocation.discovered_inputs.project_config.janitor.delete_tracked_only,
         exclude_patterns=invocation.discovered_inputs.project_config.janitor.exclude_patterns,
-        scan_relation_keys=detached_environment_scan_relation_keys(
-            retention=inspection.detached_environment
-        )
-        | expired_environment_scan_relation_keys(retention=inspection.expired_environment),
-        protected_relation_keys=protected_relation_keys,
-        protected_relation_reasons=protected_relation_reasons,
-        checkpoint_candidates=checkpoint_candidates(retention=inspection.checkpoint),
-        detached_virtual_environment_candidates=detached_environment_candidates(
-            retention=inspection.detached_environment
+        relation_scope=JanitorRelationScope(
+            scan_relation_keys=detached_environment_scan_relation_keys(
+                retention=inspection.detached_environment
+            )
+            | expired_environment_scan_relation_keys(retention=inspection.expired_environment),
+            protected_relation_keys=protected_relation_keys,
+            protected_relation_reasons=protected_relation_reasons,
         ),
-        expired_virtual_environment_candidates=expired_environment_candidates(
-            retention=inspection.expired_environment
+        state_candidates=JanitorStateCandidates(
+            checkpoint_candidates=checkpoint_candidates(retention=inspection.checkpoint),
+            detached_virtual_environment_candidates=detached_environment_candidates(
+                retention=inspection.detached_environment
+            ),
+            expired_virtual_environment_candidates=expired_environment_candidates(
+                retention=inspection.expired_environment
+            ),
+            state_backup_candidates=state_backup_candidates(retention=inspection.state),
+            expired_lock_candidates=expired_lock_candidates(retention=inspection.state),
+            virtual_state_prune_candidates=virtual_state_prune_candidates(
+                retention=inspection.state
+            ),
         ),
-        state_backup_candidates=state_backup_candidates(retention=inspection.state),
-        expired_lock_candidates=expired_lock_candidates(retention=inspection.state),
-        virtual_state_prune_candidates=virtual_state_prune_candidates(retention=inspection.state),
         direct_state_history_versions=settings.direct_state_history_versions,
     )
     status.complete(

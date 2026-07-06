@@ -15,19 +15,14 @@ from sqlbuild.executor.janitor.helpers.classification import (
 )
 from sqlbuild.executor.janitor.helpers.plan import collect_target_schemas
 from sqlbuild.executor.janitor.models import (
-    JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
-    JanitorDetachedVirtualEnvironmentCandidate,
     JanitorDirectStatePruneCandidate,
-    JanitorExpiredLockCandidate,
-    JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
     JanitorRelationClassification,
-    JanitorRelationKey,
+    JanitorRelationScope,
     JanitorSkippedRelation,
     JanitorSkippedSchema,
-    JanitorStateBackupCandidate,
-    JanitorVirtualStatePruneCandidate,
+    JanitorStateCandidates,
     JanitorWarehouseFacts,
 )
 
@@ -40,36 +35,31 @@ def build_janitor_plan(
     retention_days: int,
     delete_tracked_only: bool = True,
     exclude_patterns: tuple[str, ...] = (),
-    scan_relation_keys: frozenset[JanitorRelationKey] = frozenset(),
-    protected_relation_keys: frozenset[JanitorRelationKey] = frozenset(),
-    protected_relation_reasons: dict[JanitorRelationKey, str] | None = None,
-    checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = (),
-    detached_virtual_environment_candidates: tuple[
-        JanitorDetachedVirtualEnvironmentCandidate, ...
-    ] = (),
-    expired_virtual_environment_candidates: tuple[
-        JanitorExpiredVirtualEnvironmentCandidate, ...
-    ] = (),
-    state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = (),
-    expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = (),
-    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = (),
+    relation_scope: JanitorRelationScope | None = None,
+    state_candidates: JanitorStateCandidates | None = None,
     direct_state_history_versions: int = 20,
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
 
+    scope: JanitorRelationScope = (
+        relation_scope if relation_scope is not None else JanitorRelationScope()
+    )
+    state: JanitorStateCandidates = (
+        state_candidates if state_candidates is not None else JanitorStateCandidates()
+    )
     target_schemas: set[tuple[str | None, str | None]] = collect_target_schemas(project)
-    target_schemas.update((key.database, key.schema) for key in protected_relation_keys)
-    target_schemas.update((key.database, key.schema) for key in scan_relation_keys)
+    target_schemas.update((key.database, key.schema) for key in scope.protected_relation_keys)
+    target_schemas.update((key.database, key.schema) for key in scope.scan_relation_keys)
     if not target_schemas:
         return JanitorPlan(
             target_name=project.effective_target_name,
             retention_days=retention_days,
-            checkpoint_candidates=checkpoint_candidates,
-            detached_virtual_environment_candidates=detached_virtual_environment_candidates,
-            expired_virtual_environment_candidates=expired_virtual_environment_candidates,
-            state_backup_candidates=state_backup_candidates,
-            expired_lock_candidates=expired_lock_candidates,
-            virtual_state_prune_candidates=virtual_state_prune_candidates,
+            checkpoint_candidates=state.checkpoint_candidates,
+            detached_virtual_environment_candidates=(state.detached_virtual_environment_candidates),
+            expired_virtual_environment_candidates=(state.expired_virtual_environment_candidates),
+            state_backup_candidates=state.state_backup_candidates,
+            expired_lock_candidates=state.expired_lock_candidates,
+            virtual_state_prune_candidates=state.virtual_state_prune_candidates,
             direct_state_prune_candidates=(),
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
@@ -111,8 +101,8 @@ def build_janitor_plan(
         classification: JanitorRelationClassification = classify_janitor_relations(
             schema_relations=schema_relations,
             facts=facts,
-            protected_relation_keys=protected_relation_keys,
-            protection_reasons=protected_relation_reasons or {},
+            protected_relation_keys=scope.protected_relation_keys,
+            protection_reasons=scope.protected_relation_reasons or {},
             effective_exclude_patterns=BUILT_IN_EXCLUDE_PATTERNS + exclude_patterns,
             delete_tracked_only=delete_tracked_only,
             retention_days=retention_days,
@@ -126,12 +116,12 @@ def build_janitor_plan(
         target_name=project.effective_target_name,
         retention_days=retention_days,
         candidates=tuple(candidates),
-        checkpoint_candidates=checkpoint_candidates,
-        detached_virtual_environment_candidates=detached_virtual_environment_candidates,
-        expired_virtual_environment_candidates=expired_virtual_environment_candidates,
-        state_backup_candidates=state_backup_candidates,
-        expired_lock_candidates=expired_lock_candidates,
-        virtual_state_prune_candidates=virtual_state_prune_candidates,
+        checkpoint_candidates=state.checkpoint_candidates,
+        detached_virtual_environment_candidates=state.detached_virtual_environment_candidates,
+        expired_virtual_environment_candidates=state.expired_virtual_environment_candidates,
+        state_backup_candidates=state.state_backup_candidates,
+        expired_lock_candidates=state.expired_lock_candidates,
+        virtual_state_prune_candidates=state.virtual_state_prune_candidates,
         direct_state_prune_candidates=direct_state_prune_candidates,
         skipped_relations=tuple(skipped_relations),
         skipped_schemas=tuple(skipped_schemas),

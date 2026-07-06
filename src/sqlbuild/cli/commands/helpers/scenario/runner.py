@@ -45,6 +45,7 @@ from sqlbuild.executor.pipeline.main.run import (
     select_scenario_snapshot_capture_candidates,
 )
 from sqlbuild.executor.scenario.models import (
+    ScenarioCaptureSettings,
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureRunResult,
@@ -58,6 +59,7 @@ from sqlbuild.shared.constants import (
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.helpers.output.colors import supports_color
 from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,
@@ -388,15 +390,19 @@ def _sync_local_snapshots(
         connection_config=project_connection_config,
         adapter=project_adapter,
         project_name=project_name,
-        captured_at=_captured_at(),
-        capture_adapter=project_adapter_name,
-        capture_dialect=capture_dialect,
-        sqlbuild_version=_sqlbuild_version(),
-        retain=False,
-        capture_limits=capture_limits,
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
+        settings=ScenarioCaptureSettings(
+            captured_at=_captured_at(),
+            capture_adapter=project_adapter_name,
+            capture_dialect=capture_dialect,
+            sqlbuild_version=_sqlbuild_version(),
+            retain=False,
+            limits=capture_limits,
+        ),
+        connection_hooks=ConnectionHooks(
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=execution_connection_progress.on_connection_complete,
+            on_connection_error=execution_connection_progress.on_connection_error,
+        ),
         on_scenario_start=lambda _scenario: (
             scenario_status.start("Capturing snapshots...") if status_is_tty else None
         ),

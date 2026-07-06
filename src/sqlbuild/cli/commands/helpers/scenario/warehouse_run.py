@@ -20,6 +20,7 @@ from sqlbuild.executor.scenario.models import ScenarioRunResult
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.shared.models import ConnectionHooks
 
 
 def run_warehouse_scenarios(
@@ -63,9 +64,11 @@ def run_warehouse_scenarios(
         adapter=adapter,
         project_name=project_name,
         retain=retain,
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
+        connection_hooks=ConnectionHooks(
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=execution_connection_progress.on_connection_complete,
+            on_connection_error=execution_connection_progress.on_connection_error,
+        ),
         on_scenario_start=lambda _scenario: (
             scenario_status.start("Running scenarios...") if status_is_tty else None
         ),
