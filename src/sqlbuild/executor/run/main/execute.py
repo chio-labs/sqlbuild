@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, Model
 from sqlbuild.compiler.planner.types import RelationReuseKind
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.helpers.execution.final_audits import run_final_model_audits
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run.helpers.execution.results import (
@@ -36,7 +37,6 @@ from sqlbuild.executor.run.helpers.materializations.snapshot import (
 from sqlbuild.executor.run.helpers.materializations.view import (
     execute_view_entry as execute_view_entry,
 )
-from sqlbuild.executor.run.helpers.execution.final_audits import run_final_model_audits
 from sqlbuild.executor.run.helpers.reuse.core import (
     create_relation_from_reuse_plan,
 )

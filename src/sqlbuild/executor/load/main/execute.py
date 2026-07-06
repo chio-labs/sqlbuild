@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Mapping
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -25,11 +23,17 @@ from sqlbuild.executor.load.helpers.loader_invocation import (
 )
 from sqlbuild.executor.load.helpers.schema import validate_and_evolve_existing_target
 from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
-from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoaderContext,
+    LoaderDestination,
+    LoaderRefBindings,
+    LoadExecutionResult,
+    LoadRuntimeParams,
+)
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.load_execution import load_resource_kind
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer, invoke_with_providers
+from sqlbuild.provider.main.runtime import invoke_with_providers
 from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -43,22 +47,11 @@ def execute_source_load(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection: Any,
-    run_id: str,
-    runtime_dir: Path = Path("target"),
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
-    start_cursor_ts: datetime | None = None,
-    end_cursor_ts: datetime | None = None,
-    start_cursor_int: int | None = None,
-    end_cursor_int: int | None = None,
+    runtime: LoadRuntimeParams,
     statement_recorder: StatementRecorder,
-    use_color: bool = False,
     loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None,
     source_ref_entries: Mapping[str, SourceEntry] | None = None,
     on_progress: Callable[[str], None] | None = None,
-    providers: ProviderContainer | None = None,
-    result_store: Any | None = None,
 ) -> LoadExecutionResult:
     """Run one source loader and write returned rows using the table strategy."""
 
@@ -77,6 +70,9 @@ def execute_source_load(
         schema=source_entry.schema,
         name=f"{destination_name}__staging",
     )
+    destination: LoaderDestination = LoaderDestination(
+        relation=destination_relation, name=destination_name
+    )
     start: float = time.monotonic()
     try:
         resource_kind: ExecutionResourceKind = load_resource_kind(source_entry)
@@ -86,24 +82,12 @@ def execute_source_load(
                 loader_function=loader_function,
                 adapter=adapter,
                 connection_config=connection_config,
-                destination_relation=destination_relation,
-                destination_name=destination_name,
-                run_id=run_id,
-                runtime_dir=runtime_dir,
-                target=target,
-                vars=vars,
-                is_reload=is_reload,
-                start_cursor_ts=start_cursor_ts,
-                end_cursor_ts=end_cursor_ts,
-                start_cursor_int=start_cursor_int,
-                end_cursor_int=end_cursor_int,
+                destination=destination,
+                runtime=runtime,
                 statement_recorder=statement_recorder,
-                use_color=use_color,
                 resource_kind=resource_kind,
                 start=start,
                 on_progress=on_progress,
-                providers=providers,
-                result_store=result_store,
             )
         validate_source_write_strategy(source_entry)
         adapter.ensure_schema(
@@ -118,29 +102,19 @@ def execute_source_load(
             adapter=adapter,
             connection_config=connection_config,
             connection=connection,
-            destination_relation=destination_relation,
-            destination_name=destination_name,
-            run_id=run_id,
-            runtime_dir=runtime_dir,
-            target=target,
-            vars=vars,
-            is_reload=is_reload,
-            use_color=use_color,
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
+            destination=destination,
+            runtime=runtime,
             statement_recorder=statement_recorder,
-            loader_ref_entries=loader_ref_entries,
-            source_ref_entries=source_ref_entries,
+            ref_bindings=LoaderRefBindings(
+                loader_ref_entries=loader_ref_entries,
+                source_ref_entries=source_ref_entries,
+            ),
             on_progress=on_progress,
-            providers=providers,
-            result_store=result_store,
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,
             context=context,
-            providers=providers,
+            providers=runtime.providers,
         )
         early_result: LoadExecutionResult | None = interpret_loader_return(
             raw_rows=raw_rows,

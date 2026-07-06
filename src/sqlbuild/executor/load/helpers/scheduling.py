@@ -22,6 +22,7 @@ from sqlbuild.executor.load.models import (
     ExternalLoadPhaseResult,
     LoadCallbacks,
     LoadDagState,
+    LoadDispatchInputs,
     LoadExecutionIndexes,
     LoadExecutionResult,
     LoadRuntimeParams,
@@ -97,30 +98,21 @@ def run_external_source_loads(
             callbacks.on_load_start(external_source)
         result: LoadExecutionResult = execute_ready_dag_source(
             source_name=external_source.name,
-            source_by_name=source_by_name,
-            indexes=indexes,
-            failed_or_hard_skipped=failed_or_hard_skipped,
-            results_by_name={},
+            dispatch=LoadDispatchInputs(
+                source_by_name=source_by_name,
+                indexes=indexes,
+                failed_or_hard_skipped=failed_or_hard_skipped,
+                results_by_name={},
+            ),
             adapter=adapter,
             connection_config=connection_config,
             connection=None,
-            run_id=runtime.run_id,
-            runtime_dir=runtime.runtime_dir,
-            target=runtime.target,
-            vars=runtime.vars,
-            is_reload=runtime.is_reload,
-            start_cursor_ts=runtime.start_cursor_ts,
-            end_cursor_ts=runtime.end_cursor_ts,
-            start_cursor_int=runtime.start_cursor_int,
-            end_cursor_int=runtime.end_cursor_int,
-            use_color=runtime.use_color,
+            runtime=runtime,
             on_progress=(
                 None
                 if on_load_progress is None
                 else lambda message, source=external_source: on_load_progress(source, message)
             ),
-            providers=runtime.providers,
-            result_store=runtime.result_store,
         )
         preloaded_results.append(result)
         if result.status.value == "failed" or (
@@ -243,25 +235,16 @@ def _run_sequential_load_dag(
             source_name=source_name,
             result=execute_ready_dag_source(
                 source_name=source_name,
-                source_by_name=source_by_name,
-                indexes=indexes,
-                failed_or_hard_skipped=state.failed_or_skipped,
-                results_by_name=state.results_by_name,
+                dispatch=LoadDispatchInputs(
+                    source_by_name=source_by_name,
+                    indexes=indexes,
+                    failed_or_hard_skipped=state.failed_or_skipped,
+                    results_by_name=state.results_by_name,
+                ),
                 adapter=adapter,
                 connection_config=connection_config,
                 connection=connection,
-                run_id=runtime.run_id,
-                runtime_dir=runtime.runtime_dir,
-                target=runtime.target,
-                vars=runtime.vars,
-                is_reload=runtime.is_reload,
-                start_cursor_ts=runtime.start_cursor_ts,
-                end_cursor_ts=runtime.end_cursor_ts,
-                start_cursor_int=runtime.start_cursor_int,
-                end_cursor_int=runtime.end_cursor_int,
-                use_color=runtime.use_color,
-                providers=runtime.providers,
-                result_store=runtime.result_store,
+                runtime=runtime,
             ),
             state=state,
             on_load_complete=callbacks.on_load_complete,
@@ -292,29 +275,21 @@ def _run_concurrent_load_dag(
                 if callbacks.on_load_start is not None:
                     callbacks.on_load_start(source_by_name[source_name])
                 pool.submit(
-                    load_dag_worker,
-                    source_name,
-                    source_by_name,
-                    indexes,
-                    state.failed_or_skipped,
-                    state.results_by_name,
-                    adapter,
-                    connection_config,
-                    connection_pool,
-                    runtime.run_id,
-                    runtime.target,
-                    runtime.vars,
-                    runtime.is_reload,
-                    runtime.start_cursor_ts,
-                    runtime.end_cursor_ts,
-                    runtime.start_cursor_int,
-                    runtime.end_cursor_int,
-                    runtime.use_color,
-                    state.completion_queue,
-                    callbacks.on_load_progress,
-                    runtime.providers,
-                    runtime.result_store,
-                    runtime.runtime_dir,
+                    lambda name=source_name: load_dag_worker(
+                        source_name=name,
+                        dispatch=LoadDispatchInputs(
+                            source_by_name=source_by_name,
+                            indexes=indexes,
+                            failed_or_hard_skipped=state.failed_or_skipped,
+                            results_by_name=state.results_by_name,
+                        ),
+                        adapter=adapter,
+                        connection_config=connection_config,
+                        connection_pool=connection_pool,
+                        runtime=runtime,
+                        completion_queue=state.completion_queue,
+                        on_load_progress=callbacks.on_load_progress,
+                    )
                 )
             if not state.in_flight:
                 break

@@ -20,6 +20,7 @@ from sqlbuild.executor.node_results.constants import (
     COLUMN_TIMESTAMP,
     NODE_RESULTS_TABLE_NAME,
 )
+from sqlbuild.executor.node_results.models import NodeResultQuery, NodeResultRecord
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
@@ -77,18 +78,9 @@ def build_insert_sql(
     *,
     database: str | None,
     schema: str,
-    node_type: str,
-    node_name: str,
-    target_database: str | None,
-    target_schema: str | None,
-    target_name: str | None,
-    run_id: str,
-    status: str,
+    record: NodeResultRecord,
     payload_json_b64: str,
     metadata_json_b64: str,
-    error_message: str | None,
-    materialized: bool | None,
-    ts: str,
     render_qualified_name: Callable[..., str | None],
 ) -> str:
     qualified_name: str = build_qualified_table_name(
@@ -111,18 +103,18 @@ def build_insert_sql(
         f"{COLUMN_MATERIALIZED}, "
         f"{COLUMN_TIMESTAMP}"
         f") VALUES ("
-        f"{_required_string_literal(node_type)}, "
-        f"{_required_string_literal(node_name)}, "
-        f"{_optional_string_literal(target_database)}, "
-        f"{_optional_string_literal(target_schema)}, "
-        f"{_optional_string_literal(target_name)}, "
-        f"{_required_string_literal(run_id)}, "
-        f"{_required_string_literal(status)}, "
+        f"{_required_string_literal(record.node_type)}, "
+        f"{_required_string_literal(record.node_name)}, "
+        f"{_optional_string_literal(record.target_database)}, "
+        f"{_optional_string_literal(record.target_schema)}, "
+        f"{_optional_string_literal(record.target_name)}, "
+        f"{_required_string_literal(record.run_id)}, "
+        f"{_required_string_literal(record.status)}, "
         f"{_required_string_literal(payload_json_b64)}, "
         f"{_required_string_literal(metadata_json_b64)}, "
-        f"{_optional_string_literal(error_message)}, "
-        f"{_optional_string_literal(_materialized_storage(materialized))}, "
-        f"{_required_string_literal(ts)}"
+        f"{_optional_string_literal(record.error_message)}, "
+        f"{_optional_string_literal(_materialized_storage(record.materialized))}, "
+        f"{_required_string_literal(record.ts.isoformat())}"
         f")"
     )
 
@@ -131,13 +123,7 @@ def build_read_history_sql(
     *,
     database: str | None,
     schema: str,
-    node_type: str,
-    node_name: str,
-    target_database: str | None,
-    target_schema: str | None,
-    target_name: str | None,
-    statuses: tuple[str, ...] | None,
-    run_id: str | None,
+    query: NodeResultQuery,
     render_qualified_name: Callable[..., str | None],
 ) -> str:
     qualified_name: str = build_qualified_table_name(
@@ -146,17 +132,19 @@ def build_read_history_sql(
         render_qualified_name=render_qualified_name,
     )
     predicates: list[str] = [
-        f"{COLUMN_NODE_TYPE} = {_required_string_literal(node_type)}",
-        f"{COLUMN_NODE_NAME} = {_required_string_literal(node_name)}",
-        _optional_equality(COLUMN_TARGET_DATABASE, target_database),
-        _optional_equality(COLUMN_TARGET_SCHEMA, target_schema),
-        _optional_equality(COLUMN_TARGET_NAME, target_name),
+        f"{COLUMN_NODE_TYPE} = {_required_string_literal(query.node_type)}",
+        f"{COLUMN_NODE_NAME} = {_required_string_literal(query.node_name)}",
+        _optional_equality(COLUMN_TARGET_DATABASE, query.target_database),
+        _optional_equality(COLUMN_TARGET_SCHEMA, query.target_schema),
+        _optional_equality(COLUMN_TARGET_NAME, query.target_name),
     ]
-    if statuses is not None:
-        status_literals: str = ", ".join(_required_string_literal(status) for status in statuses)
+    if query.statuses is not None:
+        status_literals: str = ", ".join(
+            _required_string_literal(status) for status in query.statuses
+        )
         predicates.append(f"{COLUMN_STATUS} IN ({status_literals})")
-    if run_id is not None:
-        predicates.append(f"{COLUMN_RUN_ID} = {_required_string_literal(run_id)}")
+    if query.run_id is not None:
+        predicates.append(f"{COLUMN_RUN_ID} = {_required_string_literal(query.run_id)}")
     return (
         f"SELECT {_select_columns()} "
         f"FROM {qualified_name} "

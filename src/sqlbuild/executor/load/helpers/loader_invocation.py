@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Mapping
-from datetime import datetime
-from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -18,9 +16,12 @@ from sqlbuild.executor.load.helpers.relation_refs import (
 )
 from sqlbuild.executor.load.models import (
     LoaderContext,
+    LoaderDestination,
+    LoaderRefBindings,
     LoaderResult,
     LoaderSkipResult,
     LoadExecutionResult,
+    LoadRuntimeParams,
 )
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -28,7 +29,7 @@ from sqlbuild.executor.shared.helpers.load_execution import (
     is_untargeted_self_managed_intermediate,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
+from sqlbuild.provider.main.runtime import _empty_provider_container
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
@@ -65,27 +66,16 @@ def build_loader_context(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection: Any,
-    destination_relation: str,
-    destination_name: str,
-    run_id: str,
-    runtime_dir: Path,
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
-    use_color: bool,
-    start_cursor_ts: datetime | None,
-    end_cursor_ts: datetime | None,
-    start_cursor_int: int | None,
-    end_cursor_int: int | None,
+    destination: LoaderDestination,
+    runtime: LoadRuntimeParams,
     statement_recorder: StatementRecorder,
-    loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None,
-    source_ref_entries: Mapping[str, SourceEntry] | None,
+    ref_bindings: LoaderRefBindings,
     on_progress: Callable[[str], None] | None,
-    providers: ProviderContainer | None,
-    result_store: Any | None,
 ) -> LoaderContext:
     """Assemble the runtime context handed to one loader function."""
 
+    destination_relation: str = destination.relation
+    destination_name: str = destination.name
     return LoaderContext(
         adapter=adapter,
         connection_config=connection_config,
@@ -94,12 +84,12 @@ def build_loader_context(
         destination_database=source_entry.database,
         destination_schema=source_entry.schema,
         destination_name=destination_name,
-        run_id=run_id,
-        runtime_dir=runtime_dir,
-        target=target,
-        vars=vars,
-        is_reload=is_reload,
-        use_color=use_color,
+        run_id=runtime.run_id,
+        runtime_dir=runtime.runtime_dir,
+        target=runtime.target,
+        vars=runtime.vars,
+        is_reload=runtime.is_reload,
+        use_color=runtime.use_color,
         current_cursor_value=_load_current_cursor_value(
             adapter=adapter,
             connection=connection,
@@ -110,24 +100,26 @@ def build_loader_context(
         ),
         logger=logging.getLogger(f"sqlbuild.loader.{loader_function.name}"),
         statement_recorder=statement_recorder,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
+        start_cursor_ts=runtime.start_cursor_ts,
+        end_cursor_ts=runtime.end_cursor_ts,
+        start_cursor_int=runtime.start_cursor_int,
+        end_cursor_int=runtime.end_cursor_int,
         loader_refs=build_loader_relation_refs(
             adapter=adapter,
             connection=connection,
-            entries=loader_ref_entries or {},
+            entries=ref_bindings.loader_ref_entries or {},
             statement_recorder=statement_recorder,
         ),
         source_refs=build_source_relation_refs(
             adapter=adapter,
             connection=connection,
-            entries=source_ref_entries or {},
+            entries=ref_bindings.source_ref_entries or {},
             statement_recorder=statement_recorder,
         ),
-        providers=providers if providers is not None else _empty_provider_container(),
-        result_store=result_store,
+        providers=(
+            runtime.providers if runtime.providers is not None else _empty_provider_container()
+        ),
+        result_store=runtime.result_store,
         on_progress=on_progress,
     )
 

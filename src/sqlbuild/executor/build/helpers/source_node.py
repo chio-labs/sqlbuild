@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.load.main.execute import execute_source_load
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
 from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
@@ -78,22 +78,24 @@ def execute_build_source_node(
         adapter=adapter,
         connection_config=connection_config,
         connection=connection,
-        run_id=run_id,
-        runtime_dir=runtime_dir,
-        target=target,
-        vars=effective_vars,
-        is_reload=is_reload,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
+        runtime=LoadRuntimeParams(
+            run_id=run_id,
+            target=target,
+            vars=effective_vars,
+            is_reload=is_reload,
+            runtime_dir=runtime_dir,
+            start_cursor_ts=start_cursor_ts,
+            end_cursor_ts=end_cursor_ts,
+            start_cursor_int=start_cursor_int,
+            end_cursor_int=end_cursor_int,
+            use_color=use_color,
+            providers=providers,
+            result_store=result_store,
+        ),
         statement_recorder=StatementRecorder(),
-        use_color=use_color,
         loader_ref_entries=loader_ref_entries,
         source_ref_entries=plan.source_map,
         on_progress=on_sub_progress,
-        providers=providers,
-        result_store=result_store,
     )
     duration: int = int((time.monotonic() - start) * 1000)
     timed_result: LoadExecutionResult = dataclasses.replace(result, duration_ms=duration)

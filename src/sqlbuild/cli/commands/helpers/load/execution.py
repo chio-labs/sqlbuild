@@ -17,7 +17,11 @@ from sqlbuild.cli.commands.shared.helpers.config.parsers import (
 )
 from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
 from sqlbuild.executor.load.main.run import run_load_pipeline
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoadCallbacks,
+    LoadExecutionResult,
+    LoadRuntimeParams,
+)
 
 
 def execute_load_plan(
@@ -49,24 +53,28 @@ def execute_load_plan(
         loader_functions=invocation.discovered_inputs.loader_functions,
         connection_config=preparation.connection_config,
         adapter=preparation.adapter,
-        run_id=preparation.run_id,
-        runtime_dir=invocation.effective_project_dir / "target",
-        target=preparation.target_name,
-        vars=preparation.effective_vars,
-        is_reload=request.reload,
-        start_cursor_ts=parse_cursor_timestamp(preparation.effective_cursor_overrides.start_ts),
-        end_cursor_ts=parse_cursor_timestamp(preparation.effective_cursor_overrides.end_ts),
-        start_cursor_int=parse_cursor_integer(preparation.effective_cursor_overrides.start_int),
-        end_cursor_int=parse_cursor_integer(preparation.effective_cursor_overrides.end_int),
         max_concurrency=preparation.effective_concurrency,
-        on_load_start=load_progress.on_start,
-        on_load_progress=load_progress.on_progress,
-        on_load_complete=load_progress.on_complete,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        use_color=invocation.use_color,
-        providers=preparation.provider_session.providers,
+        runtime=LoadRuntimeParams(
+            run_id=preparation.run_id,
+            runtime_dir=invocation.effective_project_dir / "target",
+            target=preparation.target_name,
+            vars=preparation.effective_vars,
+            is_reload=request.reload,
+            start_cursor_ts=parse_cursor_timestamp(preparation.effective_cursor_overrides.start_ts),
+            end_cursor_ts=parse_cursor_timestamp(preparation.effective_cursor_overrides.end_ts),
+            start_cursor_int=parse_cursor_integer(preparation.effective_cursor_overrides.start_int),
+            end_cursor_int=parse_cursor_integer(preparation.effective_cursor_overrides.end_int),
+            use_color=invocation.use_color,
+            providers=preparation.provider_session.providers,
+        ),
+        callbacks=LoadCallbacks(
+            on_load_start=load_progress.on_start,
+            on_load_progress=load_progress.on_progress,
+            on_load_complete=load_progress.on_complete,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+        ),
     )
     return LoadRunOutcome(
         results=results,

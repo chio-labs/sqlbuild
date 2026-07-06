@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -23,7 +20,6 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.shared.helpers.load_execution import build_load_execution_indexes
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -34,25 +30,9 @@ def run_load_pipeline(
     loader_functions: tuple[DiscoveredLoaderFunction, ...],
     connection_config: dict[str, object],
     adapter: BaseAdapter,
-    run_id: str,
-    runtime_dir: Path = Path("target"),
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
-    start_cursor_ts: datetime | None = None,
-    end_cursor_ts: datetime | None = None,
-    start_cursor_int: int | None = None,
-    end_cursor_int: int | None = None,
+    runtime: LoadRuntimeParams,
+    callbacks: LoadCallbacks = LoadCallbacks(),
     max_concurrency: int = 1,
-    on_load_start: Callable[[SourceEntry], None] | None = None,
-    on_load_progress: Callable[[SourceEntry, str], None] | None = None,
-    on_load_complete: Callable[[LoadExecutionResult], None] | None = None,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
-    use_color: bool = False,
-    providers: ProviderContainer | None = None,
-    result_store: Any | None = None,
 ) -> tuple[LoadExecutionResult, ...]:
     """Execute selected source loaders."""
 
@@ -65,25 +45,6 @@ def run_load_pipeline(
     if source_count == 0:
         return ()
     validate_external_loaders_are_preconnect_runnable(sources=sources, indexes=indexes)
-    runtime: LoadRuntimeParams = LoadRuntimeParams(
-        run_id=run_id,
-        target=target,
-        vars=vars,
-        is_reload=is_reload,
-        runtime_dir=runtime_dir,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
-        use_color=use_color,
-        providers=providers,
-        result_store=result_store,
-    )
-    callbacks: LoadCallbacks = LoadCallbacks(
-        on_load_start=on_load_start,
-        on_load_progress=on_load_progress,
-        on_load_complete=on_load_complete,
-    )
     source_by_name: dict[str, SourceEntry] = {source.name: source for source in index_sources}
     external_phase: ExternalLoadPhaseResult = run_external_source_loads(
         sources=sources,
@@ -105,9 +66,9 @@ def run_load_pipeline(
         adapter=adapter,
         connection_config=connection_config,
         effective_concurrency=effective_concurrency,
-        on_connection_start=on_connection_start,
-        on_connection_complete=on_connection_complete,
-        on_connection_error=on_connection_error,
+        on_connection_start=callbacks.on_connection_start,
+        on_connection_complete=callbacks.on_connection_complete,
+        on_connection_error=callbacks.on_connection_error,
     )
     try:
         dag_results: tuple[LoadExecutionResult, ...] = run_load_dag(

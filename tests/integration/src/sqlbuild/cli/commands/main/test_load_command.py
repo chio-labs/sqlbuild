@@ -34,7 +34,11 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, Discover
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoadCallbacks,
+    LoadExecutionResult,
+    LoadRuntimeParams,
+)
 from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BuildRunAutoLoadFailureTestCase,
@@ -2134,10 +2138,12 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={"tier": "cli", "project_only": "yes"},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={"tier": "cli", "project_only": "yes"},
+            is_reload=False,
+        ),
     )
 
     lifecycle_sql: tuple[str, ...] = tuple(
@@ -2180,10 +2186,12 @@ def test_given_source_loader_when_running_pipeline_then_drops_stale_staging_firs
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     lifecycle_sql: tuple[str, ...] = tuple(
@@ -2936,20 +2944,24 @@ def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expe
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
     second_results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
         sources=source_file.source_entries,
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     first_lifecycle_sql: tuple[str, ...] = tuple(
@@ -3015,10 +3027,12 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     def append_spy(
@@ -3062,10 +3076,12 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert results[0].status.value == "success"
@@ -3233,10 +3249,12 @@ def test_given_loader_cursor_configuration_when_running_pipeline_then_records_ex
             loader_functions=discovered_inputs.loader_functions,
             connection_config={"database": str(tmp_path / "demo.duckdb")},
             adapter=adapter,
-            run_id="test_run",
-            target="dev",
-            vars={},
-            is_reload=False,
+            runtime=LoadRuntimeParams(
+                run_id="test_run",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
         )
         all_lifecycle_sql.extend(
             event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
@@ -3430,12 +3448,16 @@ def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurren
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         max_concurrency=test_case.max_concurrency,
-        on_connection_start=connection_starts.append,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
+        callbacks=LoadCallbacks(
+            on_connection_start=connection_starts.append,
+        ),
     )
 
     assert connection_starts == [test_case.expected_connection_count]
@@ -3554,12 +3576,16 @@ def test_given_loader_dag_when_running_pipeline_then_independent_branches_overla
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         max_concurrency=test_case.max_concurrency,
-        on_connection_start=connection_starts.append,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
+        callbacks=LoadCallbacks(
+            on_connection_start=connection_starts.append,
+        ),
     )
 
     assert connection_starts == [test_case.expected_connection_count]
@@ -3785,10 +3811,12 @@ def test_given_generator_loader_uses_batch_size_when_running_pipeline_then_appen
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert results[0].rows_loaded == len(test_case.expected_rows)
@@ -3995,10 +4023,12 @@ def test_given_batched_loader_variants_when_running_pipeline_then_writes_expecte
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4479,10 +4509,12 @@ def test_given_later_loader_batch_fails_when_running_load_then_drops_staging(
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))

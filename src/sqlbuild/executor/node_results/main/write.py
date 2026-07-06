@@ -46,13 +46,7 @@ def write_node_result_record(
     insert_sql: str = build_insert_sql(
         database=database,
         schema=schema,
-        node_type=record.node_type,
-        node_name=record.node_name,
-        target_database=record.target_database,
-        target_schema=record.target_schema,
-        target_name=record.target_name,
-        run_id=record.run_id,
-        status=record.status,
+        record=record,
         payload_json_b64=encode_json_b64(
             record.payload,
             label="payload",
@@ -63,9 +57,6 @@ def write_node_result_record(
             label="metadata",
             node_name=record.node_name,
         ),
-        error_message=record.error_message,
-        materialized=record.materialized,
-        ts=record.ts.isoformat(),
         render_qualified_name=render_qualified_name,
     )
     _ = execute(connection, insert_sql)

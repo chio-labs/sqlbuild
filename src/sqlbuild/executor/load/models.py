@@ -302,12 +302,41 @@ class LoadRuntimeParams:
 
 
 @dataclass(frozen=True)
+class LoadDispatchInputs:
+    """Per-node dispatch inputs shared by DAG source execution helpers."""
+
+    source_by_name: dict[str, SourceEntry]
+    indexes: LoadExecutionIndexes
+    failed_or_hard_skipped: set[str]
+    results_by_name: dict[str, LoadExecutionResult]
+
+
+@dataclass(frozen=True)
+class LoaderDestination:
+    """Resolved destination relation and bare name for one loader run."""
+
+    relation: str
+    name: str
+
+
+@dataclass(frozen=True)
+class LoaderRefBindings:
+    """Loader and source relation-ref entry maps for one loader run."""
+
+    loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None
+    source_ref_entries: Mapping[str, SourceEntry] | None = None
+
+
+@dataclass(frozen=True)
 class LoadCallbacks:
     """Progress callbacks for one load pipeline run."""
 
     on_load_start: Callable[[SourceEntry], None] | None = None
     on_load_progress: Callable[[SourceEntry, str], None] | None = None
     on_load_complete: Callable[[LoadExecutionResult], None] | None = None
+    on_connection_start: Callable[[int], None] | None = None
+    on_connection_complete: Callable[[int, float], None] | None = None
+    on_connection_error: Callable[[int, float], None] | None = None
 
 
 @dataclass(frozen=True)
