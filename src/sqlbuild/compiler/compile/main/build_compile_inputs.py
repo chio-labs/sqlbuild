@@ -32,6 +32,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioInput,
     LoadedMacro,
     MacroContext,
+    ModelInputBuildContext,
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompileSqlTestInput
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
@@ -62,6 +63,7 @@ def build_compile_inputs(
     defer_model_sql_validation: bool = False,
     python_functions_inherit_default_namespace: bool = True,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolved_connection: dict[str, object] | None = None,
 ) -> CompileProjectInputs:
     """Attach discovered metadata into the first compile input snapshot."""
 
@@ -101,12 +103,15 @@ def build_compile_inputs(
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
         discovered_inputs,
-        effective_vars=effective_vars,
-        effective_settings=effective_settings,
-        target_config=effective_target,
-        effective_target_name=effective_target_name,
-        run_id=resolved_run_id,
-        macro_context=macro_context,
+        context=ModelInputBuildContext(
+            effective_vars=effective_vars,
+            effective_settings=effective_settings,
+            target_config=effective_target,
+            effective_target_name=effective_target_name,
+            run_id=resolved_run_id,
+            macro_context=macro_context,
+            loaded_macros=loaded_macros,
+        ),
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
@@ -119,6 +124,7 @@ def build_compile_inputs(
         target_config=effective_target,
         adapter_name=macro_context.adapter_name,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         no_sql_validation=no_sql_validation,
         python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
     )
@@ -127,18 +133,21 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         effective_settings=effective_settings,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
@@ -156,6 +165,7 @@ def build_compile_inputs(
         source_inputs=source_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
+        loaded_macros=loaded_macros,
         generic_audit_definitions=generic_audit_definitions,
     )
     return CompileProjectInputs(
@@ -165,11 +175,15 @@ def build_compile_inputs(
         run_id=resolved_run_id,
         effective_target_name=effective_target_name,
         effective_target=effective_target,
-        effective_connection=build_effective_connection(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            target_config=effective_target,
-            effective_vars=effective_vars,
+        effective_connection=(
+            resolved_connection
+            if resolved_connection is not None
+            else build_effective_connection(
+                project_config=discovered_inputs.project_config,
+                local_config=discovered_inputs.local_config,
+                target_config=effective_target,
+                effective_vars=effective_vars,
+            )
         ),
         effective_settings=effective_settings,
         effective_vars=effective_vars,

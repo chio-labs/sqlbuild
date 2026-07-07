@@ -4,24 +4,29 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild.compiler.planner.models import GraphChangesOnlyPropagationResult, GraphNodeKey
+from sqlbuild.compiler.planner.models import (
+    GraphChangesOnlyPropagationInput,
+    GraphChangesOnlyPropagationResult,
+    GraphNodeKey,
+)
 
 
 def build_graph_changes_only_propagation(
     *,
-    upstream_deps: Mapping[GraphNodeKey, tuple[GraphNodeKey, ...]],
-    model_keys: frozenset[GraphNodeKey],
-    selected_model_keys: frozenset[GraphNodeKey],
-    current_model_keys: frozenset[GraphNodeKey],
-    run_model_keys: frozenset[GraphNodeKey],
-    version_mismatch_model_keys: frozenset[GraphNodeKey],
-    run_parent_keys: frozenset[GraphNodeKey] | None = None,
-    selected_parent_keys: frozenset[GraphNodeKey] | None = None,
-    identity_stale_model_keys: frozenset[GraphNodeKey] = frozenset(),
-    changed_seed_keys: frozenset[GraphNodeKey] = frozenset(),
-    changed_source_keys: frozenset[GraphNodeKey] = frozenset(),
-    blocked_source_keys: frozenset[GraphNodeKey] = frozenset(),
+    request: GraphChangesOnlyPropagationInput,
 ) -> GraphChangesOnlyPropagationResult:
+    upstream_deps: Mapping[GraphNodeKey, tuple[GraphNodeKey, ...]] = request.upstream_deps
+    model_keys: frozenset[GraphNodeKey] = request.model_keys
+    selected_model_keys: frozenset[GraphNodeKey] = request.selected_model_keys
+    current_model_keys: frozenset[GraphNodeKey] = request.current_model_keys
+    run_model_keys: frozenset[GraphNodeKey] = request.run_model_keys
+    version_mismatch_model_keys: frozenset[GraphNodeKey] = request.version_mismatch_model_keys
+    run_parent_keys: frozenset[GraphNodeKey] | None = request.run_parent_keys
+    selected_parent_keys: frozenset[GraphNodeKey] | None = request.selected_parent_keys
+    identity_stale_model_keys: frozenset[GraphNodeKey] = request.identity_stale_model_keys
+    changed_seed_keys: frozenset[GraphNodeKey] = request.changed_seed_keys
+    changed_source_keys: frozenset[GraphNodeKey] = request.changed_source_keys
+    blocked_source_keys: frozenset[GraphNodeKey] = request.blocked_source_keys
     blocked_model_keys: set[GraphNodeKey] = set()
     identity_stale_keys: set[GraphNodeKey] = set(identity_stale_model_keys & current_model_keys)
     source_changed_model_keys: set[GraphNodeKey] = set()

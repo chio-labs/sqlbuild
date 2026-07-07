@@ -29,7 +29,11 @@ from sqlbuild.executor.custom.models import (
     PrepareVersionContext,
 )
 from sqlbuild.executor.run.helpers.materializations.custom import execute_custom_entry
-from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    HookContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
 
 
 def insert_custom_hook_log(ctx: HookContext, phase: str) -> None:
@@ -122,22 +126,24 @@ def run_custom_entry(
     """Execute a custom materialization lifecycle with full control over parameters."""
 
     return execute_custom_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations=model_locations or {},
-        seed_locations={},
-        source_map={},
-        model_audits=model_audits,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations=model_locations or {},
+            seed_locations={},
+            source_map={},
+            model_audits=model_audits,
+            run_id="test_run",
+            query_change_tracking=True,
+            hook_functions=hook_functions,
+        ),
         declared_columns=(),
         materialize_fn=materialize_fn,
         prepare_version_fn=prepare_version_fn,
-        run_id="test_run",
-        query_change_tracking=True,
         target=target,
         effective_vars=effective_vars or {},
         existing_relation=existing_relation,
-        hook_functions=hook_functions,
     )
 
 
@@ -416,18 +422,21 @@ def run_scheduler_build(
     from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
     from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-    from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+    from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
     from sqlbuild.compiler.planner.models import PlanOutput
     from sqlbuild.executor.build.main.execute import execute_build_plan
-    from sqlbuild.executor.build.models import BuildExecutionResult
+    from sqlbuild.executor.build.models import (
+        BuildCustomizations,
+        BuildExecutionResult,
+        BuildRuntimeParams,
+    )
 
     config: dict[str, object] = {"database": str(db_path)}
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
         adapter=adapter,
-        no_sql_validation=True,
-        connection_config=config,
+        options=CompilePipelineOptions(no_sql_validation=True, connection_config=config),
     )
     plan: PlanOutput = pipeline_result.plan_output
 
@@ -439,11 +448,15 @@ def run_scheduler_build(
             connection_config=config,
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.STAGED,
-            run_id="test_scheduler",
-            query_change_tracking=True,
-            run_audits=False,
-            custom_materializations=custom_materializations,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.STAGED,
+                run_id="test_scheduler",
+                query_change_tracking=True,
+                run_audits=False,
+            ),
+            customizations=BuildCustomizations(
+                custom_materializations=custom_materializations,
+            ),
         )
         return result, connection
     except Exception:

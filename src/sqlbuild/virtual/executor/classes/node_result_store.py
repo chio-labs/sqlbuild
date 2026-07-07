@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.models import (
+    NodeResultEnvelope,
+    NodeResultQuery,
+    NodeResultRecord,
+)
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
@@ -94,14 +98,16 @@ class VirtualNodeResultStore:
             self.state_connection,
             schema=self.state_schema,
             virtual_environment_name=self.virtual_environment_name,
-            node_type=node_type,
-            node_name=node_name,
-            target_database=self.database,
-            target_schema=self.schema,
-            target_name=self.target_name,
-            statuses=(NodeResultStatus.SUCCESS.value,),
-            run_id=None,
-            limit=limit,
+            query=NodeResultQuery(
+                node_type=node_type,
+                node_name=node_name,
+                target_database=self.database,
+                target_schema=self.schema,
+                target_name=self.target_name,
+                statuses=(NodeResultStatus.SUCCESS.value,),
+                run_id=None,
+                limit=limit,
+            ),
         )
 
     def _read_one(
@@ -115,14 +121,16 @@ class VirtualNodeResultStore:
             self.state_connection,
             schema=self.state_schema,
             virtual_environment_name=self.virtual_environment_name,
-            node_type=node_type,
-            node_name=node_name,
-            target_database=self.database,
-            target_schema=self.schema,
-            target_name=self.target_name,
-            statuses=None if run_id is not None else (NodeResultStatus.SUCCESS.value,),
-            run_id=run_id,
-            limit=1,
+            query=NodeResultQuery(
+                node_type=node_type,
+                node_name=node_name,
+                target_database=self.database,
+                target_schema=self.schema,
+                target_name=self.target_name,
+                statuses=None if run_id is not None else (NodeResultStatus.SUCCESS.value,),
+                run_id=run_id,
+                limit=1,
+            ),
         )
         return results[0] if results else None
 

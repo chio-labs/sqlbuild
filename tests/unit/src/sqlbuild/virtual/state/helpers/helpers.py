@@ -3,7 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.models import (
+    NodeResultEnvelope,
+    NodeResultQuery,
+    NodeResultRecord,
+)
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
@@ -175,14 +179,7 @@ class FakeStateBackend(StateBackend):
         *,
         schema: str,
         virtual_environment_name: str,
-        node_type: str,
-        node_name: str,
-        target_database: str | None,
-        target_schema: str | None,
-        target_name: str | None,
-        statuses: tuple[str, ...] | None,
-        run_id: str | None,
-        limit: int,
+        query: NodeResultQuery,
     ) -> tuple[NodeResultEnvelope, ...]:
         return ()
 

@@ -15,7 +15,7 @@ from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.run.main.execute import execute_table_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
@@ -612,17 +612,19 @@ def test_given_hard_copy_reuse_relation_when_executing_table_then_materializes_f
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
         promotion_mode=test_case.promotion_mode,
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
@@ -674,17 +676,19 @@ def test_given_cheap_reuse_with_adapter_support_when_executing_table_then_materi
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
         promotion_mode=test_case.promotion_mode,
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
@@ -740,17 +744,19 @@ def test_given_cheap_reuse_without_adapter_support_when_executing_table_then_fai
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
         promotion_mode=test_case.promotion_mode,
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     assert result.status == test_case.expected_status
@@ -824,17 +830,19 @@ def test_given_invalid_reuse_origin_when_executing_table_then_fails_before_targe
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
         promotion_mode=TablePromotionMode.STAGED,
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     target_exists: bool = connection.execute(
@@ -896,17 +904,19 @@ def test_given_database_qualified_reuse_origin_when_executing_table_then_materia
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
         promotion_mode=test_case.promotion_mode,
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     rows: list[tuple[Any, ...]] = connection.execute(
@@ -969,17 +979,19 @@ def test_given_complete_reuse_with_origin_audit_proof_when_executing_table_then_
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(planned_audit,),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=True,
+        ),
         declared_columns=(),
         promotion_mode=TablePromotionMode.STAGED,
-        run_id="test_run",
-        query_change_tracking=True,
     )
 
     rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
@@ -1045,17 +1057,19 @@ def test_given_complete_reuse_without_origin_audit_proof_when_executing_table_th
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(planned_audit,),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=True,
+        ),
         declared_columns=(),
         promotion_mode=TablePromotionMode.STAGED,
-        run_id="test_run",
-        query_change_tracking=True,
     )
 
     target_exists: bool = connection.execute(
@@ -1128,17 +1142,19 @@ def test_given_complete_reuse_with_failed_origin_proof_when_executing_then_block
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(planned_audit,),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=True,
+        ),
         declared_columns=(),
         promotion_mode=TablePromotionMode.STAGED,
-        run_id="test_run",
-        query_change_tracking=True,
     )
 
     target_exists: bool = connection.execute(
@@ -1208,17 +1224,19 @@ def test_given_complete_reuse_with_changed_origin_proof_when_executing_then_bloc
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(planned_audit,),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=True,
+        ),
         declared_columns=(),
         promotion_mode=TablePromotionMode.STAGED,
-        run_id="test_run",
-        query_change_tracking=True,
     )
 
     target_exists: bool = connection.execute(
@@ -1280,17 +1298,19 @@ def test_given_complete_reuse_with_warn_audit_when_executing_table_then_warn_aud
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(planned_audit,),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=True,
+        ),
         declared_columns=(),
         promotion_mode=TablePromotionMode.STAGED,
-        run_id="test_run",
-        query_change_tracking=True,
     )
 
     rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()
@@ -1357,17 +1377,19 @@ def test_given_direct_complete_reuse_with_origin_proof_when_executing_then_reuse
     )
 
     result: ModelExecutionResult = execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(planned_audit,),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=True,
+        ),
         declared_columns=(),
         promotion_mode=TablePromotionMode.DIRECT,
-        run_id="test_run",
-        query_change_tracking=True,
     )
 
     rows: list[tuple[Any, ...]] = connection.execute("SELECT * FROM staging.orders").fetchall()

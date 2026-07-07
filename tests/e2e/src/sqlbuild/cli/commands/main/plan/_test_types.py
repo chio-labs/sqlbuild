@@ -84,6 +84,14 @@ class DirectFunctionSelectorE2ETestCase:
 
 
 @dataclass(frozen=True)
+class StandardModeVirtualFlagGuardE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_error_fragment: str
+    expected_exit_code: int = 1
+
+
+@dataclass(frozen=True)
 class VirtualPlanE2ETestCase:
     description: str
     seed_matching_refs: bool

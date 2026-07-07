@@ -39,7 +39,6 @@ from sqlbuild.compiler.compile.helpers.config.model_validation import (
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.helpers.render.macros import (
     expand_sql_macros,
-    load_project_macros,
 )
 from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     expand_authored_sql,
@@ -56,6 +55,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
     LoadedMacro,
     MacroContext,
+    ModelInputBuildContext,
 )
 from sqlbuild.compiler.compile.types import (
     CompileContextKey,
@@ -96,19 +96,20 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 def build_model_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     *,
-    effective_vars: dict[str, object],
-    effective_settings: SettingsConfig,
-    target_config: TargetConfig | None,
-    effective_target_name: str | None,
-    run_id: str,
-    macro_context: MacroContext,
+    context: ModelInputBuildContext,
     no_sql_validation: bool = False,
     defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    effective_vars: dict[str, object] = context.effective_vars
+    effective_settings: SettingsConfig = context.effective_settings
+    target_config: TargetConfig | None = context.target_config
+    effective_target_name: str | None = context.effective_target_name
+    run_id: str = context.run_id
+    macro_context: MacroContext = context.macro_context
+    loaded_macros: dict[str, LoadedMacro] = context.loaded_macros
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -160,13 +161,10 @@ def build_model_inputs(
             if isinstance(raw_placeholders, dict)
             else None
         )
-        sql_validation_enabled: bool = (
-            effective_settings.sql_analysis
-            and not no_sql_validation
-            and _is_sql_validation_enabled(
-                project_setting=effective_settings.sql_validation,
-                model_config=effective_config,
-            )
+        sql_validation_enabled: bool = _model_sql_validation_gate(
+            effective_settings=effective_settings,
+            no_sql_validation=no_sql_validation,
+            model_config=effective_config,
         )
         if sql_validation_enabled and not defer_model_sql_validation:
             validate_sql_syntax(
@@ -234,14 +232,7 @@ def build_model_inputs(
             logical_schema=effective_config.logical_schema,
             logical_database=effective_config.logical_database,
         )
-        if (
-            effective_settings.sql_analysis
-            and not no_sql_validation
-            and _is_sql_validation_enabled(
-                project_setting=effective_settings.sql_validation,
-                model_config=effective_config,
-            )
-        ):
+        if sql_validation_enabled:
             hook_name: str
             for hook_name in ("pre_hooks", "post_hooks"):
                 validate_hook_sql_syntax(
@@ -433,14 +424,8 @@ def build_model_config(
         effective_target_name=effective_target_name,
         run_id=run_id,
     )
-    model_resolved_values: dict[str, object] = resolve_model_context_templates(
+    model_resolved_values: dict[str, object] = _resolve_chained_model_context_templates(
         values=early_resolved_values,
-        model_name=model_name,
-        effective_target_name=effective_target_name,
-        run_id=run_id,
-    )
-    model_resolved_values = resolve_model_context_templates(
-        values=model_resolved_values,
         model_name=model_name,
         effective_target_name=effective_target_name,
         run_id=run_id,
@@ -451,7 +436,7 @@ def build_model_config(
     logical_database: str | None = (
         raw_logical_database if isinstance(raw_logical_database, str) else None
     )
-    apply_environment_database_schema_overrides(
+    model_resolved_values = apply_environment_database_schema_overrides(
         values=model_resolved_values,
         effective_vars=effective_vars,
         target_config=target_config,
@@ -797,13 +782,14 @@ def build_layered_model_values(
 
     values: dict[str, object] = project_defaults_to_mapping(defaults)
     if matched_path_default is not None:
-        _merge_with_tag_union(values, path_defaults[matched_path_default])
-    _merge_with_tag_union(values, model_header_values)
-    return values
+        values = _merged_with_tag_union(values, path_defaults[matched_path_default])
+    return _merged_with_tag_union(values, model_header_values)
 
 
-def _merge_with_tag_union(base: dict[str, object], overlay: dict[str, object]) -> None:
-    """Merge overlay into base, preserving special config merge semantics."""
+def _merged_with_tag_union(
+    base: dict[str, object], overlay: dict[str, object]
+) -> dict[str, object]:
+    """Merge overlay into a copy of base, preserving special config merge semantics."""
 
     overlay_tags: object | None = overlay.get("tags")
     base_tags: object | None = base.get("tags")
@@ -811,26 +797,28 @@ def _merge_with_tag_union(base: dict[str, object], overlay: dict[str, object]) -
     base_row_diff_exclude_columns: object | None = base.get("row_diff_exclude_columns")
     overlay_row_diff_tolerances: object | None = overlay.get("row_diff_tolerances")
     base_row_diff_tolerances: object | None = base.get("row_diff_tolerances")
-    base.update(overlay)
+    result: dict[str, object] = dict(base)
+    result.update(overlay)
     if overlay_tags is not None and base_tags is not None:
         merged: list[str] = list(_as_string_list(base_tags))
         tag: str
         for tag in _as_string_list(overlay_tags):
             if tag not in merged:
                 merged.append(tag)
-        base["tags"] = merged
+        result["tags"] = merged
     if overlay_row_diff_exclude_columns is not None and base_row_diff_exclude_columns is not None:
-        base["row_diff_exclude_columns"] = tuple(
+        result["row_diff_exclude_columns"] = tuple(
             _merge_string_sequence(
                 base_row_diff_exclude_columns,
                 overlay_row_diff_exclude_columns,
             )
         )
     if overlay_row_diff_tolerances is not None and base_row_diff_tolerances is not None:
-        base["row_diff_tolerances"] = _merge_row_diff_tolerances_mapping(
+        result["row_diff_tolerances"] = _merge_row_diff_tolerances_mapping(
             base_row_diff_tolerances,
             overlay_row_diff_tolerances,
         )
+    return result
 
 
 def _merge_string_sequence(base: object, overlay: object) -> list[str]:
@@ -1089,8 +1077,10 @@ def _merge_schema_tags(
 
     if not schema_entry.tags:
         return config
-    merged_values: dict[str, object] = dict(config.values)
-    _merge_with_tag_union(merged_values, {"tags": list(schema_entry.tags)})
+    merged_values: dict[str, object] = _merged_with_tag_union(
+        dict(config.values),
+        {"tags": list(schema_entry.tags)},
+    )
     return CompileModelConfig(
         values=merged_values,
         matched_path_default=config.matched_path_default,
@@ -1149,6 +1139,29 @@ def resolve_model_context_templates(
             preserve_context_tokens=False,
             preserve_unknown_context=True,
         ),
+    )
+
+
+def _resolve_chained_model_context_templates(
+    *,
+    values: dict[str, object],
+    model_name: str,
+    effective_target_name: str | None,
+    run_id: str,
+) -> dict[str, object]:
+    """Resolve twice so ${CTX:model.*} values may chain exactly one level without looping."""
+
+    first_pass_values: dict[str, object] = resolve_model_context_templates(
+        values=values,
+        model_name=model_name,
+        effective_target_name=effective_target_name,
+        run_id=run_id,
+    )
+    return resolve_model_context_templates(
+        values=first_pass_values,
+        model_name=model_name,
+        effective_target_name=effective_target_name,
+        run_id=run_id,
     )
 
 
@@ -1242,14 +1255,15 @@ def apply_environment_database_schema_overrides(
     effective_vars: dict[str, object],
     target_config: TargetConfig | None,
     model_context_values: dict[str, str | None],
-) -> None:
-    """Apply environment database/schema overrides using the logical config as CTX."""
+) -> dict[str, object]:
+    """Return values with environment database/schema overrides applied."""
 
     if target_config is None:
-        return
+        return dict(values)
 
+    overridden: dict[str, object] = dict(values)
     if target_config.database is not None and target_config.database != PRESERVE_TARGET_VALUE:
-        values["database"] = expand_template_data(
+        overridden["database"] = expand_template_data(
             target_config.database,
             variables=effective_vars,
             context_values=model_context_values,
@@ -1259,7 +1273,7 @@ def apply_environment_database_schema_overrides(
             preserve_unknown_context=False,
         )
     if target_config.schema is not None and target_config.schema != PRESERVE_TARGET_VALUE:
-        values["schema"] = expand_template_data(
+        overridden["schema"] = expand_template_data(
             target_config.schema,
             variables=effective_vars,
             context_values=model_context_values,
@@ -1268,6 +1282,7 @@ def apply_environment_database_schema_overrides(
             preserve_context_tokens=False,
             preserve_unknown_context=False,
         )
+    return overridden
 
 
 def resolve_run_id(*, selected_run_id: str | None) -> str:
@@ -1421,9 +1436,27 @@ def _bool_from_dict(values: dict[str, object], key: str) -> bool:
 
 
 def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:
-    """Resolve whether SQL validation is active for a model."""
+    """Apply the per-model MODEL(sql_validation) override to the project setting."""
 
     raw: object | None = model_config.values.get("sql_validation")
     if isinstance(raw, bool):
         return raw
     return project_setting
+
+
+def _model_sql_validation_gate(
+    *,
+    effective_settings: SettingsConfig,
+    no_sql_validation: bool,
+    model_config: CompileModelConfig,
+) -> bool:
+    """Gate validation on sql_analysis, --no-sql-validation, and project/model sql_validation."""
+
+    return (
+        effective_settings.sql_analysis
+        and not no_sql_validation
+        and _is_sql_validation_enabled(
+            project_setting=effective_settings.sql_validation,
+            model_config=model_config,
+        )
+    )

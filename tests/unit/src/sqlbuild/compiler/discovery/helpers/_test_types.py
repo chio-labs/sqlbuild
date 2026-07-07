@@ -197,7 +197,7 @@ class ModelOutputColumnLocationTestCase:
     description: str
     contents: str
     expected_locations: dict[str, tuple[Path, int, int, int | None, int | None]]
-    sql_analysis_enabled: bool = True
+    extract_implicit_alias_columns: bool = True
 
 
 @dataclass(frozen=True)

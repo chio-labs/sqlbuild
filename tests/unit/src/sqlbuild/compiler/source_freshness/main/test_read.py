@@ -11,6 +11,7 @@ from sqlbuild.compiler.source_freshness.main.write import write_source_freshness
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
+    SourceFreshnessRenderers,
     SourceFreshnessSet,
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
@@ -154,10 +155,12 @@ def test_given_index_renderer_when_writing_source_freshness_then_batches_inserts
                 observed_at=datetime(2026, 1, 15, 12, 15, 0),
             ),
         ),
-        render_qualified_name=render_qualified_name,
-        render_framework_type=adapter.render_framework_type,
-        render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
-        render_create_index_sqls=render_create_source_freshness_index_sqls,
+        renderers=SourceFreshnessRenderers(
+            render_qualified_name=render_qualified_name,
+            render_framework_type=adapter.render_framework_type,
+            render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+            render_create_index_sqls=render_create_source_freshness_index_sqls,
+        ),
     )
 
     assert len(execute.executed_sql) == test_case.expected_statement_count

@@ -44,7 +44,7 @@ def execute_audit(
             relation_overrides=relation_overrides,
         )
     )
-    assert_no_unresolved_sql_markers(
+    _ = assert_no_unresolved_sql_markers(
         sql=executed_sql,
         context=f"audit '{audit.name}' executable SQL",
     )

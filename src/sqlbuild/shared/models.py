@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from sqlbuild.adapter.shared.models import RelationInfo
@@ -318,3 +319,23 @@ class ParsedScenarioArtifactName:
     hash_prefix: str
     kind: str
     logical_name: str
+
+
+@dataclass(frozen=True)
+class ConnectionHooks:
+    """Progress and connection lifecycle callbacks for long-running operations."""
+
+    on_progress: Callable[[str], None] | None = None
+    on_connection_start: Callable[[int], None] | None = None
+    on_connection_complete: Callable[[int, float], None] | None = None
+    on_connection_error: Callable[[int, float], None] | None = None
+
+
+@dataclass(frozen=True)
+class CursorWindow:
+    """Resolved cursor bounds for one execution run."""
+
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None

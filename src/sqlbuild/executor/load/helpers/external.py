@@ -5,24 +5,22 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from datetime import datetime
-from pathlib import Path
-from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.load.models import (
     LoaderContext,
+    LoaderDestination,
     LoaderResult,
     LoaderSkipResult,
     LoadExecutionResult,
+    LoadRuntimeParams,
 )
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import (
-    ProviderContainer,
     _empty_provider_container,
     invoke_with_providers,
 )
@@ -36,27 +34,16 @@ def execute_external_source_load(
     loader_function: DiscoveredLoaderFunction,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
-    destination_relation: str,
-    destination_name: str,
-    run_id: str,
-    runtime_dir: Path = Path("target"),
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
-    start_cursor_ts: datetime | None,
-    end_cursor_ts: datetime | None,
-    start_cursor_int: int | None,
-    end_cursor_int: int | None,
+    destination: LoaderDestination,
+    runtime: LoadRuntimeParams,
     statement_recorder: StatementRecorder,
-    use_color: bool,
     resource_kind: ExecutionResourceKind,
     start: float,
     on_progress: Callable[[str], None] | None = None,
-    providers: ProviderContainer | None = None,
-    result_store: Any | None = None,
 ) -> LoadExecutionResult:
     """Run one external writer while SQLBuild holds no destination connection."""
 
+    destination_relation: str = destination.relation
     try:
         context: LoaderContext = LoaderContext(
             adapter=adapter,
@@ -65,28 +52,30 @@ def execute_external_source_load(
             destination=destination_relation,
             destination_database=source_entry.database,
             destination_schema=source_entry.schema,
-            destination_name=destination_name,
-            run_id=run_id,
-            runtime_dir=runtime_dir,
-            target=target,
-            vars=vars,
-            is_reload=is_reload,
-            use_color=use_color,
+            destination_name=destination.name,
+            run_id=runtime.run_id,
+            runtime_dir=runtime.runtime_dir,
+            target=runtime.target,
+            vars=runtime.vars,
+            is_reload=runtime.is_reload,
+            use_color=runtime.use_color,
             current_cursor_value=None,
             logger=logging.getLogger(f"sqlbuild.loader.{loader_function.name}"),
             statement_recorder=statement_recorder,
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
-            providers=providers if providers is not None else _empty_provider_container(),
-            result_store=result_store,
+            start_cursor_ts=runtime.start_cursor_ts,
+            end_cursor_ts=runtime.end_cursor_ts,
+            start_cursor_int=runtime.start_cursor_int,
+            end_cursor_int=runtime.end_cursor_int,
+            providers=(
+                runtime.providers if runtime.providers is not None else _empty_provider_container()
+            ),
+            result_store=runtime.result_store,
             on_progress=on_progress,
         )
         raw_rows: object = invoke_with_providers(
             function=loader_function.function,
             context=context,
-            providers=providers,
+            providers=runtime.providers,
         )
         if isinstance(raw_rows, LoaderSkipResult):
             return LoadExecutionResult(

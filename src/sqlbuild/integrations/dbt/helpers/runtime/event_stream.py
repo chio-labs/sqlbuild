@@ -100,21 +100,11 @@ def execute_dbt_json_event_stream(
         status_lock=status_lock,
         status_stop=status_stop,
     )
-    try:
-        process: subprocess.Popen[str] = subprocess.Popen(
-            argv,
-            cwd=cwd,
-            env=_build_dbt_json_env(target_path=target_path),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-    except OSError as error:
-        raise DbtInteropRuntimeError(
-            "failed to execute dbt",
-            help=str(error),
-        ) from error
+    process: subprocess.Popen[str] = _launch_dbt_process(
+        argv=argv,
+        cwd=cwd,
+        target_path=target_path,
+    )
 
     if process.stdout is not None:
         with process.stdout:
@@ -216,6 +206,29 @@ def execute_dbt_json_event_stream(
         status_thread.join(timeout=1)
     _close_status(status_box=status_box, status_lock=status_lock)
     return returncode, tuple(results)
+
+
+def _launch_dbt_process(
+    *,
+    argv: tuple[str, ...],
+    cwd: Path | None,
+    target_path: Path | None,
+) -> subprocess.Popen[str]:
+    try:
+        return subprocess.Popen(
+            argv,
+            cwd=cwd,
+            env=_build_dbt_json_env(target_path=target_path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+    except OSError as error:
+        raise DbtInteropRuntimeError(
+            "failed to execute dbt",
+            help=str(error),
+        ) from error
 
 
 def _start_dbt_status(*, stream: TextIO, use_color: bool) -> TransientStatusReporter | None:

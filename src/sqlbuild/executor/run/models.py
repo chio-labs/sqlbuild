@@ -8,11 +8,16 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import LifeCycleEvent, QueryResult, StatementRecorder
+from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorInputRelation, ModelPlanEntry
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.types import AuditGateReuseReason, HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
+from sqlbuild.spec.models.source import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -108,6 +113,14 @@ class ModelExecutionResult:
 
 
 @dataclass(frozen=True)
+class FinalAuditRun:
+    """Final-audit outcomes for one model before promotion."""
+
+    results: tuple[AuditExecutionResult, ...]
+    has_error: bool
+
+
+@dataclass(frozen=True)
 class AuditGateReuseDecision:
     """Conservative same-target audit gate proof reuse decision."""
 
@@ -115,3 +128,79 @@ class AuditGateReuseDecision:
     reason: AuditGateReuseReason
     reusable_binding_keys: tuple[str, ...] = ()
     missing_binding_keys: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ModelMaterializationContext:
+    """Shared runtime inputs for one model's materialization lifecycle."""
+
+    entry: ModelPlanEntry
+    adapter: BaseAdapter
+    connection: Any
+    model_locations: dict[str, CompiledRelationLocation]
+    seed_locations: dict[str, CompiledRelationLocation]
+    source_map: dict[str, SourceEntry]
+    model_audits: tuple[AuditPlanEntry, ...]
+    run_id: str
+    query_change_tracking: bool
+    hook_functions: tuple[DiscoveredHookFunction, ...] = ()
+    effective_target_name: str | None = None
+    effective_vars: Mapping[str, object] | None = None
+    providers: ProviderContainer | None = None
+    python_identity_recorder: PythonIdentityRecorder | None = None
+
+
+@dataclass(frozen=True)
+class RuntimeCursorSpec:
+    """Cursor configuration inputs for runtime-owned bound resolution."""
+
+    cursor_column: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    cursor_start: str | None
+    cursor_input_relations: tuple[CursorInputRelation, ...]
+
+
+@dataclass(frozen=True)
+class HookRunContext:
+    """Model-scoped runtime inputs shared by lifecycle hook execution."""
+
+    model_name: str | None = None
+    destination: CompiledRelationLocation | None = None
+    run_id: str = ""
+    target: str | None = None
+    effective_vars: Mapping[str, object] | None = None
+    statement_recorder: StatementRecorder | None = None
+    providers: ProviderContainer | None = None
+    python_identity_recorder: PythonIdentityRecorder | None = None
+
+
+@dataclass(frozen=True)
+class PostHookPhaseOutcome:
+    """Post-hook phase result: a skip request or an early failure result."""
+
+    skipped: bool = False
+    failure: ModelExecutionResult | None = None
+
+
+@dataclass(frozen=True)
+class TableTargets:
+    """Resolved destination and staging identifiers for one table model."""
+
+    target_qualified: str
+    target_database: str | None
+    target_schema: str | None
+    target_table: str
+    staging_qualified: str
+    staging_table: str
+
+
+@dataclass(frozen=True)
+class TableLifecycleState:
+    """In-flight accumulators and resolved SQL for one table lifecycle run."""
+
+    warnings: list[str]
+    audit_results: list[AuditExecutionResult]
+    statement_recorder: StatementRecorder
+    hook_results: list[HookExecutionResult]
+    resolved_sql: str

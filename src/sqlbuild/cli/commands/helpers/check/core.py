@@ -28,6 +28,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
+    PythonNodeRuntime,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
@@ -164,17 +165,19 @@ def run_check_read_side_dependencies(
     tracker: Any = create_read_side_python_execution_tracker(
         python_graph=python_graph,
         selected_python_names=read_side_names,
-        adapter=adapter,
-        connection_config=connection_config,
-        connection=connection,
-        run_id=pipeline_result.project.run_id,
-        target=pipeline_result.project.effective_target_name,
-        vars=pipeline_result.project.effective_vars,
-        is_reload=False,
-        default_database=adapter.default_database(),
-        default_schema=adapter.default_schema(),
-        relation_targets=relation_targets,
-        providers=providers,
+        runtime=PythonNodeRuntime(
+            adapter=adapter,
+            connection_config=connection_config,
+            connection=connection,
+            run_id=pipeline_result.project.run_id,
+            target=pipeline_result.project.effective_target_name,
+            vars=pipeline_result.project.effective_vars,
+            is_reload=False,
+            default_database=adapter.default_database(),
+            default_schema=adapter.default_schema(),
+            relation_targets=relation_targets,
+            providers=providers,
+        ),
     )
     sql_refs: tuple[SqlResourceRef, ...] = tuple(
         sorted(_read_side_sql_refs(read_side_names, python_graph), key=_sql_ref_sort_key)

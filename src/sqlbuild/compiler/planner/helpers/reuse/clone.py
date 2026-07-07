@@ -13,13 +13,11 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
-    build_upstream_deps,
+    build_execution_upstream_deps,
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.graph.selectors import resolve_selectors
 from sqlbuild.compiler.planner.helpers.output.plan_entry import (
-    build_path_index,
-    build_tag_index,
     gather_source_columns,
 )
 from sqlbuild.compiler.planner.helpers.output.strategy import get_materialization_type
@@ -31,6 +29,8 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
+    CursorOverridePair,
+    ModelPlanContext,
     ModelPlanEntry,
     PlanOutput,
     SeedPlanEntry,
@@ -42,6 +42,14 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.compiler.shared.helpers.lineage_graph import (
+    build_lineage_downstream_deps,
+    build_lineage_upstream_deps,
+)
+from sqlbuild.compiler.shared.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
+)
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -51,8 +59,8 @@ def build_clone_plan_output(
     select: tuple[str, ...],
     exclude: tuple[str, ...],
 ) -> PlanOutput:
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        project
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
     )
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream_deps
@@ -62,14 +70,17 @@ def build_clone_plan_output(
         **{source.name: source.key for source in project.sources},
         **{seed.name: seed.key for seed in project.seeds},
     }
+    lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_lineage_upstream_deps(project)
+    )
     selected_keys: frozenset[CompiledObjectKey] = resolve_selectors(
         select=select,
         exclude=exclude,
         all_keys=all_keys,
-        upstream=upstream_deps,
-        downstream=downstream_deps,
-        tag_index=build_tag_index(project),
-        path_index=build_path_index(project),
+        upstream=lineage_upstream,
+        downstream=build_lineage_downstream_deps(lineage_upstream),
+        tag_index=build_model_tag_index(project),
+        path_index=build_model_path_index(project),
     )
     return PlanOutput(
         execution_order=topologically_order_keys(upstream_deps),
@@ -111,16 +122,18 @@ def build_clone_model_entries(
                 adapter=adapter,
                 model=model,
                 snapshot=WarehouseSnapshot(),
-                model_locations=model_locations,
-                seed_locations=seed_locations,
-                function_locations=function_locations,
-                source_map=source_map,
-                source_warehouse_columns=source_warehouse_columns,
-                star_exclude_keyword=adapter.star_exclude_keyword(),
+                context=ModelPlanContext(
+                    model_locations=model_locations,
+                    models_by_name={},
+                    seed_locations=seed_locations,
+                    function_locations=function_locations,
+                    source_map=source_map,
+                    source_warehouse_columns=source_warehouse_columns,
+                    star_exclude_keyword=adapter.star_exclude_keyword(),
+                ),
                 backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
                 full_refresh=False,
-                start_cursor_override=None,
-                end_cursor_override=None,
+                cursor_overrides=CursorOverridePair(),
             )
         entries_by_key[model.key] = ModelPlanEntry(
             key=model.key,

@@ -34,7 +34,11 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run.helpers.materializations.microbatch import execute_microbatch_entry
-from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    HookContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
@@ -261,26 +265,28 @@ def _execute_test(
     }
 
     return execute_microbatch_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations=model_locations,
-        seed_locations={},
-        source_map={},
-        model_audits=model_audits,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations=model_locations,
+            seed_locations={},
+            source_map={},
+            model_audits=model_audits,
+            run_id="test_run",
+            query_change_tracking=(
+                test_case.query_change_tracking
+                if isinstance(test_case, MicrobatchSuccessTestCase)
+                else True
+            ),
+            hook_functions=tuple(
+                hook_function
+                for hook_function in getattr(test_case, "hook_functions", ())
+                if isinstance(hook_function, DiscoveredHookFunction)
+            ),
+        ),
         declared_columns=(),
-        run_id="test_run",
-        query_change_tracking=(
-            test_case.query_change_tracking
-            if isinstance(test_case, MicrobatchSuccessTestCase)
-            else True
-        ),
         is_full_refresh=test_case.is_full_refresh,
-        hook_functions=tuple(
-            hook_function
-            for hook_function in getattr(test_case, "hook_functions", ())
-            if isinstance(hook_function, DiscoveredHookFunction)
-        ),
     )
 
 

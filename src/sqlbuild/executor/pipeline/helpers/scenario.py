@@ -20,8 +20,8 @@ from sqlbuild.executor.scenario.main.local import execute_local_scenario_load_on
 from sqlbuild.executor.scenario.main.run import execute_scenario_run
 from sqlbuild.executor.scenario.main.snapshots import classify_scenario_snapshot_state
 from sqlbuild.executor.scenario.models import (
+    ScenarioCaptureSettings,
     ScenarioRunResult,
-    ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotStateResult,
 )
@@ -35,6 +35,7 @@ from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
 from sqlbuild.shared.main.error_code import error_code
 from sqlbuild.shared.main.error_help import error_help
 from sqlbuild.shared.main.error_message import error_message
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
@@ -60,9 +61,7 @@ def run_scenario_test_pipeline(
     adapter: BaseAdapter,
     project_name: str,
     retain: bool,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    connection_hooks: ConnectionHooks | None = None,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
         [CompiledSqlScenario, ScenarioExecutionPlan | None, ScenarioRunResult], None
@@ -71,17 +70,18 @@ def run_scenario_test_pipeline(
 ) -> tuple[ScenarioRunResult, ...]:
     """Execute selected scenarios from a compiled project."""
 
-    if on_connection_start is not None:
-        on_connection_start(1)
+    hooks: ConnectionHooks = connection_hooks if connection_hooks is not None else ConnectionHooks()
+    if hooks.on_connection_start is not None:
+        hooks.on_connection_start(1)
     start: float = time.monotonic()
     try:
         connection: Any = adapter.connect(connection_config)
     except Exception:
-        if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - start)
+        if hooks.on_connection_error is not None:
+            hooks.on_connection_error(1, time.monotonic() - start)
         raise
-    if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - start)
+    if hooks.on_connection_complete is not None:
+        hooks.on_connection_complete(1, time.monotonic() - start)
     try:
         results: list[ScenarioRunResult] = []
         scenario: CompiledSqlScenario
@@ -183,15 +183,8 @@ def run_scenario_capture_pipeline(
     connection_config: dict[str, object],
     adapter: BaseAdapter,
     project_name: str,
-    captured_at: str,
-    capture_adapter: str,
-    capture_dialect: str,
-    sqlbuild_version: str,
-    retain: bool,
-    capture_limits: ScenarioSnapshotCaptureLimits | None = None,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    settings: ScenarioCaptureSettings,
+    connection_hooks: ConnectionHooks | None = None,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
         [CompiledSqlScenario, ScenarioExecutionPlan | None, ScenarioSnapshotCaptureRunResult], None
@@ -200,17 +193,18 @@ def run_scenario_capture_pipeline(
 ) -> tuple[ScenarioSnapshotCaptureRunResult, ...]:
     """Capture selected scenario inputs into durable local snapshot files."""
 
-    if on_connection_start is not None:
-        on_connection_start(1)
+    hooks: ConnectionHooks = connection_hooks if connection_hooks is not None else ConnectionHooks()
+    if hooks.on_connection_start is not None:
+        hooks.on_connection_start(1)
     start: float = time.monotonic()
     try:
         connection: Any = adapter.connect(connection_config)
     except Exception:
-        if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - start)
+        if hooks.on_connection_error is not None:
+            hooks.on_connection_error(1, time.monotonic() - start)
         raise
-    if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - start)
+    if hooks.on_connection_complete is not None:
+        hooks.on_connection_complete(1, time.monotonic() - start)
     try:
         results: list[ScenarioSnapshotCaptureRunResult] = []
         scenario: CompiledSqlScenario
@@ -230,22 +224,17 @@ def run_scenario_capture_pipeline(
                     scenario_plan=scenario_plan,
                     adapter=adapter,
                     connection=connection,
-                    captured_at=captured_at,
-                    capture_adapter=capture_adapter,
-                    capture_dialect=capture_dialect,
-                    sqlbuild_version=sqlbuild_version,
-                    retain=retain,
+                    settings=settings,
                     local_type_overrides=scenario_local_type_overrides_for_dialect(
                         scenario_config=pipeline_result.project.scenario,
                         sql_analysis_dialect=adapter.sql_analysis_dialect(),
                     ),
-                    limits=capture_limits,
                 )
             except Exception as exc:
                 result = ScenarioSnapshotCaptureRunResult(
                     scenario_name=scenario.name,
                     status=ExecutionStatus.FAILED,
-                    retained=retain,
+                    retained=settings.retain,
                     error_code=error_code(exc, fallback_code=SCENARIO_EXEC_INTERNAL),
                     error_help=_scenario_failure_help(exc),
                     error_message=error_message(exc),

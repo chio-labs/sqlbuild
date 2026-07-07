@@ -25,7 +25,11 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run.helpers.materializations.view import execute_view_entry
-from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    HookContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.view._test_types import (
     ViewFailureTestCase,
@@ -224,21 +228,25 @@ def _execute_view_test(
     }
 
     return execute_view_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations=model_locations,
-        seed_locations={},
-        source_map={},
-        model_audits=model_audits,
-        run_id="test_run",
-        query_change_tracking=(
-            test_case.query_change_tracking if isinstance(test_case, ViewSuccessTestCase) else True
-        ),
-        hook_functions=tuple(
-            hook_function
-            for hook_function in getattr(test_case, "hook_functions", ())
-            if isinstance(hook_function, DiscoveredHookFunction)
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations=model_locations,
+            seed_locations={},
+            source_map={},
+            model_audits=model_audits,
+            run_id="test_run",
+            query_change_tracking=(
+                test_case.query_change_tracking
+                if isinstance(test_case, ViewSuccessTestCase)
+                else True
+            ),
+            hook_functions=tuple(
+                hook_function
+                for hook_function in getattr(test_case, "hook_functions", ())
+                if isinstance(hook_function, DiscoveredHookFunction)
+            ),
         ),
     )
 

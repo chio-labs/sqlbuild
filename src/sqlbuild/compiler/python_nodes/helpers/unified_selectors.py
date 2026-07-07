@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.build_resources import expand_build_resource_selection
 from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
@@ -399,8 +400,7 @@ def _resolve_path(
     if root in {"tasks", "assets", "checks", "loaders"}:
         return _resolve_python(raw=raw, python_graph=python_graph)
     raise PlannerInputError(
-        "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
-        "'checks/', or 'loaders/'",
+        PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
         code="S012",
     )
 

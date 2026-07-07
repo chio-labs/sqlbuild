@@ -36,7 +36,6 @@ def try_resolve_test_model_sql_with_sql_analysis(
     function_locations: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
-    reachable_mocks: set[str],
     file_label: str,
 ) -> SqlAnalysisResolvedTestSql | None:
     """Return Polyglot-backed readable test SQL or None on import/parse failure."""
@@ -44,6 +43,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
         return None
+    reachable_mocks: set[str] = set()
 
     try:
         parsed: Any = polyglot_module.parse_one(query_sql, dialect="generic")
@@ -57,21 +57,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
 
     parsed_dict: dict[str, Any] = parsed.to_dict()
     generated_ctes: OrderedDict[str, str] = OrderedDict()
-    generated_names: set[str] = set()
-
-    root_select: dict[str, Any] | None = _root_select(parsed_dict)
-    existing_with: dict[str, Any] | None = (
-        root_select.get("with") if root_select is not None else None
-    )
-    if isinstance(existing_with, dict):
-        cte: dict[str, Any]
-        for cte in existing_with.get("ctes", ()):
-            alias: Any | None = cte.get("alias")
-            if not isinstance(alias, dict):
-                continue
-            alias_name: Any | None = alias.get("name")
-            if alias_name is not None:
-                generated_names.add(str(alias_name))
+    generated_names: set[str] = _collect_existing_cte_names(parsed_dict)
 
     def _ensure_available(generated_name: str, referenced_name: str, referenced_kind: str) -> None:
         if generated_name not in generated_names:
@@ -175,6 +161,23 @@ def try_resolve_test_model_sql_with_sql_analysis(
     if outer_sql is None:
         return None
 
+    return _assemble_resolved_test_sql(
+        polyglot_module=polyglot_module,
+        parsed_dict=parsed_dict,
+        generated_ctes=generated_ctes,
+        outer_sql=outer_sql,
+        reachable_mocks=reachable_mocks,
+    )
+
+
+def _assemble_resolved_test_sql(
+    *,
+    polyglot_module: Any,
+    parsed_dict: dict[str, Any],
+    generated_ctes: OrderedDict[str, str],
+    outer_sql: str,
+    reachable_mocks: set[str],
+) -> SqlAnalysisResolvedTestSql | None:
     cte_parts: list[str] = [f"{name} AS ({sql})" for name, sql in generated_ctes.items()]
     transformed_select: dict[str, Any] | None = _root_select(parsed_dict)
     transformed_with: dict[str, Any] | None = (
@@ -200,12 +203,32 @@ def try_resolve_test_model_sql_with_sql_analysis(
             resolved_sql=cte_body_sql,
             cte_body_sql=cte_body_sql,
             generated_ctes=generated_ctes,
+            reachable_mock_names=frozenset(reachable_mocks),
         )
     return SqlAnalysisResolvedTestSql(
         resolved_sql=f"WITH {', '.join(cte_parts)} {outer_sql}",
         cte_body_sql=cte_body_sql,
         generated_ctes=generated_ctes,
+        reachable_mock_names=frozenset(reachable_mocks),
     )
+
+
+def _collect_existing_cte_names(parsed_dict: dict[str, Any]) -> set[str]:
+    generated_names: set[str] = set()
+    root_select: dict[str, Any] | None = _root_select(parsed_dict)
+    existing_with: dict[str, Any] | None = (
+        root_select.get("with") if root_select is not None else None
+    )
+    if isinstance(existing_with, dict):
+        cte: dict[str, Any]
+        for cte in existing_with.get("ctes", ()):
+            alias: Any | None = cte.get("alias")
+            if not isinstance(alias, dict):
+                continue
+            alias_name: Any | None = alias.get("name")
+            if alias_name is not None:
+                generated_names.add(str(alias_name))
+    return generated_names
 
 
 def _root_select(parsed_dict: dict[str, Any]) -> dict[str, Any] | None:

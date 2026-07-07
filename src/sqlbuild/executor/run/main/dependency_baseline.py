@@ -75,7 +75,7 @@ def _execute_dependency_baseline_entry(
             statement_recorder=statement_recorder,
         )
         if entry.fingerprint_version_hash is None:
-            create_relation_from_reuse_origin(
+            _ = create_relation_from_reuse_origin(
                 adapter=adapter,
                 connection=connection,
                 origin_relation=entry.relation_reuse.origin.qualified_name
@@ -87,7 +87,7 @@ def _execute_dependency_baseline_entry(
                 reuse_from_target_name=entry.relation_reuse.reuse_from_target_name,
             )
         else:
-            create_relation_from_reuse_plan(
+            _ = create_relation_from_reuse_plan(
                 adapter=adapter,
                 connection=connection,
                 model_name=entry.name,

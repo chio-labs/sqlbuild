@@ -9,6 +9,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.executor.run.models import RuntimeCursorSpec
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
     CursorGrain.SECOND: 0,
@@ -36,17 +37,14 @@ def resolve_runtime_cursor_bounds(
     target_database: str | None,
     target_schema: str | None,
     target_name: str,
-    cursor_column: str,
-    cursor_type: str | None,
-    cursor_grain: str | None,
-    cursor_start: str | None,
-    cursor_input_relations: tuple[CursorInputRelation, ...],
+    spec: RuntimeCursorSpec,
 ) -> CursorBounds | None:
     """Resolve concrete runtime cursor bounds from target and upstream relations."""
 
+    cursor_type: str | None = spec.cursor_type
     upstream_parts: list[str] = []
     cursor_input: CursorInputRelation
-    for cursor_input in cursor_input_relations:
+    for cursor_input in spec.cursor_input_relations:
         upstream_parts.append(
             f"SELECT MIN({cursor_input.cursor_column}) AS _min, "
             f"MAX({cursor_input.cursor_column}) AS _max FROM {cursor_input.relation}"
@@ -61,7 +59,7 @@ def resolve_runtime_cursor_bounds(
         target_database=target_database,
         target_schema=target_schema,
         target_name=target_name,
-        cursor_column=cursor_column,
+        cursor_column=spec.cursor_column,
     )
 
     derived_alias: str = " AS __cursor_bounds" if adapter.requires_derived_table_aliases() else ""
@@ -77,8 +75,8 @@ def resolve_runtime_cursor_bounds(
 
     effective_grain: str | None = resolve_effective_timestamp_grain(
         cursor_type=cursor_type,
-        downstream_grain=cursor_grain,
-        cursor_input_relations=cursor_input_relations,
+        downstream_grain=spec.cursor_grain,
+        cursor_input_relations=spec.cursor_input_relations,
     )
     if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
         start_raw: object | None = target_max_raw if target_max_raw is not None else row[0]
@@ -104,7 +102,7 @@ def resolve_runtime_cursor_bounds(
         return None
     start = _apply_cursor_start_floor(
         current_start=start,
-        cursor_start=cursor_start,
+        cursor_start=spec.cursor_start,
         cursor_type=cursor_type,
     )
     return CursorBounds(start=start, end=end)

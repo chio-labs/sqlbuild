@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands.main.commands.playground import run_playground
 from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
 from sqlbuild.integrations.rivers.helpers.assets import build_asset_defs
@@ -165,7 +166,14 @@ def test_given_generated_rivers_playground_when_materializing_assets_then_build_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     playground_name: str = "rivers_waffle_shop"
-    assert run_playground(tmp_path, playground_name, template="rivers") == 0
+    assert (
+        run_playground(
+            PlaygroundCommandRequest(
+                project_dir=tmp_path, target_path=playground_name, template="rivers"
+            )
+        )
+        == 0
+    )
     project_dir: Path = tmp_path / playground_name
     sqb_bin_dir: Path = REPO_ROOT / ".venv" / "bin"
     monkeypatch.setenv("RIVERS_DEPLOYMENT", "dev")

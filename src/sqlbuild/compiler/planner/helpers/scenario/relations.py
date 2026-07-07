@@ -30,7 +30,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph.core import (
-    build_upstream_deps,
+    build_execution_upstream_deps,
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.identity.functions import (
@@ -40,7 +40,9 @@ from sqlbuild.compiler.planner.helpers.output.plan_entry import extract_seed_col
 from sqlbuild.compiler.planner.helpers.resolve.refs import build_function_locations
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner.models import (
+    CursorOverridePair,
     FunctionPlanEntry,
+    ModelPlanContext,
     ModelPlanEntry,
     PlanWarning,
     ScenarioArtifactIdentity,
@@ -285,8 +287,8 @@ def build_scenario_execution_plan(
         project.functions
     )
     scenario_model_names: frozenset[str] = frozenset(graph_plan.model_names)
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        project
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
     )
     ordered_model_keys: tuple[CompiledObjectKey, ...] = tuple(
         key
@@ -338,18 +340,19 @@ def build_scenario_execution_plan(
             model=replace(model, destination=scenario_target, query_sql=scenario_query_sql),
             snapshot=effective_snapshot,
             adapter=adapter,
-            model_locations=relation_plan.model_locations,
-            models_by_name=models_by_name,
-            seed_locations=relation_plan.seed_locations,
-            function_locations=function_locations,
-            source_map=relation_plan.source_map,
-            source_warehouse_columns=effective_source_warehouse_columns,
-            star_exclude_keyword=adapter.star_exclude_keyword(),
+            context=ModelPlanContext(
+                model_locations=relation_plan.model_locations,
+                models_by_name=models_by_name,
+                seed_locations=relation_plan.seed_locations,
+                function_locations=function_locations,
+                source_map=relation_plan.source_map,
+                source_warehouse_columns=effective_source_warehouse_columns,
+                star_exclude_keyword=adapter.star_exclude_keyword(),
+            ),
             sql_analysis_enabled=sql_analysis_enabled,
             query_change_tracking=False,
             full_refresh=True,
-            start_cursor_override=None,
-            end_cursor_override=None,
+            cursor_overrides=CursorOverridePair(),
         )
         model_entries.append(entry)
         warnings.extend(model_warnings)
@@ -804,118 +807,81 @@ def _replace_relation_markers_in_polyglot_dict(
     polyglot_module: Any,
     sql_analysis_dialect: str | None,
     target_for_marker: Any,
-    relation_cache: dict[str, dict[str, Any] | None] | None = None,
 ) -> bool:
-    if relation_cache is None:
-        relation_cache = {}
-    changed: bool = False
-    if isinstance(node, dict):
-        from_clause: Any | None = node.get("from")
-        if isinstance(from_clause, dict):
-            expressions: Any = from_clause.get("expressions")
-            if isinstance(expressions, list):
-                for index, expression in enumerate(expressions):
-                    replacement: dict[str, Any] | None = _replacement_relation_expression(
-                        expression,
-                        polyglot_module=polyglot_module,
-                        sql_analysis_dialect=sql_analysis_dialect,
-                        target_for_marker=target_for_marker,
-                        relation_cache=relation_cache,
-                    )
-                    if replacement is not None:
-                        expressions[index] = replacement
-                        changed = True
-        joins: Any | None = node.get("joins")
-        if isinstance(joins, list):
-            join: Any
-            for join in joins:
-                if not isinstance(join, dict):
-                    continue
-                replacement = _replacement_relation_expression(
-                    join.get("this"),
-                    polyglot_module=polyglot_module,
-                    sql_analysis_dialect=sql_analysis_dialect,
-                    target_for_marker=target_for_marker,
-                    relation_cache=relation_cache,
-                )
-                if replacement is not None:
-                    join["this"] = replacement
-                    changed = True
-        value: Any
-        for value in node.values():
-            if isinstance(value, dict | list):
-                changed = (
-                    _replace_relation_markers_in_polyglot_dict(
-                        value,
-                        polyglot_module=polyglot_module,
-                        sql_analysis_dialect=sql_analysis_dialect,
-                        target_for_marker=target_for_marker,
-                        relation_cache=relation_cache,
-                    )
-                    or changed
-                )
-    elif isinstance(node, list):
-        item: Any
-        for item in node:
-            if isinstance(item, dict | list):
-                changed = (
-                    _replace_relation_markers_in_polyglot_dict(
-                        item,
-                        polyglot_module=polyglot_module,
-                        sql_analysis_dialect=sql_analysis_dialect,
-                        target_for_marker=target_for_marker,
-                        relation_cache=relation_cache,
-                    )
-                    or changed
-                )
-    return changed
+    """Rewrite reference-marker relations in a parsed polyglot dict in place."""
 
+    relation_cache: dict[str, dict[str, Any] | None] = {}
 
-def _replacement_relation_expression(
-    expression: Any,
-    *,
-    polyglot_module: Any,
-    sql_analysis_dialect: str | None,
-    target_for_marker: Any,
-    relation_cache: dict[str, dict[str, Any] | None],
-) -> dict[str, Any] | None:
-    if not isinstance(expression, dict):
-        return None
-    alias_payload: Any | None = expression.get("alias")
-    if isinstance(alias_payload, dict) and "this" in alias_payload:
-        inner_replacement: dict[str, Any] | None = _replacement_relation_expression(
-            alias_payload.get("this"),
-            polyglot_module=polyglot_module,
-            sql_analysis_dialect=sql_analysis_dialect,
-            target_for_marker=target_for_marker,
-            relation_cache=relation_cache,
-        )
-        if inner_replacement is None:
+    def _cached_relation(target_name: str) -> dict[str, Any] | None:
+        if target_name not in relation_cache:
+            relation_cache[target_name] = _polyglot_relation_dict(
+                target_name=target_name,
+                polyglot_module=polyglot_module,
+                sql_analysis_dialect=sql_analysis_dialect,
+            )
+        return relation_cache[target_name]
+
+    def _replacement(expression: Any) -> dict[str, Any] | None:
+        if not isinstance(expression, dict):
             return None
-        alias_payload["this"] = inner_replacement
-        return expression
+        alias_payload: Any | None = expression.get("alias")
+        if isinstance(alias_payload, dict) and "this" in alias_payload:
+            inner_replacement: dict[str, Any] | None = _replacement(alias_payload.get("this"))
+            if inner_replacement is None:
+                return None
+            alias_payload["this"] = inner_replacement
+            return expression
 
-    function_payload: Any | None = expression.get("function")
-    if not isinstance(function_payload, dict):
-        return None
-    function_name: str = str(function_payload.get("name", "")).lower()
-    referenced_name: str | None = _polyglot_marker_reference_name(
-        function_name=function_name,
-        function_payload=function_payload,
-    )
-    if referenced_name is None:
-        return None
-    target_name: str | None = target_for_marker(function_name, referenced_name)
-    if target_name is None:
-        return None
-    if target_name not in relation_cache:
-        relation_cache[target_name] = _polyglot_relation_dict(
-            target_name=target_name,
-            polyglot_module=polyglot_module,
-            sql_analysis_dialect=sql_analysis_dialect,
+        function_payload: Any | None = expression.get("function")
+        if not isinstance(function_payload, dict):
+            return None
+        function_name: str = str(function_payload.get("name", "")).lower()
+        referenced_name: str | None = _polyglot_marker_reference_name(
+            function_name=function_name,
+            function_payload=function_payload,
         )
-    relation: dict[str, Any] | None = relation_cache[target_name]
-    return None if relation is None else deepcopy(relation)
+        if referenced_name is None:
+            return None
+        target_name: str | None = target_for_marker(function_name, referenced_name)
+        if target_name is None:
+            return None
+        relation: dict[str, Any] | None = _cached_relation(target_name)
+        return None if relation is None else deepcopy(relation)
+
+    def _walk(walk_node: Any) -> bool:
+        changed: bool = False
+        if isinstance(walk_node, dict):
+            from_clause: Any | None = walk_node.get("from")
+            if isinstance(from_clause, dict):
+                expressions: Any = from_clause.get("expressions")
+                if isinstance(expressions, list):
+                    for index, expression in enumerate(expressions):
+                        replacement: dict[str, Any] | None = _replacement(expression)
+                        if replacement is not None:
+                            expressions[index] = replacement
+                            changed = True
+            joins: Any | None = walk_node.get("joins")
+            if isinstance(joins, list):
+                join: Any
+                for join in joins:
+                    if not isinstance(join, dict):
+                        continue
+                    replacement = _replacement(join.get("this"))
+                    if replacement is not None:
+                        join["this"] = replacement
+                        changed = True
+            value: Any
+            for value in walk_node.values():
+                if isinstance(value, dict | list):
+                    changed = _walk(value) or changed
+        elif isinstance(walk_node, list):
+            item: Any
+            for item in walk_node:
+                if isinstance(item, dict | list):
+                    changed = _walk(item) or changed
+        return changed
+
+    return _walk(node)
 
 
 def _polyglot_marker_reference_name(

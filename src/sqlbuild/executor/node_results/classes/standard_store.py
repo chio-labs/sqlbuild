@@ -8,7 +8,11 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.executor.node_results.main.read import read_node_results
 from sqlbuild.executor.node_results.main.write import write_node_result_record
-from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.models import (
+    NodeResultEnvelope,
+    NodeResultQuery,
+    NodeResultRecord,
+)
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -94,14 +98,16 @@ class StandardNodeResultStore:
             relation_exists=self.adapter.relation_exists,
             database=self.database,
             schema=self.schema,
-            node_type=node_type,
-            node_name=node_name,
-            target_database=self.database,
-            target_schema=self.schema,
-            target_name=None,
-            statuses=(NodeResultStatus.SUCCESS.value,),
-            run_id=None,
-            limit=limit,
+            query=NodeResultQuery(
+                node_type=node_type,
+                node_name=node_name,
+                target_database=self.database,
+                target_schema=self.schema,
+                target_name=None,
+                statuses=(NodeResultStatus.SUCCESS.value,),
+                run_id=None,
+                limit=limit,
+            ),
             render_qualified_name=self.adapter.render_qualified_name,
         )
 
@@ -120,14 +126,16 @@ class StandardNodeResultStore:
             relation_exists=self.adapter.relation_exists,
             database=self.database,
             schema=self.schema,
-            node_type=node_type,
-            node_name=node_name,
-            target_database=self.database,
-            target_schema=self.schema,
-            target_name=None,
-            statuses=None if run_id is not None else (NodeResultStatus.SUCCESS.value,),
-            run_id=run_id,
-            limit=1,
+            query=NodeResultQuery(
+                node_type=node_type,
+                node_name=node_name,
+                target_database=self.database,
+                target_schema=self.schema,
+                target_name=None,
+                statuses=None if run_id is not None else (NodeResultStatus.SUCCESS.value,),
+                run_id=run_id,
+                limit=1,
+            ),
             render_qualified_name=self.adapter.render_qualified_name,
         )
         return results[0] if results else None

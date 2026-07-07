@@ -10,10 +10,13 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildExecutionResult,
+    BuildRuntimeParams,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.build._test_types import (
     BuildExecutionTestCase,
@@ -37,7 +40,7 @@ def run_build_for_project(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
         adapter=adapter,
-        no_sql_validation=True,
+        options=CompilePipelineOptions(no_sql_validation=True),
     )
     plan: PlanOutput = pipeline_result.plan_output
 
@@ -54,14 +57,16 @@ def run_build_for_project(
         connection_config={"database": str(project_dir / "test.duckdb")},
         connections=(connection,),
         scheduler_connection=connection,
-        promotion_mode=promotion_mode,
-        run_id="test_run",
-        query_change_tracking=test_case.query_change_tracking,
-        snapshots=discovered.project_config.snapshots,
-        allow_snapshot_schema_change=test_case.allow_snapshot_schema_change,
-        run_audits=test_case.run_audits,
-        run_tests=test_case.run_tests,
-        fail_fast=test_case.fail_fast,
+        runtime=BuildRuntimeParams(
+            promotion_mode=promotion_mode,
+            run_id="test_run",
+            query_change_tracking=test_case.query_change_tracking,
+            snapshots=discovered.project_config.snapshots,
+            allow_snapshot_schema_change=test_case.allow_snapshot_schema_change,
+            run_audits=test_case.run_audits,
+            run_tests=test_case.run_tests,
+            fail_fast=test_case.fail_fast,
+        ),
     )
 
 

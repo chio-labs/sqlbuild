@@ -89,6 +89,19 @@ class MacroContext:
 
 
 @dataclass(frozen=True)
+class ModelInputBuildContext:
+    """Run-constant config and macros for building model compile inputs."""
+
+    effective_vars: dict[str, object]
+    effective_settings: SettingsConfig
+    target_config: TargetConfig | None
+    effective_target_name: str | None
+    run_id: str
+    macro_context: MacroContext
+    loaded_macros: dict[str, LoadedMacro]
+
+
+@dataclass(frozen=True)
 class CompileSqlReference:
     """One logical SQL reference discovered from compiled SQL text."""
 
@@ -120,6 +133,16 @@ class CompiledLineageColumnFact:
     upstream_columns: tuple[CompiledLineageSourceFact, ...] = field(default_factory=tuple)
     transform_kind: ColumnTransformKind = ColumnTransformKind.UNKNOWN
     confidence: ColumnLineageConfidence = ColumnLineageConfidence.UNKNOWN
+
+
+@dataclass(frozen=True)
+class PolyglotAnalysisResult:
+    """Outcome of one Polyglot column and lineage analysis pass."""
+
+    analysis_succeeded: bool
+    columns: tuple[InferredColumn, ...] | None = None
+    lineage_columns: tuple[CompiledLineageColumnFact, ...] = field(default_factory=tuple)
+    has_star: bool = False
 
 
 @dataclass(frozen=True)

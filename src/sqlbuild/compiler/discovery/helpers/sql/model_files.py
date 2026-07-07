@@ -105,7 +105,7 @@ def model_header_column_locations(
 
 
 def model_output_column_locations(
-    *, contents: str, relative_path: Path, sql_analysis_enabled: bool = True
+    *, contents: str, relative_path: Path, extract_implicit_alias_columns: bool = True
 ) -> dict[str, SourceLocation]:
     """Return authored locations for simple SELECT output expressions."""
 
@@ -122,7 +122,7 @@ def model_output_column_locations(
         sql_start=sql_start,
         relative_path=relative_path,
         projection_ranges=projection_ranges,
-        sql_analysis_enabled=sql_analysis_enabled,
+        extract_implicit_alias_columns=extract_implicit_alias_columns,
         line_starts=_line_starts(contents),
     )
 
@@ -197,7 +197,7 @@ def _scanner_output_column_locations(
     sql_start: int,
     relative_path: Path,
     projection_ranges: tuple[tuple[int, int], ...],
-    sql_analysis_enabled: bool,
+    extract_implicit_alias_columns: bool,
     line_starts: tuple[int, ...],
 ) -> dict[str, SourceLocation]:
     locations: dict[str, SourceLocation] = {}
@@ -206,7 +206,7 @@ def _scanner_output_column_locations(
     for item_start, item_end in projection_ranges:
         output_name: str | None = _select_item_output_name(
             contents[sql_start + item_start : sql_start + item_end],
-            sql_analysis_enabled=sql_analysis_enabled,
+            extract_implicit_alias_columns=extract_implicit_alias_columns,
         )
         if output_name is None:
             continue
@@ -359,7 +359,7 @@ def _split_top_level_select_items(sql: str, *, start: int, end: int) -> tuple[tu
     return tuple(items)
 
 
-def _select_item_output_name(item: str, *, sql_analysis_enabled: bool) -> str | None:
+def _select_item_output_name(item: str, *, extract_implicit_alias_columns: bool) -> str | None:
     as_match: re.Match[str] | None = re.search(
         r"\s+AS\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*|\"[^\"]+\")\s*\Z",
         item,
@@ -373,7 +373,7 @@ def _select_item_output_name(item: str, *, sql_analysis_enabled: bool) -> str | 
         item,
     )
     if bare_match is None:
-        if not sql_analysis_enabled:
+        if not extract_implicit_alias_columns:
             return None
         implicit_alias_match: re.Match[str] | None = re.search(
             r"\)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*|\"[^\"]+\")\s*\Z",

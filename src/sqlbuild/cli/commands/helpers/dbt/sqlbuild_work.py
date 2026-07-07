@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands.helpers.test.sql_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
@@ -28,7 +29,11 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildCallbacks,
+    BuildExecutionResult,
+    BuildRuntimeParams,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline.main.run import (
     run_audit_pipeline,
@@ -45,18 +50,19 @@ from sqlbuild.shared.main.summary_footer import format_summary_footer
 
 def execute_sqlbuild_build_work(
     *,
+    context: DbtSqlbuildWorkContext,
     command: DbtInteropCommand,
-    plan_output: PlanOutput,
-    connection_config: dict[str, object],
-    adapter: BaseAdapter,
-    adapter_name: str,
     project: CompiledProject,
     project_dir: Path,
     fail_fast: bool,
     verbose: bool,
-    output_stream: TextIO,
-    use_color: bool,
 ) -> int:
+    plan_output: PlanOutput = context.plan_output
+    connection_config: dict[str, object] = context.connection_config
+    adapter: BaseAdapter = context.adapter
+    adapter_name: str = context.adapter_name
+    output_stream: TextIO = context.output_stream
+    use_color: bool = context.use_color
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=plan_output, use_color=use_color, verbose=verbose, debug=False
     )
@@ -85,18 +91,22 @@ def execute_sqlbuild_build_work(
         connection_config=connection_config,
         adapter=adapter,
         settings=project.settings,
-        run_id=project.run_id,
-        run_tests=command == DbtInteropCommand.BUILD,
-        run_audits=command == DbtInteropCommand.BUILD,
-        fail_fast=fail_fast,
-        max_concurrency=effective_concurrency,
-        on_node_start=callbacks.on_node_start,
-        on_node_complete=callbacks.on_node_complete,
-        on_sub_progress=callbacks.on_sub_progress,
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
-        use_color=use_color,
+        runtime=BuildRuntimeParams(
+            run_id=project.run_id,
+            run_tests=command == DbtInteropCommand.BUILD,
+            run_audits=command == DbtInteropCommand.BUILD,
+            fail_fast=fail_fast,
+            max_concurrency=effective_concurrency,
+            use_color=use_color,
+        ),
+        callbacks=BuildCallbacks(
+            on_node_start=callbacks.on_node_start,
+            on_node_complete=callbacks.on_node_complete,
+            on_sub_progress=callbacks.on_sub_progress,
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=execution_connection_progress.on_connection_complete,
+            on_connection_error=execution_connection_progress.on_connection_error,
+        ),
     )
     write_runtime_target(target_dir=project_dir / "target", plan_output=plan_output, result=result)
     footer: str = format_build_footer(result=result, elapsed=callbacks.elapsed, use_color=use_color)
@@ -107,14 +117,15 @@ def execute_sqlbuild_build_work(
 
 def execute_sqlbuild_test_work(
     *,
-    plan_output: PlanOutput,
-    connection_config: dict[str, object],
-    adapter: BaseAdapter,
-    adapter_name: str,
+    context: DbtSqlbuildWorkContext,
     actions: tuple[DbtInteropSqlbuildTestAction, ...],
-    output_stream: TextIO,
-    use_color: bool,
 ) -> int:
+    plan_output: PlanOutput = context.plan_output
+    connection_config: dict[str, object] = context.connection_config
+    adapter: BaseAdapter = context.adapter
+    adapter_name: str = context.adapter_name
+    output_stream: TextIO = context.output_stream
+    use_color: bool = context.use_color
     exit_code: int = 0
     action: DbtInteropSqlbuildTestAction
     for action in actions:

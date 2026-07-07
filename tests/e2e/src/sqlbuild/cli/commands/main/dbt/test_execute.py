@@ -108,7 +108,8 @@ def test_given_dbt_model_reads_source_when_build_runs_then_records_node_source_w
             setup_command=("--no-color", "dbt", "build", "--select", "b"),
             command=("--no-color", "dbt", "plan", "--select", "a"),
             expected_stdout_fragments=(
-                "Warnings (1)",
+                "Warnings (2)",
+                "selected dbt model 'a' will build on 1 stale upstream(s)",
                 "Stale inputs detected",
                 "Affected selected models:",
                 "model.analytics.a",
@@ -234,7 +235,8 @@ def test_given_dbt_upstream_table_stale_when_downstream_runs_then_records_inheri
             setup_command=(),
             command=("--no-color", "dbt", "plan", "--select", "a"),
             expected_stdout_fragments=(
-                "Warnings (1)",
+                "Warnings (2)",
+                "selected dbt model 'a' will build on 1 stale upstream(s)",
                 "Stale inputs detected",
                 "Affected selected models:",
                 "model.analytics.a",

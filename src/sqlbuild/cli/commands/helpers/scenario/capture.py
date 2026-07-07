@@ -7,8 +7,16 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.scenario.capture_run import run_scenario_capture_run
+from sqlbuild.cli.commands.helpers.scenario.capture_run import (
+    build_scenario_capture_settings,
+    run_scenario_capture_run,
+)
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
+from sqlbuild.cli.commands.helpers.scenario.models import (
+    ScenarioCaptureCommandRequest,
+    ScenarioRunOutputContext,
+    ScenarioSnapshotLimitInputs,
+)
 from sqlbuild.cli.commands.helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.commands.helpers.scenario.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
@@ -29,31 +37,31 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import (
+    CompilePipelineOptions,
+    CompilePipelineResult,
+)
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
 from sqlbuild.shared.constants import SCENARIO_CLI_SQL_VALIDATION_REQUIRED
 from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,
 )
 
 
-def run_scenario_capture(
-    project_dir: Path | None,
-    no_sql_validation: bool = False,
-    no_color: bool = False,
-    selectors: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    retain: bool = False,
-    force: bool = False,
-    max_snapshot_rows: int | None = None,
-    max_snapshot_total_rows: int | None = None,
-    max_snapshot_bytes: int | None = None,
-    max_snapshot_total_bytes: int | None = None,
-) -> int:
+def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     """Execute the scenario capture command."""
 
+    project_dir: Path | None = request.project_dir
+    no_sql_validation: bool = request.no_sql_validation
+    no_color: bool = request.no_color
+    selectors: tuple[str, ...] = request.selectors
+    exclude: tuple[str, ...] = request.exclude
+    retain: bool = request.retain
+    limit_inputs: ScenarioSnapshotLimitInputs = request.limit_inputs
+    force: bool = limit_inputs.force
     if no_sql_validation:
         raise CliUserError(
             "scenario capture requires SQL analysis and SQL validation",
@@ -107,15 +115,19 @@ def run_scenario_capture(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
-        no_sql_validation=no_sql_validation,
-        connection_config=connection_config,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=planning_progress.on_progress,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=effective_project_dir,
-            discovered_inputs=discovered_inputs,
+        options=CompilePipelineOptions(
+            no_sql_validation=no_sql_validation,
+            connection_config=connection_config,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
+        ),
+        hooks=ConnectionHooks(
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
         ),
     )
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
@@ -129,11 +141,7 @@ def run_scenario_capture(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
-        max_rows_per_relation=max_snapshot_rows,
-        max_total_rows=max_snapshot_total_rows,
-        max_bytes_per_relation=max_snapshot_bytes,
-        max_total_bytes=max_snapshot_total_bytes,
-        force=force,
+        limit_inputs=limit_inputs,
     )
     return run_scenario_capture_run(
         project_dir=effective_project_dir,
@@ -143,11 +151,16 @@ def run_scenario_capture(
         adapter=adapter,
         adapter_name=adapter_name,
         project_name=discovered_inputs.project_config.name,
-        capture_dialect=capture_dialect,
-        capture_limits=capture_limits,
-        retain=retain,
-        progress_stream=progress_stream,
-        use_color=use_color,
+        settings=build_scenario_capture_settings(
+            capture_adapter=adapter_name,
+            capture_dialect=capture_dialect,
+            retain=retain,
+            limits=capture_limits,
+        ),
+        output_context=ScenarioRunOutputContext(
+            progress_stream=progress_stream,
+            use_color=use_color,
+        ),
     )
 
 

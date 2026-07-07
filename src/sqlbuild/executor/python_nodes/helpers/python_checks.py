@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -26,6 +25,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonCheckResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
+    PythonNodeRuntime,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
@@ -35,7 +35,6 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import PythonCheckSeverity
 
 
@@ -45,31 +44,21 @@ def execute_python_check_nodes(
     python_graph: PythonNodeGraph,
     upstream_python_results: tuple[PythonNodeExecutionResult, ...],
     upstream_load_results: tuple[LoadExecutionResult, ...],
-    upstream_load_results_by_loader_name: Mapping[str, LoadExecutionResult] | None = None,
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    connection: Any,
-    run_id: str,
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
+    runtime: PythonNodeRuntime,
     run_state: PythonNodeRunState,
-    default_database: str | None = None,
-    default_schema: str | None = None,
-    relation_targets: dict[SqlResourceRef, str] | None = None,
-    start_cursor_ts: datetime | None = None,
-    end_cursor_ts: datetime | None = None,
-    start_cursor_int: int | None = None,
-    end_cursor_int: int | None = None,
+    upstream_load_results_by_loader_name: Mapping[str, LoadExecutionResult] | None = None,
     logger: logging.Logger | None = None,
-    providers: ProviderContainer | None = None,
     identity_recorder: PythonIdentityRecorder | None = None,
-    result_store: Any | None = None,
-    persist_node_results: bool = True,
     require_upstream_results: bool = True,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
+    adapter: BaseAdapter = runtime.adapter
+    connection: Any = runtime.connection
+    run_id: str = runtime.run_id
+    default_database: str | None = runtime.default_database
+    default_schema: str | None = runtime.default_schema
+    providers: ProviderContainer | None = runtime.providers
     python_results_by_name: dict[str, PythonNodeExecutionResult] = {
         result.node_name: result for result in upstream_python_results
     }
@@ -86,8 +75,8 @@ def execute_python_check_nodes(
         )
     selected_check_names: frozenset[str] = frozenset(check.name for check in check_functions)
     resolved_result_store: Any | None = (
-        result_store
-        if result_store is not None
+        runtime.result_store
+        if runtime.result_store is not None
         else (
             build_standard_node_result_store(
                 adapter=adapter,
@@ -95,7 +84,7 @@ def execute_python_check_nodes(
                 database=default_database,
                 schema=default_schema,
             )
-            if persist_node_results
+            if runtime.persist_node_results
             else None
         )
     )
@@ -123,25 +112,25 @@ def execute_python_check_nodes(
             continue
         context: CheckContext = CheckContext(
             adapter=adapter,
-            connection_config=connection_config,
+            connection_config=runtime.connection_config,
             connection=connection,
             run_id=run_id,
-            target=target,
-            vars=vars,
-            is_reload=is_reload,
+            target=runtime.target,
+            vars=runtime.vars,
+            is_reload=runtime.is_reload,
             logger=logger or logging.getLogger(f"sqlbuild.check.{check_function.name}"),
             statement_recorder=StatementRecorder(),
             run_state=run_state,
             result_store=resolved_result_store,
             default_database=default_database,
             default_schema=default_schema,
-            relation_targets={} if relation_targets is None else relation_targets,
+            relation_targets=runtime.resolved_relation_targets,
             allowed_sql_refs=frozenset(),
             providers=providers if providers is not None else _empty_provider_container(),
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
+            start_cursor_ts=runtime.start_cursor_ts,
+            end_cursor_ts=runtime.end_cursor_ts,
+            start_cursor_int=runtime.start_cursor_int,
+            end_cursor_int=runtime.end_cursor_int,
         )
         try:
             returned: object = invoke_with_providers(

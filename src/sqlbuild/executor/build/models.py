@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.shared.models import LifeCycleEvent, RelationInfo
+from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     FunctionPlanEntry,
@@ -16,10 +22,76 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.provider.main.runtime import ProviderContainer
+from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.spec.models.project import SnapshotsConfig
+
+
+@dataclass(frozen=True)
+class BuildRuntimeParams:
+    """Runtime-invariant configuration for one build execution."""
+
+    run_id: str
+    runtime_dir: Path = Path("target")
+    promotion_mode: TablePromotionMode | None = None
+    query_change_tracking: bool | None = None
+    snapshots: SnapshotsConfig | None = None
+    allow_snapshot_schema_change: bool = False
+    run_audits: bool = True
+    run_tests: bool = True
+    fail_fast: bool = False
+    max_concurrency: int = 1
+    loader_is_reload: bool = False
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
+    target: str = ""
+    effective_vars: dict[str, object] | None = None
+    use_color: bool = False
+    providers: ProviderContainer | None = None
+
+
+@dataclass(frozen=True)
+class BuildCallbacks:
+    """Progress and lifecycle callbacks for one build execution."""
+
+    on_progress: Callable[[str], None] | None = None
+    on_sub_progress: Callable[[str], None] | None = None
+    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None
+    on_node_complete: Callable[[object], None] | None = None
+    before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None
+    on_connection_start: Callable[[int], None] | None = None
+    on_connection_complete: Callable[[int, float], None] | None = None
+    on_connection_error: Callable[[int, float], None] | None = None
+    python_identity_recorder: PythonIdentityRecorder | None = None
+
+
+@dataclass(frozen=True)
+class BuildCustomizations:
+    """User-supplied materializations, hooks, and loader functions."""
+
+    custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None
+    custom_prepare_version_functions: (
+        Mapping[str, Callable[[PrepareVersionContext], None]] | None
+    ) = None
+    loader_functions: tuple[DiscoveredLoaderFunction, ...] = ()
+
+
+@dataclass(frozen=True)
+class BuildInitialState:
+    """Pre-seeded scheduler state carried in from earlier lifecycle phases."""
+
+    warehouse_relations: dict[str, RelationInfo] | None = None
+    precompleted_keys: frozenset[CompiledObjectKey] = frozenset()
+    initial_load_results: tuple[LoadExecutionResult, ...] = ()
+    initial_failed_keys: frozenset[CompiledObjectKey] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -49,6 +121,17 @@ class FunctionExecutionResult:
     error_message: str | None = None
     warning_messages: tuple[str, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SourceAuditRunResult:
+    """Outcome of running pending source audits for one model."""
+
+    blocked: bool
+    executed_source_names: tuple[str, ...] = field(default_factory=tuple)
+    failed_source_names: tuple[str, ...] = field(default_factory=tuple)
+    newly_blocked_keys: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+    audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

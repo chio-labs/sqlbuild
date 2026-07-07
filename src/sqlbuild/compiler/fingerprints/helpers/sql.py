@@ -22,6 +22,7 @@ from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_TABLE_NAME,
 )
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 
 def build_qualified_table_name(
@@ -107,34 +108,30 @@ def build_insert_sql(
     *,
     database: str | None,
     schema: str,
-    node_type: str,
-    node_name: str,
-    target_database: str | None,
-    target_schema: str | None,
-    target_name: str | None,
-    run_id: str,
-    definition_hash: str,
-    version_hash: str,
-    schema_fingerprint: str,
-    definition: str,
-    metadata_json: str,
-    ts: str,
+    fingerprint: Fingerprint,
     render_qualified_name: Callable[..., str | None],
 ) -> str:
     """Build a complete INSERT statement for appending one fingerprint row."""
 
+    run_id: str = fingerprint.run_id
+    definition_hash: str = fingerprint.definition_hash
+    version_hash: str = fingerprint.version_hash
+    schema_fingerprint: str = fingerprint.schema_fingerprint
+    ts: str = fingerprint.ts.isoformat()
     qualified_name: str = build_qualified_table_name(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
-    encoded_definition: str = _encode_definition_storage(definition).replace("'", "''")
-    encoded_metadata_json: str = _encode_definition_storage(metadata_json).replace("'", "''")
-    node_type_literal: str = _required_string_literal(node_type)
-    node_name_literal: str = _required_string_literal(node_name)
-    target_database_literal: str = _optional_string_literal(target_database)
-    target_schema_literal: str = _optional_string_literal(target_schema)
-    target_name_literal: str = _optional_string_literal(target_name)
+    encoded_definition: str = _encode_definition_storage(fingerprint.definition).replace("'", "''")
+    encoded_metadata_json: str = _encode_definition_storage(fingerprint.metadata_json).replace(
+        "'", "''"
+    )
+    node_type_literal: str = _required_string_literal(fingerprint.node_type)
+    node_name_literal: str = _required_string_literal(fingerprint.node_name)
+    target_database_literal: str = _optional_string_literal(fingerprint.target_database)
+    target_schema_literal: str = _optional_string_literal(fingerprint.target_schema)
+    target_name_literal: str = _optional_string_literal(fingerprint.target_name)
     return (
         f"INSERT INTO {qualified_name} ("
         f"{COLUMN_NODE_TYPE}, "

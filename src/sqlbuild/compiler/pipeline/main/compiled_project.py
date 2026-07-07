@@ -27,6 +27,7 @@ def build_compiled_project(
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolved_connection: dict[str, object] | None = None,
 ) -> CompiledProject:
     """Build one compiled project with adapter defaults and target validation applied."""
 
@@ -36,6 +37,7 @@ def build_compiled_project(
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=True,
         cli_vars=cli_vars,
+        resolved_connection=resolved_connection,
         python_functions_inherit_default_namespace=(
             adapter.python_functions_inherit_default_namespace()
         ),

@@ -30,13 +30,15 @@ def build_sql_test_comparison_sql(
     step_index: int
     step: ChainStep
     for step_index, step in enumerate(test_entry.chain):
-        cte_suffix: str = unique_cte_suffix(
+        cte_suffix: str
+        cte_suffix, cte_name_counts = unique_cte_suffix(
             model_name=step.model_name,
             cte_name_counts=cte_name_counts,
         )
         actual_cte: str = f"__actual__{cte_suffix}"
         expected_cte: str = f"__expected__{cte_suffix}"
-        actual_sql: str = lift_step_ctes(
+        actual_sql: str
+        actual_sql, lifted_ctes = lift_step_ctes(
             step.resolved_sql,
             lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
@@ -44,7 +46,8 @@ def build_sql_test_comparison_sql(
         comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
         if step.expected_cte_sql is None:
             continue
-        expected_sql: str = lift_step_ctes(
+        expected_sql: str
+        expected_sql, lifted_ctes = lift_step_ctes(
             step.expected_cte_sql,
             lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
@@ -62,12 +65,14 @@ def build_sql_test_comparison_sql(
         )
     assertion_index: int
     for assertion_index, assertion in enumerate(test_entry.assertions, start=len(test_entry.chain)):
-        assertion_suffix: str = unique_cte_suffix(
+        assertion_suffix: str
+        assertion_suffix, cte_name_counts = unique_cte_suffix(
             model_name=assertion.name,
             cte_name_counts=cte_name_counts,
         )
         assertion_cte: str = f"__assert__{assertion_suffix}"
-        assertion_sql: str = lift_step_ctes(
+        assertion_sql: str
+        assertion_sql, lifted_ctes = lift_step_ctes(
             assertion.resolved_sql,
             lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,

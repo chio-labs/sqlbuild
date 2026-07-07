@@ -16,6 +16,7 @@ from sqlbuild.adapter.shared.models import (
     ExpressionInferenceProfile,
     RowDiffTolerance,
     RowDiffTolerances,
+    SnapshotChangeTarget,
     StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
@@ -502,16 +503,11 @@ class StrictAdapter(
     def render_apply_check_snapshot_changes(
         self,
         *,
-        destination: str,
-        origin: str,
-        unique_key: tuple[str, ...],
+        target: SnapshotChangeTarget,
         check_columns: tuple[str, ...],
         updated_at_column: str | None,
         observed_at_column: str | None,
-        valid_from_column: str,
-        valid_to_column: str,
         initial_valid_from: str | None,
-        output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         """Render SQL statements that apply check snapshot changes."""

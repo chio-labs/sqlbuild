@@ -2,13 +2,50 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
+from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
+from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers
+from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
+from sqlbuild.cli.commands.helpers.scenario.models import ScenarioTestCommandRequest
+from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
+from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 
 
 def noop_handler(*_a: Any, **_k: Any) -> int:
     return 0
+
+
+def extract_json_output_fields(args: tuple[object, ...]) -> tuple[bool, Path | None]:
+    """Return (json_output, json_output_path) from a typed request or positional args."""
+
+    request: object = args[0]
+    if isinstance(
+        request,
+        AuditCommandRequest
+        | BuildCommandRequest
+        | LoadCommandRequest
+        | ScenarioTestCommandRequest
+        | SeedCommandRequest
+        | TestCommandRequest,
+    ):
+        return bool(request.json_output), request.json_output_path
+    return bool(args[-2]), args[-1] if isinstance(args[-1], Path) else None
+
+
+def build_json_recording_handler(
+    *, received_args: list[tuple[bool, Path | None]], exit_code: int
+) -> Callable[..., int]:
+    """Build a fake command handler that records json output flags and returns exit_code."""
+
+    def record_json_handler(*args: object) -> int:
+        received_args.append(extract_json_output_fields(args))
+        return exit_code
+
+    return record_json_handler
 
 
 def build_handlers(**overrides: Any) -> CliEntrypointHandlers:

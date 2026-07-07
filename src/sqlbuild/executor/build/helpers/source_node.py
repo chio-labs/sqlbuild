@@ -5,8 +5,6 @@ from __future__ import annotations
 import dataclasses
 import time
 from collections.abc import Callable
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -14,12 +12,12 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
+from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.main.execute import execute_source_load
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
 from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -33,20 +31,8 @@ def execute_build_source_node(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection: Any,
-    run_id: str,
-    runtime_dir: Path = Path("target"),
-    target: str,
-    effective_vars: dict[str, object],
-    is_reload: bool,
-    start_cursor_ts: datetime | None,
-    end_cursor_ts: datetime | None,
-    start_cursor_int: int | None,
-    end_cursor_int: int | None,
-    on_progress: Callable[[str], None] | None,
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
-    on_sub_progress: Callable[[str], None] | None = None,
-    use_color: bool = False,
-    providers: ProviderContainer | None = None,
+    runtime: BuildRuntimeParams,
+    callbacks: BuildCallbacks,
 ) -> LoadExecutionResult:
     """Execute one source-load node from the build scheduler."""
 
@@ -61,10 +47,10 @@ def execute_build_source_node(
     )
     loader_name: str = source_entry.loader or ""
     loader_function: DiscoveredLoaderFunction = loader_functions_by_name[loader_name]
-    if on_progress is not None:
-        on_progress(f"source: {source_entry.name}")
-    if on_node_start is not None:
-        on_node_start(source_entry.name, resource_kind)
+    if callbacks.on_progress is not None:
+        callbacks.on_progress(f"source: {source_entry.name}")
+    if callbacks.on_node_start is not None:
+        callbacks.on_node_start(source_entry.name, resource_kind)
     start: float = time.monotonic()
     result_store: StandardNodeResultStore = build_standard_node_result_store(
         adapter=adapter,
@@ -78,22 +64,24 @@ def execute_build_source_node(
         adapter=adapter,
         connection_config=connection_config,
         connection=connection,
-        run_id=run_id,
-        runtime_dir=runtime_dir,
-        target=target,
-        vars=effective_vars,
-        is_reload=is_reload,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
+        runtime=LoadRuntimeParams(
+            run_id=runtime.run_id,
+            target=runtime.target,
+            vars=runtime.effective_vars or {},
+            is_reload=runtime.loader_is_reload,
+            runtime_dir=runtime.runtime_dir,
+            start_cursor_ts=runtime.start_cursor_ts,
+            end_cursor_ts=runtime.end_cursor_ts,
+            start_cursor_int=runtime.start_cursor_int,
+            end_cursor_int=runtime.end_cursor_int,
+            use_color=runtime.use_color,
+            providers=runtime.providers,
+            result_store=result_store,
+        ),
         statement_recorder=StatementRecorder(),
-        use_color=use_color,
         loader_ref_entries=loader_ref_entries,
         source_ref_entries=plan.source_map,
-        on_progress=on_sub_progress,
-        providers=providers,
-        result_store=result_store,
+        on_progress=callbacks.on_sub_progress,
     )
     duration: int = int((time.monotonic() - start) * 1000)
     timed_result: LoadExecutionResult = dataclasses.replace(result, duration_ms=duration)
@@ -102,7 +90,7 @@ def execute_build_source_node(
         connection=connection,
         loader_name=loader_name,
         result=timed_result,
-        run_id=run_id,
+        run_id=runtime.run_id,
         result_store=result_store,
     )
     return timed_result

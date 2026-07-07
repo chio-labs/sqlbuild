@@ -12,6 +12,8 @@ from sqlbuild.executor.janitor.models import (
     JanitorExecutionResult,
     JanitorPlan,
     JanitorRelationKey,
+    JanitorRelationScope,
+    JanitorStateCandidates,
     JanitorVirtualStatePruneCandidate,
 )
 from sqlbuild.virtual.state.constants import PYTHON_NODE_VERSION_TABLE
@@ -212,16 +214,20 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         retention_days=test_case.retention_days,
         delete_tracked_only=test_case.delete_tracked_only,
         exclude_patterns=test_case.exclude_patterns,
-        protected_relation_keys=test_case.protected_relation_keys,
-        virtual_state_prune_candidates=(
-            JanitorVirtualStatePruneCandidate(
-                schema="sqlbuild_state",
-                table_name=PYTHON_NODE_VERSION_TABLE,
-                reason="1 unreferenced Python identity version(s)",
-            ),
-        )
-        if test_case.expected_virtual_state_table_names
-        else (),
+        relation_scope=JanitorRelationScope(
+            protected_relation_keys=test_case.protected_relation_keys,
+        ),
+        state_candidates=JanitorStateCandidates(
+            virtual_state_prune_candidates=(
+                JanitorVirtualStatePruneCandidate(
+                    schema="sqlbuild_state",
+                    table_name=PYTHON_NODE_VERSION_TABLE,
+                    reason="1 unreferenced Python identity version(s)",
+                ),
+            )
+            if test_case.expected_virtual_state_table_names
+            else (),
+        ),
         direct_state_history_versions=test_case.direct_state_history_versions,
     )
 
@@ -280,15 +286,17 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
         connection=object(),
         retention_days=7,
         delete_tracked_only=False,
-        virtual_state_prune_candidates=(
-            JanitorVirtualStatePruneCandidate(
-                schema="sqlbuild_state",
-                table_name=PYTHON_NODE_VERSION_TABLE,
-                reason="1 unreferenced Python identity version(s)",
-            ),
-        )
-        if test_case.expected_pruned_virtual_table_names
-        else (),
+        state_candidates=JanitorStateCandidates(
+            virtual_state_prune_candidates=(
+                JanitorVirtualStatePruneCandidate(
+                    schema="sqlbuild_state",
+                    table_name=PYTHON_NODE_VERSION_TABLE,
+                    reason="1 unreferenced Python identity version(s)",
+                ),
+            )
+            if test_case.expected_pruned_virtual_table_names
+            else (),
+        ),
     )
     pruned_virtual_table_names: list[str] = []
 

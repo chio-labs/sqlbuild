@@ -101,29 +101,6 @@ class NodeSourceWatermarkTarget:
     name: str | None
 
 
-@dataclass
-class NodeSourceWatermarkExecutionContext:
-    """In-memory source watermark state for one execution."""
-
-    direct_source_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
-    direct_source_identities_by_node: dict[
-        NodeSourceWatermarkIdentity,
-        tuple[SourceFreshnessIdentity, ...],
-    ]
-    source_identities_by_node: dict[
-        NodeSourceWatermarkIdentity,
-        tuple[SourceFreshnessIdentity, ...],
-    ]
-    upstream_node_identities_by_node: dict[
-        NodeSourceWatermarkIdentity,
-        tuple[NodeSourceWatermarkIdentity, ...],
-    ]
-    payloads_by_node: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkPayload] = field(
-        default_factory=dict
-    )
-    buffered_records: list[NodeSourceWatermarkRecord] = field(default_factory=list)
-
-
 @dataclass(frozen=True)
 class NativeNodeSourceWatermarkInputs:
     """Native plan-derived source watermark execution inputs."""
@@ -217,3 +194,8 @@ class NodeSourceWatermarkStalenessReport:
             or self.changed_source_names
             or self.unknown_frontier_names
         )
+
+
+from sqlbuild.compiler.node_source_watermarks.classes.execution_context import (  # noqa: E402,F401
+    NodeSourceWatermarkExecutionContext,
+)

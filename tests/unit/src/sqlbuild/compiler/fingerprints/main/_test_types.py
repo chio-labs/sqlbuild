@@ -29,3 +29,22 @@ class WriteFingerprintIndexTestCase:
     description: str
     expected_index_sql: str
     expected_insert_prefix: str
+
+
+@dataclass(frozen=True)
+class WriteFingerprintRetryTestCase:
+    description: str
+    failing_create_attempts: int
+    error_message: str
+    expected_create_attempts: int
+    expected_insert_count: int
+    expected_sleep_count: int
+
+
+@dataclass(frozen=True)
+class WriteFingerprintRetryExhaustionTestCase:
+    description: str
+    error_message: str
+    expected_create_attempts: int
+    expected_insert_count: int
+    expected_error_fragment: str

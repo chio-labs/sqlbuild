@@ -572,16 +572,17 @@ def test_given_audit_gate_when_writing_fingerprint_then_metadata_json_contains_a
     audit: AuditPlanEntry = build_fingerprint_audit_plan_entry()
     audit_result: AuditExecutionResult = build_fingerprint_audit_result(outcome="pass")
 
-    fingerprinting.try_write_fingerprint(
+    fingerprint_warnings: tuple[str, ...] = fingerprinting.try_write_fingerprint(
         entry=entry,
         adapter=FakeRelationReuseAdapter(supports_zero_copy_clone=True),
         connection=object(),
         run_id="run_1",
         query_change_tracking=True,
-        warnings=[],
         model_audits=(audit,),
         audit_results=(audit_result,),
     )
+
+    assert fingerprint_warnings == ()
 
     assert len(written_fingerprints) == 1
     metadata: dict[str, object] = json.loads(written_fingerprints[0].metadata_json)

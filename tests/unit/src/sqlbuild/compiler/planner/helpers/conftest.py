@@ -8,9 +8,9 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
-    build_upstream_deps,
+    build_execution_upstream_deps,
 )
-from sqlbuild.compiler.planner.helpers.output.plan_entry import build_path_index
+from sqlbuild.compiler.shared.helpers.selector_indexes import build_model_path_index
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_test_project,
     model_key,
@@ -32,7 +32,9 @@ def diamond_graph() -> tuple[
         source_names=("raw_orders", "raw_customers"),
         seed_names=("codes",),
     )
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(project)
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
+    )
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream
     )
@@ -72,10 +74,12 @@ def path_graph() -> tuple[
         },
         source_names=("raw_orders", "raw_customers"),
     )
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(project)
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
+    )
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream
     )
     all_keys: dict[str, CompiledObjectKey] = {key.name: key for key in upstream}
-    path_idx: dict[CompiledObjectKey, str] = build_path_index(project)
+    path_idx: dict[CompiledObjectKey, str] = build_model_path_index(project)
     return all_keys, upstream, downstream, path_idx

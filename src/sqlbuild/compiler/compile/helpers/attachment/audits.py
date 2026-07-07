@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import (
@@ -19,9 +20,6 @@ from sqlbuild.compiler.compile.helpers.attachment.references import (
     validate_audit_references,
 )
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.helpers.render.macros import (
-    load_project_macros,
-)
 from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -51,6 +49,22 @@ from sqlbuild.spec.models.schema import (
 )
 from sqlbuild.spec.models.source import SourceColumnEntry
 
+
+@dataclass(frozen=True)
+class _AuditAttachmentContext:
+    """Run-constant inputs shared across attached audit rendering."""
+
+    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
+    loaded_macros: dict[str, LoadedMacro]
+    known_model_names: set[str]
+    known_seed_names: set[str]
+    known_source_names: set[str]
+    default_audit_severity: str | None
+    default_audit_run_scope: str | None
+    effective_vars: dict[str, object]
+    macro_context: MacroContext
+
+
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
@@ -67,12 +81,12 @@ def build_audit_inputs(
     source_inputs: tuple[CompileSourceInput, ...],
     effective_vars: dict[str, object],
     macro_context: MacroContext,
+    loaded_macros: dict[str, LoadedMacro],
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -80,6 +94,17 @@ def build_audit_inputs(
         generic_audit_definitions = index_generic_audit_definitions(discovered_inputs.audit_files)
     default_audit_severity: str | None = effective_settings.default_audit_severity
     default_audit_run_scope: str | None = effective_settings.default_audit_run_scope
+    attachment_context: _AuditAttachmentContext = _AuditAttachmentContext(
+        generic_audit_definitions=generic_audit_definitions,
+        loaded_macros=loaded_macros,
+        known_model_names=known_model_names,
+        known_seed_names=known_seed_names,
+        known_source_names=known_source_names,
+        default_audit_severity=default_audit_severity,
+        default_audit_run_scope=default_audit_run_scope,
+        effective_vars=effective_vars,
+        macro_context=macro_context,
+    )
     audit_inputs: list[CompileAuditInput] = []
     audit_file: DiscoveredAuditFile
     for audit_file in discovered_inputs.audit_files:
@@ -132,15 +157,7 @@ def build_audit_inputs(
         audit_inputs.extend(
             build_model_attached_audit_inputs(
                 model_input=model_input,
-                generic_audit_definitions=generic_audit_definitions,
-                loaded_macros=loaded_macros,
-                known_model_names=known_model_names,
-                known_seed_names=known_seed_names,
-                known_source_names=known_source_names,
-                default_audit_severity=default_audit_severity,
-                default_audit_run_scope=default_audit_run_scope,
-                effective_vars=effective_vars,
-                macro_context=macro_context,
+                context=attachment_context,
             )
         )
     source_input: CompileSourceInput
@@ -148,15 +165,7 @@ def build_audit_inputs(
         audit_inputs.extend(
             build_source_attached_audit_inputs(
                 source_input=source_input,
-                generic_audit_definitions=generic_audit_definitions,
-                loaded_macros=loaded_macros,
-                known_model_names=known_model_names,
-                known_seed_names=known_seed_names,
-                known_source_names=known_source_names,
-                default_audit_severity=default_audit_severity,
-                default_audit_run_scope=default_audit_run_scope,
-                effective_vars=effective_vars,
-                macro_context=macro_context,
+                context=attachment_context,
             )
         )
     return tuple(audit_inputs)
@@ -165,15 +174,7 @@ def build_audit_inputs(
 def build_model_attached_audit_inputs(
     *,
     model_input: CompileModelInput,
-    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
-    loaded_macros: dict[str, LoadedMacro],
-    known_model_names: set[str],
-    known_seed_names: set[str],
-    known_source_names: set[str],
-    default_audit_severity: str | None,
-    default_audit_run_scope: str | None,
-    effective_vars: dict[str, object],
-    macro_context: MacroContext,
+    context: _AuditAttachmentContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render schema-attached model audits into compile audit inputs."""
 
@@ -194,7 +195,6 @@ def build_model_attached_audit_inputs(
             build_attached_audit_input(
                 audit_instance=audit_instance,
                 owner_file=owner_file,
-                generic_audit_definitions=generic_audit_definitions,
                 implicit_arguments={
                     "model": model_input.model_file.file_path.stem,
                     "relation": SqlReferenceKind.REF.example_call(
@@ -205,14 +205,7 @@ def build_model_attached_audit_inputs(
                 attached_target_kind=AttachedAuditTargetKind.MODEL,
                 attached_target_name=model_input.model_file.file_path.stem,
                 attached_column_name=None,
-                loaded_macros=loaded_macros,
-                known_model_names=known_model_names,
-                known_seed_names=known_seed_names,
-                known_source_names=known_source_names,
-                default_audit_severity=default_audit_severity,
-                default_audit_run_scope=default_audit_run_scope,
-                effective_vars=effective_vars,
-                macro_context=macro_context,
+                context=context,
             )
         )
     column_entry: SchemaColumn
@@ -222,7 +215,6 @@ def build_model_attached_audit_inputs(
                 build_attached_audit_input(
                     audit_instance=audit_instance,
                     owner_file=owner_file,
-                    generic_audit_definitions=generic_audit_definitions,
                     implicit_arguments={
                         "model": model_input.model_file.file_path.stem,
                         "relation": SqlReferenceKind.REF.example_call(
@@ -234,14 +226,7 @@ def build_model_attached_audit_inputs(
                     attached_target_kind=AttachedAuditTargetKind.MODEL,
                     attached_target_name=model_input.model_file.file_path.stem,
                     attached_column_name=column_entry.name,
-                    loaded_macros=loaded_macros,
-                    known_model_names=known_model_names,
-                    known_seed_names=known_seed_names,
-                    known_source_names=known_source_names,
-                    default_audit_severity=default_audit_severity,
-                    default_audit_run_scope=default_audit_run_scope,
-                    effective_vars=effective_vars,
-                    macro_context=macro_context,
+                    context=context,
                 )
             )
     return tuple(attached_audit_inputs)
@@ -250,15 +235,7 @@ def build_model_attached_audit_inputs(
 def build_source_attached_audit_inputs(
     *,
     source_input: CompileSourceInput,
-    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
-    loaded_macros: dict[str, LoadedMacro],
-    known_model_names: set[str],
-    known_seed_names: set[str],
-    known_source_names: set[str],
-    default_audit_severity: str | None,
-    default_audit_run_scope: str | None,
-    effective_vars: dict[str, object],
-    macro_context: MacroContext,
+    context: _AuditAttachmentContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render source-attached audits into compile audit inputs."""
 
@@ -269,7 +246,6 @@ def build_source_attached_audit_inputs(
             build_attached_audit_input(
                 audit_instance=audit_instance,
                 owner_file=source_input.source_file.relative_path,
-                generic_audit_definitions=generic_audit_definitions,
                 implicit_arguments={
                     "source": source_input.source_entry.name,
                     "relation": SqlReferenceKind.SOURCE.example_call(
@@ -280,14 +256,7 @@ def build_source_attached_audit_inputs(
                 attached_target_kind=AttachedAuditTargetKind.SOURCE,
                 attached_target_name=source_input.source_entry.name,
                 attached_column_name=None,
-                loaded_macros=loaded_macros,
-                known_model_names=known_model_names,
-                known_seed_names=known_seed_names,
-                known_source_names=known_source_names,
-                default_audit_severity=default_audit_severity,
-                default_audit_run_scope=default_audit_run_scope,
-                effective_vars=effective_vars,
-                macro_context=macro_context,
+                context=context,
             )
         )
     column_entry: SourceColumnEntry
@@ -297,7 +266,6 @@ def build_source_attached_audit_inputs(
                 build_attached_audit_input(
                     audit_instance=audit_instance,
                     owner_file=source_input.source_file.relative_path,
-                    generic_audit_definitions=generic_audit_definitions,
                     implicit_arguments={
                         "source": source_input.source_entry.name,
                         "relation": SqlReferenceKind.SOURCE.example_call(
@@ -309,14 +277,7 @@ def build_source_attached_audit_inputs(
                     attached_target_kind=AttachedAuditTargetKind.SOURCE,
                     attached_target_name=source_input.source_entry.name,
                     attached_column_name=column_entry.name,
-                    loaded_macros=loaded_macros,
-                    known_model_names=known_model_names,
-                    known_seed_names=known_seed_names,
-                    known_source_names=known_source_names,
-                    default_audit_severity=default_audit_severity,
-                    default_audit_run_scope=default_audit_run_scope,
-                    effective_vars=effective_vars,
-                    macro_context=macro_context,
+                    context=context,
                 )
             )
     return tuple(attached_audit_inputs)
@@ -326,24 +287,16 @@ def build_attached_audit_input(
     *,
     audit_instance: SchemaAuditInstance,
     owner_file: Path,
-    generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
     implicit_arguments: dict[str, object],
     attached_target_kind: str,
     attached_target_name: str,
     attached_column_name: str | None,
-    loaded_macros: dict[str, LoadedMacro],
-    known_model_names: set[str],
-    known_seed_names: set[str],
-    known_source_names: set[str],
-    default_audit_severity: str | None,
-    default_audit_run_scope: str | None,
-    effective_vars: dict[str, object],
-    macro_context: MacroContext,
+    context: _AuditAttachmentContext,
 ) -> CompileAuditInput:
     """Render one attached generic audit instance into a compile audit input."""
 
     definition: tuple[DiscoveredAuditFile, DiscoveredAuditBlock] | None = (
-        generic_audit_definitions.get(audit_instance.definition_name)
+        context.generic_audit_definitions.get(audit_instance.definition_name)
     )
     if definition is None:
         raise CompileInputError(
@@ -364,27 +317,27 @@ def build_attached_audit_input(
     expanded_sql_body: str = expand_authored_sql(
         sql=rendered_sql_body,
         file_path=definition[0].file_path,
-        effective_vars=effective_vars,
-        loaded_macros=loaded_macros,
-        macro_context=macro_context,
+        effective_vars=context.effective_vars,
+        loaded_macros=context.loaded_macros,
+        macro_context=context.macro_context,
     )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
     validate_audit_references(
         references=references,
         audit_file=definition[0],
-        known_model_names=known_model_names,
-        known_seed_names=known_seed_names,
-        known_source_names=known_source_names,
+        known_model_names=context.known_model_names,
+        known_seed_names=context.known_seed_names,
+        known_source_names=context.known_source_names,
     )
     audit_label: str = f"{owner_file} audit '{audit_instance.definition_name}'"
     resolved_severity: str = resolve_audit_severity(
         instance_severity=audit_instance.severity,
-        default_severity=default_audit_severity,
+        default_severity=context.default_audit_severity,
         audit_label=audit_label,
     )
     resolved_run_scope: str = resolve_audit_run_scope(
         instance_run_scope=audit_instance.run_scope,
-        default_run_scope=default_audit_run_scope,
+        default_run_scope=context.default_audit_run_scope,
     )
     validate_model_attached_audit_references(
         references=references,

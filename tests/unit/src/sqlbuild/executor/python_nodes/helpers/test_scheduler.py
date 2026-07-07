@@ -79,7 +79,7 @@ def test_given_python_node_dag_when_completing_nodes_then_unlocks_ready_nodes(
 
     assert tuple(ready) == test_case.expected_initial_ready
 
-    apply_completion_order(
+    in_degree, ready = apply_completion_order(
         completion_order=test_case.completion_order,
         in_degree=in_degree,
         ready=ready,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import lru_cache
 from typing import Any, cast
 
 from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
@@ -13,6 +14,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledLineageSourceFact,
     CompileSqlReference,
     InferredColumn,
+    PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.types import (
@@ -212,6 +214,16 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
 
 
+@lru_cache(maxsize=1)
+def _warn_once_polyglot_module_missing() -> None:
+    """Warn once per process when the Polyglot module cannot be imported."""
+
+    _DEBUG_LOGGER.warning(
+        "Polyglot SQL module is not importable; SQL validation, column inference, "
+        "and column lineage are disabled for this run"
+    )
+
+
 def infer_columns_with_sql_analysis(
     *,
     query_sql: str,
@@ -267,12 +279,13 @@ def analyze_columns_and_lineage_with_polyglot(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
     allow_compact_analysis: bool = False,
-) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool:
+) -> PolyglotAnalysisResult:
     """Infer columns and compact lineage facts from one Polyglot parse."""
 
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
-        return False
+        _warn_once_polyglot_module_missing()
+        return PolyglotAnalysisResult(analysis_succeeded=False)
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
@@ -289,7 +302,12 @@ def analyze_columns_and_lineage_with_polyglot(
         allow_compact_analysis=allow_compact_analysis,
     )
     if compact_analysis is not None:
-        return compact_analysis
+        return PolyglotAnalysisResult(
+            analysis_succeeded=True,
+            columns=compact_analysis[0],
+            lineage_columns=compact_analysis[1],
+            has_star=compact_analysis[2],
+        )
     try:
         parsed: Any = polyglot_module.parse_one(
             cleaned_sql,
@@ -301,16 +319,19 @@ def analyze_columns_and_lineage_with_polyglot(
             "column and lineage analysis parse failed; falling back",
             sqlbuild_error=str(error),
         )
-        return False
-    analysis: (
-        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool
-    ) = _analyze_columns_and_lineage_from_polyglot_ast(
+        return PolyglotAnalysisResult(analysis_succeeded=False)
+    columns, lineage_columns, has_star = _analyze_columns_and_lineage_from_polyglot_ast(
         parsed=parsed,
         references=references,
         column_nullability_by_table=column_nullability_by_table or {},
         inference_profile=profile,
     )
-    return analysis
+    return PolyglotAnalysisResult(
+        analysis_succeeded=True,
+        columns=columns,
+        lineage_columns=lineage_columns,
+        has_star=has_star,
+    )
 
 
 def _analyze_columns_and_lineage_with_compact_polyglot(
@@ -599,6 +620,7 @@ def _infer_columns_with_polyglot(
 ) -> tuple[InferredColumn, ...] | None | bool:
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
+        _warn_once_polyglot_module_missing()
         return False
     try:
         parsed: Any = polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
@@ -676,7 +698,7 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
     references: tuple[CompileSqlReference, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
-) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | bool:
+) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool]:
     infer_nullability: bool = str(getattr(parsed, "kind", "")) not in _POLYGLOT_SET_OPERATION_KINDS
     select: Any | None = parsed
     if str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
@@ -1673,4 +1695,6 @@ def _copy_table_facts_to_alias(
         return
     table_facts: dict[str, InferredNullability] | None = column_nullability_by_table.get(table_name)
     if table_facts is not None:
-        column_nullability_by_table.setdefault(alias, table_facts)
+        column_nullability_by_table.setdefault(  # sc: allow-param-mutation (alias fact builder)
+            alias, table_facts
+        )

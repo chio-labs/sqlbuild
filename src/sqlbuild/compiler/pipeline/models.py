@@ -11,13 +11,41 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
-from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SeedPlanEntry
+from sqlbuild.compiler.planner.models import (
+    CursorOverrides,
+    ModelPlanEntry,
+    PlanOutput,
+    SeedPlanEntry,
+)
 from sqlbuild.compiler.python_nodes.types import (
     PythonIdentityStatus,
     PythonNodeKind,
     PythonRunPhase,
 )
 from sqlbuild.executor.custom.models import PrepareVersionContext
+from sqlbuild.shared.types import ExternalSqlReferenceResolver
+
+
+@dataclass(frozen=True)
+class CompilePipelineOptions:
+    """Selection, deferral, and planning options for one compile pipeline run."""
+
+    selected_target: str | None = None
+    no_sql_validation: bool = False
+    defer_to: str | None = None
+    defer_sources_to: str | None = None
+    source_deferral_enabled: bool = True
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    cursor_overrides: CursorOverrides | None = None
+    full_refresh: bool = False
+    changes_only: bool = False
+    auto_load_sources: bool = False
+    reload_sources: bool = False
+    connection_config: dict[str, object] | None = None
+    cli_vars: dict[str, object] | None = None
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+    resolve_python_run_selectors: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,12 +64,20 @@ class PythonPlanEntry:
 
 
 @dataclass(frozen=True)
+class PythonRunPlanOutputs:
+    """Plan output and Python entries after python-aware run selection."""
+
+    plan_output: PlanOutput
+    python_plan_entries: tuple[PythonPlanEntry, ...]
+    selected_python_node_names: frozenset[str]
+
+
+@dataclass(frozen=True)
 class CompilePipelineResult:
     """Complete output from the compile-and-plan pipeline."""
 
     project: CompiledProject
     plan_output: PlanOutput
-    manifest: dict[str, object] = field(default_factory=dict)
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
     custom_prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = field(
         default_factory=dict

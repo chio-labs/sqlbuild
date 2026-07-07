@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import queue
 from collections.abc import Callable
-from datetime import datetime
-from pathlib import Path
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.main.execute import execute_source_load
-from sqlbuild.executor.load.models import LoadDagState, LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoadDagState,
+    LoadDispatchInputs,
+    LoadExecutionIndexes,
+    LoadExecutionResult,
+    LoadRuntimeParams,
+)
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.shared.helpers.load_execution import (
     load_resource_kind,
@@ -27,7 +32,6 @@ from sqlbuild.executor.shared.helpers.python_node_scheduler import (
 )
 from sqlbuild.executor.shared.helpers.worker_completion import run_worker_with_completion
 from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
@@ -73,59 +77,45 @@ def complete_dag_source(
 ) -> None:
     """Record one completed source-loader node and unlock downstream nodes."""
 
-    source_index: int = state.source_index_by_name[source_name]
-    state.results[source_index] = result
-    state.results_by_name[source_name] = result
-    if result.status == ExecutionStatus.FAILED or (
+    hard_failure: bool = result.status == ExecutionStatus.FAILED or (
         result.status == ExecutionStatus.SKIPPED and result.skip_mode == SkipMode.HARD
-    ):
-        state.failed_or_skipped.add(source_name)
+    )
+    state.record_completion(source_name=source_name, result=result, hard_failure=hard_failure)
     if on_load_complete is not None:
         on_load_complete(result)
-    unlock_downstream_python_nodes(
+    updated_in_degree: dict[str, int]
+    newly_ready: tuple[str, ...]
+    updated_in_degree, newly_ready = unlock_downstream_python_nodes(
         completed_node_name=source_name,
         in_degree=state.in_degree,
-        ready=state.ready,
         downstream_names=state.downstream_names,
     )
+    state.apply_unlock(in_degree=updated_in_degree, newly_ready=newly_ready)
 
 
 def execute_ready_dag_source(
     *,
     source_name: str,
-    source_by_name: dict[str, SourceEntry],
-    indexes: LoadExecutionIndexes,
-    failed_or_hard_skipped: set[str],
-    results_by_name: dict[str, LoadExecutionResult] | None = None,
+    dispatch: LoadDispatchInputs,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection: Any,
-    run_id: str,
-    runtime_dir: Path = Path("target"),
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
-    start_cursor_ts: datetime | None,
-    end_cursor_ts: datetime | None,
-    start_cursor_int: int | None,
-    end_cursor_int: int | None,
-    use_color: bool = False,
+    runtime: LoadRuntimeParams,
     on_progress: Callable[[str], None] | None = None,
-    providers: ProviderContainer | None = None,
-    result_store: Any | None = None,
 ) -> LoadExecutionResult:
     """Execute one ready DAG node or return a skipped result."""
 
-    source: SourceEntry = source_by_name[source_name]
+    indexes: LoadExecutionIndexes = dispatch.indexes
+    source: SourceEntry = dispatch.source_by_name[source_name]
     if should_skip_due_to_hard_dependency(
         source=source,
-        failed_or_hard_skipped=failed_or_hard_skipped,
+        failed_or_hard_skipped=dispatch.failed_or_hard_skipped,
         indexes=indexes,
     ):
         return skipped_load_result(source, reason="Upstream loader hard-skipped")
     if should_soft_skip_due_to_all_skipped_dependencies(
         source=source,
-        results_by_name={} if results_by_name is None else results_by_name,
+        results_by_name=dispatch.results_by_name,
         indexes=indexes,
     ):
         return skipped_load_result(
@@ -133,7 +123,7 @@ def execute_ready_dag_source(
             reason="All upstream loaders were soft-skipped",
             mode=SkipMode.SOFT,
         )
-    resolved_result_store: Any | None = result_store
+    resolved_result_store: Any | None = runtime.result_store
     if resolved_result_store is None and connection is not None:
         resolved_result_store = build_standard_node_result_store(
             adapter=adapter,
@@ -147,78 +137,42 @@ def execute_ready_dag_source(
         adapter=adapter,
         connection_config=connection_config,
         connection=connection,
-        run_id=run_id,
-        runtime_dir=runtime_dir,
-        target=target,
-        vars=vars,
-        is_reload=is_reload,
-        start_cursor_ts=start_cursor_ts,
-        end_cursor_ts=end_cursor_ts,
-        start_cursor_int=start_cursor_int,
-        end_cursor_int=end_cursor_int,
+        runtime=replace(runtime, result_store=resolved_result_store),
         statement_recorder=StatementRecorder(),
-        use_color=use_color,
         loader_ref_entries=indexes.loader_ref_entries,
         source_ref_entries=indexes.source_by_name,
         on_progress=on_progress,
-        providers=providers,
-        result_store=resolved_result_store,
     )
 
 
 def load_dag_worker(
+    *,
     source_name: str,
-    source_by_name: dict[str, SourceEntry],
-    indexes: LoadExecutionIndexes,
-    failed_or_hard_skipped: set[str],
-    results_by_name: dict[str, LoadExecutionResult],
+    dispatch: LoadDispatchInputs,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection_pool: queue.Queue[Any],
-    run_id: str,
-    target: str | None,
-    vars: dict[str, object],
-    is_reload: bool,
-    start_cursor_ts: datetime | None,
-    end_cursor_ts: datetime | None,
-    start_cursor_int: int | None,
-    end_cursor_int: int | None,
-    use_color: bool,
+    runtime: LoadRuntimeParams,
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
     on_load_progress: Callable[[SourceEntry, str], None] | None = None,
-    providers: ProviderContainer | None = None,
-    result_store: Any | None = None,
-    runtime_dir: Path = Path("target"),
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
+
+    source_by_name: dict[str, SourceEntry] = dispatch.source_by_name
 
     def _execute(connection: Any) -> LoadExecutionResult:
         return execute_ready_dag_source(
             source_name=source_name,
-            source_by_name=source_by_name,
-            indexes=indexes,
-            failed_or_hard_skipped=failed_or_hard_skipped,
-            results_by_name=results_by_name,
+            dispatch=dispatch,
             adapter=adapter,
             connection_config=connection_config,
             connection=connection,
-            run_id=run_id,
-            runtime_dir=runtime_dir,
-            target=target,
-            vars=vars,
-            is_reload=is_reload,
-            start_cursor_ts=start_cursor_ts,
-            end_cursor_ts=end_cursor_ts,
-            start_cursor_int=start_cursor_int,
-            end_cursor_int=end_cursor_int,
-            use_color=use_color,
+            runtime=runtime,
             on_progress=(
                 None
                 if on_load_progress is None
                 else lambda message: on_load_progress(source_by_name[source_name], message)
             ),
-            providers=providers,
-            result_store=result_store,
         )
 
     run_worker_with_completion(

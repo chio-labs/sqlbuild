@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.helpers.source_node import execute_build_source_node
+from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.types import ExecutionResourceKind
@@ -63,16 +64,15 @@ def test_given_build_source_node_when_executing_then_runs_loader_runtime(
             adapter=adapter,
             connection_config={"database": str(tmp_path / "source_node.duckdb")},
             connection=connection,
-            run_id="run-1",
-            target="dev",
-            effective_vars={"region": "west"},
-            is_reload=False,
-            start_cursor_ts=None,
-            end_cursor_ts=None,
-            start_cursor_int=None,
-            end_cursor_int=None,
-            on_progress=progress_events.append,
-            on_node_start=lambda name, kind: start_events.append((name, kind)),
+            runtime=BuildRuntimeParams(
+                run_id="run-1",
+                target="dev",
+                effective_vars={"region": "west"},
+            ),
+            callbacks=BuildCallbacks(
+                on_progress=progress_events.append,
+                on_node_start=lambda name, kind: start_events.append((name, kind)),
+            ),
         )
         rows: tuple[tuple[object, ...], ...] = tuple(
             connection.execute("SELECT id, status FROM raw_orders ORDER BY id").fetchall()

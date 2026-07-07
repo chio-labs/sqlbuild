@@ -53,12 +53,13 @@ def expand_selected_loader_dependencies(
             loader_name_by_function=loader_name_by_function,
             source_by_loader=source_by_loader,
         )
-        _add_dependency_closure_edges(
-            loader_function=loader_function,
-            loader_by_name=loader_by_name,
-            loader_name_by_function=loader_name_by_function,
-            source_by_loader=source_by_loader,
-            upstream_deps=expanded_upstream,
+        expanded_upstream.update(
+            _dependency_closure_edges(
+                loader_function=loader_function,
+                loader_by_name=loader_by_name,
+                loader_name_by_function=loader_name_by_function,
+                source_by_loader=source_by_loader,
+            )
         )
         if selected_key not in executable_dependency_source_keys:
             continue
@@ -217,14 +218,14 @@ def loader_to_source_entry(
     )
 
 
-def _add_dependency_closure_edges(
+def _dependency_closure_edges(
     *,
     loader_function: DiscoveredLoaderFunction,
     loader_by_name: dict[str, DiscoveredLoaderFunction],
     loader_name_by_function: dict[object, str],
     source_by_loader: dict[str, SourceEntry],
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> None:
+) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
+    edges: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
     dependency_name: str
     for dependency_name in _dependency_loader_names(
         loader_function=loader_function, loader_name_by_function=loader_name_by_function
@@ -233,18 +234,20 @@ def _add_dependency_closure_edges(
             loader_name=dependency_name, source_by_loader=source_by_loader
         )
         dependency_function: DiscoveredLoaderFunction = loader_by_name[dependency_name]
-        upstream_deps[dependency_key] = _dependency_keys(
+        edges[dependency_key] = _dependency_keys(
             loader_function=dependency_function,
             loader_name_by_function=loader_name_by_function,
             source_by_loader=source_by_loader,
         )
-        _add_dependency_closure_edges(
-            loader_function=dependency_function,
-            loader_by_name=loader_by_name,
-            loader_name_by_function=loader_name_by_function,
-            source_by_loader=source_by_loader,
-            upstream_deps=upstream_deps,
+        edges.update(
+            _dependency_closure_edges(
+                loader_function=dependency_function,
+                loader_by_name=loader_by_name,
+                loader_name_by_function=loader_name_by_function,
+                source_by_loader=source_by_loader,
+            )
         )
+    return edges
 
 
 def _dependency_keys(

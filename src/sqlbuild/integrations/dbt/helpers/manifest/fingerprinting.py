@@ -9,10 +9,14 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
+from sqlbuild.integrations.dbt.models import (
+    DbtFingerprintDestination,
+    DbtNodeExecutionResult,
+)
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 
@@ -22,10 +26,7 @@ def try_write_dbt_node_fingerprint(
     result: DbtNodeExecutionResult,
     adapter: BaseAdapter,
     connection: Any,
-    run_id: str,
-    fingerprint_database: str | None,
-    fingerprint_schema: str | None,
-    target_name: str | None,
+    destination: DbtFingerprintDestination,
     warnings: list[str],
     query_sql: str | None = None,
     seed_identity_hash: str | None = None,
@@ -35,6 +36,8 @@ def try_write_dbt_node_fingerprint(
 
     if not _is_successful_dbt_result(result):
         return
+    fingerprint_database: str | None = destination.fingerprint_database
+    fingerprint_schema: str | None = destination.fingerprint_schema
     if fingerprint_schema is None:
         warnings.append(
             f"dbt fingerprint write skipped for '{result.unique_id}': fingerprint schema is missing"
@@ -74,7 +77,7 @@ def try_write_dbt_node_fingerprint(
             target_database=result.database,
             target_schema=result.schema,
             target_name=result.relation_name or result.node_name,
-            run_id=run_id,
+            run_id=destination.run_id,
             definition_hash=definition_hash,
             version_hash=version_hash,
             schema_fingerprint=hashlib.sha256(b"").hexdigest(),
@@ -85,7 +88,7 @@ def try_write_dbt_node_fingerprint(
                     "node_name": result.node_name,
                     "materialized": result.materialized,
                     "status": result.status,
-                    "target_name": target_name,
+                    "target_name": destination.target_name,
                     "execution_time": result.execution_time,
                 },
                 sort_keys=True,
@@ -116,6 +119,17 @@ def try_write_dbt_node_fingerprint(
             "dbt fingerprint write failed for "
             f"'{result.unique_id}'; future dbt change detection may be incorrect: {exc}"
         )
+
+
+def build_dbt_fingerprint_destination(project: CompiledProject) -> DbtFingerprintDestination:
+    """Return the run-scoped fingerprint destination for a compiled dbt project."""
+
+    return DbtFingerprintDestination(
+        run_id=project.run_id,
+        fingerprint_database=project.effective_target_database,
+        fingerprint_schema=project.effective_target_schema,
+        target_name=project.effective_target_name,
+    )
 
 
 def _is_successful_dbt_result(result: DbtNodeExecutionResult) -> bool:

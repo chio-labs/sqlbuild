@@ -2,18 +2,33 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
+from typing import Any
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
+    DeferralInputs,
     FunctionPlanEntry,
     ModelPlanEntry,
+    PlannerOverrides,
+    PlannerPolicies,
+    PlannerSelection,
     PlanOutput,
     RunDespiteUnchangedDecision,
     RunDespiteUnchangedPlanningResult,
     SeedPlanEntry,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
+from sqlbuild.virtual.planner.models import (
+    VirtualBoundState,
+    VirtualPlanOptions,
+    VirtualPlanSemantics,
+)
 
 
 def rewrite_virtual_plan_entries(
@@ -148,3 +163,82 @@ def with_virtual_metadata(
         }
     )
     return replace(plan_output, metadata=metadata)
+
+
+def build_virtual_plan_output(
+    *,
+    graph: ProjectGraph,
+    adapter: BaseAdapter,
+    connection: Any,
+    effective_select_with_seeds: tuple[str, ...],
+    options: VirtualPlanOptions,
+    bound: VirtualBoundState,
+    discovered_inputs: DiscoveredProjectInputs,
+    on_progress: Callable[[str], None] | None,
+) -> PlanOutput:
+    """Build the execution plan for the selection, or an empty structural plan."""
+
+    if not effective_select_with_seeds:
+        return PlanOutput(
+            execution_order=tuple(graph.upstream_deps),
+            upstream_deps=graph.upstream_deps,
+            downstream_deps=graph.downstream_deps,
+            model_locations={model.name: model.destination for model in graph.project.models},
+            function_locations={
+                function.name: function.destination for function in graph.project.functions
+            },
+            seed_locations={seed.name: seed.destination for seed in graph.project.seeds},
+            source_map={source.name: source.source_entry for source in graph.project.sources},
+        )
+    return build_execution_plan(
+        project=graph.project,
+        adapter=adapter,
+        connection=connection,
+        selection=PlannerSelection(select=effective_select_with_seeds),
+        overrides=PlannerOverrides(
+            cursor_overrides=options.cursor_overrides,
+            full_refresh=options.full_refresh,
+            reload_sources=options.reload_sources,
+        ),
+        deferral=DeferralInputs(
+            deferred_locations=bound.deferred_locations,
+            deferred_relations=bound.deferred_relations,
+            defer_sources_to=options.defer_sources_to,
+            source_deferral_enabled=options.source_deferral_enabled,
+        ),
+        policies=PlannerPolicies(
+            auto_load_sources=options.auto_load_sources,
+            enable_reuse_planning=False,
+        ),
+        on_progress=on_progress,
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+    )
+
+
+def attach_virtual_plan_metadata(
+    *,
+    plan_output: PlanOutput,
+    graph: ProjectGraph,
+    semantics: VirtualPlanSemantics,
+    bound: VirtualBoundState,
+    target_name: str | None,
+    effective_select: tuple[str, ...],
+) -> PlanOutput:
+    """Attach virtual staleness and freshness metadata to a plan output."""
+
+    return with_virtual_metadata(
+        plan_output=plan_output,
+        target_name=target_name,
+        stale_model_names=semantics.stale_model_names,
+        stale_root_names=tuple(sorted(semantics.stale_root_reasons)),
+        remaining_stale_model_names=tuple(
+            sorted(set(semantics.stale_model_names) - set(effective_select))
+        ),
+        source_freshness_observed_source_names=(semantics.source_freshness_observed_source_names),
+        source_freshness_unchanged_source_names=(bound.source_freshness_unchanged_source_names),
+        source_freshness_incomplete_source_names=(
+            semantics.source_freshness_incomplete_source_names
+        ),
+        source_freshness_incomplete_model_names=(semantics.source_freshness_incomplete_model_names),
+    )

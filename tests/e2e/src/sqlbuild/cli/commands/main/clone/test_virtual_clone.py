@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clone.helpers import (
     prepare_virtual_clone_project,
     prod_seed_version_hash,
     prod_version_hash,
+    registered_physical_relation_artifacts,
     target_physical_relation_count,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -43,6 +44,12 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "destination refs        unchanged",
                 "hydrated             4",
                 "missing in origin    0",
+            ),
+            expected_registered_artifacts=(
+                ("model", "dim_customers"),
+                ("model", "fact_orders"),
+                ("model", "stg_orders"),
+                ("seed", "order_amounts"),
             ),
         )
     ],
@@ -82,6 +89,10 @@ def test_given_virtual_clone_when_source_has_workspace_versions_then_target_is_h
     ) == [(7,)]
     assert dev_ref_rows(project_dir) == []
     assert dev_seed_ref_rows(project_dir) == []
+    assert (
+        registered_physical_relation_artifacts(project_dir)
+        == test_case.expected_registered_artifacts
+    )
 
 
 @pytest.mark.parametrize(

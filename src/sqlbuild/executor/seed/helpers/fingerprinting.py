@@ -20,25 +20,22 @@ def try_write_seed_fingerprint(
     connection: Any,
     run_id: str,
     query_change_tracking: bool,
-    warnings: list[str],
-) -> None:
-    """Append active-target seed identity after a successful seed load."""
+) -> tuple[str, ...]:
+    """Write active-target seed identity after a successful load, returning warnings."""
 
     if not query_change_tracking:
-        return
+        return ()
     target_schema: str | None = seed_entry.destination.schema
     if target_schema is None:
-        warnings.append(
+        return (
             "fingerprint write skipped for "
             f"seed '{seed_entry.name}': target schema is missing while "
-            "query_change_tracking is enabled"
+            "query_change_tracking is enabled",
         )
-        return
     if not seed_entry.fingerprint_version_hash:
-        warnings.append(
-            f"fingerprint write skipped for seed '{seed_entry.name}': seed identity is missing"
+        return (
+            f"fingerprint write skipped for seed '{seed_entry.name}': seed identity is missing",
         )
-        return
     try:
         fingerprint: Fingerprint = Fingerprint(
             node_type=NODE_TYPE_SEED,
@@ -66,7 +63,8 @@ def try_write_seed_fingerprint(
             render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
         )
     except Exception as exc:
-        warnings.append(
+        return (
             f"fingerprint write failed for seed '{seed_entry.name}'; "
-            f"future changes-only seed planning may be incorrect: {exc}"
+            f"future changes-only seed planning may be incorrect: {exc}",
         )
+    return ()

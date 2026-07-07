@@ -25,21 +25,19 @@ def try_write_fingerprint(
     connection: Any,
     run_id: str,
     query_change_tracking: bool,
-    warnings: list[str],
     model_audits: tuple[AuditPlanEntry, ...] = (),
     audit_results: tuple[AuditExecutionResult, ...] = (),
-) -> None:
-    """Attempt best-effort fingerprint write after successful lifecycle."""
+) -> tuple[str, ...]:
+    """Attempt best-effort fingerprint write, returning any warnings."""
 
     if not query_change_tracking:
-        return
+        return ()
     target_schema: str | None = entry.destination.schema
     if target_schema is None:
-        warnings.append(
+        return (
             "fingerprint write skipped for "
-            f"'{entry.name}': target schema is missing while query_change_tracking is enabled"
+            f"'{entry.name}': target schema is missing while query_change_tracking is enabled",
         )
-        return
     try:
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         metadata_json: str = model_fingerprint_metadata_with_audit_gate(
@@ -76,7 +74,8 @@ def try_write_fingerprint(
             render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
         )
     except Exception as exc:
-        warnings.append(
+        return (
             f"fingerprint write failed for '{entry.name}'; "
-            f"future query-change detection may be incorrect: {exc}"
+            f"future query-change detection may be incorrect: {exc}",
         )
+    return ()

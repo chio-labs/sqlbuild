@@ -43,6 +43,7 @@ from sqlbuild.executor.scenario.helpers.snapshots.core import (
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionExpectationExecutionResult,
     ScenarioExpectedExpectationExecutionResult,
+    ScenarioFailureDetails,
     ScenarioLocalSnapshotLoadedRelation,
     ScenarioLocalSnapshotLoadResult,
     ScenarioRunResult,
@@ -298,9 +299,11 @@ def _execute_local_plan(
             duckdb_path=duckdb_path,
             loaded_relations=loaded_relations,
             function_results=function_results,
-            error_code=_first_error_code(function_results) or SCENARIO_LOCAL_FUNCTION_FAILED,
-            error_help=_first_error_help(function_results),
-            error_message=_first_error(function_results),
+            failure=ScenarioFailureDetails(
+                error_code=_first_error_code(function_results) or SCENARIO_LOCAL_FUNCTION_FAILED,
+                error_help=_first_error_help(function_results),
+                error_message=_first_error(function_results),
+            ),
         )
 
     model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
@@ -321,9 +324,11 @@ def _execute_local_plan(
             loaded_relations=loaded_relations,
             function_results=function_results,
             model_results=local_model_results,
-            error_code=_first_error_code(local_model_results) or SCENARIO_LOCAL_MODEL_FAILED,
-            error_help=_first_error_help(local_model_results),
-            error_message=_first_error(local_model_results),
+            failure=ScenarioFailureDetails(
+                error_code=_first_error_code(local_model_results) or SCENARIO_LOCAL_MODEL_FAILED,
+                error_help=_first_error_help(local_model_results),
+                error_message=_first_error(local_model_results),
+            ),
         )
 
     expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...]
@@ -354,9 +359,11 @@ def _execute_local_plan(
             model_results=model_results,
             expected_results=expected_results,
             assertion_results=assertion_results,
-            error_code=_first_error_code(check_results) or SCENARIO_LOCAL_MODEL_FAILED,
-            error_help=_first_error_help(check_results),
-            error_message=_first_error(check_results),
+            failure=ScenarioFailureDetails(
+                error_code=_first_error_code(check_results) or SCENARIO_LOCAL_MODEL_FAILED,
+                error_help=_first_error_help(check_results),
+                error_message=_first_error(check_results),
+            ),
         )
     if _has_failed(check_results):
         return _local_result(
@@ -369,9 +376,11 @@ def _execute_local_plan(
             model_results=model_results,
             expected_results=expected_results,
             assertion_results=assertion_results,
-            error_code=_first_error_code(check_results),
-            error_help=_first_error_help(check_results),
-            error_message=_first_error(check_results),
+            failure=ScenarioFailureDetails(
+                error_code=_first_error_code(check_results),
+                error_help=_first_error_help(check_results),
+                error_message=_first_error(check_results),
+            ),
         )
     return _local_result(
         scenario_plan=scenario_plan,
@@ -495,43 +504,48 @@ def _build_relation_replacements(
     }
     source_name: str
     for source_name, target in scenario_plan.relation_plan.source_fixture_locations.items():
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=loaded_names[(ScenarioArtifactKind.SOURCE, source_name)],
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=loaded_names[(ScenarioArtifactKind.SOURCE, source_name)],
+            )
         )
     ref_name: str
     for ref_name, target in scenario_plan.relation_plan.ref_fixture_locations.items():
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=loaded_names[(ScenarioArtifactKind.REF, ref_name)],
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=loaded_names[(ScenarioArtifactKind.REF, ref_name)],
+            )
         )
     dbt_ref_name: str
     for dbt_ref_name, target in scenario_plan.relation_plan.dbt_ref_fixture_locations.items():
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=loaded_names[(ScenarioArtifactKind.DBT_REF, dbt_ref_name)],
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=loaded_names[(ScenarioArtifactKind.DBT_REF, dbt_ref_name)],
+            )
         )
     seed_name: str
     for seed_name, target in scenario_plan.relation_plan.seed_locations.items():
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=loaded_names[(ScenarioArtifactKind.SEED, seed_name)],
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=loaded_names[(ScenarioArtifactKind.SEED, seed_name)],
+            )
         )
     model_name: str
     for model_name, target in scenario_plan.relation_plan.model_locations.items():
         if model_name in scenario_plan.graph_plan.ref_fixture_names:
             continue
-        _add_target_replacements(
-            replacements,
-            target=target,
-            local_name=local_snapshot_table_name(
-                kind=ScenarioArtifactKind.MODEL,
-                logical_name=model_name,
-            ),
+        replacements.update(
+            _target_replacements(
+                target=target,
+                local_name=local_snapshot_table_name(
+                    kind=ScenarioArtifactKind.MODEL,
+                    logical_name=model_name,
+                ),
+            )
         )
     return replacements
 
@@ -568,10 +582,11 @@ def _local_result(
     model_results: tuple[ModelExecutionResult, ...] = (),
     expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...] = (),
     assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...] = (),
-    error_code: str | None = None,
-    error_help: str | None = None,
-    error_message: str | None = None,
+    failure: ScenarioFailureDetails | None = None,
 ) -> ScenarioRunResult:
+    resolved_failure: ScenarioFailureDetails = (
+        failure if failure is not None else ScenarioFailureDetails()
+    )
     return ScenarioRunResult(
         scenario_name=scenario_plan.name,
         status=ExecutionStatus.SUCCESS
@@ -587,9 +602,9 @@ def _local_result(
         model_results=model_results,
         expected_results=expected_results,
         assertion_results=assertion_results,
-        error_code=error_code,
-        error_help=error_help,
-        error_message=error_message,
+        error_code=resolved_failure.error_code,
+        error_help=resolved_failure.error_help,
+        error_message=resolved_failure.error_message,
     )
 
 
@@ -602,12 +617,8 @@ def _local_target(table_name: str) -> CompiledRelationLocation:
     )
 
 
-def _add_target_replacements(
-    replacements: dict[str, str], *, target: CompiledRelationLocation, local_name: str
-) -> None:
-    original: str
-    for original in _target_name_variants(target):
-        replacements[original] = local_name
+def _target_replacements(*, target: CompiledRelationLocation, local_name: str) -> dict[str, str]:
+    return {original: local_name for original in _target_name_variants(target)}
 
 
 def _target_name_variants(target: CompiledRelationLocation) -> tuple[str, ...]:

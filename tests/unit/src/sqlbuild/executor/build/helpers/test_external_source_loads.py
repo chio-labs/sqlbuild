@@ -14,7 +14,11 @@ from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.build.helpers.external_source_loads import (
     run_external_source_loads_before_connections,
 )
-from sqlbuild.executor.build.models import ExternalSourceLoadResults
+from sqlbuild.executor.build.models import (
+    BuildCallbacks,
+    BuildRuntimeParams,
+    ExternalSourceLoadResults,
+)
 from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
@@ -85,18 +89,15 @@ def test_given_external_source_load_when_preloading_then_records_progress_and_no
         ),
         adapter=adapter,
         connection_config={},
-        run_id="run-1",
-        target="dev",
-        effective_vars={},
-        is_reload=False,
-        start_cursor_ts=None,
-        end_cursor_ts=None,
-        start_cursor_int=None,
-        end_cursor_int=None,
-        on_progress=None,
-        on_node_start=lambda name, kind: started_nodes.append((name, kind)),
-        on_node_complete=completed_results.append,
-        use_color=False,
+        runtime=BuildRuntimeParams(
+            run_id="run-1",
+            target="dev",
+            effective_vars={},
+        ),
+        callbacks=BuildCallbacks(
+            on_node_start=lambda name, kind: started_nodes.append((name, kind)),
+            on_node_complete=completed_results.append,
+        ),
     )
 
     assert adapter.connection_count == 0

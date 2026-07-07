@@ -16,7 +16,7 @@ skill_description = (
     "Use when modifying SQLBuild Python package structure, imports, boundaries, main/ "
     "entry modules, helpers/, shared/, classes/, models.py, types.py, constants.py, "
     "exceptions.py, adapter/integration modules, or fixing make check structure convention "
-    "violations SC001-SC043."
+    "violations SC001-SC068."
 )
 default_source_path = Path("scripts/structure/structure_conventions/rules.py")
 default_output_path = Path.home() / ".config/opencode/skills/sqlbuild-structure/SKILL.md"
@@ -74,6 +74,8 @@ Use this before changing Python files under `src/sqlbuild/` or `scripts/`, espec
 
 - Do not import sibling package internals. Promote shared code to the parent `shared/` boundary.
 - Treat `main/` as a focused entry boundary, not a place to reach casually into sibling internals.
+- Keep `main/` public functions as ordered lists of named phases; extract cohesive stages
+  into `helpers/` functions that return frozen result models instead of mutating arguments.
 - Keep nested runtime packages role-oriented; avoid arbitrary buckets and put support code
   under `helpers/`.
 - Keep `shared/` dependency-neutral; it must not import sibling package internals.
@@ -88,6 +90,31 @@ Use this before changing Python files under `src/sqlbuild/` or `scripts/`, espec
 2. Prefer moving shared behavior upward to `shared/` over importing sideways.
 3. Prefer role files and explicit support boundaries over new feature buckets.
 4. Run `make check` after the change and fix any `SC...` violations using this reference.
+
+## Main Orchestrators And Phase Functions
+
+- A `main/` public function is an orchestrator: it should read as an ordered list of named
+  phase calls, not as an inline script with interleaved intermediate state.
+- Name each extracted phase after the result it produces, such as `resolve_planner_scopes`
+  or `detect_staleness`; do not create `_part_one`-style splits.
+- Phase helpers accept explicit inputs and RETURN a named result model. Use frozen models
+  over mutable threading so dataflow is visible at call sites.
+- Main orchestrators consume phase results by assigning them to typed locals or returning
+  them. Bare function calls are reserved for raise-or-pass validators (`validate_*`,
+  `enforce_*`, `check_*`), callbacks and progress reporting (`on_*`, `report_*`),
+  diagnostics (`log*`, `print`), and writers (`write_*`); these prefixes are contracts,
+  so do not use them for real phases that produce values. Discard a genuine void effect
+  explicitly with `_ = ...` instead of a bare call.
+- Orchestrators may drive resources they own through method calls (connections, CLI
+  reporters, local accumulators such as `results.append(...)`); phases themselves are
+  functions and must hand results back as values, never by mutating shared objects.
+- `SC063`, `SC064`, and `SC065` cap statements, distinct calls, and locals for every
+  top-level function in main/ modules, private helpers included; private functions in
+  main/ are small glue, so phase-sized logic belongs in `helpers/`. `SC066` rejects
+  discarded phase function call results in all main/ top-level functions. `SC067` rejects
+  helpers mutating their parameters (`self`/`cls` exempt) unless a deliberate builder is
+  marked with `# sc: allow-param-mutation`. `SC068` requires frozen dataclass result
+  models in `models.py`.
 
 ## Generated Rule Reference
 

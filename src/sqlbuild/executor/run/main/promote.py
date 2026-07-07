@@ -22,7 +22,7 @@ def promote_run_relation_to_destination(
 ) -> None:
     """Promote an already-created run relation into its final destination."""
 
-    promote_relation_to_destination(
+    _ = promote_relation_to_destination(
         adapter=adapter,
         connection=connection,
         origin_relation=origin_relation,

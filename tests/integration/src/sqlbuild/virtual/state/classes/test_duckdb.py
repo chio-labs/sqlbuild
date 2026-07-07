@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.node_results.models import (
+    NodeResultEnvelope,
+    NodeResultQuery,
+    NodeResultRecord,
+)
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
@@ -250,66 +254,76 @@ def test_given_duckdb_node_results_when_reading_then_scopes_by_environment_and_s
             connection,
             schema=test_case.schema,
             virtual_environment_name=test_case.virtual_environment_name,
-            node_type="task",
-            node_name="produce_result",
-            target_database=None,
-            target_schema="dev",
-            target_name=None,
-            statuses=(NodeResultStatus.SUCCESS.value,),
-            run_id=None,
-            limit=1,
+            query=NodeResultQuery(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="dev",
+                target_name=None,
+                statuses=(NodeResultStatus.SUCCESS.value,),
+                run_id=None,
+                limit=1,
+            ),
         )
         explicit_failed: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
             connection,
             schema=test_case.schema,
             virtual_environment_name=test_case.virtual_environment_name,
-            node_type="task",
-            node_name="produce_result",
-            target_database=None,
-            target_schema="dev",
-            target_name=None,
-            statuses=None,
-            run_id="run_3",
-            limit=1,
+            query=NodeResultQuery(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="dev",
+                target_name=None,
+                statuses=None,
+                run_id="run_3",
+                limit=1,
+            ),
         )
         isolated_results: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
             connection,
             schema=test_case.schema,
             virtual_environment_name=test_case.isolated_virtual_environment_name,
-            node_type="task",
-            node_name="produce_result",
-            target_database=None,
-            target_schema="dev",
-            target_name=None,
-            statuses=(NodeResultStatus.SUCCESS.value,),
-            run_id=None,
-            limit=5,
+            query=NodeResultQuery(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="dev",
+                target_name=None,
+                statuses=(NodeResultStatus.SUCCESS.value,),
+                run_id=None,
+                limit=5,
+            ),
         )
         history_results: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
             connection,
             schema=test_case.schema,
             virtual_environment_name=test_case.virtual_environment_name,
-            node_type="task",
-            node_name="produce_result",
-            target_database=None,
-            target_schema="dev",
-            target_name=None,
-            statuses=(NodeResultStatus.SUCCESS.value,),
-            run_id=None,
-            limit=5,
+            query=NodeResultQuery(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="dev",
+                target_name=None,
+                statuses=(NodeResultStatus.SUCCESS.value,),
+                run_id=None,
+                limit=5,
+            ),
         )
         target_isolated_results: tuple[NodeResultEnvelope, ...] = backend.read_node_results(
             connection,
             schema=test_case.schema,
             virtual_environment_name=test_case.virtual_environment_name,
-            node_type="task",
-            node_name="produce_result",
-            target_database=None,
-            target_schema="prod",
-            target_name=None,
-            statuses=(NodeResultStatus.SUCCESS.value,),
-            run_id=None,
-            limit=1,
+            query=NodeResultQuery(
+                node_type="task",
+                node_name="produce_result",
+                target_database=None,
+                target_schema="prod",
+                target_name=None,
+                statuses=(NodeResultStatus.SUCCESS.value,),
+                run_id=None,
+                limit=1,
+            ),
         )
         rollback_rows: list[tuple[object, ...]] = fetch_all(
             connection,

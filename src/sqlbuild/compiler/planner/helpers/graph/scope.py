@@ -14,14 +14,22 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.graph.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
-    build_upstream_deps,
+    build_execution_edge_origins,
+    build_execution_upstream_deps,
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.graph.loader_dag import expand_selected_loader_dependencies
 from sqlbuild.compiler.planner.helpers.graph.selectors import parse_selector, resolve_selectors
-from sqlbuild.compiler.planner.helpers.output.plan_entry import build_path_index, build_tag_index
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector, PlannerScope
 from sqlbuild.compiler.planner.types import SelectorKind
+from sqlbuild.compiler.shared.helpers.lineage_graph import (
+    build_lineage_downstream_deps,
+    build_lineage_upstream_deps,
+)
+from sqlbuild.compiler.shared.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
+)
 
 
 def build_planner_scope(
@@ -32,26 +40,21 @@ def build_planner_scope(
     auto_load_sources: bool,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> PlannerScope:
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        project
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
     )
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream_deps
     )
     all_keys: dict[str, CompiledObjectKey] = _build_all_keys(project)
-    tag_index: dict[str, frozenset[CompiledObjectKey]] = build_tag_index(project)
-    path_idx: dict[CompiledObjectKey, str] = build_path_index(project)
     resolved_selected_keys: frozenset[CompiledObjectKey] = (
         selected_keys
         if selected_keys is not None
-        else resolve_selectors(
+        else _resolve_selection_on_lineage_graph(
+            project=project,
             select=select,
             exclude=exclude,
             all_keys=all_keys,
-            upstream=upstream_deps,
-            downstream=downstream_deps,
-            tag_index=tag_index,
-            path_index=path_idx,
         )
     )
     executable_dependency_source_keys: frozenset[CompiledObjectKey] = (
@@ -88,7 +91,34 @@ def build_planner_scope(
         all_keys=all_keys,
         models_by_name={model.name: model for model in project.models},
         selected_keys=resolved_selected_keys,
-        execution_order=topologically_order_keys(upstream_deps),
+        execution_order=topologically_order_keys(
+            upstream_deps,
+            injected_edge_origins=build_execution_edge_origins(project),
+        ),
+        user_selected_keys=resolved_selected_keys,
+    )
+
+
+def _resolve_selection_on_lineage_graph(
+    *,
+    project: CompiledProject,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    all_keys: dict[str, CompiledObjectKey],
+) -> frozenset[CompiledObjectKey]:
+    """Resolve user selection against the LINEAGE graph; execution edges never affect selection."""
+
+    lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_lineage_upstream_deps(project)
+    )
+    return resolve_selectors(
+        select=select,
+        exclude=exclude,
+        all_keys=all_keys,
+        upstream=lineage_upstream,
+        downstream=build_lineage_downstream_deps(lineage_upstream),
+        tag_index=build_model_tag_index(project),
+        path_index=build_model_path_index(project),
     )
 
 

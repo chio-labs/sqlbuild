@@ -17,7 +17,12 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.helpers.resolve.resolve import resolve_model_sql
-from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
+from sqlbuild.compiler.planner.models import (
+    BackfillResult,
+    CursorOverridePair,
+    ModelPlanContext,
+    WarehouseSnapshot,
+)
 from sqlbuild.compiler.planner.types import BackfillAction
 from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
@@ -82,15 +87,21 @@ def resolve_and_execute(
         adapter=DuckDbAdapter(),
         model=model,
         snapshot=snapshot,
-        model_locations=model_locations,
-        seed_locations={},
-        source_map=source_map,
-        source_warehouse_columns=source_warehouse_columns,
-        star_exclude_keyword="EXCLUDE",
+        context=ModelPlanContext(
+            model_locations=model_locations,
+            models_by_name={},
+            seed_locations={},
+            function_locations={},
+            source_map=source_map,
+            source_warehouse_columns=source_warehouse_columns,
+            star_exclude_keyword="EXCLUDE",
+        ),
         backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
         full_refresh=full_refresh,
-        start_cursor_override=start_cursor_override,
-        end_cursor_override=end_cursor_override,
+        cursor_overrides=CursorOverridePair(
+            start_cursor_override=start_cursor_override,
+            end_cursor_override=end_cursor_override,
+        ),
     )
 
     result: Any = connection.execute(resolved_sql)

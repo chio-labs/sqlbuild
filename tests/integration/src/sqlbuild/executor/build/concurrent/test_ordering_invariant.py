@@ -14,10 +14,14 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildCallbacks,
+    BuildExecutionResult,
+    BuildRuntimeParams,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from tests.integration.src.sqlbuild.executor.build.concurrent._test_types import (
     OrderingInvariantTestCase,
@@ -88,8 +92,7 @@ def test_given_dag_when_building_concurrently_then_no_node_starts_before_deps_co
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
         adapter=adapter,
-        no_sql_validation=True,
-        connection_config=config,
+        options=CompilePipelineOptions(no_sql_validation=True, connection_config=config),
     )
     plan: PlanOutput = pipeline_result.plan_output
 
@@ -116,11 +119,15 @@ def test_given_dag_when_building_concurrently_then_no_node_starts_before_deps_co
             connection_config=config,
             connections=tuple(worker_connections),
             scheduler_connection=scheduler_connection,
-            promotion_mode=TablePromotionMode.STAGED,
-            run_id="test_ordering",
-            query_change_tracking=True,
-            on_node_start=on_start,
-            on_node_complete=on_complete,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.STAGED,
+                run_id="test_ordering",
+                query_change_tracking=True,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=on_start,
+                on_node_complete=on_complete,
+            ),
         )
     finally:
         conn: Any

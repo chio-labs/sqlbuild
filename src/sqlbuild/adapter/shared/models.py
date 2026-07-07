@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
 from sqlbuild.adapter.shared.types import (
     CursorKind,
@@ -13,6 +15,7 @@ from sqlbuild.adapter.shared.types import (
     LifeCycleEventKind,
     TypeFamily,
 )
+from sqlbuild.compiler.compile.types import FunctionLanguage
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,34 @@ class FunctionInfo:
 
 
 @dataclass(frozen=True)
+class SnapshotChangeTarget:
+    """Common destination/origin columns for a snapshot change-apply render."""
+
+    destination: str
+    origin: str
+    unique_key: tuple[str, ...]
+    valid_from_column: str
+    valid_to_column: str
+    output_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FunctionDefinition:
+    """Warehouse function definition inputs for create/render adapter methods."""
+
+    destination: str
+    arguments: tuple[Any, ...]
+    returns: str
+    body_sql: str
+    return_columns: tuple[Any, ...] = ()
+    language: FunctionLanguage = FunctionLanguage.SQL
+    runtime_version: str | None = None
+    entry_point: str | None = None
+    packages: tuple[str, ...] = ()
+    source_file_path: Path | None = None
+
+
+@dataclass(frozen=True)
 class QueryResult:
     """Rows returned by an ad hoc warehouse query."""
 
@@ -181,22 +212,4 @@ class LifeCycleEvent:
     content: str
 
 
-@dataclass
-class StatementRecorder:
-    """Mutable recorder for runtime lifecycle events."""
-
-    events: list[LifeCycleEvent] = field(default_factory=list)
-
-    def record(self, statement: str) -> None:
-        self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=statement))
-
-    def record_many(self, statements: Iterable[str]) -> None:
-        statement: str
-        for statement in statements:
-            self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=statement))
-
-    def log(self, message: str) -> None:
-        self.events.append(LifeCycleEvent(kind=LifeCycleEventKind.LOG, content=message))
-
-    def snapshot(self) -> tuple[LifeCycleEvent, ...]:
-        return tuple(self.events)
+from sqlbuild.adapter.shared.classes.statement_recorder import StatementRecorder  # noqa: E402,F401
