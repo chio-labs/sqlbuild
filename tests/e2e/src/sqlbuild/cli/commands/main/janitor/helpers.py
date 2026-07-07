@@ -10,7 +10,10 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessRecord,
+    SourceFreshnessRenderers,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
 
@@ -162,9 +165,11 @@ def create_direct_state_history(*, db_path: Path) -> None:
                         observed_at=datetime(2026, 1, 15, observed_hour, 5, 0),
                     ),
                 ),
-                render_qualified_name=adapter.render_qualified_name,
-                render_framework_type=adapter.render_framework_type,
-                render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+                renderers=SourceFreshnessRenderers(
+                    render_qualified_name=adapter.render_qualified_name,
+                    render_framework_type=adapter.render_framework_type,
+                    render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+                ),
             )
     finally:
         connection.close()

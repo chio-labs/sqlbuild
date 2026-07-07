@@ -5,8 +5,11 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild.cli.commands.helpers.playground import (
+    completion_output as playground_completion_output,
+)
 from sqlbuild.cli.commands.helpers.playground.copy import create_playground_project
-from sqlbuild.cli.commands.main.commands import playground as playground_command
+from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands.main.commands.playground import run_playground
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
@@ -367,7 +370,13 @@ def test_given_playground_command_when_running_then_it_prints_next_steps(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    exit_code: int = run_playground(tmp_path, test_case.target_path, template=test_case.template)
+    exit_code: int = run_playground(
+        PlaygroundCommandRequest(
+            project_dir=tmp_path,
+            target_path=test_case.target_path,
+            template=test_case.template,
+        )
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0
@@ -401,9 +410,15 @@ def test_given_color_terminal_when_running_playground_command_then_it_styles_key
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(playground_command, "supports_color", lambda: True)
+    monkeypatch.setattr(playground_completion_output, "supports_color", lambda: True)
 
-    exit_code: int = run_playground(tmp_path, test_case.target_path, template=test_case.template)
+    exit_code: int = run_playground(
+        PlaygroundCommandRequest(
+            project_dir=tmp_path,
+            target_path=test_case.target_path,
+            template=test_case.template,
+        )
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0

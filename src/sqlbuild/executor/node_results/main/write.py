@@ -36,23 +36,17 @@ def write_node_result_record(
     )
 
     def initialize_node_result_table() -> None:
-        execute(connection, create_sql)
+        _ = execute(connection, create_sql)
         if render_create_index_sqls is not None:
             index_sql: str
             for index_sql in render_create_index_sqls(database=database, schema=schema):
-                execute(connection, index_sql)
+                _ = execute(connection, index_sql)
 
-    run_with_node_result_ddl_lock(initialize_node_result_table)
+    _ = run_with_node_result_ddl_lock(initialize_node_result_table)
     insert_sql: str = build_insert_sql(
         database=database,
         schema=schema,
-        node_type=record.node_type,
-        node_name=record.node_name,
-        target_database=record.target_database,
-        target_schema=record.target_schema,
-        target_name=record.target_name,
-        run_id=record.run_id,
-        status=record.status,
+        record=record,
         payload_json_b64=encode_json_b64(
             record.payload,
             label="payload",
@@ -63,9 +57,6 @@ def write_node_result_record(
             label="metadata",
             node_name=record.node_name,
         ),
-        error_message=record.error_message,
-        materialized=record.materialized,
-        ts=record.ts.isoformat(),
         render_qualified_name=render_qualified_name,
     )
-    execute(connection, insert_sql)
+    _ = execute(connection, insert_sql)

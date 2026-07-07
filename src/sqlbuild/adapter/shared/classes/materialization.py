@@ -6,8 +6,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
-from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.adapter.shared.models import ColumnInfo, FunctionDefinition, StatementRecorder
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 
@@ -44,16 +43,7 @@ class MaterializationMixin(ABC):
         self,
         connection: Any,
         *,
-        destination: str,
-        arguments: tuple[Any, ...],
-        returns: str,
-        body_sql: str,
-        return_columns: tuple[Any, ...] = (),
-        language: FunctionLanguage = FunctionLanguage.SQL,
-        runtime_version: str | None = None,
-        entry_point: str | None = None,
-        packages: tuple[str, ...] = (),
-        source_file_path: Path | None = None,
+        definition: FunctionDefinition,
         statement_recorder: StatementRecorder,
     ) -> None:
         """Create or replace a function."""

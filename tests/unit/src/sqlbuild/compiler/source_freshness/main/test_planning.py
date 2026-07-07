@@ -18,6 +18,7 @@ from sqlbuild.compiler.source_freshness.main.planning import (
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
+    SourceFreshnessRenderers,
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessAgePolicy, SourceFreshnessConfig
@@ -373,9 +374,11 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
                     observed_at=datetime(2026, 1, 15, 12, 0, 0),
                 ),
             ),
-            render_qualified_name=RENDER_QUALIFIED_NAME,
-            render_framework_type=RENDER_FRAMEWORK_TYPE,
-            render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+            renderers=SourceFreshnessRenderers(
+                render_qualified_name=RENDER_QUALIFIED_NAME,
+                render_framework_type=RENDER_FRAMEWORK_TYPE,
+                render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+            ),
         )
 
         result: StandardSourceFreshnessPlanningResult = (

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapter.shared.models import SnapshotChangeTarget
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     SnapshotAdapterMethodsTestCase,
@@ -158,16 +159,18 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "UNION ALL SELECT 2 AS customer_id, 'basic' AS plan, 'active' AS status"
     )
     for statement in adapter.render_apply_check_snapshot_changes(
-        destination="main.check_target",
-        origin="main.check_source",
-        unique_key=("customer_id",),
+        target=SnapshotChangeTarget(
+            destination="main.check_target",
+            origin="main.check_source",
+            unique_key=("customer_id",),
+            valid_from_column="valid_from",
+            valid_to_column="valid_to",
+            output_columns=("customer_id", "plan", "status"),
+        ),
         check_columns=("status",),
         updated_at_column=None,
         observed_at_column=None,
-        valid_from_column="valid_from",
-        valid_to_column="valid_to",
         initial_valid_from=None,
-        output_columns=("customer_id", "plan", "status"),
         invalidate_hard_deletes=False,
     ):
         connection.execute(statement)

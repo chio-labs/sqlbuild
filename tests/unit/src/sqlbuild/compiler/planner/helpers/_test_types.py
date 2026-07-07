@@ -70,6 +70,15 @@ class SourceColumnsTestCase:
 
 
 @dataclass(frozen=True)
+class KnownSourceColumnsReuseTestCase:
+    description: str
+    known_source_columns: dict[str, tuple[str, ...]] | None
+    adapter_column_names: tuple[str, ...]
+    expected_queried_sql_count: int
+    expected_source_column_names: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
 class SeedIdentityTestCase:
     description: str
     seed_contents: str
@@ -313,6 +322,17 @@ class CycleDetectionTestCase:
     description: str
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     expected_error_type: type[Exception]
+    injected_edge_origins: dict[tuple[CompiledObjectKey, CompiledObjectKey], str] | None = None
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionEdgeOriginsTestCase:
+    description: str
+    model_deps: dict[str, tuple[str, ...]]
+    source_names: tuple[str, ...]
+    audit_model_source_deps: dict[str, tuple[str, ...]]
+    expected_origin_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

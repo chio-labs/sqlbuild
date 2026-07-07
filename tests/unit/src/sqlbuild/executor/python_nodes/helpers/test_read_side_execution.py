@@ -9,6 +9,7 @@ from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.python_nodes.helpers.read_side_execution import (
     ReadSidePythonExecutionTracker,
 )
+from sqlbuild.executor.python_nodes.models import PythonNodeRuntime
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
@@ -45,14 +46,16 @@ def test_given_sql_dep_completes_when_tracking_read_side_then_runs_ready_python_
     tracker: ReadSidePythonExecutionTracker = ReadSidePythonExecutionTracker(
         python_graph=graph,
         selected_python_names=test_case.selected_names,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
-        default_schema="default_schema",
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+            default_schema="default_schema",
+        ),
     )
 
     sql_name: str
@@ -96,14 +99,16 @@ def test_given_sql_dep_fails_when_finalizing_read_side_then_skips_unrun_python_n
     tracker: ReadSidePythonExecutionTracker = ReadSidePythonExecutionTracker(
         python_graph=graph,
         selected_python_names=test_case.selected_names,
-        adapter=PythonNodeContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
-        default_schema="default_schema",
+        runtime=PythonNodeRuntime(
+            adapter=PythonNodeContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+            default_schema="default_schema",
+        ),
     )
 
     sql_name: str

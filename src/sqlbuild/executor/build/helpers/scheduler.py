@@ -43,15 +43,21 @@ from sqlbuild.executor.build.constants import (
     BUILD_WORKER_FAILED_CODE,
     INCREMENTAL_ACTIONS,
 )
-from sqlbuild.executor.build.helpers.blocking import block_downstream
+from sqlbuild.executor.build.helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build.helpers.end_audits import run_end_audits
+from sqlbuild.executor.build.helpers.indexes import build_execution_indexes
 from sqlbuild.executor.build.helpers.source_audits import run_pending_source_audits
 from sqlbuild.executor.build.helpers.source_node import execute_build_source_node
 from sqlbuild.executor.build.models import (
+    BuildCallbacks,
+    BuildCustomizations,
     BuildIndexes,
+    BuildInitialState,
+    BuildRuntimeParams,
     FunctionExecutionResult,
     NodeCompletion,
     SeedExecutionResult,
+    SourceAuditRunResult,
     SourceLoadPlanEntry,
 )
 from sqlbuild.executor.build.shared.helpers.node_source_watermarks import (
@@ -70,9 +76,10 @@ from sqlbuild.executor.run.main.execute import (
     execute_table_entry,
     execute_view_entry,
 )
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
 from sqlbuild.executor.seed.main.execute import execute_seed
+from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.load_execution import (
     build_load_execution_indexes,
     skipped_load_result,
@@ -107,101 +114,82 @@ class BuildScheduler:
         self,
         *,
         plan: PlanOutput,
-        indexes: BuildIndexes,
         adapter: BaseAdapter,
         connection_config: dict[str, object],
         connections: tuple[Any, ...],
         scheduler_connection: Any,
-        promotion_mode: TablePromotionMode,
-        run_id: str,
-        runtime_dir: Path,
-        query_change_tracking: bool,
-        snapshots: SnapshotsConfig,
-        allow_snapshot_schema_change: bool,
-        run_audits: bool,
-        run_tests: bool,
-        fail_fast: bool,
-        on_node_start: Callable[[str, ExecutionResourceKind], None] | None,
-        on_node_complete: Callable[[object], None] | None,
-        on_progress: Callable[[str], None] | None,
-        before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None,
-        custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
-        custom_prepare_version_functions: Mapping[str, Callable[[PrepareVersionContext], None]]
-        | None = None,
-        loader_functions: tuple[DiscoveredLoaderFunction, ...] = (),
-        loader_is_reload: bool = False,
-        start_cursor_ts: datetime | None = None,
-        end_cursor_ts: datetime | None = None,
-        start_cursor_int: int | None = None,
-        end_cursor_int: int | None = None,
-        target: str = "",
-        effective_vars: dict[str, object] | None = None,
-        warehouse_relations: dict[str, RelationInfo] | None = None,
-        on_sub_progress: Callable[[str], None] | None = None,
-        use_color: bool = False,
-        precompleted_keys: frozenset[CompiledObjectKey] = frozenset(),
-        initial_load_results: tuple[LoadExecutionResult, ...] = (),
-        initial_failed_keys: frozenset[CompiledObjectKey] = frozenset(),
-        providers: ProviderContainer | None = None,
-        python_identity_recorder: PythonIdentityRecorder | None = None,
+        runtime: BuildRuntimeParams,
+        callbacks: BuildCallbacks,
+        customizations: BuildCustomizations,
+        initial_state: BuildInitialState,
         node_source_watermark_context: NodeSourceWatermarkExecutionContext | None = None,
     ) -> None:
+        if runtime.promotion_mode is None:
+            raise ExecutorInputError("build scheduler requires a resolved promotion mode")
+        self._runtime: BuildRuntimeParams = runtime
+        self._callbacks: BuildCallbacks = callbacks
         self._plan: PlanOutput = plan
-        self._indexes: BuildIndexes = indexes
+        self._indexes: BuildIndexes = build_execution_indexes(plan)
         self._adapter: BaseAdapter = adapter
         self._connection_config: dict[str, object] = connection_config
         self._connections: tuple[Any, ...] = connections
         self._scheduler_connection: Any = scheduler_connection
-        self._promotion_mode: TablePromotionMode = promotion_mode
-        self._run_id: str = run_id
-        self._runtime_dir: Path = runtime_dir
-        self._query_change_tracking: bool = query_change_tracking
-        self._snapshots: SnapshotsConfig = snapshots
-        self._allow_snapshot_schema_change: bool = allow_snapshot_schema_change
-        self._run_audits: bool = run_audits
-        self._run_tests: bool = run_tests
-        self._fail_fast: bool = fail_fast
-        self._on_node_start: Callable[[str, ExecutionResourceKind], None] | None = on_node_start
-        self._on_node_complete: Callable[[object], None] | None = on_node_complete
-        self._on_progress: Callable[[str], None] | None = on_progress
+        self._promotion_mode: TablePromotionMode = runtime.promotion_mode
+        self._run_id: str = runtime.run_id
+        self._runtime_dir: Path = runtime.runtime_dir
+        self._query_change_tracking: bool = (
+            True if runtime.query_change_tracking is None else runtime.query_change_tracking
+        )
+        self._snapshots: SnapshotsConfig = runtime.snapshots or SnapshotsConfig()
+        self._allow_snapshot_schema_change: bool = runtime.allow_snapshot_schema_change
+        self._run_audits: bool = runtime.run_audits
+        self._run_tests: bool = runtime.run_tests
+        self._fail_fast: bool = runtime.fail_fast
+        self._on_node_start: Callable[[str, ExecutionResourceKind], None] | None = (
+            callbacks.on_node_start
+        )
+        self._on_node_complete: Callable[[object], None] | None = callbacks.on_node_complete
+        self._on_progress: Callable[[str], None] | None = callbacks.on_progress
         self._before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = (
-            before_model_materialize
+            callbacks.before_model_materialize
         )
         self._custom_materializations: Mapping[str, Callable[..., MaterializationResult]] = (
-            custom_materializations or {}
+            customizations.custom_materializations or {}
         )
         self._custom_prepare_version_functions: Mapping[
             str, Callable[[PrepareVersionContext], None]
-        ] = custom_prepare_version_functions or {}
+        ] = customizations.custom_prepare_version_functions or {}
         self._loader_functions_by_name: dict[str, DiscoveredLoaderFunction] = {
-            loader.name: loader for loader in loader_functions
+            loader.name: loader for loader in customizations.loader_functions
         }
         self._loader_ref_entries: dict[Callable[..., object], SourceEntry] = (
             build_load_execution_indexes(
                 sources=tuple(plan.source_map.values()),
-                loader_functions=loader_functions,
+                loader_functions=customizations.loader_functions,
             ).loader_ref_entries
         )
-        self._loader_is_reload: bool = loader_is_reload
-        self._start_cursor_ts: datetime | None = start_cursor_ts
-        self._end_cursor_ts: datetime | None = end_cursor_ts
-        self._start_cursor_int: int | None = start_cursor_int
-        self._end_cursor_int: int | None = end_cursor_int
-        self._target: str = target
-        self._effective_vars: dict[str, object] = effective_vars or {}
-        self._warehouse_relations: dict[str, RelationInfo] = warehouse_relations or {}
-        self._on_sub_progress: Callable[[str], None] | None = on_sub_progress
-        self._use_color: bool = use_color
-        self._providers: ProviderContainer | None = providers
-        self._python_identity_recorder: PythonIdentityRecorder | None = python_identity_recorder
+        self._loader_is_reload: bool = runtime.loader_is_reload
+        self._start_cursor_ts: datetime | None = runtime.start_cursor_ts
+        self._end_cursor_ts: datetime | None = runtime.end_cursor_ts
+        self._start_cursor_int: int | None = runtime.start_cursor_int
+        self._end_cursor_int: int | None = runtime.end_cursor_int
+        self._target: str = runtime.target
+        self._effective_vars: dict[str, object] = runtime.effective_vars or {}
+        self._warehouse_relations: dict[str, RelationInfo] = initial_state.warehouse_relations or {}
+        self._on_sub_progress: Callable[[str], None] | None = callbacks.on_sub_progress
+        self._use_color: bool = runtime.use_color
+        self._providers: ProviderContainer | None = runtime.providers
+        self._python_identity_recorder: PythonIdentityRecorder | None = (
+            callbacks.python_identity_recorder
+        )
         self._node_source_watermark_context: NodeSourceWatermarkExecutionContext | None = (
             node_source_watermark_context
         )
 
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
-        self._completed_keys: set[CompiledObjectKey] = set(precompleted_keys)
-        self._initial_failed_keys: frozenset[CompiledObjectKey] = initial_failed_keys
+        self._completed_keys: set[CompiledObjectKey] = set(initial_state.precompleted_keys)
+        self._initial_failed_keys: frozenset[CompiledObjectKey] = initial_state.initial_failed_keys
         self._in_flight: set[CompiledObjectKey] = set()
         self._ready: deque[CompiledObjectKey] = deque()
         self._stop: bool = False
@@ -209,7 +197,7 @@ class BuildScheduler:
         self._model_results: list[ModelExecutionResult] = []
         self._seed_results: list[SeedExecutionResult] = []
         self._function_results: list[FunctionExecutionResult] = []
-        self._load_results: list[LoadExecutionResult] = list(initial_load_results)
+        self._load_results: list[LoadExecutionResult] = list(initial_state.initial_load_results)
         self._test_results: list[SqlTestExecutionResult] = []
         self._source_audit_results: list[AuditExecutionResult] = []
 
@@ -299,11 +287,12 @@ class BuildScheduler:
     def _block_initial_failed_keys(self) -> None:
         key: CompiledObjectKey
         for key in self._initial_failed_keys:
-            block_downstream(
-                failed_key=key,
-                downstream_deps=self._plan.downstream_deps,
-                selected_keys=self._plan.selected_keys,
-                blocked_keys=self._blocked_keys,
+            self._blocked_keys.update(
+                downstream_blocked_keys(
+                    failed_key=key,
+                    downstream_deps=self._plan.downstream_deps,
+                    selected_keys=self._plan.selected_keys,
+                )
             )
         if self._fail_fast and self._initial_failed_keys:
             self._stop = True
@@ -401,24 +390,21 @@ class BuildScheduler:
             model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
             if model_entry is None:
                 return False
-            source_blocked: bool = run_pending_source_audits(
+            audit_run: SourceAuditRunResult = run_pending_source_audits(
                 model_key=key,
-                upstream_deps=self._plan.upstream_deps,
-                downstream_deps=self._plan.downstream_deps,
-                selected_keys=self._plan.selected_keys,
+                plan=self._plan,
                 source_audits_by_source=self._indexes.source_audits_by_source,
-                executed_source_audits=self._executed_source_audits,
-                failed_sources=self._failed_sources,
-                blocked_keys=self._blocked_keys,
+                executed_source_audits=frozenset(self._executed_source_audits),
+                failed_sources=frozenset(self._failed_sources),
                 adapter=self._adapter,
                 connection=self._scheduler_connection,
-                model_locations=self._plan.model_locations,
-                seed_locations=self._plan.seed_locations,
-                source_map=self._plan.source_map,
-                all_source_audit_results=self._source_audit_results,
                 fail_fast=self._fail_fast,
             )
-            if source_blocked:
+            self._executed_source_audits.update(audit_run.executed_source_names)
+            self._failed_sources.update(audit_run.failed_source_names)
+            self._blocked_keys.update(audit_run.newly_blocked_keys)
+            self._source_audit_results.extend(audit_run.audit_results)
+            if audit_run.blocked:
                 self._blocked_keys.add(key)
                 self._model_results.append(
                     ModelExecutionResult(
@@ -468,20 +454,8 @@ class BuildScheduler:
             adapter=self._adapter,
             connection_config=self._connection_config,
             connection=connection,
-            run_id=self._run_id,
-            runtime_dir=self._runtime_dir,
-            target=self._target,
-            effective_vars=self._effective_vars,
-            is_reload=self._loader_is_reload,
-            start_cursor_ts=self._start_cursor_ts,
-            end_cursor_ts=self._end_cursor_ts,
-            start_cursor_int=self._start_cursor_int,
-            end_cursor_int=self._end_cursor_int,
-            on_progress=self._on_progress,
-            on_node_start=self._on_node_start,
-            on_sub_progress=self._on_sub_progress,
-            use_color=self._use_color,
-            providers=self._providers,
+            runtime=self._runtime,
+            callbacks=self._callbacks,
         )
 
     def _execute_seed_node(self, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:
@@ -641,14 +615,23 @@ class BuildScheduler:
                 if self._before_model_materialize is not None:
                     self._before_model_materialize(model_entry, connection)
                 result: ModelExecutionResult = _dispatch_model(
-                    entry=model_entry,
-                    adapter=self._adapter,
-                    connection=connection,
-                    plan=self._plan,
-                    model_audits=model_audits,
+                    context=ModelMaterializationContext(
+                        entry=model_entry,
+                        adapter=self._adapter,
+                        connection=connection,
+                        model_locations=self._plan.model_locations,
+                        seed_locations=self._plan.seed_locations,
+                        source_map=self._plan.source_map,
+                        model_audits=model_audits,
+                        run_id=self._run_id,
+                        query_change_tracking=self._query_change_tracking,
+                        hook_functions=self._plan.hook_functions,
+                        effective_target_name=self._target,
+                        effective_vars=self._effective_vars,
+                        providers=self._providers,
+                        python_identity_recorder=self._python_identity_recorder,
+                    ),
                     promotion_mode=self._promotion_mode,
-                    run_id=self._run_id,
-                    query_change_tracking=self._query_change_tracking,
                     snapshots=self._snapshots,
                     allow_snapshot_schema_change=self._allow_snapshot_schema_change,
                     custom_materializations=self._custom_materializations,
@@ -657,8 +640,6 @@ class BuildScheduler:
                     effective_vars=self._effective_vars,
                     warehouse_relations=self._warehouse_relations,
                     on_progress=self._on_sub_progress,
-                    providers=self._providers,
-                    python_identity_recorder=self._python_identity_recorder,
                 )
             except Exception as error:
                 result = ModelExecutionResult(
@@ -712,11 +693,12 @@ class BuildScheduler:
                     dep_key: CompiledObjectKey
                     for dep_key in test_entry.scope_deps:
                         self._blocked_keys.add(dep_key)
-                        block_downstream(
-                            failed_key=dep_key,
-                            downstream_deps=self._plan.downstream_deps,
-                            selected_keys=self._plan.selected_keys,
-                            blocked_keys=self._blocked_keys,
+                        self._blocked_keys.update(
+                            downstream_blocked_keys(
+                                failed_key=dep_key,
+                                downstream_deps=self._plan.downstream_deps,
+                                selected_keys=self._plan.selected_keys,
+                            )
                         )
 
         elif isinstance(result, FunctionExecutionResult):
@@ -740,11 +722,12 @@ class BuildScheduler:
             failed = result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
 
         if failed:
-            block_downstream(
-                failed_key=key,
-                downstream_deps=self._plan.downstream_deps,
-                selected_keys=self._plan.selected_keys,
-                blocked_keys=self._blocked_keys,
+            self._blocked_keys.update(
+                downstream_blocked_keys(
+                    failed_key=key,
+                    downstream_deps=self._plan.downstream_deps,
+                    selected_keys=self._plan.selected_keys,
+                )
             )
             if self._fail_fast:
                 self._stop = True
@@ -843,14 +826,8 @@ def _build_worker_failure_completion(key: CompiledObjectKey, error: Exception) -
 
 def _dispatch_model(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    plan: PlanOutput,
-    model_audits: tuple[AuditPlanEntry, ...],
+    context: ModelMaterializationContext,
     promotion_mode: TablePromotionMode,
-    run_id: str,
-    query_change_tracking: bool,
     snapshots: SnapshotsConfig,
     allow_snapshot_schema_change: bool,
     custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
@@ -860,11 +837,10 @@ def _dispatch_model(
     effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
     on_progress: Callable[[str], None] | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Route a model to the correct executor based on action and mode."""
 
+    entry: ModelPlanEntry = context.entry
     if entry.action == PlanAction.SKIP:
         return ModelExecutionResult(
             model_name=entry.name,
@@ -888,26 +864,14 @@ def _dispatch_model(
             )
         existing: RelationInfo | None = (warehouse_relations or {}).get(entry.name)
         return execute_custom_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations=plan.model_locations,
-            seed_locations=plan.seed_locations,
-            source_map=plan.source_map,
-            model_audits=model_audits,
+            context=context,
             declared_columns=entry.declared_columns,
             materialize_fn=registry[mat_name],
             prepare_version_fn=prepare_registry.get(mat_name),
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
             target=target,
             effective_vars=effective_vars or {},
             existing_relation=existing,
             on_progress=on_progress,
-            hook_functions=plan.hook_functions,
-            effective_target_name=target,
-            providers=providers,
-            python_identity_recorder=python_identity_recorder,
         )
 
     is_microbatch: bool = entry.incremental_mode == IncrementalMode.MICROBATCH
@@ -919,112 +883,32 @@ def _dispatch_model(
 
     if is_microbatch and entry.action in INCREMENTAL_ACTIONS:
         return execute_microbatch_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations=plan.model_locations,
-            seed_locations=plan.seed_locations,
-            source_map=plan.source_map,
-            model_audits=model_audits,
+            context=context,
             declared_columns=entry.declared_columns,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
-            hook_functions=plan.hook_functions,
-            effective_target_name=target,
-            effective_vars=effective_vars,
-            providers=providers,
-            python_identity_recorder=python_identity_recorder,
         )
     if is_full_refresh_microbatch:
         return execute_microbatch_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations=plan.model_locations,
-            seed_locations=plan.seed_locations,
-            source_map=plan.source_map,
-            model_audits=model_audits,
+            context=context,
             declared_columns=entry.declared_columns,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
             is_full_refresh=True,
-            hook_functions=plan.hook_functions,
-            effective_target_name=target,
-            effective_vars=effective_vars,
-            providers=providers,
-            python_identity_recorder=python_identity_recorder,
         )
     if entry.action in INCREMENTAL_ACTIONS:
         return execute_incremental_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations=plan.model_locations,
-            seed_locations=plan.seed_locations,
-            source_map=plan.source_map,
-            model_audits=model_audits,
+            context=context,
             declared_columns=entry.declared_columns,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
-            hook_functions=plan.hook_functions,
-            effective_target_name=target,
-            effective_vars=effective_vars,
-            providers=providers,
-            python_identity_recorder=python_identity_recorder,
         )
     if entry.action == PlanAction.CREATE_VIEW:
-        return execute_view_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations=plan.model_locations,
-            seed_locations=plan.seed_locations,
-            source_map=plan.source_map,
-            model_audits=model_audits,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
-            hook_functions=plan.hook_functions,
-            effective_target_name=target,
-            effective_vars=effective_vars,
-            providers=providers,
-            python_identity_recorder=python_identity_recorder,
-        )
+        return execute_view_entry(context=context)
     if entry.action == PlanAction.SNAPSHOT:
         return execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations=plan.model_locations,
-            seed_locations=plan.seed_locations,
-            source_map=plan.source_map,
-            model_audits=model_audits,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
+            context=context,
             snapshots=snapshots,
             allow_snapshot_schema_change=allow_snapshot_schema_change,
-            hook_functions=plan.hook_functions,
-            effective_target_name=target,
-            effective_vars=effective_vars,
-            providers=providers,
-            python_identity_recorder=python_identity_recorder,
         )
     return execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations=plan.model_locations,
-        seed_locations=plan.seed_locations,
-        source_map=plan.source_map,
-        model_audits=model_audits,
+        context=context,
         declared_columns=entry.declared_columns,
         promotion_mode=promotion_mode,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        hook_functions=plan.hook_functions,
-        effective_target_name=target,
-        effective_vars=effective_vars,
-        providers=providers,
-        python_identity_recorder=python_identity_recorder,
     )
 
 

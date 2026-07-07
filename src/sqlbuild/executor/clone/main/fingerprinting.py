@@ -23,7 +23,7 @@ def copy_clone_fingerprints(
     run_id: str,
     query_change_tracking: bool,
 ) -> None:
-    _copy(
+    _ = _copy(
         result=result,
         origin_model_entries=origin_model_entries,
         destination_model_entries=destination_model_entries,

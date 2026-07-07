@@ -56,6 +56,9 @@ def check_example(file_path):
                 "---\nname: sqlbuild-structure\n",
                 generated_marker,
                 "Load it before changing runtime or script structure",
+                "## Main Orchestrators And Phase Functions",
+                "A `main/` public function is an orchestrator",
+                "`SC063`, `SC064`, and `SC065` cap statements, distinct calls, and locals",
                 (
                     "- `SC010`: helpers/ must not contain main.py; keep orchestration "
                     "outside helper packages"

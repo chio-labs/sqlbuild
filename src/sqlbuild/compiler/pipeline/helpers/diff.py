@@ -11,6 +11,14 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.shared.helpers.lineage_graph import (
+    build_lineage_downstream_deps,
+    build_lineage_upstream_deps,
+)
+from sqlbuild.compiler.shared.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
+)
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
@@ -43,11 +51,11 @@ def resolve_diff_model_names(
 ) -> tuple[str, ...]:
     """Resolve diff selectors to model names only."""
 
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = _build_upstream_deps(
-        project
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_lineage_upstream_deps(project)
     )
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        _build_downstream_deps(upstream_deps)
+        build_lineage_downstream_deps(upstream_deps)
     )
     all_keys: dict[str, CompiledObjectKey] = {
         **{model.name: model.key for model in project.models},
@@ -60,61 +68,14 @@ def resolve_diff_model_names(
         all_keys=all_keys,
         upstream=upstream_deps,
         downstream=downstream_deps,
-        tag_index=_build_tag_index(project),
-        path_index=_build_path_index(project),
+        tag_index=build_model_tag_index(project),
+        path_index=build_model_path_index(project),
     )
     return tuple(
         model.name
         for model in project.models
         if model.key in selected_keys and model.key.resource_type == CompiledResourceType.MODEL
     )
-
-
-def _build_upstream_deps(
-    project: CompiledProject,
-) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
-    upstream.update({model.key: model.deps for model in project.models})
-    upstream.update({source.key: source.deps for source in project.sources})
-    upstream.update({seed.key: seed.deps for seed in project.seeds})
-    return upstream
-
-
-def _build_downstream_deps(
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    downstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
-    key: CompiledObjectKey
-    for key in upstream:
-        downstream.setdefault(key, [])
-    for key, dep_keys in upstream.items():
-        dep_key: CompiledObjectKey
-        for dep_key in dep_keys:
-            downstream.setdefault(dep_key, []).append(key)
-    return {
-        key: tuple(sorted(values, key=lambda item: (item.resource_type, item.name)))
-        for key, values in downstream.items()
-    }
-
-
-def _build_tag_index(project: CompiledProject) -> dict[str, frozenset[CompiledObjectKey]]:
-    index: dict[str, set[CompiledObjectKey]] = {}
-    for model in project.models:
-        raw_tags: object | None = model.config.values.get("tags")
-        if not isinstance(raw_tags, list | tuple):
-            continue
-        tag: object
-        for tag in raw_tags:
-            if isinstance(tag, str):
-                index.setdefault(tag, set()).add(model.key)
-    return {tag: frozenset(keys) for tag, keys in index.items()}
-
-
-def _build_path_index(project: CompiledProject) -> dict[CompiledObjectKey, str]:
-    return {
-        model.key: str(model.relative_path.parent).replace("\\", "/").removeprefix("models/")
-        for model in project.models
-    }
 
 
 def _resolve_model_selectors(

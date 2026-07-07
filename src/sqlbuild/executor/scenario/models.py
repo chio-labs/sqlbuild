@@ -111,6 +111,38 @@ class ScenarioSnapshotCaptureLimits:
 
 
 @dataclass(frozen=True)
+class ScenarioCaptureSettings:
+    """Capture provenance and safety settings for one scenario snapshot run."""
+
+    captured_at: str
+    capture_adapter: str
+    capture_dialect: str
+    sqlbuild_version: str
+    retain: bool
+    limits: ScenarioSnapshotCaptureLimits | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioFailureDetails:
+    """Error code, help text, and message for one failed scenario step."""
+
+    error_code: str | None = None
+    error_help: str | None = None
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioStepResults:
+    """Per-phase execution results collected during one scenario run."""
+
+    fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = ()
+    seed_results: tuple[SeedExecutionResult, ...] = ()
+    model_results: tuple[ModelExecutionResult, ...] = ()
+    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...] = ()
+    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...] = ()
+
+
+@dataclass(frozen=True)
 class ScenarioSnapshotStateResult:
     """Manifest freshness classification for one local scenario snapshot."""
 

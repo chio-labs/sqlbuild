@@ -20,7 +20,7 @@ def persist_virtual_environment_source_freshness(
 ) -> None:
     """Persist the latest observed freshness records for a virtual environment."""
 
-    _persist_virtual_environment_source_freshness(
+    _ = _persist_virtual_environment_source_freshness(
         backend=backend,
         state_connection=state_connection,
         schema=schema,

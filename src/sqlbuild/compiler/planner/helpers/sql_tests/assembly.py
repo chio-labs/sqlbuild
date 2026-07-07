@@ -134,7 +134,9 @@ def plan_test(
         )
 
         query_sql: str = _resolve_test_model_query_sql(model=model, test=test)
-        step_sql: str = _resolve_test_model_sql(
+        step_sql: str
+        step_reachable_mocks: frozenset[str]
+        step_sql, step_reachable_mocks = _resolve_test_model_sql(
             query_sql=query_sql,
             mock_refs=mock_refs,
             mock_sources=mock_sources,
@@ -142,10 +144,10 @@ def plan_test(
             mock_dbt_refs=mock_dbt_refs,
             helper_ctes=helper_ctes,
             resolved_chain=resolved,
-            reachable_mocks=reachable_mocks,
             function_locations=function_locations,
             adapter=adapter,
         )
+        reachable_mocks.update(step_reachable_mocks)
         resolved_value: str = f"({step_sql})"
         if sql_analysis_enabled:
             sql_analysis_sql: SqlAnalysisResolvedTestSql | None = (
@@ -162,7 +164,6 @@ def plan_test(
                     },
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
-                    reachable_mocks=reachable_mocks,
                     file_label=str(test.test_file.relative_path),
                 )
             )
@@ -170,6 +171,7 @@ def plan_test(
                 step_sql = sql_analysis_sql.resolved_sql
                 resolved_value = sql_analysis_sql.resolved_sql
                 sql_analysis_resolved[model_name] = sql_analysis_sql
+                reachable_mocks.update(sql_analysis_sql.reachable_mock_names)
 
         unresolved_warnings: tuple[PlanWarning, ...] = _validate_resolved_sql(
             resolved_sql=step_sql,
@@ -342,11 +344,11 @@ def _resolve_assertion_sql(
     function_locations: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
-    reachable_mocks: set[str] = set()
     assertion_resolved_chain: dict[str, str] = {
         name: _wrap_resolved_chain_sql(sql) for name, sql in resolved_chain.items()
     }
-    return _resolve_test_model_sql(
+    resolved_sql: str
+    resolved_sql, _ = _resolve_test_model_sql(
         query_sql=sql,
         mock_refs=mock_refs,
         mock_sources=mock_sources,
@@ -354,10 +356,10 @@ def _resolve_assertion_sql(
         mock_dbt_refs=mock_dbt_refs,
         helper_ctes=helper_ctes,
         resolved_chain=assertion_resolved_chain,
-        reachable_mocks=reachable_mocks,
         function_locations=function_locations,
         adapter=adapter,
     )
+    return resolved_sql
 
 
 def _wrap_resolved_chain_sql(sql: str) -> str:
@@ -400,12 +402,12 @@ def _resolve_test_model_sql(
     mock_dbt_refs: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, str],
-    reachable_mocks: set[str],
     function_locations: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
-) -> str:
-    """Replace refs and sources in model SQL with mocks or chain outputs."""
+) -> tuple[str, frozenset[str]]:
+    """Replace refs and sources in model SQL and return it with reached mock names."""
 
+    reachable_mocks: set[str] = set()
     helper_with: str = _build_helper_with_clause(helper_ctes)
 
     def _replace_ref(match: re.Match[str]) -> str:
@@ -465,7 +467,7 @@ def _resolve_test_model_sql(
         function_locations=function_locations,
         adapter=adapter,
     )
-    return result
+    return result, frozenset(reachable_mocks)
 
 
 def _validate_resolved_sql(

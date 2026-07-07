@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandResult
+from sqlbuild.cli.commands.helpers.freshness.models import (
+    FreshnessCommandRequest,
+    FreshnessCommandResult,
+)
 from sqlbuild.cli.commands.helpers.freshness.observe import (
     observe_source_freshness_for_command,
 )
@@ -38,27 +41,19 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.source import SourceEntry
 
 
-def run_freshness(
-    project_dir: Path | None,
-    no_sql_validation: bool = False,
-    no_color: bool = False,
-    selected_target: str | None = None,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    cli_vars: dict[str, object] | None = None,
-    json_output: bool = False,
-    json_output_path: Path | None = None,
-    fail_on_error: bool = False,
-    compare_state: bool = False,
-    fail_on_stale: bool = False,
-    virtual_environment_name: str | None = None,
-) -> int:
+def run_freshness(request: FreshnessCommandRequest) -> int:
     """Observe source freshness without writing state."""
 
-    del no_color
-    if fail_on_stale and not compare_state:
+    selected_target: str | None = request.selected_target
+    select: tuple[str, ...] = request.select
+    cli_vars: dict[str, object] | None = request.cli_vars
+    compare_state: bool = request.compare_state
+    virtual_environment_name: str | None = request.virtual_environment_name
+    if request.fail_on_stale and not compare_state:
         raise CliUserError("freshness --fail-on-stale requires --state", code="C238")
-    effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
+    effective_project_dir: Path = (
+        request.project_dir if request.project_dir is not None else Path.cwd()
+    )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
@@ -77,7 +72,7 @@ def run_freshness(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         selected_target=selected_target,
-        no_sql_validation=no_sql_validation,
+        no_sql_validation=request.no_sql_validation,
         cli_vars=cli_vars,
     )
     sources: tuple[SourceEntry, ...] = tuple(
@@ -86,7 +81,7 @@ def run_freshness(
     selected_source_names: tuple[str, ...] = resolve_freshness_source_names(
         graph=graph,
         select=select,
-        exclude=exclude,
+        exclude=request.exclude,
     )
     if not selected_source_names:
         result: FreshnessCommandResult = FreshnessCommandResult()
@@ -121,20 +116,22 @@ def run_freshness(
             adapter.close(connection)
 
     payload: str = format_freshness_json(result)
-    if json_output:
+    if request.json_output:
         write_execution_json_output(
             payload=payload + "\n",
             json_output=True,
-            json_output_path=json_output_path,
+            json_output_path=request.json_output_path,
         )
     else:
-        if json_output_path is not None:
+        if request.json_output_path is not None:
             write_execution_json_output(
                 payload=payload + "\n",
                 json_output=False,
-                json_output_path=json_output_path,
+                json_output_path=request.json_output_path,
             )
         sys.stdout.write(format_freshness_text(result))
-    if fail_on_stale and (result.changed_count or result.unknown_count or result.error_count):
+    if request.fail_on_stale and (
+        result.changed_count or result.unknown_count or result.error_count
+    ):
         return 1
-    return 1 if fail_on_error and (result.unknown_count or result.error_count) else 0
+    return 1 if request.fail_on_error and (result.unknown_count or result.error_count) else 0

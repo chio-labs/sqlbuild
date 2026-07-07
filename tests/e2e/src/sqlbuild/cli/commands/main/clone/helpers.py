@@ -185,3 +185,16 @@ def insert_dev_model_version_lock(*, project_dir: Path, model_name: str, version
             "CURRENT_TIMESTAMP + INTERVAL 1 HOUR, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
         ),
     )
+
+
+def registered_physical_relation_artifacts(project_dir: Path) -> tuple[tuple[str, str], ...]:
+    """Read (artifact_type, artifact_name) rows registered in destination state."""
+
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "dev_state.duckdb",
+        sql=(
+            "SELECT artifact_type, artifact_name FROM sqlbuild_state.physical_relations "
+            "ORDER BY artifact_type, artifact_name"
+        ),
+    )
+    return tuple((str(row[0]), str(row[1])) for row in rows)

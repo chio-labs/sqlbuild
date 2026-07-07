@@ -325,8 +325,6 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
             ),
             selected_keys=frozenset({_SELECTED_KEY}),
             full_refresh=False,
-            start_cursor_override=None,
-            end_cursor_override=None,
             expected_cursor_model_names=frozenset({"fact_orders"}),
             expected_cursor_snapshots={
                 "fact_orders": ModelCursorSnapshot(
@@ -345,8 +343,6 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
             ),
             selected_keys=frozenset({_SELECTED_KEY}),
             full_refresh=False,
-            start_cursor_override=None,
-            end_cursor_override=None,
             expected_cursor_model_names=frozenset({"fact_orders"}),
             expected_cursor_snapshots={
                 "fact_orders": ModelCursorSnapshot(
@@ -365,21 +361,6 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
             ),
             selected_keys=frozenset({_SELECTED_KEY}),
             full_refresh=True,
-            start_cursor_override=None,
-            end_cursor_override=None,
-            expected_cursor_model_names=frozenset(),
-            expected_progress_calls=0,
-        ),
-        GatherCursorSnapshotTestCase(
-            description="skips cursor gathering when both overrides are provided",
-            setup_sql=(
-                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
-                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01')",
-            ),
-            selected_keys=frozenset({_SELECTED_KEY}),
-            full_refresh=False,
-            start_cursor_override="2024-01-01",
-            end_cursor_override="2024-02-01",
             expected_cursor_model_names=frozenset(),
             expected_progress_calls=0,
         ),
@@ -391,8 +372,6 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
             ),
             selected_keys=frozenset(),
             full_refresh=False,
-            start_cursor_override=None,
-            end_cursor_override=None,
             expected_cursor_model_names=frozenset(),
             expected_progress_calls=0,
         ),
@@ -425,8 +404,6 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
         execute=execute,
         selected_keys=test_case.selected_keys,
         full_refresh=test_case.full_refresh,
-        start_cursor_override=test_case.start_cursor_override,
-        end_cursor_override=test_case.end_cursor_override,
         on_progress=_track_progress,
     )
 
@@ -452,8 +429,6 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
             ),
             selected_keys=frozenset({_SELECTED_KEY, _ORDERS_KEY}),
             full_refresh=False,
-            start_cursor_override=None,
-            end_cursor_override=None,
             deferred_locations={"raw_orders": "prod.raw_orders"},
             expected_cursor_model_names=frozenset({"fact_orders"}),
             expected_cursor_snapshots={
@@ -476,8 +451,6 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
             ),
             selected_keys=frozenset({_SELECTED_KEY}),
             full_refresh=False,
-            start_cursor_override=None,
-            end_cursor_override=None,
             deferred_locations={"raw_orders": "prod.raw_orders"},
             expected_cursor_model_names=frozenset({"fact_orders"}),
             expected_cursor_snapshots={
@@ -524,8 +497,6 @@ def test_given_deferred_locations_when_gathering_cursor_snapshots_then_resolves_
         execute=execute,
         selected_keys=test_case.selected_keys,
         full_refresh=test_case.full_refresh,
-        start_cursor_override=test_case.start_cursor_override,
-        end_cursor_override=test_case.end_cursor_override,
         on_progress=_track_progress,
         deferred_locations=deferred,
     )

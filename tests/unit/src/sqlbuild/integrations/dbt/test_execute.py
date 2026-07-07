@@ -14,12 +14,17 @@ from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandExecutionResult,
     DbtExecutionOutcome,
+    DbtInteropExecutionRequest,
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsNode,
     DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers import execute as execute_helpers
+from sqlbuild.integrations.dbt.pipeline.helpers import (
+    execution_phases as execution_phases_module,
+)
+from sqlbuild.integrations.dbt.pipeline.helpers import interop_prologue as prologue_module
 from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import resolve_dbt_defer_clone_from
 from sqlbuild.integrations.dbt.pipeline.main import execute as execute_module
 from sqlbuild.integrations.dbt.types import (
@@ -173,18 +178,18 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
     output_stream: StringIO = StringIO()
 
     monkeypatch.setattr(
-        execute_module, "discover_project_inputs", lambda *, project_dir: discovered_inputs
+        prologue_module, "discover_project_inputs", lambda *, project_dir: discovered_inputs
     )
     monkeypatch.setattr(
-        execute_module,
+        prologue_module,
         "resolve_dbt_plan_options",
         lambda **kwargs: DbtCliOptions(project_dir=Path("/dbt_project")),
     )
     monkeypatch.setattr(
-        execute_module, "resolve_dbt_manifest_path", lambda *, options: Path("/manifest.json")
+        prologue_module, "resolve_dbt_manifest_path", lambda *, options: Path("/manifest.json")
     )
     monkeypatch.setattr(
-        execute_module,
+        prologue_module,
         "load_dbt_manifest_index",
         lambda *, manifest_path: SimpleNamespace(
             models_by_unique_id={},
@@ -192,12 +197,14 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
             seed_identity_warnings=(),
         ),
     )
-    monkeypatch.setattr(execute_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb")
     monkeypatch.setattr(
-        execute_module, "resolve_dbt_interop_adapter", lambda *args, **kwargs: object()
+        prologue_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb"
     )
     monkeypatch.setattr(
-        execute_module,
+        prologue_module, "resolve_dbt_interop_adapter", lambda *args, **kwargs: object()
+    )
+    monkeypatch.setattr(
+        prologue_module,
         "build_compiled_project",
         lambda **kwargs: SimpleNamespace(
             settings=SimpleNamespace(query_change_tracking=False),
@@ -208,22 +215,32 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
             models=(),
         ),
     )
-    monkeypatch.setattr(execute_module, "build_dbt_combined_graph", lambda **kwargs: object())
-    monkeypatch.setattr(execute_module, "plan_dbt_interop_command", lambda **kwargs: plan)
-    monkeypatch.setattr(execute_module, "build_dbt_model_plan_output", emit_connection_progress)
-    monkeypatch.setattr(execute_module, "build_dbt_non_model_run_unique_ids", lambda **kwargs: ())
-    monkeypatch.setattr(execute_module, "build_dbt_pruned_seed_unique_ids", lambda **kwargs: ())
-    monkeypatch.setattr(execute_module, "build_dbt_pruned_test_unique_ids", lambda **kwargs: ())
+    monkeypatch.setattr(prologue_module, "build_dbt_combined_graph", lambda **kwargs: object())
+    monkeypatch.setattr(prologue_module, "plan_dbt_interop_command", lambda **kwargs: plan)
+    monkeypatch.setattr(
+        execution_phases_module, "build_dbt_model_plan_output", emit_connection_progress
+    )
+    monkeypatch.setattr(
+        execution_phases_module, "build_dbt_non_model_run_unique_ids", lambda **kwargs: ()
+    )
+    monkeypatch.setattr(
+        execution_phases_module, "build_dbt_pruned_seed_unique_ids", lambda **kwargs: ()
+    )
+    monkeypatch.setattr(
+        execution_phases_module, "build_dbt_pruned_test_unique_ids", lambda **kwargs: ()
+    )
     monkeypatch.setattr(execute_module, "build_merged_dbt_execution_argv", lambda **kwargs: None)
-    monkeypatch.setattr(execute_module, "build_effective_connection_config", lambda **kwargs: {})
-    monkeypatch.setattr(execute_module, "resolve_connection_config", lambda **kwargs: {})
+    monkeypatch.setattr(
+        execution_phases_module, "build_effective_connection_config", lambda **kwargs: {}
+    )
+    monkeypatch.setattr(execution_phases_module, "resolve_connection_config", lambda **kwargs: {})
 
     def execute_no_dbt_work(**kwargs: object) -> DbtCommandExecutionResult:
         output: StringIO = cast(StringIO, kwargs["progress_stream"])
         output.write("Skipping dbt: no dbt work selected.\n")
         return DbtCommandExecutionResult(returncode=0)
 
-    monkeypatch.setattr(execute_module, "execute_dbt_commands", execute_no_dbt_work)
+    monkeypatch.setattr(execution_phases_module, "execute_dbt_commands", execute_no_dbt_work)
     monkeypatch.setattr(
         execute_module,
         "build_dbt_execution_outcome",
@@ -234,14 +251,16 @@ def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_
         output_stream.write(f"{message}\n")
 
     exit_code: int = execute_module.execute_dbt_interop_from_project(
-        command=DbtInteropCommand.BUILD,
-        project_dir=Path("/sqlbuild_project"),
-        args=("--select", "missing"),
-        dbt_runner=CompileOnlyDbtRunner(),
-        on_progress=write_progress,
-        progress_stream=output_stream,
-        dbt_stdout_stream=output_stream,
-        use_color=False,
+        DbtInteropExecutionRequest(
+            command=DbtInteropCommand.BUILD,
+            project_dir=Path("/sqlbuild_project"),
+            args=("--select", "missing"),
+            dbt_runner=CompileOnlyDbtRunner(),
+            on_progress=write_progress,
+            progress_stream=output_stream,
+            dbt_stdout_stream=output_stream,
+            use_color=False,
+        )
     )
 
     rendered: str = output_stream.getvalue()
@@ -302,18 +321,18 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
     runner: CompileOnlyDbtRunner = CompileOnlyDbtRunner()
 
     monkeypatch.setattr(
-        execute_module, "discover_project_inputs", lambda *, project_dir: discovered_inputs
+        prologue_module, "discover_project_inputs", lambda *, project_dir: discovered_inputs
     )
     monkeypatch.setattr(
-        execute_module,
+        prologue_module,
         "resolve_dbt_plan_options",
         lambda **kwargs: DbtCliOptions(project_dir=Path("/dbt_project")),
     )
     monkeypatch.setattr(
-        execute_module, "resolve_dbt_manifest_path", lambda *, options: Path("/manifest.json")
+        prologue_module, "resolve_dbt_manifest_path", lambda *, options: Path("/manifest.json")
     )
     monkeypatch.setattr(
-        execute_module,
+        prologue_module,
         "load_dbt_manifest_index",
         lambda *, manifest_path: SimpleNamespace(
             models_by_unique_id={},
@@ -321,12 +340,14 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
             seed_identity_warnings=(),
         ),
     )
-    monkeypatch.setattr(execute_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb")
     monkeypatch.setattr(
-        execute_module, "resolve_dbt_interop_adapter", lambda *args, **kwargs: object()
+        prologue_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb"
     )
     monkeypatch.setattr(
-        execute_module,
+        prologue_module, "resolve_dbt_interop_adapter", lambda *args, **kwargs: object()
+    )
+    monkeypatch.setattr(
+        prologue_module,
         "build_compiled_project",
         lambda **kwargs: SimpleNamespace(
             settings=SimpleNamespace(query_change_tracking=False),
@@ -337,17 +358,27 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
             models=(),
         ),
     )
-    monkeypatch.setattr(execute_module, "build_dbt_combined_graph", lambda **kwargs: object())
-    monkeypatch.setattr(execute_module, "plan_dbt_interop_command", lambda **kwargs: plan)
-    monkeypatch.setattr(execute_module, "build_dbt_model_plan_output", lambda **kwargs: None)
-    monkeypatch.setattr(execute_module, "build_dbt_non_model_run_unique_ids", lambda **kwargs: ())
-    monkeypatch.setattr(execute_module, "build_dbt_pruned_seed_unique_ids", lambda **kwargs: ())
-    monkeypatch.setattr(execute_module, "build_dbt_pruned_test_unique_ids", lambda **kwargs: ())
-    monkeypatch.setattr(execute_module, "build_merged_dbt_execution_argv", lambda **kwargs: None)
-    monkeypatch.setattr(execute_module, "build_effective_connection_config", lambda **kwargs: {})
-    monkeypatch.setattr(execute_module, "resolve_connection_config", lambda **kwargs: {})
+    monkeypatch.setattr(prologue_module, "build_dbt_combined_graph", lambda **kwargs: object())
+    monkeypatch.setattr(prologue_module, "plan_dbt_interop_command", lambda **kwargs: plan)
     monkeypatch.setattr(
-        execute_module,
+        execution_phases_module, "build_dbt_model_plan_output", lambda **kwargs: None
+    )
+    monkeypatch.setattr(
+        execution_phases_module, "build_dbt_non_model_run_unique_ids", lambda **kwargs: ()
+    )
+    monkeypatch.setattr(
+        execution_phases_module, "build_dbt_pruned_seed_unique_ids", lambda **kwargs: ()
+    )
+    monkeypatch.setattr(
+        execution_phases_module, "build_dbt_pruned_test_unique_ids", lambda **kwargs: ()
+    )
+    monkeypatch.setattr(execute_module, "build_merged_dbt_execution_argv", lambda **kwargs: None)
+    monkeypatch.setattr(
+        execution_phases_module, "build_effective_connection_config", lambda **kwargs: {}
+    )
+    monkeypatch.setattr(execution_phases_module, "resolve_connection_config", lambda **kwargs: {})
+    monkeypatch.setattr(
+        execution_phases_module,
         "execute_dbt_commands",
         lambda **kwargs: DbtCommandExecutionResult(returncode=0),
     )
@@ -360,13 +391,15 @@ def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
     output_stream: StringIO = StringIO()
 
     exit_code: int = execute_module.execute_dbt_interop_from_project(
-        command=DbtInteropCommand(test_case.command),
-        project_dir=Path("/sqlbuild_project"),
-        args=("--select", "missing"),
-        dbt_runner=runner,
-        progress_stream=output_stream,
-        dbt_stdout_stream=StringIO(),
-        use_color=False,
+        DbtInteropExecutionRequest(
+            command=DbtInteropCommand(test_case.command),
+            project_dir=Path("/sqlbuild_project"),
+            args=("--select", "missing"),
+            dbt_runner=runner,
+            progress_stream=output_stream,
+            dbt_stdout_stream=StringIO(),
+            use_color=False,
+        )
     )
 
     assert exit_code == 0

@@ -22,8 +22,10 @@ from sqlbuild.executor.scenario.models import (
     ScenarioAssertionExpectationExecutionResult,
     ScenarioCleanupExecutionResult,
     ScenarioExpectedExpectationExecutionResult,
+    ScenarioFailureDetails,
     ScenarioFixtureExecutionResult,
     ScenarioRunResult,
+    ScenarioStepResults,
 )
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
@@ -68,10 +70,12 @@ def execute_scenario_run_steps(
             connection=connection,
             retain=retain,
             prepare_cleanup_result=prepare_result,
-            fixture_results=fixture_results,
-            error_code=_first_error_code(fixture_results),
-            error_help=_first_error_help(fixture_results),
-            error_message=_first_error(fixture_results),
+            results=ScenarioStepResults(fixture_results=fixture_results),
+            failure=ScenarioFailureDetails(
+                error_code=_first_error_code(fixture_results),
+                error_help=_first_error_help(fixture_results),
+                error_message=_first_error(fixture_results),
+            ),
         )
 
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
@@ -86,11 +90,15 @@ def execute_scenario_run_steps(
             connection=connection,
             retain=retain,
             prepare_cleanup_result=prepare_result,
-            fixture_results=fixture_results,
-            seed_results=seed_results,
-            error_code=_first_error_code(seed_results),
-            error_help=_first_error_help(seed_results),
-            error_message=_first_error(seed_results),
+            results=ScenarioStepResults(
+                fixture_results=fixture_results,
+                seed_results=seed_results,
+            ),
+            failure=ScenarioFailureDetails(
+                error_code=_first_error_code(seed_results),
+                error_help=_first_error_help(seed_results),
+                error_message=_first_error(seed_results),
+            ),
         )
 
     model_results: tuple[ModelExecutionResult, ...] = execute_scenario_models(
@@ -106,12 +114,16 @@ def execute_scenario_run_steps(
             connection=connection,
             retain=retain,
             prepare_cleanup_result=prepare_result,
-            fixture_results=fixture_results,
-            seed_results=seed_results,
-            model_results=model_results,
-            error_code=_first_error_code(model_results),
-            error_help=_first_error_help(model_results),
-            error_message=_first_error(model_results),
+            results=ScenarioStepResults(
+                fixture_results=fixture_results,
+                seed_results=seed_results,
+                model_results=model_results,
+            ),
+            failure=ScenarioFailureDetails(
+                error_code=_first_error_code(model_results),
+                error_help=_first_error_help(model_results),
+                error_message=_first_error(model_results),
+            ),
         )
 
     expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...]
@@ -135,14 +147,18 @@ def execute_scenario_run_steps(
         connection=connection,
         retain=retain,
         prepare_cleanup_result=prepare_result,
-        fixture_results=fixture_results,
-        seed_results=seed_results,
-        model_results=model_results,
-        expected_results=expected_results,
-        assertion_results=assertion_results,
-        error_code=failed_check_code,
-        error_help=failed_check_help,
-        error_message=failed_check_message,
+        results=ScenarioStepResults(
+            fixture_results=fixture_results,
+            seed_results=seed_results,
+            model_results=model_results,
+            expected_results=expected_results,
+            assertion_results=assertion_results,
+        ),
+        failure=ScenarioFailureDetails(
+            error_code=failed_check_code,
+            error_help=failed_check_help,
+            error_message=failed_check_message,
+        ),
     )
 
 
@@ -153,15 +169,18 @@ def _finish_scenario(
     connection: Any,
     retain: bool,
     prepare_cleanup_result: ScenarioCleanupExecutionResult,
-    fixture_results: tuple[ScenarioFixtureExecutionResult, ...] = (),
-    seed_results: tuple[SeedExecutionResult, ...] = (),
-    model_results: tuple[ModelExecutionResult, ...] = (),
-    expected_results: tuple[ScenarioExpectedExpectationExecutionResult, ...] = (),
-    assertion_results: tuple[ScenarioAssertionExpectationExecutionResult, ...] = (),
-    error_code: str | None = None,
-    error_help: str | None = None,
-    error_message: str | None = None,
+    results: ScenarioStepResults | None = None,
+    failure: ScenarioFailureDetails | None = None,
 ) -> ScenarioRunResult:
+    resolved_results: ScenarioStepResults = (
+        results if results is not None else ScenarioStepResults()
+    )
+    resolved_failure: ScenarioFailureDetails = (
+        failure if failure is not None else ScenarioFailureDetails()
+    )
+    error_code: str | None = resolved_failure.error_code
+    error_help: str | None = resolved_failure.error_help
+    error_message: str | None = resolved_failure.error_message
     status: ExecutionStatus = (
         ExecutionStatus.FAILED if error_message is not None else ExecutionStatus.SUCCESS
     )
@@ -187,11 +206,11 @@ def _finish_scenario(
         status=status,
         retained=retain,
         relation_map=scenario_plan.relation_plan.relation_map,
-        fixture_results=fixture_results,
-        seed_results=seed_results,
-        model_results=model_results,
-        expected_results=expected_results,
-        assertion_results=assertion_results,
+        fixture_results=resolved_results.fixture_results,
+        seed_results=resolved_results.seed_results,
+        model_results=resolved_results.model_results,
+        expected_results=resolved_results.expected_results,
+        assertion_results=resolved_results.assertion_results,
         prepare_cleanup_result=prepare_cleanup_result,
         cleanup_result=cleanup_result,
         error_code=error_code,

@@ -63,6 +63,15 @@ class OldFingerprintSchemaTestCase:
 
 
 @dataclass(frozen=True)
+class ConcurrentFingerprintWriteTestCase:
+    description: str
+    writer_count: int
+    round_count: int
+    expected_lost_rows: int
+    expected_failure_count: int
+
+
+@dataclass(frozen=True)
 class PruneFingerprintHistoryTestCase:
     description: str
     database: str | None

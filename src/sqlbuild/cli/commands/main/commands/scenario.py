@@ -2,48 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
+from sqlbuild.cli.commands.helpers.scenario.models import ScenarioTestCommandRequest
 from sqlbuild.cli.commands.helpers.scenario.runner import run_scenario as run_scenario_command
 
 
-def run_scenario(
-    project_dir: Path | None,
-    no_sql_validation: bool = False,
-    no_color: bool = False,
-    selectors: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    retain: bool = False,
-    local: bool = False,
-    strict: bool = False,
-    sync_snapshots: bool = False,
-    refresh: bool = False,
-    force: bool = False,
-    max_snapshot_rows: int | None = None,
-    max_snapshot_total_rows: int | None = None,
-    max_snapshot_bytes: int | None = None,
-    max_snapshot_total_bytes: int | None = None,
-    json_output: bool = False,
-    json_output_path: Path | None = None,
-) -> int:
+def run_scenario(request: ScenarioTestCommandRequest) -> int:
     """Run the scenario command."""
 
-    return run_scenario_command(
-        project_dir=project_dir,
-        no_sql_validation=no_sql_validation,
-        no_color=no_color,
-        selectors=selectors,
-        exclude=exclude,
-        retain=retain,
-        local=local,
-        strict=strict,
-        sync_snapshots=sync_snapshots,
-        refresh=refresh,
-        force=force,
-        max_snapshot_rows=max_snapshot_rows,
-        max_snapshot_total_rows=max_snapshot_total_rows,
-        max_snapshot_bytes=max_snapshot_bytes,
-        max_snapshot_total_bytes=max_snapshot_total_bytes,
-        json_output=json_output,
-        json_output_path=json_output_path,
-    )
+    return run_scenario_command(request=request)

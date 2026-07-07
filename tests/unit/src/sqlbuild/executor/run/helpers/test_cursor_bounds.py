@@ -10,6 +10,7 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation
 from sqlbuild.compiler.planner.types import CursorType
 from sqlbuild.executor.run.helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds
+from sqlbuild.executor.run.models import RuntimeCursorSpec
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     RuntimeCursorStartTestCase,
     RuntimeTargetMaxTestCase,
@@ -62,14 +63,16 @@ def test_given_runtime_cursor_start_when_resolving_bounds_then_applies_lower_flo
         target_database=None,
         target_schema=None,
         target_name="target_data",
-        cursor_column="cursor_value",
-        cursor_type=test_case.cursor_type,
-        cursor_grain=None,
-        cursor_start=test_case.cursor_start,
-        cursor_input_relations=(
-            CursorInputRelation(
-                relation="upstream_data",
-                cursor_column="cursor_value",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=test_case.cursor_type,
+            cursor_grain=None,
+            cursor_start=test_case.cursor_start,
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="upstream_data",
+                    cursor_column="cursor_value",
+                ),
             ),
         ),
     )
@@ -113,14 +116,16 @@ def test_given_existing_target_relation_when_resolving_bounds_then_starts_from_t
         target_database=None,
         target_schema=None,
         target_name="target_data",
-        cursor_column="cursor_value",
-        cursor_type=test_case.cursor_type,
-        cursor_grain=None,
-        cursor_start=None,
-        cursor_input_relations=(
-            CursorInputRelation(
-                relation="upstream_data",
-                cursor_column="cursor_value",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=test_case.cursor_type,
+            cursor_grain=None,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="upstream_data",
+                    cursor_column="cursor_value",
+                ),
             ),
         ),
     )
@@ -156,14 +161,16 @@ def test_given_target_max_query_failure_when_resolving_bounds_then_propagates_er
             target_database=None,
             target_schema=None,
             target_name="target_data",
-            cursor_column="cursor_value",
-            cursor_type=CursorType.INTEGER,
-            cursor_grain=None,
-            cursor_start=None,
-            cursor_input_relations=(
-                CursorInputRelation(
-                    relation="upstream_data",
-                    cursor_column="cursor_value",
+            spec=RuntimeCursorSpec(
+                cursor_column="cursor_value",
+                cursor_type=CursorType.INTEGER,
+                cursor_grain=None,
+                cursor_start=None,
+                cursor_input_relations=(
+                    CursorInputRelation(
+                        relation="upstream_data",
+                        cursor_column="cursor_value",
+                    ),
                 ),
             ),
         )

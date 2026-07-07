@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.compiler.fingerprints.constants import (
+    FINGERPRINT_WRITE_ATTEMPTS,
+    FINGERPRINT_WRITE_RETRY_BASE_SECONDS,
+)
 from sqlbuild.compiler.fingerprints.helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
@@ -25,7 +31,7 @@ def write_fingerprint(
     render_create_table_sql: Callable[..., str] | None = None,
     render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
 ) -> None:
-    """Append one fingerprint row, creating the table if needed."""
+    """Append one fingerprint row, retrying transient concurrent-writer conflicts."""
 
     create_sql: str = (
         render_create_table_sql(database=database, schema=schema)
@@ -37,26 +43,58 @@ def write_fingerprint(
             render_framework_type=render_framework_type,
         )
     )
-    execute(connection, create_sql)
-    if render_create_index_sqls is not None:
-        index_sql: str
-        for index_sql in render_create_index_sqls(database=database, schema=schema):
-            execute(connection, index_sql)
+    index_sqls: tuple[str, ...] = (
+        render_create_index_sqls(database=database, schema=schema)
+        if render_create_index_sqls is not None
+        else ()
+    )
     insert_sql: str = build_insert_sql(
         database=database,
         schema=schema,
-        node_type=fingerprint.node_type,
-        node_name=fingerprint.node_name,
-        target_database=fingerprint.target_database,
-        target_schema=fingerprint.target_schema,
-        target_name=fingerprint.target_name,
-        run_id=fingerprint.run_id,
-        definition_hash=fingerprint.definition_hash,
-        version_hash=fingerprint.version_hash,
-        schema_fingerprint=fingerprint.schema_fingerprint,
-        definition=fingerprint.definition,
-        metadata_json=fingerprint.metadata_json,
-        ts=fingerprint.ts.isoformat(),
+        fingerprint=fingerprint,
         render_qualified_name=render_qualified_name,
     )
-    execute(connection, insert_sql)
+    attempt: int
+    for attempt in range(FINGERPRINT_WRITE_ATTEMPTS):
+        try:
+            _ = _execute_write_statements(
+                connection=connection,
+                execute=execute,
+                create_sql=create_sql,
+                index_sqls=index_sqls,
+                insert_sql=insert_sql,
+            )
+            return
+        except Exception as error:
+            if attempt + 1 == FINGERPRINT_WRITE_ATTEMPTS:
+                raise
+            _log_write_retry(fingerprint=fingerprint, attempt=attempt, error=error)
+            time.sleep(FINGERPRINT_WRITE_RETRY_BASE_SECONDS * (attempt + 1))
+
+
+def _execute_write_statements(
+    *,
+    connection: Any,
+    execute: Any,
+    create_sql: str,
+    index_sqls: tuple[str, ...],
+    insert_sql: str,
+) -> None:
+    _ = execute(connection, create_sql)
+    index_sql: str
+    for index_sql in index_sqls:
+        _ = execute(connection, index_sql)
+    _ = execute(connection, insert_sql)
+
+
+def _log_write_retry(*, fingerprint: Fingerprint, attempt: int, error: Exception) -> None:
+    logging.getLogger("sqlbuild.fingerprints").warning(
+        "fingerprint write attempt %s/%s failed for %s '%s' "
+        "(likely concurrent-writer conflict); retrying: %s: %s",
+        attempt + 1,
+        FINGERPRINT_WRITE_ATTEMPTS,
+        fingerprint.node_type,
+        fingerprint.node_name,
+        type(error).__name__,
+        error,
+    )

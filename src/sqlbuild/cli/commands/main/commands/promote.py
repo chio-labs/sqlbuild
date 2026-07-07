@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.promote.models import PromoteCommandRequest
 from sqlbuild.cli.commands.helpers.promote.output import format_promote_output
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
@@ -22,25 +23,26 @@ from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgr
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.virtual.executor.main.promote import run_virtual_promote
+from sqlbuild.virtual.executor.models import PromoteOptions
 
 
-def run_promote(
-    project_dir: Path | None,
-    no_color: bool,
-    no_sql_validation: bool,
-    from_virtual_environment: str,
-    to_virtual_environment: str,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    allow_partial_promotion: bool = False,
-    include_stale_upstreams: bool = False,
-    verbose: bool = False,
-    cli_vars: dict[str, object] | None = None,
-) -> int:
+def run_promote(request: PromoteCommandRequest) -> int:
     """Execute the promote command."""
 
+    project_dir: Path | None = request.project_dir
+    no_color: bool = request.no_color
+    no_sql_validation: bool = request.no_sql_validation
+    from_virtual_environment: str = request.from_virtual_environment
+    to_virtual_environment: str = request.to_virtual_environment
+    select: tuple[str, ...] = request.select
+    exclude: tuple[str, ...] = request.exclude
+    allow_partial_promotion: bool = request.allow_partial_promotion
+    include_stale_upstreams: bool = request.include_stale_upstreams
+    verbose: bool = request.verbose
+    cli_vars: dict[str, object] | None = request.cli_vars
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
@@ -74,20 +76,24 @@ def run_promote(
         connection_config=connection_config,
         from_virtual_environment_name=from_virtual_environment,
         to_virtual_environment_name=to_virtual_environment,
-        select=select,
-        exclude=exclude,
-        allow_partial_promotion=allow_partial_promotion,
-        include_stale_upstreams=include_stale_upstreams,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=effective_project_dir,
-            discovered_inputs=discovered_inputs,
+        options=PromoteOptions(
+            select=select,
+            exclude=exclude,
+            allow_partial_promotion=allow_partial_promotion,
+            include_stale_upstreams=include_stale_upstreams,
+            no_sql_validation=no_sql_validation,
+            cli_vars=cli_vars,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
         ),
-        on_progress=planning_progress.on_progress,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
+        hooks=ConnectionHooks(
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+        ),
     )
     print(
         format_promote_output(

@@ -37,13 +37,7 @@ def write_disabled(*, stream: TextIO, use_color: bool = False) -> None:
     )
 
 
-def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) -> None:
-    """Write a janitor preview."""
-
-    style: CliStyle = CliStyle(use_color=use_color)
-    env_label: str = environment_label(plan)
-    rendered_env: str = style.object_name(env_label)
-    stream.write(f"{style.title('Janitor preview')}  {rendered_env}\n\n")
+def _write_plan_summary(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -> None:
     if plan.retention_days == 0:
         stream.write(f"  {'retention':<22} {style.accent('disabled (0 days)')}\n")
         stream.write(f"  {'age metadata':<22} {style.accent('not checked')}\n")
@@ -53,60 +47,74 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
             stream.write(f"  {'age metadata':<22} {style.accent('unavailable')}\n")
     stream.write(f"  {'schemas scanned':<22} {style.accent(str(plan.scanned_schema_count))}\n")
     stream.write(f"  {'schemas skipped':<22} {style.accent(str(len(plan.skipped_schemas)))}\n")
-    candidate_count: str = str(len(plan.candidates))
-    rendered_candidates: str = (
-        style.warning(candidate_count) if plan.candidates else style.accent(candidate_count)
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="eligible for deletion",
+        items=plan.candidates,
     )
-    stream.write(f"  {'eligible for deletion':<22} {rendered_candidates}\n")
-    checkpoint_count: str = str(len(plan.checkpoint_candidates))
-    rendered_checkpoints: str = (
-        style.warning(checkpoint_count)
-        if plan.checkpoint_candidates
-        else style.accent(checkpoint_count)
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="checkpoints pruned",
+        items=plan.checkpoint_candidates,
     )
-    stream.write(f"  {'checkpoints pruned':<22} {rendered_checkpoints}\n")
-    detached_count: str = str(len(plan.detached_virtual_environment_candidates))
-    rendered_detached: str = (
-        style.warning(detached_count)
-        if plan.detached_virtual_environment_candidates
-        else style.accent(detached_count)
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="detached VDEs pruned",
+        items=plan.detached_virtual_environment_candidates,
     )
-    stream.write(f"  {'detached VDEs pruned':<22} {rendered_detached}\n")
-    expired_vde_count: str = str(len(plan.expired_virtual_environment_candidates))
-    rendered_expired_vdes: str = (
-        style.warning(expired_vde_count)
-        if plan.expired_virtual_environment_candidates
-        else style.accent(expired_vde_count)
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="expired VDEs pruned",
+        items=plan.expired_virtual_environment_candidates,
     )
-    stream.write(f"  {'expired VDEs pruned':<22} {rendered_expired_vdes}\n")
-    backup_count: str = str(len(plan.state_backup_candidates))
-    rendered_backups: str = (
-        style.warning(backup_count) if plan.state_backup_candidates else style.accent(backup_count)
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="state backups pruned",
+        items=plan.state_backup_candidates,
     )
-    stream.write(f"  {'state backups pruned':<22} {rendered_backups}\n")
-    expired_lock_count: str = str(len(plan.expired_lock_candidates))
-    rendered_expired_locks: str = (
-        style.warning(expired_lock_count)
-        if plan.expired_lock_candidates
-        else style.accent(expired_lock_count)
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="expired locks pruned",
+        items=plan.expired_lock_candidates,
     )
-    stream.write(f"  {'expired locks pruned':<22} {rendered_expired_locks}\n")
-    direct_state_count: str = str(len(plan.direct_state_prune_candidates))
-    rendered_direct_state: str = (
-        style.warning(direct_state_count)
-        if plan.direct_state_prune_candidates
-        else style.accent(direct_state_count)
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="direct state pruned",
+        items=plan.direct_state_prune_candidates,
     )
-    stream.write(f"  {'direct state pruned':<22} {rendered_direct_state}\n")
-    virtual_state_count: str = str(len(plan.virtual_state_prune_candidates))
-    rendered_virtual_state: str = (
-        style.warning(virtual_state_count)
-        if plan.virtual_state_prune_candidates
-        else style.accent(virtual_state_count)
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="virtual state pruned",
+        items=plan.virtual_state_prune_candidates,
     )
-    stream.write(f"  {'virtual state pruned':<22} {rendered_virtual_state}\n")
     skipped_count: str = style.accent(str(len(plan.skipped_relations)))
     stream.write(f"  {'objects skipped':<22} {skipped_count}\n")
+
+
+def _write_count_row(
+    *, stream: TextIO, style: CliStyle, label: str, items: tuple[object, ...]
+) -> None:
+    count: str = str(len(items))
+    rendered: str = style.warning(count) if items else style.accent(count)
+    stream.write(f"  {label:<22} {rendered}\n")
+
+
+def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) -> None:
+    """Write a janitor preview."""
+
+    style: CliStyle = CliStyle(use_color=use_color)
+    env_label: str = environment_label(plan)
+    rendered_env: str = style.object_name(env_label)
+    stream.write(f"{style.title('Janitor preview')}  {rendered_env}\n\n")
+    _write_plan_summary(plan=plan, stream=stream, style=style)
 
     if plan.skipped_schemas:
         stream.write(f"\n{style.success('Skipped schemas')}\n")

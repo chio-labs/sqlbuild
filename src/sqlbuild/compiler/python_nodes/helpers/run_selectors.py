@@ -42,8 +42,7 @@ def resolve_python_sql_run_selectors(
     if select and selected_check_names:
         check_list: str = ", ".join(sorted(selected_check_names))
         raise PlannerInputError(
-            "sqb build --no-tests --no-audits does not execute Python checks: "
-            f"{check_list}. Use sqb check instead."
+            f"Python checks are not selectable here: {check_list}. Use sqb check instead."
         )
     runnable_python_names: frozenset[str] = frozenset(
         name

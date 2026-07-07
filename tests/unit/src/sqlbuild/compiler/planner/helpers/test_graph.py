@@ -5,7 +5,8 @@ import pytest
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
-    build_upstream_deps,
+    build_execution_edge_origins,
+    build_execution_upstream_deps,
     expand_downstream,
     expand_upstream,
     find_path_keys,
@@ -15,6 +16,7 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     BuildDownstreamDepsTestCase,
     BuildUpstreamDepsTestCase,
     CycleDetectionTestCase,
+    ExecutionEdgeOriginsTestCase,
     ExpandDownstreamTestCase,
     ExpandUpstreamTestCase,
     FindPathKeysErrorTestCase,
@@ -52,12 +54,14 @@ from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
 def test_given_project_when_building_upstream_then_includes_expected_deps(
     test_case: BuildUpstreamDepsTestCase,
 ) -> None:
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        build_test_project(
-            model_deps=test_case.model_deps,
-            source_names=test_case.source_names,
-            seed_names=test_case.seed_names,
-            audit_model_source_deps=test_case.audit_model_source_deps,
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(
+            build_test_project(
+                model_deps=test_case.model_deps,
+                source_names=test_case.source_names,
+                seed_names=test_case.seed_names,
+                audit_model_source_deps=test_case.audit_model_source_deps,
+            )
         )
     )
 
@@ -165,6 +169,69 @@ def test_given_cyclic_deps_when_ordering_topologically_then_raises(
 ) -> None:
     with pytest.raises(test_case.expected_error_type, match="cycle"):
         topologically_order_keys(test_case.upstream)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CycleDetectionTestCase(
+            description="names the injected audit edge that closed the cycle",
+            upstream={
+                model_key("a"): (model_key("b"),),
+                model_key("b"): (model_key("a"),),
+            },
+            expected_error_type=ValueError,
+            injected_edge_origins={
+                (model_key("a"), model_key("b")): "audit 'a_audit' on 'a' reads 'b'",
+            },
+            expected_error_fragment="(via audit 'a_audit' on 'a' reads 'b')",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_injected_edge_cycle_when_ordering_topologically_then_error_names_origin(
+    test_case: CycleDetectionTestCase,
+) -> None:
+    with pytest.raises(test_case.expected_error_type, match="cycle") as exc_info:
+        topologically_order_keys(
+            test_case.upstream,
+            injected_edge_origins=test_case.injected_edge_origins,
+        )
+
+    assert test_case.expected_error_fragment is not None
+    assert test_case.expected_error_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionEdgeOriginsTestCase(
+            description="records audit scope-dep edges with audit and target names",
+            model_deps={"stg_payments": ("raw_payments",)},
+            source_names=("raw_payments", "raw_orders"),
+            audit_model_source_deps={"stg_payments": ("raw_orders",)},
+            expected_origin_fragments=(
+                "audit 'stg_payments_audit' on 'stg_payments' reads 'raw_orders'",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_audit_scope_deps_when_building_edge_origins_then_names_the_audit(
+    test_case: ExecutionEdgeOriginsTestCase,
+) -> None:
+    origins: dict[tuple[CompiledObjectKey, CompiledObjectKey], str] = build_execution_edge_origins(
+        build_test_project(
+            model_deps=test_case.model_deps,
+            source_names=test_case.source_names,
+            audit_model_source_deps=test_case.audit_model_source_deps,
+        )
+    )
+
+    origin_values: tuple[str, ...] = tuple(sorted(origins.values()))
+    expected_fragment: str
+    for expected_fragment in test_case.expected_origin_fragments:
+        assert any(expected_fragment in value for value in origin_values)
 
 
 @pytest.mark.parametrize(
@@ -298,8 +365,8 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
     "test_case",
     [
         TopologicalOrderTestCase(
-            description="includes sources and seeds from build_upstream_deps",
-            upstream=build_upstream_deps(
+            description="includes sources and seeds from build_execution_upstream_deps",
+            upstream=build_execution_upstream_deps(
                 build_test_project(
                     model_deps={"orders": ("raw_orders",)},
                     source_names=("raw_orders",),
@@ -314,7 +381,7 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
         ),
         TopologicalOrderTestCase(
             description="runs function deps before sql tests for dependent models",
-            upstream=build_upstream_deps(
+            upstream=build_execution_upstream_deps(
                 build_test_project(
                     model_deps={"orders": ("is_completed_order",)},
                     function_names=("is_completed_order",),
@@ -332,7 +399,7 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
         ),
         TopologicalOrderTestCase(
             description="runs table function tests after their function resource",
-            upstream=build_upstream_deps(
+            upstream=build_execution_upstream_deps(
                 build_test_project(
                     function_names=("customer_orders",),
                     table_fn_test_function_names=("customer_orders",),
@@ -348,7 +415,7 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
         ),
         TopologicalOrderTestCase(
             description="runs source refs from attached audits before audited model",
-            upstream=build_upstream_deps(
+            upstream=build_execution_upstream_deps(
                 build_test_project(
                     model_deps={"stg_payments": ("raw_payments",)},
                     source_names=("raw_payments", "raw_orders"),
@@ -390,11 +457,13 @@ def test_given_sql_test_for_function_model_when_building_upstream_then_test_depe
         name="test_models",
     )
 
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        build_test_project(
-            model_deps={"orders": ("is_completed_order",)},
-            function_names=("is_completed_order",),
-            sql_test_expected_model_names=("orders",),
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(
+            build_test_project(
+                model_deps={"orders": ("is_completed_order",)},
+                function_names=("is_completed_order",),
+                sql_test_expected_model_names=("orders",),
+            )
         )
     )
 
@@ -419,10 +488,12 @@ def test_given_table_function_sql_test_when_building_upstream_then_test_depends_
         name="test_table_functions",
     )
 
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_upstream_deps(
-        build_test_project(
-            function_names=("customer_orders",),
-            table_fn_test_function_names=("customer_orders",),
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(
+            build_test_project(
+                function_names=("customer_orders",),
+                table_fn_test_function_names=("customer_orders",),
+            )
         )
     )
 

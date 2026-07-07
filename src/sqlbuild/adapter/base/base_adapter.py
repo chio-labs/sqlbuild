@@ -13,6 +13,7 @@ from sqlbuild.adapter.shared.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
+    FunctionDefinition,
     FunctionInfo,
     QueryResult,
     RelationInfo,
@@ -21,6 +22,7 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerance,
     RowDiffTolerances,
     SchemaDiffResult,
+    SnapshotChangeTarget,
     StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
@@ -727,18 +729,19 @@ class BaseAdapter(StrictAdapter):
     def render_apply_check_snapshot_changes(
         self,
         *,
-        destination: str,
-        origin: str,
-        unique_key: tuple[str, ...],
+        target: SnapshotChangeTarget,
         check_columns: tuple[str, ...],
         updated_at_column: str | None,
         observed_at_column: str | None,
-        valid_from_column: str,
-        valid_to_column: str,
         initial_valid_from: str | None,
-        output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
+        destination: str = target.destination
+        origin: str = target.origin
+        unique_key: tuple[str, ...] = target.unique_key
+        valid_from_column: str = target.valid_from_column
+        valid_to_column: str = target.valid_to_column
+        output_columns: tuple[str, ...] = target.output_columns
         current_timestamp: str = self.render_current_timestamp()
         initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
             snapshot_strategy="check",
@@ -1081,29 +1084,19 @@ class BaseAdapter(StrictAdapter):
         self,
         connection: Any,
         *,
-        destination: str,
-        arguments: tuple[Any, ...],
-        returns: str,
-        body_sql: str,
-        return_columns: tuple[Any, ...] = (),
-        language: FunctionLanguage = FunctionLanguage.SQL,
-        runtime_version: str | None = None,
-        entry_point: str | None = None,
-        packages: tuple[str, ...] = (),
-        source_file_path: Path | None = None,
+        definition: FunctionDefinition,
         statement_recorder: StatementRecorder,
     ) -> None:
-        del source_file_path
         statements: tuple[str, ...] = self.render_create_function(
-            destination=destination,
-            arguments=arguments,
-            returns=returns,
-            body_sql=body_sql,
-            return_columns=return_columns,
-            language=language,
-            runtime_version=runtime_version,
-            entry_point=entry_point,
-            packages=packages,
+            destination=definition.destination,
+            arguments=definition.arguments,
+            returns=definition.returns,
+            body_sql=definition.body_sql,
+            return_columns=definition.return_columns,
+            language=definition.language,
+            runtime_version=definition.runtime_version,
+            entry_point=definition.entry_point,
+            packages=definition.packages,
         )
         statement_recorder.record_many(statements)
         stmt: str

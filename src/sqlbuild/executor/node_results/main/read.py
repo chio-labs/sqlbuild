@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.executor.node_results.constants import NODE_RESULTS_TABLE_NAME
 from sqlbuild.executor.node_results.helpers.serialization import decode_json_b64
 from sqlbuild.executor.node_results.helpers.sql import build_read_history_sql
-from sqlbuild.executor.node_results.models import NodeResultEnvelope
+from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultQuery
 
 
 def read_node_results(
@@ -19,19 +19,12 @@ def read_node_results(
     relation_exists: Callable[..., bool],
     database: str | None,
     schema: str,
-    node_type: str,
-    node_name: str,
-    target_database: str | None,
-    target_schema: str | None,
-    target_name: str | None,
-    statuses: tuple[str, ...] | None,
-    run_id: str | None,
-    limit: int,
+    query: NodeResultQuery,
     render_qualified_name: Callable[..., str | None],
 ) -> tuple[NodeResultEnvelope, ...]:
     """Read persisted node results for one runtime node identity."""
 
-    if limit < 1:
+    if query.limit < 1:
         return ()
     if not relation_exists(
         connection,
@@ -43,18 +36,12 @@ def read_node_results(
     read_sql: str = build_read_history_sql(
         database=database,
         schema=schema,
-        node_type=node_type,
-        node_name=node_name,
-        target_database=target_database,
-        target_schema=target_schema,
-        target_name=target_name,
-        statuses=statuses,
-        run_id=run_id,
+        query=query,
         render_qualified_name=render_qualified_name,
     )
     result: Any = execute(connection, read_sql)
     rows: list[tuple[Any, ...]] = result.fetchall()
-    return tuple(_row_to_envelope(row) for row in rows[:limit])
+    return tuple(_row_to_envelope(row) for row in rows[: query.limit])
 
 
 def _row_to_envelope(row: tuple[Any, ...]) -> NodeResultEnvelope:

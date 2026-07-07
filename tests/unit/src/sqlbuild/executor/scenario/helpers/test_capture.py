@@ -6,7 +6,10 @@ import pytest
 
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.scenario.helpers.capture.core import execute_scenario_snapshot_capture_steps
-from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureRunResult
+from sqlbuild.executor.scenario.models import (
+    ScenarioCaptureSettings,
+    ScenarioSnapshotCaptureRunResult,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ExecuteScenarioSnapshotCaptureStepsTestCase,
@@ -109,11 +112,13 @@ def test_given_scenario_plan_when_executing_snapshot_capture_steps_then_returns_
         scenario_plan=SCENARIO_PLAN,
         adapter=adapter,
         connection=object(),
-        captured_at="2026-05-09T00:00:00Z",
-        capture_adapter="duckdb",
-        capture_dialect="duckdb",
-        sqlbuild_version="0.1.0",
-        retain=test_case.retain,
+        settings=ScenarioCaptureSettings(
+            captured_at="2026-05-09T00:00:00Z",
+            capture_adapter="duckdb",
+            capture_dialect="duckdb",
+            sqlbuild_version="0.1.0",
+            retain=test_case.retain,
+        ),
     )
 
     assert result.status == test_case.expected_status

@@ -30,6 +30,14 @@ class BuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ManifestArtifactGatingE2ETestCase:
+    description: str
+    expected_manifest_after_build: bool
+    expected_manifest_after_compile_manifest: bool
+    expected_manifest_after_build_manifest: bool
+
+
+@dataclass(frozen=True)
 class BuildNoTestsNoAuditsFlagE2ETestCase:
     """Test case for build test/audit opt-out flags."""
 

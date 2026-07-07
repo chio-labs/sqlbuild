@@ -142,6 +142,49 @@ class JanitorSkippedSchema:
 
 
 @dataclass(frozen=True)
+class JanitorWarehouseFacts:
+    """Desired, discovered, and tracked relation facts for planning."""
+
+    desired_keys: frozenset[JanitorRelationKey]
+    source_schema_names: dict[tuple[str | None, str | None], set[str]]
+    relations_by_schema: dict[tuple[str | None, str | None], tuple[RelationInfo, ...]]
+    tracked_relation_keys: frozenset[JanitorRelationKey]
+
+
+@dataclass(frozen=True)
+class JanitorRelationClassification:
+    """Delete candidates and skipped relations for one target schema."""
+
+    candidates: tuple[JanitorDeleteCandidate, ...]
+    skipped_relations: tuple[JanitorSkippedRelation, ...]
+
+
+@dataclass(frozen=True)
+class JanitorStateCandidates:
+    """Precomputed state-side cleanup candidates for one janitor plan."""
+
+    checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = ()
+    detached_virtual_environment_candidates: tuple[
+        JanitorDetachedVirtualEnvironmentCandidate, ...
+    ] = ()
+    expired_virtual_environment_candidates: tuple[
+        JanitorExpiredVirtualEnvironmentCandidate, ...
+    ] = ()
+    state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = ()
+    expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = ()
+    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = ()
+
+
+@dataclass(frozen=True)
+class JanitorRelationScope:
+    """Scan scope and protection rules for one janitor plan."""
+
+    scan_relation_keys: frozenset[JanitorRelationKey] = frozenset()
+    protected_relation_keys: frozenset[JanitorRelationKey] = frozenset()
+    protected_relation_reasons: dict[JanitorRelationKey, str] | None = None
+
+
+@dataclass(frozen=True)
 class JanitorPlan:
     """Complete janitor preview and execution plan."""
 

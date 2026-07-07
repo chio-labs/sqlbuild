@@ -5,14 +5,23 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, TextIO
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import (
+    DependencyBaselinePlanEntry,
+    GraphNodeKey,
+    PlanOutput,
+)
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_selector_term
+from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
@@ -24,7 +33,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.spec.models.project import ScenarioConfig
+from sqlbuild.spec.models.project import DbtProductionRefConfig, ScenarioConfig
 from sqlbuild.spec.models.source import SourceColumnEntry
 
 
@@ -249,6 +258,29 @@ class DbtCloneRun:
 
 
 @dataclass(frozen=True)
+class DbtComparisonPreparation:
+    """Current and production-ref manifests prepared for clone/diff commands."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    production_ref: DbtProductionRefConfig
+    production_git_ref: str
+    dbt_options: DbtCliOptions
+    runner: Any
+    current_manifest: DbtManifestIndex
+    reuse_manifest: DbtManifestIndex
+
+
+@dataclass(frozen=True)
+class DbtInteropConnection:
+    """Open warehouse connection resolved for a dbt interop command."""
+
+    adapter: BaseAdapter
+    adapter_name: str
+    connection_config: dict[str, object]
+    connection: Any
+
+
+@dataclass(frozen=True)
 class DbtNodeMessage:
     """One dbt log message attached to a dbt node."""
 
@@ -441,6 +473,18 @@ class DbtLineageArgs:
 
 
 @dataclass(frozen=True)
+class DbtLineagePreparation:
+    """Compiled dbt/SQLBuild inputs shared by lineage selection and rendering."""
+
+    lineage_args: DbtLineageArgs
+    manifest: DbtManifestIndex
+    adapter: BaseAdapter
+    project: CompiledProject
+    graph: DbtCombinedGraph
+    connection_config: dict[str, object]
+
+
+@dataclass(frozen=True)
 class DbtScenarioBuild:
     """Adapted SQLBuild project and connection inputs for a dbt scenario run."""
 
@@ -618,3 +662,181 @@ class DbtInteropPlan:
     dbt_skip_reason: DbtInteropSkipReason | None = None
     sqlbuild_skip_reason: DbtInteropSkipReason | None = None
     warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DbtInteropExecutionRequest:
+    """Caller inputs for one dbt interop execution command."""
+
+    command: DbtInteropCommand
+    project_dir: Path
+    args: tuple[str, ...]
+    dbt_runner: Any | None = None
+    dbt_executable: str | None = None
+    sqlbuild_executable: str = "sqb"
+    no_sql_validation: bool = False
+    fail_fast: bool = False
+    on_progress: Callable[[str], None] | None = None
+    progress_stream: TextIO | None = None
+    dbt_stdout_stream: TextIO | None = None
+    use_color: bool = False
+    verbose: bool = False
+    json_output: bool = False
+
+
+@dataclass(frozen=True)
+class DbtInteropInvocation:
+    """Resolved execution environment for one dbt interop command."""
+
+    dbt_executable: str
+    output_stream: TextIO
+    dbt_output_stream: TextIO
+    routed: DbtInteropRoutedArgs
+    discovered_inputs: DiscoveredProjectInputs
+    effective_force: bool
+    effective_sqlbuild_args: tuple[str, ...]
+    dbt_options: DbtCliOptions
+    dbt_vars: dict[str, object]
+    runner: Any
+
+
+@dataclass(frozen=True)
+class DbtInteropCompiledProject:
+    """Adapter and compiled SQLBuild project for dbt interop planning."""
+
+    adapter_name: str
+    adapter: BaseAdapter
+    project: CompiledProject
+
+
+@dataclass(frozen=True)
+class DbtInteropPlanResolution:
+    """Combined dbt graph and the resolved interop plan."""
+
+    graph: DbtCombinedGraph
+    plan: DbtInteropPlan
+
+
+@dataclass(frozen=True)
+class DbtPlannedWork:
+    """Interop plan enriched with model planning plus the connection config."""
+
+    plan: DbtInteropPlan
+    connection_config: dict[str, object]
+
+
+@dataclass(frozen=True)
+class DbtWriteIdentities:
+    """Write-time identity hashes and query SQL lookups for dbt nodes."""
+
+    expected_version_hash_by_unique_id: dict[str, str | None]
+    seed_identity_by_unique_id: dict[str, str]
+    previous_version_hash_by_unique_id: dict[str, str]
+    write_identity_hashes: dict[GraphNodeKey, str]
+    query_sql_by_unique_id: dict[str, str]
+
+
+@dataclass(frozen=True)
+class DbtDeferClonePlan:
+    """Resolved defer-clone selection for one dbt interop execution."""
+
+    enabled: bool
+    unique_ids: frozenset[str]
+    cause_names: tuple[str, ...]
+    view_chain_terms: tuple[str, ...]
+    view_chain_unique_ids: frozenset[str]
+
+
+@dataclass(frozen=True)
+class DbtPreExecutionOutputs:
+    """Plan and missing-relation blocks resolved before dbt execution."""
+
+    plan: DbtInteropPlan
+    missing_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]]
+
+
+@dataclass(frozen=True)
+class DbtTrackedExecution:
+    """dbt execution result with fingerprint and watermark tracking applied."""
+
+    execution: DbtCommandExecutionResult
+    fingerprint_warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtSqlbuildReplanResult:
+    """SQLBuild plan output and missing-relation blocks after dbt execution."""
+
+    plan_output: PlanOutput | None
+    missing_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]]
+
+
+@dataclass(frozen=True)
+class DbtFingerprintDestination:
+    """Run-scoped fingerprint destination coordinates for dbt node writes."""
+
+    run_id: str
+    fingerprint_database: str | None
+    fingerprint_schema: str | None
+    target_name: str | None
+
+
+@dataclass(frozen=True)
+class DbtInteropCommandArgs:
+    """Selection, passthrough args, and executables for a dbt interop command."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...] = ()
+    dbt_command_args: tuple[str, ...] = ()
+    sqlbuild_command_args: tuple[str, ...] = ()
+    dbt_executable: str = "dbt"
+    sqlbuild_executable: str = "sqb"
+
+
+@dataclass(frozen=True)
+class DbtDeferClonePrephaseContext:
+    """Runtime environment inputs for a dbt defer-clone prephase."""
+
+    project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    dbt_options: DbtCliOptions
+    runner: Any
+    adapter: BaseAdapter
+    project: CompiledProject
+    connection_config: dict[str, object]
+
+
+@dataclass(frozen=True)
+class DbtPlanEnvironment:
+    """Compiled project and adapter environment for dbt plan-output builds."""
+
+    project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    project: CompiledProject
+    adapter: BaseAdapter
+    adapter_name: str
+
+
+@dataclass(frozen=True)
+class DbtSqlbuildPlanArtifacts:
+    """Optional dbt manifest, graph, and source-freshness planning artifacts."""
+
+    manifest: DbtManifestIndex | None = None
+    dbt_manifest: DbtManifestIndex | None = None
+    dbt_graph: DbtCombinedGraph | None = None
+    dbt_source_freshness: StandardSourceFreshnessPlanningResult | None = None
+
+
+@dataclass(frozen=True)
+class DbtSqlbuildPlanRequest:
+    """Selection, overrides, and dbt artifacts for a SQLBuild plan-output build."""
+
+    selected_model_names: tuple[str, ...]
+    required_dbt_unique_ids: tuple[str, ...]
+    sqlbuild_args: tuple[str, ...]
+    forced_stale_model_names: tuple[str, ...] = ()
+    external_blocked_model_names: tuple[str, ...] = ()
+    deferred_relations: dict[str, RelationInfo] | None = None
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = ()
+    disable_scope_pruning: bool = False
+    artifacts: DbtSqlbuildPlanArtifacts = field(default_factory=DbtSqlbuildPlanArtifacts)

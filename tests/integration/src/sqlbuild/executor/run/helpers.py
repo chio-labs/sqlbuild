@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.main.create_table_sql import build_create_table_sql
 from sqlbuild.compiler.fingerprints.main.write import build_insert_sql
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import (
     MaterializationType,
@@ -35,7 +37,11 @@ from sqlbuild.executor.run.helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
 )
 from sqlbuild.executor.run.main.execute import execute_table_entry
-from sqlbuild.executor.run.models import HookContext, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    HookContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
 from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
@@ -259,18 +265,20 @@ def write_matching_reuse_origin_fingerprint(
         build_insert_sql(
             database=database,
             schema=schema,
-            node_type="model",
-            node_name=model_name,
-            target_database=target_database,
-            target_schema=schema,
-            target_name=target_name,
-            run_id="reuse_from_run",
-            definition_hash="definition_hash",
-            version_hash=version_hash,
-            schema_fingerprint="schema_hash",
-            definition="SELECT 1 AS id",
-            metadata_json=metadata_json,
-            ts="2026-01-01T00:00:00+00:00",
+            fingerprint=Fingerprint(
+                node_type="model",
+                node_name=model_name,
+                target_database=target_database,
+                target_schema=schema,
+                target_name=target_name,
+                run_id="reuse_from_run",
+                definition_hash="definition_hash",
+                version_hash=version_hash,
+                schema_fingerprint="schema_hash",
+                definition="SELECT 1 AS id",
+                metadata_json=metadata_json,
+                ts=datetime.fromisoformat("2026-01-01T00:00:00+00:00"),
+            ),
             render_qualified_name=adapter.render_qualified_name,
         ),
     )
@@ -464,24 +472,28 @@ def _execute_test(
     }
 
     return execute_table_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations=model_locations,
-        seed_locations={},
-        source_map={},
-        model_audits=model_audits,
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations=model_locations,
+            seed_locations={},
+            source_map={},
+            model_audits=model_audits,
+            run_id="test_run",
+            query_change_tracking=(
+                test_case.query_change_tracking
+                if isinstance(test_case, TableSuccessTestCase)
+                else True
+            ),
+            hook_functions=tuple(
+                hook_function
+                for hook_function in getattr(test_case, "hook_functions", ())
+                if isinstance(hook_function, DiscoveredHookFunction)
+            ),
+        ),
         declared_columns=declared_columns,
         promotion_mode=test_case.promotion_mode,
-        run_id="test_run",
-        query_change_tracking=(
-            test_case.query_change_tracking if isinstance(test_case, TableSuccessTestCase) else True
-        ),
-        hook_functions=tuple(
-            hook_function
-            for hook_function in getattr(test_case, "hook_functions", ())
-            if isinstance(hook_function, DiscoveredHookFunction)
-        ),
     )
 
 

@@ -23,13 +23,15 @@ def unlock_downstream_python_nodes(
     *,
     completed_node_name: str,
     in_degree: dict[str, int],
-    ready: list[str],
     downstream_names: dict[str, tuple[str, ...]],
-) -> None:
-    """Mark one node complete and append newly ready downstream nodes."""
+) -> tuple[dict[str, int], tuple[str, ...]]:
+    """Return updated in-degrees and newly ready nodes after one completion."""
 
+    updated_in_degree: dict[str, int] = dict(in_degree)
+    newly_ready: list[str] = []
     downstream_name: str
     for downstream_name in downstream_names.get(completed_node_name, ()):
-        in_degree[downstream_name] = in_degree.get(downstream_name, 1) - 1
-        if in_degree[downstream_name] == 0:
-            ready.append(downstream_name)
+        updated_in_degree[downstream_name] = updated_in_degree.get(downstream_name, 1) - 1
+        if updated_in_degree[downstream_name] == 0:
+            newly_ready.append(downstream_name)
+    return updated_in_degree, tuple(newly_ready)

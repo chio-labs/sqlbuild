@@ -30,8 +30,10 @@ from scripts.structure.structure_conventions.rules import (
     check_init_module,
     check_integration_adapter_helpers_module,
     check_integrations_package_structure,
+    check_main_discarded_call_results,
     check_main_entry_name_collisions,
     check_main_package_layout,
+    check_main_public_function_shape,
     check_model_declarations_outside_models,
     check_models_module,
     check_nested_runtime_package_direct_modules,
@@ -42,6 +44,7 @@ from scripts.structure.structure_conventions.rules import (
     check_no_internal_helper_exports,
     check_no_internal_reexport_modules,
     check_no_metadata_calls_in_loops,
+    check_no_parameter_mutation_in_phase_helpers,
     check_no_raw_color_helper_imports,
     check_no_raw_runtime_diagnostics,
     check_no_relative_imports,
@@ -55,6 +58,7 @@ from scripts.structure.structure_conventions.rules import (
     check_shared_package_imports,
     check_shared_package_structure,
     check_single_line_docstrings,
+    check_single_project_macro_load_site,
     check_source_file_line_count,
     check_target_reuse_terminology,
     check_top_level_domain_direct_modules,
@@ -95,6 +99,8 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_classes_package_module_shape(actual_repo_root, file_path, module))
         violations.extend(check_init_module(file_path, module))
         violations.extend(check_entry_module_shape(file_path, module))
+        violations.extend(check_main_public_function_shape(file_path, module))
+        violations.extend(check_main_discarded_call_results(file_path, module))
         violations.extend(check_main_entry_name_collisions(actual_repo_root, file_path))
         violations.extend(check_types_module(file_path, module))
         violations.extend(check_models_module(file_path, module))
@@ -113,7 +119,11 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         violations.extend(check_no_ad_hoc_dbt_graph_projection(file_path, module))
         violations.extend(check_no_ad_hoc_selector_plus_parsing(file_path, module))
         violations.extend(check_single_line_docstrings(file_path, module))
+        violations.extend(check_single_project_macro_load_site(file_path, module))
         violations.extend(check_no_standalone_comments(file_path))
+        violations.extend(
+            check_no_parameter_mutation_in_phase_helpers(actual_repo_root, file_path, module)
+        )
         violations.extend(check_private_definition_ordering(file_path, module))
         violations.extend(check_type_declarations_outside_types(file_path, module))
         violations.extend(check_exception_declarations_outside_exceptions(file_path, module))

@@ -23,7 +23,12 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.executor.build.main.execute import execute_build_plan
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildCallbacks,
+    BuildCustomizations,
+    BuildExecutionResult,
+    BuildRuntimeParams,
+)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import HookContext
 from sqlbuild.executor.shared.types import ExecutionStatus
@@ -120,12 +125,18 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
             connection_config={"database": str(tmp_path / "scheduler.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-            loader_functions=(loader_function,),
-            on_node_start=lambda name, _kind: node_starts.append(name),
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=lambda name, _kind: node_starts.append(name),
+            ),
+            customizations=BuildCustomizations(
+                loader_functions=(loader_function,),
+            ),
         )
         loaded_rows: tuple[tuple[object, ...], ...] = fetch_rows_or_empty(
             connection,
@@ -195,12 +206,16 @@ def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_
             connection_config={"database": str(tmp_path / "scheduler_hook.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-            on_node_start=lambda name, _kind: events.append(f"start:{name}"),
-            before_model_materialize=before_model_materialize,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=lambda name, _kind: events.append(f"start:{name}"),
+                before_model_materialize=before_model_materialize,
+            ),
         )
         loaded_rows: tuple[tuple[object, ...], ...] = fetch_rows_or_empty(
             connection,
@@ -269,10 +284,12 @@ def test_given_source_freshness_when_model_succeeds_then_writes_node_source_wate
             connection_config={"database": str(tmp_path / "watermarks.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         rows: tuple[tuple[object, ...], ...] = tuple(
             connection.execute(
@@ -335,10 +352,12 @@ def test_given_upstream_table_runs_before_downstream_when_build_succeeds_then_in
             connection_config={"database": str(tmp_path / "same_run.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
@@ -411,10 +430,12 @@ def test_given_downstream_depends_on_view_over_source_when_built_then_records_di
             connection_config={"database": str(tmp_path / "view_source.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
@@ -510,10 +531,12 @@ def test_given_downstream_depends_on_view_over_table_when_built_then_inherits_ta
             connection_config={"database": str(database_path)},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-b",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-b",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         a_result: BuildExecutionResult = execute_build_plan(
             plan=a_plan,
@@ -521,10 +544,12 @@ def test_given_downstream_depends_on_view_over_table_when_built_then_inherits_ta
             connection_config={"database": str(database_path)},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-a",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-a",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
@@ -614,10 +639,12 @@ def test_given_only_downstream_runs_when_upstream_watermark_exists_then_inherits
             connection_config={"database": str(database_path)},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         second_result: BuildExecutionResult = execute_build_plan(
             plan=second_plan,
@@ -625,10 +652,12 @@ def test_given_only_downstream_runs_when_upstream_watermark_exists_then_inherits
             connection_config={"database": str(database_path)},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-2",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-2",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
@@ -700,10 +729,12 @@ def test_given_upstream_table_without_watermark_when_downstream_runs_then_record
             connection_config={"database": str(tmp_path / "missing.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
@@ -837,10 +868,12 @@ def test_given_downstream_depends_on_two_frontier_tables_when_built_then_merges_
             connection_config={"database": str(database_path)},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-b",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-b",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         c_result: BuildExecutionResult = execute_build_plan(
             plan=c_plan,
@@ -848,10 +881,12 @@ def test_given_downstream_depends_on_two_frontier_tables_when_built_then_merges_
             connection_config={"database": str(database_path)},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-c",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-c",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         a_result: BuildExecutionResult = execute_build_plan(
             plan=a_plan,
@@ -859,10 +894,12 @@ def test_given_downstream_depends_on_two_frontier_tables_when_built_then_merges_
             connection_config={"database": str(database_path)},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-a",
-            run_audits=False,
-            run_tests=False,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-a",
+                run_audits=False,
+                run_tests=False,
+            ),
         )
         records: dict[str, NodeSourceWatermarkRecord] = read_node_source_watermark_records(
             adapter=adapter,
@@ -954,11 +991,15 @@ def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_ski
             connection_config={"database": str(tmp_path / "scheduler_skip.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-            on_node_start=lambda name, _kind: node_starts.append(name),
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=lambda name, _kind: node_starts.append(name),
+            ),
         )
     finally:
         adapter.close(connection)
@@ -1024,11 +1065,15 @@ def test_given_model_plan_action_skip_when_build_runs_then_downstream_model_is_s
             connection_config={"database": str(tmp_path / "scheduler_planned_skip.duckdb")},
             connections=(connection,),
             scheduler_connection=connection,
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="run-1",
-            run_audits=False,
-            run_tests=False,
-            on_node_start=lambda name, _kind: node_starts.append(name),
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.DIRECT,
+                run_id="run-1",
+                run_audits=False,
+                run_tests=False,
+            ),
+            callbacks=BuildCallbacks(
+                on_node_start=lambda name, _kind: node_starts.append(name),
+            ),
         )
     finally:
         adapter.close(connection)

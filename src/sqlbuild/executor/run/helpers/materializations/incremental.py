@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
+from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange, RelationReuseKind
-from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run.helpers.execution.final_audits import (
+    run_delta_scope_audits,
+    run_final_scope_audits,
+)
+from sqlbuild.executor.run.helpers.execution.hook_phases import (
+    run_post_hook_phase,
+    run_pre_hook_phase,
+)
 from sqlbuild.executor.run.helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run.helpers.execution.results import (
     build_failed_result,
@@ -32,41 +34,43 @@ from sqlbuild.executor.run.helpers.validation.cursor_bounds import (
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run.helpers.validation.type_enforcement import enforce_types_staged
-from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
-from sqlbuild.executor.run.types import HookPhase
+from sqlbuild.executor.run.models import (
+    FinalAuditRun,
+    HookExecutionResult,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+    PostHookPhaseOutcome,
+    RuntimeCursorSpec,
+)
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
 from sqlbuild.shared.helpers.identity.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.spec.models.source import SourceEntry
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 
 
+@dataclass(frozen=True)
+class _DeltaPreparation:
+    """Resolved SQL and runtime cursor bounds after delta relation staging."""
+
+    resolved_sql: str
+    runtime_cursor_bounds: CursorBounds | None
+
+
 def execute_incremental_entry(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
+    context: ModelMaterializationContext,
     declared_columns: tuple[ColumnInfo, ...],
-    run_id: str,
-    query_change_tracking: bool,
-    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
-    effective_target_name: str | None = None,
-    effective_vars: Mapping[str, object] | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one incremental model through its delta/DML lifecycle."""
 
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_table: str = entry.destination.name
@@ -91,122 +95,28 @@ def execute_incremental_entry(
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
-    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
-    runtime_cursor_bounds: CursorBounds | None = None
-    resolved_sql: str = entry.resolved_sql
+
+    pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
+    )
+    if pre_hook_exit is not None:
+        return pre_hook_exit
 
     try:
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
-            pre_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.pre_hooks,
-                phase=HookPhase.PRE_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
-            )
-        if pre_hook_skipped:
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-            )
-    except Exception as exc:
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.PRE_HOOK,
-            error=str(exc),
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-            hook_results=hook_results,
-        )
-
-    try:
-        adapter.ensure_schema(
-            connection,
-            database=target_database,
-            schema=target_schema,
+        preparation: _DeltaPreparation = _prepare_delta_relation(
+            context=context,
+            target_database=target_database,
+            target_schema=target_schema,
+            target_table=target_table,
+            target_qualified=target_qualified,
+            seed_qualified=seed_qualified,
+            delta_qualified=delta_qualified,
             statement_recorder=statement_recorder,
         )
-        if (
-            entry.relation_reuse is not None
-            and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
-        ):
-            adapter.drop(
-                connection,
-                destination=seed_qualified,
-                if_exists=True,
-                statement_recorder=statement_recorder,
-            )
-            create_relation_from_reuse_plan(
-                adapter=adapter,
-                connection=connection,
-                model_name=entry.name,
-                expected_version_hash=entry.fingerprint_version_hash,
-                relation_reuse=entry.relation_reuse,
-                destination_relation=seed_qualified,
-                statement_recorder=statement_recorder,
-            )
-            promote_relation_to_destination(
-                adapter=adapter,
-                connection=connection,
-                origin_relation=seed_qualified,
-                destination_relation=target_qualified,
-                destination_database=target_database,
-                destination_schema=target_schema,
-                destination_name=target_table,
-                statement_recorder=statement_recorder,
-            )
-        if runtime_owned_cursor_bounds:
-            if entry.cursor_column is None:
-                raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")
-            runtime_cursor_bounds = resolve_runtime_cursor_bounds(
-                adapter=adapter,
-                connection=connection,
-                target_relation=target_qualified,
-                target_database=target_database,
-                target_schema=target_schema,
-                target_name=target_table,
-                cursor_column=entry.cursor_column,
-                cursor_type=entry.cursor_type,
-                cursor_grain=entry.cursor_grain,
-                cursor_start=entry.cursor_start,
-                cursor_input_relations=entry.cursor_input_relations,
-            )
-            if runtime_cursor_bounds is None:
-                raise ExecutorInputError(
-                    f"runtime cursor bounds could not be resolved for '{entry.name}'"
-                )
-            resolved_sql = substitute_cursor_sentinels(
-                sql=entry.resolved_sql, bounds=runtime_cursor_bounds
-            )
-        with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
-            adapter.drop(
-                connection,
-                destination=delta_qualified,
-                if_exists=True,
-                statement_recorder=statement_recorder,
-            )
-            adapter.create_table_as(
-                connection,
-                destination=delta_qualified,
-                sql=resolved_sql,
-                statement_recorder=statement_recorder,
-            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -233,15 +143,16 @@ def execute_incremental_entry(
                 schema=target_schema,
                 name=target_table,
             )
-            _apply_schema_change(
-                adapter=adapter,
-                connection=connection,
-                target_qualified=target_qualified,
-                target_columns=target_columns,
-                delta_columns=delta_columns,
-                on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
-                warnings=warnings,
-                statement_recorder=statement_recorder,
+            warnings.extend(
+                _apply_schema_change(
+                    adapter=adapter,
+                    connection=connection,
+                    target_qualified=target_qualified,
+                    target_columns=target_columns,
+                    delta_columns=delta_columns,
+                    on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                    statement_recorder=statement_recorder,
+                )
             )
             target_columns = adapter.get_columns(
                 connection,
@@ -310,26 +221,12 @@ def execute_incremental_entry(
             statement_recorder=statement_recorder,
         )
 
-    delta_overrides: dict[str, str] = {entry.name: delta_qualified}
-    delta_audit_error: bool = False
-    audit: AuditPlanEntry
-    for audit in model_audits:
-        if audit.effective_run_scope == AuditRunScope.DELTA_AND_FINAL:
-            result: AuditExecutionResult = execute_audit(
-                audit=audit,
-                adapter=adapter,
-                connection=connection,
-                model_locations=model_locations,
-                seed_locations=seed_locations,
-                source_map=source_map,
-                relation_overrides=delta_overrides,
-                run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
-            )
-            audit_results.append(result)
-            if result.outcome == AuditOutcome.ERROR:
-                delta_audit_error = True
+    delta_audit_run: FinalAuditRun = run_delta_scope_audits(
+        context=context, delta_qualified=delta_qualified
+    )
+    audit_results.extend(delta_audit_run.results)
 
-    if delta_audit_error:
+    if delta_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
@@ -343,7 +240,7 @@ def execute_incremental_entry(
             statement_recorder=statement_recorder,
         )
 
-    effective_bounds: CursorBounds | None = runtime_cursor_bounds or entry.cursor_bounds
+    effective_bounds: CursorBounds | None = preparation.runtime_cursor_bounds or entry.cursor_bounds
     cursor_start: str | None = effective_bounds.start if effective_bounds else None
     cursor_end: str | None = effective_bounds.end if effective_bounds else None
 
@@ -372,23 +269,10 @@ def execute_incremental_entry(
             statement_recorder=statement_recorder,
         )
 
-    final_audit_error: bool = False
-    for audit in model_audits:
-        result = execute_audit(
-            audit=audit,
-            adapter=adapter,
-            connection=connection,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            relation_overrides=None,
-            run_scope_phase=AuditRunScope.FINAL,
-        )
-        audit_results.append(result)
-        if result.outcome == AuditOutcome.ERROR:
-            final_audit_error = True
+    final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
+    audit_results.extend(final_audit_run.results)
 
-    if final_audit_error:
+    if final_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
@@ -403,65 +287,44 @@ def execute_incremental_entry(
             statement_recorder=statement_recorder,
         )
 
-    try:
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            post_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.post_hooks,
-                phase=HookPhase.POST_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
+    post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
+        staging_relation=delta_qualified,
+        promoted_relation=target_qualified,
+    )
+    if post_hook_outcome.failure is not None:
+        return post_hook_outcome.failure
+    if post_hook_outcome.skipped:
+        with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
+            adapter.drop(
+                connection,
+                destination=delta_qualified,
+                if_exists=True,
                 statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
             )
-        if post_hook_skipped:
-            with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
-                adapter.drop(
-                    connection,
-                    destination=delta_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                promoted_relation=target_qualified,
-            )
-    except Exception as exc:
-        return build_failed_result(
+        return build_skipped_result(
             entry=entry,
-            phase=ExecutionPhase.POST_HOOK,
-            error=str(exc),
-            staging_relation=delta_qualified,
-            promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
             hook_results=hook_results,
+            promoted_relation=target_qualified,
         )
 
-    try_write_fingerprint(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        warnings=warnings,
-        model_audits=model_audits,
-        audit_results=tuple(audit_results),
+    warnings.extend(
+        try_write_fingerprint(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            run_id=context.run_id,
+            query_change_tracking=context.query_change_tracking,
+            model_audits=context.model_audits,
+            audit_results=tuple(audit_results),
+        )
     )
 
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
@@ -483,6 +346,103 @@ def execute_incremental_entry(
     )
 
 
+def _prepare_delta_relation(
+    *,
+    context: ModelMaterializationContext,
+    target_database: str | None,
+    target_schema: str | None,
+    target_table: str,
+    target_qualified: str,
+    seed_qualified: str,
+    delta_qualified: str,
+    statement_recorder: StatementRecorder,
+) -> _DeltaPreparation:
+    """Seed reuse, resolve runtime cursors, and create the delta relation."""
+
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
+    runtime_cursor_bounds: CursorBounds | None = None
+    resolved_sql: str = entry.resolved_sql
+    adapter.ensure_schema(
+        connection,
+        database=target_database,
+        schema=target_schema,
+        statement_recorder=statement_recorder,
+    )
+    if (
+        entry.relation_reuse is not None
+        and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
+    ):
+        adapter.drop(
+            connection,
+            destination=seed_qualified,
+            if_exists=True,
+            statement_recorder=statement_recorder,
+        )
+        create_relation_from_reuse_plan(
+            adapter=adapter,
+            connection=connection,
+            model_name=entry.name,
+            expected_version_hash=entry.fingerprint_version_hash,
+            relation_reuse=entry.relation_reuse,
+            destination_relation=seed_qualified,
+            statement_recorder=statement_recorder,
+        )
+        promote_relation_to_destination(
+            adapter=adapter,
+            connection=connection,
+            origin_relation=seed_qualified,
+            destination_relation=target_qualified,
+            destination_database=target_database,
+            destination_schema=target_schema,
+            destination_name=target_table,
+            statement_recorder=statement_recorder,
+        )
+    if has_model_backed_cursor_inputs(entry.cursor_input_relations):
+        if entry.cursor_column is None:
+            raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")
+        runtime_cursor_bounds = resolve_runtime_cursor_bounds(
+            adapter=adapter,
+            connection=connection,
+            target_relation=target_qualified,
+            target_database=target_database,
+            target_schema=target_schema,
+            target_name=target_table,
+            spec=RuntimeCursorSpec(
+                cursor_column=entry.cursor_column,
+                cursor_type=entry.cursor_type,
+                cursor_grain=entry.cursor_grain,
+                cursor_start=entry.cursor_start,
+                cursor_input_relations=entry.cursor_input_relations,
+            ),
+        )
+        if runtime_cursor_bounds is None:
+            raise ExecutorInputError(
+                f"runtime cursor bounds could not be resolved for '{entry.name}'"
+            )
+        resolved_sql = substitute_cursor_sentinels(
+            sql=entry.resolved_sql, bounds=runtime_cursor_bounds
+        )
+    with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
+        adapter.drop(
+            connection,
+            destination=delta_qualified,
+            if_exists=True,
+            statement_recorder=statement_recorder,
+        )
+        adapter.create_table_as(
+            connection,
+            destination=delta_qualified,
+            sql=resolved_sql,
+            statement_recorder=statement_recorder,
+        )
+    return _DeltaPreparation(
+        resolved_sql=resolved_sql,
+        runtime_cursor_bounds=runtime_cursor_bounds,
+    )
+
+
 def _apply_schema_change(
     *,
     adapter: BaseAdapter,
@@ -491,10 +451,9 @@ def _apply_schema_change(
     target_columns: tuple[ColumnInfo, ...],
     delta_columns: tuple[ColumnInfo, ...],
     on_schema_change: OnSchemaChange,
-    warnings: list[str],
     statement_recorder: StatementRecorder,
-) -> None:
-    """Inspect runtime schema diff and apply on_schema_change policy."""
+) -> tuple[str, ...]:
+    """Inspect runtime schema diff, apply on_schema_change policy, return new warnings."""
 
     target_map: dict[str, str] = {col.name.lower(): col.type for col in target_columns}
     delta_map: dict[str, str] = {col.name.lower(): col.type for col in delta_columns}
@@ -519,7 +478,7 @@ def _apply_schema_change(
     has_diff: bool = bool(added or removed or type_changed)
 
     if not has_diff:
-        return
+        return ()
 
     if on_schema_change == OnSchemaChange.FAIL:
         diff_parts: list[str] = []
@@ -534,21 +493,22 @@ def _apply_schema_change(
         )
 
     if on_schema_change == OnSchemaChange.IGNORE:
+        ignored_warnings: list[str] = []
         if added:
-            warnings.append(
+            ignored_warnings.append(
                 f"schema change ignored: new columns in delta not added to target: "
                 f"{', '.join(c.name for c in added)}"
             )
         if removed:
-            warnings.append(
+            ignored_warnings.append(
                 f"schema change ignored: target columns not in delta: {', '.join(removed)}"
             )
         if type_changed:
-            warnings.append(
+            ignored_warnings.append(
                 f"schema change ignored: type changes detected: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return
+        return tuple(ignored_warnings)
 
     if on_schema_change == OnSchemaChange.APPEND_NEW_COLUMNS:
         if added:
@@ -563,7 +523,7 @@ def _apply_schema_change(
                 f"append_new_columns does not support type changes: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return
+        return ()
 
     if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:
         if added:
@@ -587,9 +547,9 @@ def _apply_schema_change(
                 columns=tuple(type_changed),
                 statement_recorder=statement_recorder,
             )
-        return
+        return ()
 
-    return
+    return ()
 
 
 def _execute_dml(
@@ -621,7 +581,7 @@ def _execute_dml(
     dml_sql: str = f"SELECT {projection} FROM {delta_qualified}"
 
     if strategy == IncrementalStrategy.APPEND:
-        adapter.append(
+        adapter.append(  # sc: allow-param-mutation (adapter SQL APPEND, not container mutation)
             connection,
             destination=target_qualified,
             sql=dml_sql,

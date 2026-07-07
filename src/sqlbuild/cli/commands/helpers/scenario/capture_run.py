@@ -9,6 +9,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.scenario.constants import SUCCESS_STATUS
+from sqlbuild.cli.commands.helpers.scenario.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands.helpers.scenario.result_output import render_result_error
 from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
@@ -17,6 +18,7 @@ from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_scenario_capture_pipeline
 from sqlbuild.executor.scenario.models import (
+    ScenarioCaptureSettings,
     ScenarioFixtureExecutionResult,
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureRelationResult,
@@ -26,6 +28,7 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.shared.models import ConnectionHooks
 
 _SCENARIO_NAME_WIDTH: int = 64
 _CAPTURE_RELATION_KIND_WIDTH: int = 8
@@ -41,15 +44,14 @@ def run_scenario_capture_run(
     adapter: BaseAdapter,
     adapter_name: str,
     project_name: str,
-    capture_dialect: str,
-    capture_limits: ScenarioSnapshotCaptureLimits,
-    retain: bool,
-    progress_stream: TextIO,
-    use_color: bool,
+    settings: ScenarioCaptureSettings,
+    output_context: ScenarioRunOutputContext,
     capture_results_out: list[ScenarioSnapshotCaptureRunResult] | None = None,
 ) -> int:
     """Capture selected scenarios to durable snapshots and render results."""
 
+    progress_stream: TextIO = output_context.progress_stream
+    use_color: bool = output_context.use_color
     style: CliStyle = CliStyle(use_color=use_color)
     header: str = f"Scenario Capture ({len(scenarios)} selected)"
     progress_stream.write(f"\n{style.success_strong(header)}\n\n")
@@ -75,15 +77,12 @@ def run_scenario_capture_run(
         connection_config=connection_config,
         adapter=adapter,
         project_name=project_name,
-        captured_at=_captured_at(),
-        capture_adapter=adapter_name,
-        capture_dialect=capture_dialect,
-        sqlbuild_version=_sqlbuild_version(),
-        retain=retain,
-        capture_limits=capture_limits,
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
+        settings=settings,
+        connection_hooks=ConnectionHooks(
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=execution_connection_progress.on_connection_complete,
+            on_connection_error=execution_connection_progress.on_connection_error,
+        ),
         on_scenario_start=lambda _scenario: (
             scenario_status.start("Capturing scenarios...") if status_is_tty else None
         ),
@@ -239,6 +238,25 @@ def _capture_detail(result: ScenarioSnapshotCaptureRunResult) -> str:
     relation_label: str = "relation" if relation_count == 1 else "relations"
     row_label: str = "row" if row_count == 1 else "rows"
     return f"  {relation_count} {relation_label}, {row_count} {row_label}"
+
+
+def build_scenario_capture_settings(
+    *,
+    capture_adapter: str,
+    capture_dialect: str,
+    retain: bool,
+    limits: ScenarioSnapshotCaptureLimits,
+) -> ScenarioCaptureSettings:
+    """Build capture settings with current provenance for a scenario capture run."""
+
+    return ScenarioCaptureSettings(
+        captured_at=_captured_at(),
+        capture_adapter=capture_adapter,
+        capture_dialect=capture_dialect,
+        sqlbuild_version=_sqlbuild_version(),
+        retain=retain,
+        limits=limits,
+    )
 
 
 def _captured_at() -> str:

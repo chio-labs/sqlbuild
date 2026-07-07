@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import queue
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -284,16 +283,69 @@ class LoadExecutionIndexes:
     has_loader_dependencies: bool
 
 
-@dataclass
-class LoadDagState:
-    """Mutable scheduling state for concurrent source loader DAG execution."""
+@dataclass(frozen=True)
+class LoadRuntimeParams:
+    """Execution-invariant parameters shared by all loader runs in one pipeline."""
 
-    results: list[LoadExecutionResult | None]
-    in_degree: dict[str, int]
-    ready: list[str]
-    in_flight: set[str]
-    failed_or_skipped: set[str]
+    run_id: str
+    target: str | None
+    vars: dict[str, object]
+    is_reload: bool
+    runtime_dir: Path = Path("target")
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
+    use_color: bool = False
+    providers: ProviderContainer | None = None
+    result_store: Any | None = None
+
+
+@dataclass(frozen=True)
+class LoadDispatchInputs:
+    """Per-node dispatch inputs shared by DAG source execution helpers."""
+
+    source_by_name: dict[str, SourceEntry]
+    indexes: LoadExecutionIndexes
+    failed_or_hard_skipped: set[str]
     results_by_name: dict[str, LoadExecutionResult]
-    source_index_by_name: dict[str, int]
-    downstream_names: dict[str, tuple[str, ...]]
-    completion_queue: queue.Queue[tuple[str, LoadExecutionResult]]
+
+
+@dataclass(frozen=True)
+class LoaderDestination:
+    """Resolved destination relation and bare name for one loader run."""
+
+    relation: str
+    name: str
+
+
+@dataclass(frozen=True)
+class LoaderRefBindings:
+    """Loader and source relation-ref entry maps for one loader run."""
+
+    loader_ref_entries: Mapping[Callable[..., object], SourceEntry] | None = None
+    source_ref_entries: Mapping[str, SourceEntry] | None = None
+
+
+@dataclass(frozen=True)
+class LoadCallbacks:
+    """Progress callbacks for one load pipeline run."""
+
+    on_load_start: Callable[[SourceEntry], None] | None = None
+    on_load_progress: Callable[[SourceEntry, str], None] | None = None
+    on_load_complete: Callable[[LoadExecutionResult], None] | None = None
+    on_connection_start: Callable[[int], None] | None = None
+    on_connection_complete: Callable[[int, float], None] | None = None
+    on_connection_error: Callable[[int, float], None] | None = None
+
+
+@dataclass(frozen=True)
+class ExternalLoadPhaseResult:
+    """Outcome of running external-connection loaders before warehouse connect."""
+
+    preloaded_results: tuple[LoadExecutionResult, ...]
+    failed_or_hard_skipped: frozenset[str]
+    sqlbuild_sources: tuple[SourceEntry, ...]
+
+
+from sqlbuild.executor.load.classes.dag_state import LoadDagState  # noqa: E402,F401

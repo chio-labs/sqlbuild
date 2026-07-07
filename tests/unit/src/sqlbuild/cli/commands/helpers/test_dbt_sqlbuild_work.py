@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.dbt import sqlbuild_work as work_module
+from sqlbuild.cli.commands.helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands.helpers.dbt.sqlbuild_work import execute_sqlbuild_test_work
 from sqlbuild.compiler.planner.models import PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -42,13 +43,15 @@ def test_given_empty_sqlbuild_test_work_when_executing_then_skips_empty_phases(
     output_stream: StringIO = StringIO()
 
     exit_code: int = execute_sqlbuild_test_work(
-        plan_output=PlanOutput(),
-        connection_config={},
-        adapter=cast(BaseAdapter, object()),
-        adapter_name="duckdb",
+        context=DbtSqlbuildWorkContext(
+            plan_output=PlanOutput(),
+            connection_config={},
+            adapter=cast(BaseAdapter, object()),
+            adapter_name="duckdb",
+            output_stream=output_stream,
+            use_color=False,
+        ),
         actions=(DbtInteropSqlbuildTestAction.TEST, DbtInteropSqlbuildTestAction.AUDIT),
-        output_stream=output_stream,
-        use_color=False,
     )
 
     rendered: str = output_stream.getvalue()
@@ -106,13 +109,15 @@ def test_given_sqlbuild_test_work_when_preflight_completes_then_separates_first_
     monkeypatch.setattr(work_module, "run_test_pipeline", fake_run_test_pipeline)
 
     execute_sqlbuild_test_work(
-        plan_output=PlanOutput(test_entries=(chained_sql_test_entry(),)),
-        connection_config={},
-        adapter=cast(BaseAdapter, object()),
-        adapter_name="duckdb",
+        context=DbtSqlbuildWorkContext(
+            plan_output=PlanOutput(test_entries=(chained_sql_test_entry(),)),
+            connection_config={},
+            adapter=cast(BaseAdapter, object()),
+            adapter_name="duckdb",
+            output_stream=output_stream,
+            use_color=False,
+        ),
         actions=(DbtInteropSqlbuildTestAction.TEST,),
-        output_stream=output_stream,
-        use_color=False,
     )
 
     rendered: str = output_stream.getvalue()
@@ -154,13 +159,15 @@ def test_given_sqlbuild_test_work_when_rendering_header_then_uses_success_strong
     monkeypatch.setattr(work_module, "run_test_pipeline", fake_run_test_pipeline)
 
     execute_sqlbuild_test_work(
-        plan_output=PlanOutput(test_entries=(chained_sql_test_entry(),)),
-        connection_config={},
-        adapter=cast(BaseAdapter, object()),
-        adapter_name="duckdb",
+        context=DbtSqlbuildWorkContext(
+            plan_output=PlanOutput(test_entries=(chained_sql_test_entry(),)),
+            connection_config={},
+            adapter=cast(BaseAdapter, object()),
+            adapter_name="duckdb",
+            output_stream=output_stream,
+            use_color=True,
+        ),
         actions=(DbtInteropSqlbuildTestAction.TEST,),
-        output_stream=output_stream,
-        use_color=True,
     )
 
     rendered: str = output_stream.getvalue()

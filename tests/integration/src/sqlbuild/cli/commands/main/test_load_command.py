@@ -13,7 +13,13 @@ from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
+from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands.helpers.load.selection import select_load_entries
+from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
+from sqlbuild.cli.commands.helpers.scenario.models import ScenarioTestCommandRequest
+from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.main.commands.audit import run_audit
 from sqlbuild.cli.commands.main.commands.build import run_build
 from sqlbuild.cli.commands.main.commands.load import run_load
@@ -29,7 +35,11 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, Discover
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.main.run import run_load_pipeline
-from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.load.models import (
+    LoadCallbacks,
+    LoadExecutionResult,
+    LoadRuntimeParams,
+)
 from sqlbuild.spec.models.source import SourceEntry
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BuildRunAutoLoadFailureTestCase,
@@ -697,7 +707,9 @@ def test_given_selected_model_references_managed_source_when_build_or_run_then_a
 ) -> None:
     write_repo_files(tmp_path, _BUILD_RUN_AUTO_LOAD_PROJECT_FILES)
 
-    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build(
+        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0
@@ -742,7 +754,9 @@ def test_given_self_managed_source_when_running_build_then_auto_loads_before_mod
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build(
+        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0
@@ -863,10 +877,12 @@ def test_given_managed_source_environment_when_building_or_running_then_reads_co
         setup_connection.close()
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=("stg_orders",),
-        defer_sources_to=test_case.defer_sources_to,
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=("stg_orders",),
+            defer_sources_to=test_case.defer_sources_to,
+        )
     )
 
     assert exit_code == test_case.expected_exit_code
@@ -927,10 +943,12 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_plan(
-        project_dir=tmp_path,
-        no_color=True,
-        select=test_case.select,
-        defer_sources_to=test_case.defer_sources_to,
+        PlanCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=test_case.select,
+            defer_sources_to=test_case.defer_sources_to,
+        )
     )
 
     assert exit_code == test_case.expected_exit_code
@@ -1068,10 +1086,10 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
         setup_connection.close()
 
     command_runners: dict[str, Callable[..., int]] = {
-        "audit": run_audit,
-        "build": run_build,
-        "scenario": run_scenario,
-        "test": run_test,
+        "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
+        "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
+        "scenario": lambda **kwargs: run_scenario(ScenarioTestCommandRequest(**kwargs)),
+        "test": lambda **kwargs: run_test(TestCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
         project_dir=tmp_path,
@@ -1139,10 +1157,12 @@ def test_given_managed_source_without_source_deferral_when_planning_then_errors(
 
     with pytest.raises(PlannerInputError) as exc_info:
         run_plan(
-            project_dir=tmp_path,
-            no_color=True,
-            select=test_case.select,
-            defer_sources_to=test_case.defer_sources_to,
+            PlanCommandRequest(
+                project_dir=tmp_path,
+                no_color=True,
+                select=test_case.select,
+                defer_sources_to=test_case.defer_sources_to,
+            )
         )
 
     assert test_case.expected_error_fragment in str(exc_info.value)
@@ -1218,8 +1238,8 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
         setup_connection.close()
 
     command_runners: dict[str, Callable[..., int]] = {
-        "audit": run_audit,
-        "build": run_build,
+        "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
+        "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
         project_dir=tmp_path,
@@ -1336,14 +1356,20 @@ def test_given_build_or_run_load_flags_when_running_then_applies_loader_control(
         setup_connection.close()
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=(test_case.args[test_case.args.index("--select") + 1],),
-        load_sources=(
-            True if "--load" in test_case.args else False if "--no-load" in test_case.args else None
-        ),
-        reload_sources="--reload" in test_case.args,
-        full_refresh="--full-refresh" in test_case.args,
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=(test_case.args[test_case.args.index("--select") + 1],),
+            load_sources=(
+                True
+                if "--load" in test_case.args
+                else False
+                if "--no-load" in test_case.args
+                else None
+            ),
+            reload_sources="--reload" in test_case.args,
+            full_refresh="--full-refresh" in test_case.args,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -1420,9 +1446,11 @@ def test_given_downstream_selection_when_running_build_then_loads_only_direct_se
         setup_connection.close()
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=(test_case.args[test_case.args.index("--select") + 1],),
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=(test_case.args[test_case.args.index("--select") + 1],),
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -1464,7 +1492,9 @@ def test_given_source_loader_fails_when_running_build_then_downstream_model_is_n
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_build(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    exit_code: int = run_build(
+        BuildCommandRequest(project_dir=tmp_path, no_color=True, select=("stg_orders",))
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == test_case.expected_exit_code
@@ -1511,10 +1541,13 @@ def test_given_build_auto_loads_source_when_json_output_then_includes_source_ass
     json_output_path: Path = tmp_path / "target" / "build.json"
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=("stg_orders",),
-        json_output_path=json_output_path,
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=("stg_orders",),
+            json_output_path=json_output_path,
+            manifest=True,
+        )
     )
 
     payload: dict[str, Any] = json.loads(json_output_path.read_text(encoding="utf-8"))
@@ -1565,10 +1598,12 @@ def test_given_plan_load_controls_when_running_plan_then_formats_source_load_sec
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_plan(
-        project_dir=tmp_path,
-        no_color=True,
-        select=("stg_orders",),
-        load_sources=test_case.load_sources,
+        PlanCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=("stg_orders",),
+            load_sources=test_case.load_sources,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -1636,11 +1671,13 @@ def test_given_plan_json_output_when_source_auto_loads_then_includes_source_load
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_plan(
-        project_dir=tmp_path,
-        no_color=True,
-        json_output=True,
-        select=("stg_orders",),
-        load_sources=test_case.load_sources,
+        PlanCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            json_output=True,
+            select=("stg_orders",),
+            load_sources=test_case.load_sources,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -1683,10 +1720,13 @@ def test_given_build_skips_loader_when_manifest_is_written_then_marks_source_aut
         setup_connection.close()
 
     exit_code: int = run_build(
-        project_dir=tmp_path,
-        no_color=True,
-        select=("stg_orders",),
-        load_sources=False,
+        BuildCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=("stg_orders",),
+            load_sources=False,
+            manifest=True,
+        )
     )
 
     manifest: dict[str, Any] = json.loads(
@@ -1882,11 +1922,13 @@ def test_given_source_loader_when_running_load_then_writes_source_table(
     json_output_path: Path = tmp_path / "target" / "load.json"
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        select=test_case.select,
-        cli_vars=test_case.cli_vars,
-        json_output_path=json_output_path,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=test_case.select,
+            cli_vars=test_case.cli_vars,
+            json_output_path=json_output_path,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -2097,10 +2139,12 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={"tier": "cli", "project_only": "yes"},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={"tier": "cli", "project_only": "yes"},
+            is_reload=False,
+        ),
     )
 
     lifecycle_sql: tuple[str, ...] = tuple(
@@ -2143,10 +2187,12 @@ def test_given_source_loader_when_running_pipeline_then_drops_stale_staging_firs
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     lifecycle_sql: tuple[str, ...] = tuple(
@@ -2808,7 +2854,7 @@ def test_given_source_loader_write_strategy_when_running_load_twice_then_writes_
     write_repo_files(tmp_path, test_case.project_files)
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -2899,20 +2945,24 @@ def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expe
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
     second_results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
         sources=source_file.source_entries,
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     first_lifecycle_sql: tuple[str, ...] = tuple(
@@ -2978,10 +3028,12 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     def append_spy(
@@ -3025,10 +3077,12 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert results[0].status.value == "success"
@@ -3148,7 +3202,7 @@ def test_given_loader_cursor_context_has_no_value_when_running_load_then_passes_
         connection.close()
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3196,10 +3250,12 @@ def test_given_loader_cursor_configuration_when_running_pipeline_then_records_ex
             loader_functions=discovered_inputs.loader_functions,
             connection_config={"database": str(tmp_path / "demo.duckdb")},
             adapter=adapter,
-            run_id="test_run",
-            target="dev",
-            vars={},
-            is_reload=False,
+            runtime=LoadRuntimeParams(
+                run_id="test_run",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
         )
         all_lifecycle_sql.extend(
             event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
@@ -3241,9 +3297,11 @@ def test_given_reload_flag_when_running_load_then_passes_reload_context_to_loade
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        reload=test_case.reload,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            reload=test_case.reload,
+        )
     )
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3288,9 +3346,11 @@ def test_given_cursor_override_flags_when_running_load_then_passes_typed_context
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        cursor_overrides=test_case.cursor_overrides,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            cursor_overrides=test_case.cursor_overrides,
+        )
     )
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3389,12 +3449,16 @@ def test_given_multiple_source_loaders_when_running_pipeline_then_uses_concurren
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         max_concurrency=test_case.max_concurrency,
-        on_connection_start=connection_starts.append,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
+        callbacks=LoadCallbacks(
+            on_connection_start=connection_starts.append,
+        ),
     )
 
     assert connection_starts == [test_case.expected_connection_count]
@@ -3513,12 +3577,16 @@ def test_given_loader_dag_when_running_pipeline_then_independent_branches_overla
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
         max_concurrency=test_case.max_concurrency,
-        on_connection_start=connection_starts.append,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
+        callbacks=LoadCallbacks(
+            on_connection_start=connection_starts.append,
+        ),
     )
 
     assert connection_starts == [test_case.expected_connection_count]
@@ -3609,7 +3677,7 @@ def test_given_generator_loader_with_inferred_columns_when_running_load_then_wri
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3672,7 +3740,7 @@ def test_given_generator_loader_yields_multiple_rows_when_running_load_then_writ
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3744,10 +3812,12 @@ def test_given_generator_loader_uses_batch_size_when_running_pipeline_then_appen
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     assert results[0].rows_loaded == len(test_case.expected_rows)
@@ -3954,10 +4024,12 @@ def test_given_batched_loader_variants_when_running_pipeline_then_writes_expecte
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4032,9 +4104,11 @@ def test_given_loader_writes_many_rows_when_running_load_then_formats_human_row_
     json_output_path: Path = tmp_path / "target" / "load.json"
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        json_output_path=json_output_path,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            json_output_path=json_output_path,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -4086,7 +4160,7 @@ def test_given_loader_returns_empty_rows_when_running_load_then_writes_empty_dec
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4145,7 +4219,7 @@ def test_given_self_managed_loader_when_running_load_then_uses_loader_written_ta
     write_repo_files(tmp_path, test_case.project_files)
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4242,7 +4316,7 @@ def test_given_loader_returns_conflicting_types_when_running_load_then_fails_cle
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(project_dir=tmp_path, no_color=True)
+    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == test_case.expected_exit_code
@@ -4436,10 +4510,12 @@ def test_given_later_loader_batch_fails_when_running_load_then_drops_staging(
         loader_functions=discovered_inputs.loader_functions,
         connection_config={"database": str(tmp_path / "demo.duckdb")},
         adapter=adapter,
-        run_id="test_run",
-        target="dev",
-        vars={},
-        is_reload=False,
+        runtime=LoadRuntimeParams(
+            run_id="test_run",
+            target="dev",
+            vars={},
+            is_reload=False,
+        ),
     )
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4553,10 +4629,12 @@ def test_given_invalid_load_selectors_when_running_load_then_it_raises_clear_err
 
     with pytest.raises(CliUserError) as exc_info:
         run_load(
-            project_dir=tmp_path,
-            no_color=True,
-            select=test_case.select,
-            exclude=test_case.exclude,
+            LoadCommandRequest(
+                project_dir=tmp_path,
+                no_color=True,
+                select=test_case.select,
+                exclude=test_case.exclude,
+            )
         )
 
     assert test_case.expected_error_fragment in str(exc_info.value)
@@ -4621,10 +4699,12 @@ def test_given_no_selected_managed_sources_when_running_load_then_it_does_not_co
     write_repo_files(tmp_path, test_case.project_files)
 
     exit_code: int = run_load(
-        project_dir=tmp_path,
-        no_color=True,
-        select=test_case.select,
-        exclude=test_case.exclude,
+        LoadCommandRequest(
+            project_dir=tmp_path,
+            no_color=True,
+            select=test_case.select,
+            exclude=test_case.exclude,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()

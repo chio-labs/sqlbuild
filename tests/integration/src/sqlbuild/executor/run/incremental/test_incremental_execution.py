@@ -15,7 +15,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
 from sqlbuild.executor.run.helpers.materializations.incremental import execute_incremental_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.helpers import (
@@ -691,16 +691,18 @@ def test_given_seeded_incremental_when_running_then_recomputes_cursor_bounds_aft
     )
 
     result: ModelExecutionResult = execute_incremental_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     rows: list[tuple[object, ...]] = connection.execute(
@@ -786,16 +788,18 @@ def test_given_cheap_seed_reuse_when_running_incremental_then_materializes_from_
     )
 
     result: ModelExecutionResult = execute_incremental_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     rows: list[tuple[object, ...]] = connection.execute(
@@ -885,16 +889,18 @@ def test_given_incremental_reuse_with_origin_proof_when_running_then_audit_execu
     )
 
     result: ModelExecutionResult = execute_incremental_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(planned_audit,),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(planned_audit,),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     target_exists: bool = connection.execute(
@@ -976,16 +982,18 @@ def test_given_stale_reuse_origin_fingerprint_when_running_incremental_then_seed
     )
 
     result: ModelExecutionResult = execute_incremental_entry(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        model_locations={"orders": entry.destination},
-        seed_locations={},
-        source_map={},
-        model_audits=(),
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={"orders": entry.destination},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="test_run",
+            query_change_tracking=False,
+        ),
         declared_columns=(),
-        run_id="test_run",
-        query_change_tracking=False,
     )
 
     target_exists: bool = connection.execute(

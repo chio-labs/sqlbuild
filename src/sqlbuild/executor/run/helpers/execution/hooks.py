@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -21,13 +20,13 @@ from sqlbuild.executor.run.models import (
     HookContext,
     HookExecutionResult,
     HookRelation,
+    HookRunContext,
     HookSkipResult,
 )
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import (
-    ProviderContainer,
     _empty_provider_container,
     invoke_with_providers,
 )
@@ -42,18 +41,12 @@ def execute_hooks(
     hooks: object,
     phase: HookPhase,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
-    model_name: str | None = None,
-    destination: CompiledRelationLocation | None = None,
-    run_id: str = "",
-    target: str | None = None,
-    effective_vars: Mapping[str, object] | None = None,
-    statement_recorder: StatementRecorder | None = None,
+    hook_run: HookRunContext | None = None,
     hook_results: list[HookExecutionResult] | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> bool:
     """Execute pre/post lifecycle hook entries."""
 
+    resolved_hook_run: HookRunContext = HookRunContext() if hook_run is None else hook_run
     if hooks is None:
         return False
     if isinstance(hooks, str):
@@ -84,15 +77,8 @@ def execute_hooks(
             hook_functions=hook_functions,
             hook_index=0,
             phase=phase,
-            model_name=model_name,
-            destination=destination,
-            run_id=run_id,
-            target=target,
-            effective_vars=effective_vars,
-            statement_recorder=statement_recorder,
+            hook_run=resolved_hook_run,
             hook_results=hook_results,
-            providers=providers,
-            python_identity_recorder=python_identity_recorder,
         )
     if isinstance(hooks, list | tuple):
         skipped: bool = False
@@ -125,15 +111,8 @@ def execute_hooks(
                     hook_functions=hook_functions,
                     hook_index=hook_index,
                     phase=phase,
-                    model_name=model_name,
-                    destination=destination,
-                    run_id=run_id,
-                    target=target,
-                    effective_vars=effective_vars,
-                    statement_recorder=statement_recorder,
+                    hook_run=resolved_hook_run,
                     hook_results=hook_results,
-                    providers=providers,
-                    python_identity_recorder=python_identity_recorder,
                 )
                 if skipped:
                     return True
@@ -157,16 +136,11 @@ def invoke_python_hook(
     hook_functions: tuple[DiscoveredHookFunction, ...],
     hook_index: int,
     phase: HookPhase,
-    model_name: str | None,
-    destination: CompiledRelationLocation | None,
-    run_id: str,
-    target: str | None,
-    effective_vars: Mapping[str, object] | None,
-    statement_recorder: StatementRecorder | None,
+    hook_run: HookRunContext,
     hook_results: list[HookExecutionResult] | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> bool:
+    model_name: str | None = hook_run.model_name
+    destination: CompiledRelationLocation | None = hook_run.destination
     hook_label: str = f'{phase.value}[{hook_index}] python("{hook_entry.name}")'
     hook_function: DiscoveredHookFunction | None = _find_hook_function(
         name=hook_entry.name,
@@ -205,17 +179,13 @@ def invoke_python_hook(
         phase=phase,
         model_name=model_name,
         destination=destination,
-        run_id=run_id,
-        target=target,
-        effective_vars=effective_vars or {},
-        statement_recorder=statement_recorder or StatementRecorder(),
-        providers=providers or _empty_provider_container(),
+        hook_run=hook_run,
     )
     try:
         returned: object = invoke_with_providers(
             function=hook_function.function,
             context=context,
-            providers=providers,
+            providers=hook_run.providers,
             supplied_kwargs=dict(hook_entry.kwargs),
         )
     except Exception as exc:
@@ -245,10 +215,10 @@ def invoke_python_hook(
             hook_function=hook_function,
             adapter=adapter,
             connection=connection,
-            run_id=run_id,
+            run_id=hook_run.run_id,
             destination=destination,
             model_name=model_name,
-            python_identity_recorder=python_identity_recorder,
+            python_identity_recorder=hook_run.python_identity_recorder,
         )
         return True
     if returned is not None:
@@ -275,10 +245,10 @@ def invoke_python_hook(
         hook_function=hook_function,
         adapter=adapter,
         connection=connection,
-        run_id=run_id,
+        run_id=hook_run.run_id,
         destination=destination,
         model_name=model_name,
-        python_identity_recorder=python_identity_recorder,
+        python_identity_recorder=hook_run.python_identity_recorder,
     )
     return False
 
@@ -360,7 +330,7 @@ def _record_hook_result(
 ) -> None:
     if hook_results is None:
         return
-    hook_results.append(
+    hook_results.append(  # sc: allow-param-mutation (deliberate optional hook-result accumulator)
         HookExecutionResult(
             phase=phase,
             index=hook_index,
@@ -390,11 +360,7 @@ def build_hook_context(
     phase: HookPhase,
     model_name: str,
     destination: CompiledRelationLocation,
-    run_id: str,
-    target: str | None,
-    effective_vars: Mapping[str, object],
-    statement_recorder: StatementRecorder,
-    providers: ProviderContainer,
+    hook_run: HookRunContext,
 ) -> HookContext:
     relation: HookRelation = HookRelation(
         name=destination.name,
@@ -407,15 +373,19 @@ def build_hook_context(
         phase=phase,
         hook_name=hook_entry.name,
         hook_index=hook_index,
-        run_id=run_id,
-        target=target,
-        vars=effective_vars,
+        run_id=hook_run.run_id,
+        target=hook_run.target,
+        vars=hook_run.effective_vars if hook_run.effective_vars is not None else {},
         destination=relation,
         adapter_name=adapter.adapter_name,
         adapter=adapter,
         connection=connection,
-        statement_recorder=statement_recorder,
-        providers=providers,
+        statement_recorder=hook_run.statement_recorder
+        if hook_run.statement_recorder is not None
+        else StatementRecorder(),
+        providers=hook_run.providers
+        if hook_run.providers is not None
+        else _empty_provider_container(),
     )
 
 

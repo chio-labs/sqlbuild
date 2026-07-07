@@ -91,8 +91,6 @@ def build_warehouse_snapshot(
     connection: Any,
     scope: PlannerScope,
     full_refresh: bool = False,
-    start_cursor_override: str | None = None,
-    end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     deferred_relations: dict[str, RelationInfo] | None = None,
@@ -106,8 +104,6 @@ def build_warehouse_snapshot(
         execute=adapter.execute,
         selected_keys=scope.selected_keys,
         full_refresh=full_refresh,
-        start_cursor_override=start_cursor_override,
-        end_cursor_override=end_cursor_override,
         on_progress=on_progress,
         deferred_locations=deferred_locations,
     )
@@ -135,8 +131,6 @@ def gather_warehouse_snapshot(
     execute: Any,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     full_refresh: bool = False,
-    start_cursor_override: str | None = None,
-    end_cursor_override: str | None = None,
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> WarehouseSnapshot:
@@ -178,11 +172,8 @@ def gather_warehouse_snapshot(
         fingerprint_state_schemas=fingerprint_state_schemas,
     )
 
-    skip_cursors: bool = full_refresh or (
-        start_cursor_override is not None and end_cursor_override is not None
-    )
     cursor_snapshots: dict[str, ModelCursorSnapshot] = {}
-    if not skip_cursors:
+    if not full_refresh:
         cursor_snapshots = _gather_cursor_snapshots(
             project=project,
             adapter=adapter,
@@ -269,12 +260,13 @@ def _build_metadata_name_filter(
             selected_model: CompiledModel | None = model_map.get(key.name)
             if selected_model is not None:
                 names.add(selected_model.destination.name)
-                _add_model_upstream_names(
-                    model=selected_model,
-                    model_map=model_map,
-                    seed_map=seed_map,
-                    selected_names=selected_names,
-                    names=names,
+                names.update(
+                    _model_upstream_names(
+                        model=selected_model,
+                        model_map=model_map,
+                        seed_map=seed_map,
+                        selected_names=selected_names,
+                    )
                 )
                 continue
             selected_seed: CompiledSeed | None = seed_map.get(key.name)
@@ -297,14 +289,14 @@ def _build_metadata_name_filter(
     return tuple(sorted(names))
 
 
-def _add_model_upstream_names(
+def _model_upstream_names(
     *,
     model: CompiledModel,
     model_map: dict[str, CompiledModel],
     seed_map: dict[str, CompiledSeed],
     selected_names: frozenset[str],
-    names: set[str],
-) -> None:
+) -> frozenset[str]:
+    names: set[str] = set()
     reference: CompileSqlReference
     for reference in model.references:
         if (
@@ -326,6 +318,7 @@ def _add_model_upstream_names(
             if upstream_seed is not None:
                 names.add(upstream_seed.destination.name)
             continue
+    return frozenset(names)
 
 
 def _gather_relations(

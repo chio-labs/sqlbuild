@@ -19,11 +19,13 @@ from sqlbuild.compiler.planner.models import (
     GraphIdentityNode,
     GraphNodeKey,
     PlannerChangeResults,
+    PlannerResolvedActions,
     PlannerScope,
+    ResolvedModelAction,
     StandardModelVersionIdentities,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import GraphResourceKind
+from sqlbuild.compiler.planner.types import ChangeKind, GraphResourceKind
 
 
 def with_honest_model_write_hashes(
@@ -85,6 +87,48 @@ def with_honest_model_write_hashes(
             continue
         model_changes[model.name] = replace(change, fingerprint_version_hash=write_hash)
     return replace(changes, models=model_changes)
+
+
+def merge_recomputed_model_changes(
+    *,
+    resolved_actions: PlannerResolvedActions,
+    changes: PlannerChangeResults,
+) -> PlannerResolvedActions:
+    """Patch recomputed model changes into resolved actions, keeping run-despite-unchanged kinds."""
+
+    merged_models: dict[str, ResolvedModelAction] = {}
+    model_name: str
+    resolved: ResolvedModelAction
+    for model_name, resolved in resolved_actions.models.items():
+        merged_models[model_name] = replace(
+            resolved,
+            change=_merged_recomputed_change(
+                resolved_change=resolved.change,
+                recomputed_change=changes.models.get(model_name),
+            ),
+        )
+    return replace(resolved_actions, models=merged_models)
+
+
+def _merged_recomputed_change(
+    *,
+    resolved_change: ChangeDetectionResult,
+    recomputed_change: ChangeDetectionResult | None,
+) -> ChangeDetectionResult:
+    """Prefer the recomputed change but never downgrade RUN_DESPITE_UNCHANGED to NO_CHANGE."""
+
+    if recomputed_change is None:
+        return resolved_change
+    if (
+        resolved_change.change_kind == ChangeKind.RUN_DESPITE_UNCHANGED
+        and recomputed_change.change_kind == ChangeKind.NO_CHANGE
+    ):
+        return replace(
+            recomputed_change,
+            change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
+            backfill=resolved_change.backfill,
+        )
+    return recomputed_change
 
 
 def _graph_identity_nodes(

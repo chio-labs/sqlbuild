@@ -59,15 +59,19 @@ def apply_completion_order(
     in_degree: dict[str, int],
     ready: list[str],
     downstream_names: dict[str, tuple[str, ...]],
-) -> None:
+) -> tuple[dict[str, int], list[str]]:
+    updated_in_degree: dict[str, int] = dict(in_degree)
+    updated_ready: list[str] = list(ready)
     completed_node_name: str
     for completed_node_name in completion_order:
-        unlock_downstream_python_nodes(
+        newly_ready: tuple[str, ...]
+        updated_in_degree, newly_ready = unlock_downstream_python_nodes(
             completed_node_name=completed_node_name,
-            in_degree=in_degree,
-            ready=ready,
+            in_degree=updated_in_degree,
             downstream_names=downstream_names,
         )
+        updated_ready.extend(newly_ready)
+    return updated_in_degree, updated_ready
 
 
 class PythonNodeContextTestAdapter(BaseAdapter):

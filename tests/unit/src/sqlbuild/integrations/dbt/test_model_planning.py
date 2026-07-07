@@ -14,7 +14,10 @@ from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NOD
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessRecord,
+    SourceFreshnessRenderers,
+)
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
@@ -29,6 +32,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandExecutionResult,
     DbtCommandResult,
     DbtExecutionOutcome,
+    DbtFingerprintDestination,
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsNode,
@@ -399,10 +403,12 @@ def test_given_successful_dbt_model_when_writing_fingerprint_then_definition_is_
             ),
             adapter=adapter,
             connection=connection,
-            run_id="test-run",
-            fingerprint_database=None,
-            fingerprint_schema="main",
-            target_name="dev",
+            destination=DbtFingerprintDestination(
+                run_id="test-run",
+                fingerprint_database=None,
+                fingerprint_schema="main",
+                target_name="dev",
+            ),
             warnings=warnings,
             query_sql=test_case.query_sql,
         )
@@ -1555,9 +1561,11 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
                     observed_at=datetime(2026, 1, 1, tzinfo=UTC),
                 ),
             ),
-            render_qualified_name=adapter.render_qualified_name,
-            render_framework_type=adapter.render_framework_type,
-            render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+            renderers=SourceFreshnessRenderers(
+                render_qualified_name=adapter.render_qualified_name,
+                render_framework_type=adapter.render_framework_type,
+                render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+            ),
         )
         adapter.execute(
             connection,

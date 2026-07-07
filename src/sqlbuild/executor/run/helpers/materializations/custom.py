@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, SchemaFinding
@@ -21,6 +21,7 @@ from sqlbuild.executor.custom.models import (
     PrepareVersionContext,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.helpers.execution.final_audits import run_final_scope_audits
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks
 from sqlbuild.executor.run.helpers.execution.results import (
     build_failed_result,
@@ -28,7 +29,13 @@ from sqlbuild.executor.run.helpers.execution.results import (
 )
 from sqlbuild.executor.run.helpers.reuse.core import validate_reuse_origin_fingerprint
 from sqlbuild.executor.run.helpers.reuse.fingerprinting import try_write_fingerprint
-from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    FinalAuditRun,
+    HookExecutionResult,
+    HookRunContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import (
@@ -43,29 +50,30 @@ from sqlbuild.spec.models.source import SourceEntry
 
 def execute_custom_entry(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
+    context: ModelMaterializationContext,
     declared_columns: tuple[ColumnInfo, ...],
     materialize_fn: Callable[[MaterializationContext], MaterializationResult],
-    prepare_version_fn: Callable[[PrepareVersionContext], None] | None = None,
-    run_id: str,
-    query_change_tracking: bool,
     target: str,
     effective_vars: dict[str, object],
     existing_relation: RelationInfo | None,
+    prepare_version_fn: Callable[[PrepareVersionContext], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
-    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
-    effective_target_name: str | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
 
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
+    model_locations: dict[str, CompiledRelationLocation] = context.model_locations
+    seed_locations: dict[str, CompiledRelationLocation] = context.seed_locations
+    source_map: dict[str, SourceEntry] = context.source_map
+    model_audits: tuple[AuditPlanEntry, ...] = context.model_audits
+    run_id: str = context.run_id
+    query_change_tracking: bool = context.query_change_tracking
+    hook_functions: tuple[DiscoveredHookFunction, ...] = context.hook_functions
+    effective_target_name: str | None = context.effective_target_name
+    providers: ProviderContainer | None = context.providers
+    python_identity_recorder: PythonIdentityRecorder | None = context.python_identity_recorder
     destination_database: str | None = entry.destination.database
     destination_schema: str | None = entry.destination.schema
     destination_name: str = entry.destination.name
@@ -92,15 +100,17 @@ def execute_custom_entry(
                 hooks=entry.pre_hooks,
                 phase=HookPhase.PRE_HOOKS,
                 hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
                 hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
+                hook_run=HookRunContext(
+                    model_name=entry.name,
+                    destination=entry.destination,
+                    run_id=run_id,
+                    target=effective_target_name,
+                    effective_vars=effective_vars,
+                    statement_recorder=statement_recorder,
+                    providers=providers,
+                    python_identity_recorder=python_identity_recorder,
+                ),
             )
         if pre_hook_skipped:
             return build_skipped_result(
@@ -268,24 +278,10 @@ def execute_custom_entry(
     if materialization_result.audit_results is not None:
         audit_results.extend(materialization_result.audit_results)
     else:
-        audit_error: bool = False
-        audit: AuditPlanEntry
-        for audit in model_audits:
-            audit_result: AuditExecutionResult = execute_audit(
-                audit=audit,
-                adapter=adapter,
-                connection=connection,
-                model_locations=model_locations,
-                seed_locations=seed_locations,
-                source_map=source_map,
-                relation_overrides=None,
-                run_scope_phase=AuditRunScope.FINAL,
-            )
-            audit_results.append(audit_result)
-            if audit_result.outcome == AuditOutcome.ERROR:
-                audit_error = True
+        final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
+        audit_results.extend(final_audit_run.results)
 
-        if audit_error:
+        if final_audit_run.has_error:
             _cleanup_relations(
                 adapter=adapter,
                 connection=connection,
@@ -314,15 +310,17 @@ def execute_custom_entry(
                 hooks=entry.post_hooks,
                 phase=HookPhase.POST_HOOKS,
                 hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
                 hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
+                hook_run=HookRunContext(
+                    model_name=entry.name,
+                    destination=entry.destination,
+                    run_id=run_id,
+                    target=effective_target_name,
+                    effective_vars=effective_vars,
+                    statement_recorder=statement_recorder,
+                    providers=providers,
+                    python_identity_recorder=python_identity_recorder,
+                ),
             )
         if post_hook_skipped:
             _cleanup_relations(
@@ -359,15 +357,16 @@ def execute_custom_entry(
             hook_results=hook_results,
         )
 
-    try_write_fingerprint(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        warnings=warnings,
-        model_audits=model_audits,
-        audit_results=tuple(audit_results),
+    warnings.extend(
+        try_write_fingerprint(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            query_change_tracking=query_change_tracking,
+            model_audits=model_audits,
+            audit_results=tuple(audit_results),
+        )
     )
 
     _cleanup_relations(

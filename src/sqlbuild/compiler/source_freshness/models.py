@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild.adapter.shared.types import FrameworkType
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+
+
+@dataclass(frozen=True)
+class SourceFreshnessRenderers:
+    """Adapter SQL renderers used when writing source freshness rows."""
+
+    render_qualified_name: Callable[..., str | None]
+    render_framework_type: Callable[[FrameworkType], str]
+    render_insert_records_sql: Callable[..., str]
+    render_create_table_sql: Callable[..., str] | None = None
+    render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None
 
 
 @dataclass(frozen=True)

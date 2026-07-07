@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.rollback.models import RollbackCommandRequest
 from sqlbuild.cli.commands.helpers.rollback.output import format_rollback_output
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
@@ -20,27 +21,20 @@ from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgr
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.rollback import run_virtual_rollback
+from sqlbuild.virtual.executor.models import RollbackOptions
 
 
-def run_rollback(
-    project_dir: Path | None,
-    no_color: bool,
-    no_sql_validation: bool,
-    virtual_environment: str | None,
-    verbose: bool = False,
-    checkpoint_id: str | None = None,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    allow_partial_rollback: bool = False,
-    include_stale_upstreams: bool = False,
-    cli_vars: dict[str, object] | None = None,
-) -> int:
+def run_rollback(request: RollbackCommandRequest) -> int:
     """Execute the rollback command."""
 
-    effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
+    cli_vars: dict[str, object] | None = request.cli_vars
+    effective_project_dir: Path = (
+        request.project_dir if request.project_dir is not None else Path.cwd()
+    )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
@@ -61,10 +55,10 @@ def run_rollback(
         local_config=discovered_inputs.local_config,
         selected_target=None,
     )
-    virtual_environment_name: str | None = virtual_environment or resolved_target_name
+    virtual_environment_name: str | None = request.virtual_environment or resolved_target_name
     if virtual_environment_name is None:
         raise CliUserError("rollback requires --virtual-env or a default environment", code="C246")
-    use_color: bool = not no_color and supports_color()
+    use_color: bool = not request.no_color and supports_color()
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=sys.stdout,
         use_color=use_color,
@@ -80,21 +74,25 @@ def run_rollback(
         adapter=adapter,
         connection_config=connection_config,
         virtual_environment_name=virtual_environment_name,
-        checkpoint_id=checkpoint_id,
-        select=select,
-        exclude=exclude,
-        allow_partial_rollback=allow_partial_rollback,
-        include_stale_upstreams=include_stale_upstreams,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=effective_project_dir,
-            discovered_inputs=discovered_inputs,
+        options=RollbackOptions(
+            checkpoint_id=request.checkpoint_id,
+            select=request.select,
+            exclude=request.exclude,
+            allow_partial_rollback=request.allow_partial_rollback,
+            include_stale_upstreams=request.include_stale_upstreams,
+            no_sql_validation=request.no_sql_validation,
+            cli_vars=cli_vars,
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=effective_project_dir,
+                discovered_inputs=discovered_inputs,
+            ),
         ),
-        on_progress=planning_progress.on_progress,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
+        hooks=ConnectionHooks(
+            on_progress=planning_progress.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+        ),
     )
     print(
         format_rollback_output(
@@ -102,7 +100,7 @@ def run_rollback(
             checkpoint_id=restored_checkpoint_id,
             rolled_back_models=rolled_back_models,
             status=status.value,
-            verbose=verbose,
+            verbose=request.verbose,
             use_color=use_color,
         )
     )

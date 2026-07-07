@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
+import sqlbuild.cli.commands.helpers.dbt_init.execution as dbt_init_execution
+import sqlbuild.cli.commands.helpers.dbt_init.invocation as dbt_init_invocation
 import sqlbuild.cli.commands.main.commands.dbt_init as dbt_init_module
+from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
@@ -147,26 +150,25 @@ def test_given_dbt_init_when_running_then_outputs_progress_and_dbt_first_next_st
             toml='name = "analytics"\n',
         )
 
+    monkeypatch.setattr(dbt_init_execution, "run_dbt_profile_init", run_dbt_profile_init)
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt_init.run_dbt_profile_init",
-        run_dbt_profile_init,
-    )
-    monkeypatch.setattr(
-        dbt_init_module,
+        dbt_init_invocation,
         "_validate_dbt_profile_init_request",
         lambda *, request: None,
     )
 
     exit_code: int = dbt_init_module.run_dbt_init_command(
-        cwd=Path("/workspace"),
-        dbt_project_dir="dbt_project",
-        profiles_dir="profiles",
-        profile_name=None,
-        target_name=None,
-        sqb_output_dir="sqlbuild_project",
-        dry_run=test_case.dry_run,
-        overwrite=False,
-        skip_dbt_debug=True,
+        DbtInitCommandRequest(
+            cwd=Path("/workspace"),
+            dbt_project_dir="dbt_project",
+            profiles_dir="profiles",
+            profile_name=None,
+            target_name=None,
+            sqb_output_dir="sqlbuild_project",
+            dry_run=test_case.dry_run,
+            overwrite=False,
+            skip_dbt_debug=True,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -226,27 +228,26 @@ def test_given_dbt_init_dry_run_when_running_then_outputs_preview_document(
             dry_run=True,
         )
 
+    monkeypatch.setattr(dbt_init_execution, "run_dbt_profile_init", run_dbt_profile_init)
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt_init.run_dbt_profile_init",
-        run_dbt_profile_init,
-    )
-    monkeypatch.setattr(
-        dbt_init_module,
+        dbt_init_invocation,
         "_validate_dbt_profile_init_request",
         lambda *, request: None,
     )
 
     exit_code: int = dbt_init_module.run_dbt_init_command(
-        cwd=Path("/workspace"),
-        dbt_project_dir="dbt_project",
-        profiles_dir="profiles",
-        profile_name=None,
-        target_name=None,
-        sqb_output_dir="sqlbuild_project",
-        dry_run=test_case.dry_run,
-        overwrite=False,
-        skip_dbt_debug=True,
-        production_git_ref="release/prod",
+        DbtInitCommandRequest(
+            cwd=Path("/workspace"),
+            dbt_project_dir="dbt_project",
+            profiles_dir="profiles",
+            profile_name=None,
+            target_name=None,
+            sqb_output_dir="sqlbuild_project",
+            dry_run=test_case.dry_run,
+            overwrite=False,
+            skip_dbt_debug=True,
+            production_git_ref="release/prod",
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -303,28 +304,26 @@ def test_given_color_terminal_when_running_dbt_init_then_it_styles_output(
             toml='name = "analytics"\n',
         )
 
-    monkeypatch.setattr(dbt_init_module, "supports_color", lambda: True)
+    monkeypatch.setattr(dbt_init_invocation, "supports_color", lambda: True)
+    monkeypatch.setattr(dbt_init_execution, "run_dbt_profile_init", run_dbt_profile_init)
     monkeypatch.setattr(
-        dbt_init_module,
-        "run_dbt_profile_init",
-        run_dbt_profile_init,
-    )
-    monkeypatch.setattr(
-        dbt_init_module,
+        dbt_init_invocation,
         "_validate_dbt_profile_init_request",
         lambda *, request: None,
     )
 
     exit_code: int = dbt_init_module.run_dbt_init_command(
-        cwd=Path("/workspace"),
-        dbt_project_dir="dbt_project",
-        profiles_dir="profiles",
-        profile_name=None,
-        target_name=None,
-        sqb_output_dir="sqlbuild_project",
-        dry_run=test_case.dry_run,
-        overwrite=False,
-        skip_dbt_debug=True,
+        DbtInitCommandRequest(
+            cwd=Path("/workspace"),
+            dbt_project_dir="dbt_project",
+            profiles_dir="profiles",
+            profile_name=None,
+            target_name=None,
+            sqb_output_dir="sqlbuild_project",
+            dry_run=test_case.dry_run,
+            overwrite=False,
+            skip_dbt_debug=True,
+        )
     )
 
     captured: CaptureResult[str] = capsys.readouterr()
@@ -370,21 +369,25 @@ def test_given_dbt_project_in_cwd_when_running_dbt_init_then_project_dir_default
         )
 
     monkeypatch.setattr(
-        dbt_init_module, "_validate_dbt_profile_init_request", validate_dbt_profile_init_request
+        dbt_init_invocation,
+        "_validate_dbt_profile_init_request",
+        validate_dbt_profile_init_request,
     )
-    monkeypatch.setattr(dbt_init_module, "run_dbt_profile_init", run_dbt_profile_init)
+    monkeypatch.setattr(dbt_init_execution, "run_dbt_profile_init", run_dbt_profile_init)
 
     exit_code: int = dbt_init_module.run_dbt_init_command(
-        cwd=tmp_path,
-        dbt_project_dir=None,
-        profiles_dir=None,
-        profile_name=None,
-        target_name=None,
-        sqb_output_dir=None,
-        dry_run=True,
-        overwrite=False,
-        skip_dbt_debug=True,
-        production_git_ref="main",
+        DbtInitCommandRequest(
+            cwd=tmp_path,
+            dbt_project_dir=None,
+            profiles_dir=None,
+            profile_name=None,
+            target_name=None,
+            sqb_output_dir=None,
+            dry_run=True,
+            overwrite=False,
+            skip_dbt_debug=True,
+            production_git_ref="main",
+        )
     )
 
     assert exit_code == 0
@@ -411,7 +414,7 @@ def test_given_invalid_dbt_init_inputs_when_running_then_validation_happens_befo
 ) -> None:
     input_stream: StringIO = StringIO(test_case.input_text)
     monkeypatch.setattr(input_stream, "isatty", lambda: True)
-    monkeypatch.setattr(dbt_init_module.sys, "stdin", input_stream)
+    monkeypatch.setattr(dbt_init_invocation.sys, "stdin", input_stream)
 
     def validate_dbt_profile_init_request(*, request: DbtInitRequest) -> None:
         raise DbtProfileError(f"dbt config file not found: {test_case.expected_error_fragment}")
@@ -420,22 +423,26 @@ def test_given_invalid_dbt_init_inputs_when_running_then_validation_happens_befo
         raise AssertionError("init should not run after validation failure")
 
     monkeypatch.setattr(
-        dbt_init_module, "_validate_dbt_profile_init_request", validate_dbt_profile_init_request
+        dbt_init_invocation,
+        "_validate_dbt_profile_init_request",
+        validate_dbt_profile_init_request,
     )
-    monkeypatch.setattr(dbt_init_module, "run_dbt_profile_init", run_dbt_profile_init)
+    monkeypatch.setattr(dbt_init_execution, "run_dbt_profile_init", run_dbt_profile_init)
 
     with pytest.raises(DbtProfileError, match=test_case.expected_error_fragment):
         dbt_init_module.run_dbt_init_command(
-            cwd=tmp_path,
-            dbt_project_dir=".",
-            profiles_dir=None,
-            profile_name=None,
-            target_name=None,
-            sqb_output_dir=None,
-            dry_run=True,
-            overwrite=False,
-            skip_dbt_debug=True,
-            production_git_ref=None,
+            DbtInitCommandRequest(
+                cwd=tmp_path,
+                dbt_project_dir=".",
+                profiles_dir=None,
+                profile_name=None,
+                target_name=None,
+                sqb_output_dir=None,
+                dry_run=True,
+                overwrite=False,
+                skip_dbt_debug=True,
+                production_git_ref=None,
+            )
         )
 
     captured: CaptureResult[str] = capsys.readouterr()

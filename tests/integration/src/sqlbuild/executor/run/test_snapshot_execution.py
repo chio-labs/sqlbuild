@@ -11,7 +11,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.run.main.execute import execute_snapshot_entry
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
@@ -97,15 +97,17 @@ def test_given_snapshot_seed_reuse_when_running_snapshot_then_promotes_seed_and_
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={},
-            seed_locations={},
-            source_map={},
-            model_audits=(),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={},
+                seed_locations={},
+                source_map={},
+                model_audits=(),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         rows: tuple[tuple[object, ...], ...] = tuple(
@@ -187,15 +189,17 @@ def test_given_snapshot_seed_reuse_fingerprint_mismatch_when_running_snapshot_th
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={},
-            seed_locations={},
-            source_map={},
-            model_audits=(),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={},
+                seed_locations={},
+                source_map={},
+                model_audits=(),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         target_exists: bool = adapter.relation_exists(
@@ -268,15 +272,17 @@ def test_given_cheap_snapshot_seed_reuse_when_running_snapshot_then_materializes
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={},
-            seed_locations={},
-            source_map={},
-            model_audits=(),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={},
+                seed_locations={},
+                source_map={},
+                model_audits=(),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         rows: tuple[tuple[object, ...], ...] = tuple(
@@ -360,15 +366,17 @@ def test_given_existing_snapshot_destination_when_running_seed_reuse_then_promot
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={},
-            seed_locations={},
-            source_map={},
-            model_audits=(),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={},
+                seed_locations={},
+                source_map={},
+                model_audits=(),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         rows: tuple[tuple[object, ...], ...] = tuple(
@@ -446,15 +454,17 @@ def test_given_existing_snapshot_destination_when_seed_reuse_fails_then_destinat
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={},
-            seed_locations={},
-            source_map={},
-            model_audits=(),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={},
+                seed_locations={},
+                source_map={},
+                model_audits=(),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         rows: tuple[tuple[object, ...], ...] = tuple(
@@ -531,15 +541,17 @@ def test_given_check_snapshot_seed_reuse_when_running_snapshot_then_tracks_check
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={},
-            seed_locations={},
-            source_map={},
-            model_audits=(),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={},
+                seed_locations={},
+                source_map={},
+                model_audits=(),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         rows: tuple[tuple[object, ...], ...] = tuple(
@@ -638,15 +650,17 @@ def test_given_snapshot_seed_reuse_with_hooks_audits_and_contract_when_running_t
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={"account_snapshot": entry.destination},
-            seed_locations={},
-            source_map={},
-            model_audits=(audit,),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={"account_snapshot": entry.destination},
+                seed_locations={},
+                source_map={},
+                model_audits=(audit,),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         hook_rows: tuple[tuple[object, ...], ...] = tuple(
@@ -714,15 +728,17 @@ def test_given_snapshot_seed_reuse_with_schema_change_when_running_then_appends_
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={},
-            seed_locations={},
-            source_map={},
-            model_audits=(),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={},
+                seed_locations={},
+                source_map={},
+                model_audits=(),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         rows: tuple[tuple[object, ...], ...] = tuple(
@@ -810,15 +826,17 @@ def test_given_snapshot_seed_reuse_with_origin_audit_proof_when_running_then_aud
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={"account_snapshot": entry.destination},
-            seed_locations={},
-            source_map={},
-            model_audits=(planned_audit,),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={"account_snapshot": entry.destination},
+                seed_locations={},
+                source_map={},
+                model_audits=(planned_audit,),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         assert result.status.value == test_case.expected_status
@@ -888,15 +906,17 @@ def test_given_database_qualified_snapshot_reuse_origin_when_running_then_materi
         )
 
         result: ModelExecutionResult = execute_snapshot_entry(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={},
-            seed_locations={},
-            source_map={},
-            model_audits=(),
-            run_id="test_run",
-            query_change_tracking=False,
+            context=ModelMaterializationContext(
+                entry=entry,
+                adapter=adapter,
+                connection=connection,
+                model_locations={},
+                seed_locations={},
+                source_map={},
+                model_audits=(),
+                run_id="test_run",
+                query_change_tracking=False,
+            ),
         )
 
         rows: tuple[tuple[object, ...], ...] = tuple(

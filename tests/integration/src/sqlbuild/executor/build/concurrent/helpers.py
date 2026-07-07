@@ -11,10 +11,15 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
-from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.build.models import (
+    BuildCustomizations,
+    BuildExecutionResult,
+    BuildRuntimeParams,
+    SeedExecutionResult,
+)
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
 from tests.integration.src.sqlbuild.executor.build.concurrent._test_types import (
@@ -48,8 +53,7 @@ def run_concurrent_build(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
         adapter=adapter,
-        no_sql_validation=True,
-        connection_config=config,
+        options=CompilePipelineOptions(no_sql_validation=True, connection_config=config),
     )
     plan: PlanOutput = pipeline_result.plan_output
 
@@ -65,13 +69,17 @@ def run_concurrent_build(
             connection_config=config,
             connections=tuple(worker_connections),
             scheduler_connection=scheduler_connection,
-            promotion_mode=TablePromotionMode.STAGED,
-            run_id="test_concurrent",
-            query_change_tracking=True,
-            run_audits=test_case.run_audits,
-            fail_fast=test_case.fail_fast,
-            loader_functions=discovered.loader_functions,
-            providers=provider_session.providers if provider_session is not None else None,
+            runtime=BuildRuntimeParams(
+                promotion_mode=TablePromotionMode.STAGED,
+                run_id="test_concurrent",
+                query_change_tracking=True,
+                run_audits=test_case.run_audits,
+                fail_fast=test_case.fail_fast,
+                providers=provider_session.providers if provider_session is not None else None,
+            ),
+            customizations=BuildCustomizations(
+                loader_functions=discovered.loader_functions,
+            ),
         )
     finally:
         if provider_session is not None:

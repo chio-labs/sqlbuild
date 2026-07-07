@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -17,6 +20,7 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
+    CompiledProject,
     CompiledRelationLocation,
     FunctionReturnColumn,
 )
@@ -39,6 +43,7 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     SchemaColumnSource,
     SelectorKind,
+    StandardScopePruning,
     WarningSeverity,
 )
 from sqlbuild.compiler.source_freshness.models import (
@@ -46,6 +51,7 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
@@ -337,6 +343,7 @@ class PlannerScope:
     models_by_name: dict[str, CompiledModel]
     selected_keys: frozenset[CompiledObjectKey]
     execution_order: tuple[CompiledObjectKey, ...]
+    user_selected_keys: frozenset[CompiledObjectKey] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -358,6 +365,57 @@ class PlannerRelationsContext:
     source_read_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     star_exclude_keyword: str
+
+
+@dataclass(frozen=True)
+class ModelPlanContext:
+    """Relation lookups and source columns for building one model plan entry."""
+
+    model_locations: dict[str, CompiledRelationLocation]
+    models_by_name: dict[str, CompiledModel]
+    seed_locations: dict[str, CompiledRelationLocation]
+    function_locations: dict[str, CompiledRelationLocation]
+    source_map: dict[str, SourceEntry]
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
+    star_exclude_keyword: str
+
+
+@dataclass(frozen=True)
+class CursorOverridePair:
+    """Resolved per-model cursor start/end overrides for plan entry construction."""
+
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelChangesPlanInputs:
+    """Optional planning inputs for building a plan output from model changes."""
+
+    cursor_overrides: CursorOverrides | None = None
+    full_refresh: bool = False
+    reload_sources: bool = False
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None
+    project_config: ProjectConfig | None = None
+    local_config: LocalConfig | None = None
+    defer_sources_to: str | None = None
+    source_deferral_enabled: bool = True
+    seed_version_hashes: dict[str, str] | None = None
+    seed_metadata_jsons: dict[str, str] | None = None
+    seed_plan_reasons: dict[str, PlanReason] | None = None
+
+
+@dataclass(frozen=True)
+class PlanEntryBuildInputs:
+    """Reuse decisions, blocked models, and cursor overrides for plan entry building."""
+
+    standard_reuse_decisions: StandardReuseDecisionResults | None = None
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None
+    source_freshness_blocked_model_names: frozenset[str] = frozenset()
+    external_blocked_model_names: frozenset[str] = frozenset()
+    custom_prepare_version_materializations: frozenset[str] = frozenset()
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
 
 
 @dataclass(frozen=True)
@@ -540,6 +598,28 @@ class ExistingDestinationInputPlanEntry:
     status: str
     expected_version_hash: str | None = None
     destination_version_hash: str | None = None
+
+
+@dataclass(frozen=True)
+class StandardReuseIdentityInputs:
+    """Version, fingerprint, and cursor inputs for standard reuse planning."""
+
+    expected_version_hashes: dict[str, str]
+    built_fingerprints: dict[str, Fingerprint]
+    cursor_snapshots: dict[str, ModelCursorSnapshot]
+    destination_relation_names: frozenset[str] = frozenset()
+    custom_prepare_version_materializations: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class PlanOutputExtras:
+    """Optional supplemental entries and seed fingerprints for plan output assembly."""
+
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = ()
+    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = ()
+    seed_version_hashes: dict[str, str] | None = None
+    seed_metadata_jsons: dict[str, str] | None = None
+    seed_plan_reasons: dict[str, PlanReason] | None = None
 
 
 @dataclass(frozen=True)
@@ -750,6 +830,7 @@ class SqlAnalysisResolvedTestSql:
     resolved_sql: str
     cte_body_sql: str
     generated_ctes: OrderedDict[str, str]
+    reachable_mock_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -932,3 +1013,119 @@ class PlanOutput:
     ] = field(default_factory=dict)
     python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
     metadata: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PlannerSelection:
+    """User-facing selection inputs for one planner invocation."""
+
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    selected_keys: frozenset[CompiledObjectKey] | None = None
+
+
+@dataclass(frozen=True)
+class PlannerOverrides:
+    """Explicit user overrides that force or bound planner decisions."""
+
+    cursor_overrides: CursorOverrides | None = None
+    full_refresh: bool = False
+    reload_sources: bool = False
+    forced_stale_model_names: tuple[str, ...] = ()
+    external_blocked_model_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DeferralInputs:
+    """Deferred relation and source-deferral inputs for planning."""
+
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None
+    deferred_relations: dict[str, RelationInfo] | None = None
+    defer_sources_to: str | None = None
+    source_deferral_enabled: bool = True
+
+
+@dataclass(frozen=True)
+class PlannerPolicies:
+    """Behavior policies selected by the caller for one planner invocation."""
+
+    standard_scope_pruning: StandardScopePruning = StandardScopePruning.NONE
+    auto_load_sources: bool = False
+    enable_reuse_planning: bool = True
+    custom_prepare_version_materializations: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class PlannerRuntime:
+    """Resolved execution environment shared by planner phases."""
+
+    project: CompiledProject
+    adapter: BaseAdapter
+    connection: Any
+    project_config: ProjectConfig | None = None
+    local_config: LocalConfig | None = None
+    on_progress: Callable[[str], None] | None = None
+
+
+@dataclass(frozen=True)
+class PlannerScopeResolution:
+    """Resolved planner scopes and dependency-baseline candidates."""
+
+    selected_scope: PlannerScope
+    stale_warning_scope: PlannerScope
+    inspection_scope: PlannerScope
+    dependency_baseline_candidate_keys: frozenset[CompiledObjectKey]
+
+
+@dataclass(frozen=True)
+class PlannerWarehouseState:
+    """Warehouse snapshot and inspection relations gathered once per plan."""
+
+    snapshot: WarehouseSnapshot
+    inspection_relations: PlannerRelationsContext
+
+
+@dataclass(frozen=True)
+class PlannerIdentityContext:
+    """Expected version identities for inspection and stale-warning scopes."""
+
+    version_identities: StandardModelVersionIdentities
+    stale_warning_identities: StandardModelVersionIdentities
+
+
+@dataclass(frozen=True)
+class PlannerReuseResolution:
+    """Standard reuse planning outcome and reusable baseline keys."""
+
+    standard_reuse: StandardReusePlanningResult | None
+    dependency_baseline_candidate_keys: frozenset[CompiledObjectKey]
+    reusable_dependency_baseline_keys: frozenset[CompiledObjectKey]
+
+
+@dataclass(frozen=True)
+class PlannerScopePruningResult:
+    """Scope pruning outcome with pruned scopes, actions, and staleness state."""
+
+    inspection_scope: PlannerScope
+    execution_scope: PlannerScope
+    resolved_actions: PlannerResolvedActions
+    pruned_standard_model_names: tuple[str, ...]
+    standard_identity_stale_model_names: frozenset[str]
+    run_despite_unchanged: RunDespiteUnchangedPlanningResult
+
+
+@dataclass(frozen=True)
+class PlannerChangeReconciliation:
+    """Write-hash-honest changes merged back into resolved actions."""
+
+    changes: PlannerChangeResults
+    resolved_actions: PlannerResolvedActions
+
+
+@dataclass(frozen=True)
+class PlannerEntryResults:
+    """Model plan entries plus dependency-baseline and reuse-input entries."""
+
+    model_entry_results: PlannerModelEntryResults
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...]
+    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...]

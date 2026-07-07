@@ -94,9 +94,21 @@ class _PythonNodeDiscoveryBucket:
     assets: list[DiscoveredAssetFunction] = field(default_factory=list)
     checks: list[DiscoveredCheckFunction] = field(default_factory=list)
 
+    def add_loader(self, item: DiscoveredLoaderFunction) -> None:
+        self.loaders.append(item)
+
+    def add_task(self, item: DiscoveredTaskFunction) -> None:
+        self.tasks.append(item)
+
+    def add_asset(self, item: DiscoveredAssetFunction) -> None:
+        self.assets.append(item)
+
+    def add_check(self, item: DiscoveredCheckFunction) -> None:
+        self.checks.append(item)
+
 
 def discover_model_files(
-    *, project_dir: Path, sql_analysis_enabled: bool = True
+    *, project_dir: Path, extract_implicit_alias_columns: bool = True
 ) -> tuple[DiscoveredSqlModelFile, ...]:
     """Discover SQL model files under models/."""
 
@@ -125,7 +137,7 @@ def discover_model_files(
                 output_column_locations=model_output_column_locations(
                     contents=contents,
                     relative_path=relative_path,
-                    sql_analysis_enabled=sql_analysis_enabled,
+                    extract_implicit_alias_columns=extract_implicit_alias_columns,
                 ),
                 query_sql=query_sql,
             )
@@ -730,7 +742,7 @@ def _append_python_node_function(
             file_path=file_path,
             project_dir=project_dir,
         )
-        bucket.loaders.append(
+        bucket.add_loader(
             DiscoveredLoaderFunction(
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),
@@ -760,7 +772,7 @@ def _append_python_node_function(
             file_path=file_path,
             project_dir=project_dir,
         )
-        bucket.tasks.append(
+        bucket.add_task(
             DiscoveredTaskFunction(
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),
@@ -789,7 +801,7 @@ def _append_python_node_function(
             file_path=file_path,
             project_dir=project_dir,
         )
-        bucket.assets.append(
+        bucket.add_asset(
             DiscoveredAssetFunction(
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),
@@ -820,7 +832,7 @@ def _append_python_node_function(
             file_path=file_path,
             project_dir=project_dir,
         )
-        bucket.checks.append(
+        bucket.add_check(
             DiscoveredCheckFunction(
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),

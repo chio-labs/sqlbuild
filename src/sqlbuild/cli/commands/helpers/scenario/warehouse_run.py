@@ -7,6 +7,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.scenario.constants import SUCCESS_STATUS
+from sqlbuild.cli.commands.helpers.scenario.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands.helpers.scenario.result_output import complete_scenario_run
 from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
     format_scenario_execution_json,
@@ -20,6 +21,7 @@ from sqlbuild.executor.scenario.models import ScenarioRunResult
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.shared.models import ConnectionHooks
 
 
 def run_warehouse_scenarios(
@@ -32,13 +34,14 @@ def run_warehouse_scenarios(
     project_name: str,
     target_dir: Path,
     retain: bool,
-    progress_stream: TextIO,
-    use_color: bool,
-    json_output: bool = False,
-    json_output_path: Path | None = None,
+    output_context: ScenarioRunOutputContext,
 ) -> int:
     """Run selected scenarios warehouse-direct and render results."""
 
+    progress_stream: TextIO = output_context.progress_stream
+    use_color: bool = output_context.use_color
+    json_output: bool = output_context.json_output
+    json_output_path: Path | None = output_context.json_output_path
     style: CliStyle = CliStyle(use_color=use_color)
     progress_stream.write(f"\n{style.success_strong(f'Scenario ({len(scenarios)} selected)')}\n\n")
     progress_stream.flush()
@@ -63,9 +66,11 @@ def run_warehouse_scenarios(
         adapter=adapter,
         project_name=project_name,
         retain=retain,
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
+        connection_hooks=ConnectionHooks(
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=execution_connection_progress.on_connection_complete,
+            on_connection_error=execution_connection_progress.on_connection_error,
+        ),
         on_scenario_start=lambda _scenario: (
             scenario_status.start("Running scenarios...") if status_is_tty else None
         ),

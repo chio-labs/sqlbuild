@@ -2,27 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
 from sqlbuild.adapter.shared.types import TablePromotionMode
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorBounds, ModelPlanEntry
+from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import RelationReuseKind
-from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.helpers.execution.final_audits import run_final_model_audits
+from sqlbuild.executor.run.helpers.execution.hook_phases import run_post_hook_phase
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run.helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
+from sqlbuild.executor.run.helpers.execution.staging import create_staging_relation
+from sqlbuild.executor.run.helpers.execution.table_targets import resolve_table_targets
 from sqlbuild.executor.run.helpers.materializations.custom import (
     execute_custom_entry as execute_custom_entry,
 )
@@ -38,10 +36,6 @@ from sqlbuild.executor.run.helpers.materializations.snapshot import (
 from sqlbuild.executor.run.helpers.materializations.view import (
     execute_view_entry as execute_view_entry,
 )
-from sqlbuild.executor.run.helpers.reuse.audit import (
-    audit_plan_binding_key,
-    reused_final_audit_results_by_binding_key,
-)
 from sqlbuild.executor.run.helpers.reuse.core import (
     create_relation_from_reuse_plan,
 )
@@ -53,53 +47,35 @@ from sqlbuild.executor.run.helpers.validation.cursor_bounds import (
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run.helpers.validation.type_enforcement import enforce_types_staged
-from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.models import (
+    FinalAuditRun,
+    HookExecutionResult,
+    HookRunContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+    PostHookPhaseOutcome,
+    RuntimeCursorSpec,
+    TableLifecycleState,
+    TableTargets,
+)
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
-from sqlbuild.shared.helpers.identity.naming import (
-    resolve_qualified_name_parts,
-    resolve_relation_location_qualified_name,
-)
-from sqlbuild.spec.models.source import SourceEntry
 
 
 def execute_table_entry(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
+    context: ModelMaterializationContext,
     declared_columns: tuple[ColumnInfo, ...],
     promotion_mode: TablePromotionMode,
-    run_id: str,
-    query_change_tracking: bool,
-    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
-    effective_target_name: str | None = None,
-    effective_vars: Mapping[str, object] | None = None,
-    providers: ProviderContainer | None = None,
-    python_identity_recorder: PythonIdentityRecorder | None = None,
 ) -> ModelExecutionResult:
     """Execute one table model through its full materialization lifecycle."""
 
-    target_database: str | None = entry.destination.database
-    target_schema: str | None = entry.destination.schema
-    target_table: str = entry.destination.name
-    target_qualified: str = resolve_relation_location_qualified_name(
-        adapter=adapter, location=entry.destination
-    )
-    staging_table: str = f"{target_table}__staging"
-    staging_qualified: str = resolve_qualified_name_parts(
-        adapter=adapter,
-        database=target_database,
-        schema=target_schema,
-        name=staging_table,
-    )
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
+    targets: TableTargets = resolve_table_targets(adapter=adapter, entry=entry)
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
@@ -122,15 +98,17 @@ def execute_table_entry(
             runtime_bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
                 adapter=adapter,
                 connection=connection,
-                target_relation=target_qualified,
-                target_database=target_database,
-                target_schema=target_schema,
-                target_name=target_table,
-                cursor_column=entry.cursor_column,
-                cursor_type=entry.cursor_type,
-                cursor_grain=entry.cursor_grain,
-                cursor_start=entry.cursor_start,
-                cursor_input_relations=entry.cursor_input_relations,
+                target_relation=targets.target_qualified,
+                target_database=targets.target_database,
+                target_schema=targets.target_schema,
+                target_name=targets.target_table,
+                spec=RuntimeCursorSpec(
+                    cursor_column=entry.cursor_column,
+                    cursor_type=entry.cursor_type,
+                    cursor_grain=entry.cursor_grain,
+                    cursor_start=entry.cursor_start,
+                    cursor_input_relations=entry.cursor_input_relations,
+                ),
             )
         except Exception as exc:
             return build_failed_result(
@@ -156,8 +134,8 @@ def execute_table_entry(
     try:
         adapter.ensure_schema(
             connection,
-            database=target_database,
-            schema=target_schema,
+            database=targets.target_database,
+            schema=targets.target_schema,
             statement_recorder=statement_recorder,
         )
         statement_recorder.record_many(
@@ -169,16 +147,18 @@ def execute_table_entry(
                 adapter=adapter,
                 hooks=entry.pre_hooks,
                 phase=HookPhase.PRE_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
+                hook_functions=context.hook_functions,
                 hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
+                hook_run=HookRunContext(
+                    model_name=entry.name,
+                    destination=entry.destination,
+                    run_id=context.run_id,
+                    target=context.effective_target_name,
+                    effective_vars=context.effective_vars,
+                    statement_recorder=statement_recorder,
+                    providers=context.providers,
+                    python_identity_recorder=context.python_identity_recorder,
+                ),
             )
         if pre_hook_skipped:
             return build_skipped_result(
@@ -199,34 +179,20 @@ def execute_table_entry(
             hook_results=hook_results,
         )
 
+    state: TableLifecycleState = TableLifecycleState(
+        warnings=warnings,
+        audit_results=audit_results,
+        statement_recorder=statement_recorder,
+        hook_results=hook_results,
+        resolved_sql=resolved_sql,
+    )
+
     if promotion_mode == TablePromotionMode.STAGED:
         return _staged_lifecycle(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            target_qualified=target_qualified,
-            target_database=target_database,
-            target_schema=target_schema,
-            target_table=target_table,
-            staging_qualified=staging_qualified,
-            staging_table=staging_table,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            model_audits=model_audits,
+            context=context,
+            targets=targets,
+            state=state,
             declared_columns=declared_columns,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-            hook_results=hook_results,
-            resolved_sql=resolved_sql,
-            hook_functions=hook_functions,
-            effective_target_name=effective_target_name,
-            effective_vars=effective_vars,
-            providers=providers,
-            python_identity_recorder=python_identity_recorder,
         )
 
     if entry.contract_enforced:
@@ -245,92 +211,41 @@ def execute_table_entry(
         )
 
     return _direct_lifecycle(
-        entry=entry,
-        adapter=adapter,
-        connection=connection,
-        target_qualified=target_qualified,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        source_map=source_map,
-        model_audits=model_audits,
+        context=context,
+        targets=targets,
+        state=state,
         declared_columns=declared_columns,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        warnings=warnings,
-        audit_results=audit_results,
-        statement_recorder=statement_recorder,
-        hook_results=hook_results,
-        resolved_sql=resolved_sql,
-        hook_functions=hook_functions,
-        effective_target_name=effective_target_name,
-        effective_vars=effective_vars,
-        providers=providers,
-        python_identity_recorder=python_identity_recorder,
     )
 
 
 def _staged_lifecycle(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    target_qualified: str,
-    target_database: str | None,
-    target_schema: str | None,
-    target_table: str,
-    staging_qualified: str,
-    staging_table: str,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
+    context: ModelMaterializationContext,
+    targets: TableTargets,
+    state: TableLifecycleState,
     declared_columns: tuple[ColumnInfo, ...],
-    run_id: str,
-    query_change_tracking: bool,
-    warnings: list[str],
-    audit_results: list[AuditExecutionResult],
-    statement_recorder: StatementRecorder,
-    hook_results: list[HookExecutionResult],
-    resolved_sql: str,
-    hook_functions: tuple[DiscoveredHookFunction, ...],
-    effective_target_name: str | None,
-    effective_vars: Mapping[str, object] | None,
-    providers: ProviderContainer | None,
-    python_identity_recorder: PythonIdentityRecorder | None,
 ) -> ModelExecutionResult:
     """Staged table lifecycle: CTAS staging, type enforce, audit, promote."""
 
-    reuse_origin_fingerprint: Fingerprint | None = None
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
+    target_qualified: str = targets.target_qualified
+    staging_qualified: str = targets.staging_qualified
+    warnings: list[str] = state.warnings
+    audit_results: list[AuditExecutionResult] = state.audit_results
+    statement_recorder: StatementRecorder = state.statement_recorder
+    hook_results: list[HookExecutionResult] = state.hook_results
     try:
         with diagnostics_context(
             sqlbuild_phase="materialize", sqlbuild_action_name="create_staging"
         ):
-            adapter.drop(
-                connection,
-                destination=staging_qualified,
-                if_exists=True,
+            reuse_origin_fingerprint: Fingerprint | None = create_staging_relation(
+                context=context,
+                staging_qualified=staging_qualified,
+                resolved_sql=state.resolved_sql,
                 statement_recorder=statement_recorder,
             )
-            if (
-                entry.relation_reuse is not None
-                and entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
-            ):
-                reuse_origin_fingerprint = create_relation_from_reuse_plan(
-                    adapter=adapter,
-                    connection=connection,
-                    model_name=entry.name,
-                    expected_version_hash=entry.fingerprint_version_hash,
-                    relation_reuse=entry.relation_reuse,
-                    destination_relation=staging_qualified,
-                    statement_recorder=statement_recorder,
-                )
-            else:
-                adapter.create_table_as(
-                    connection,
-                    destination=staging_qualified,
-                    sql=resolved_sql,
-                    statement_recorder=statement_recorder,
-                )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -352,9 +267,9 @@ def _staged_lifecycle(
                     adapter=adapter,
                     connection=connection,
                     staging_qualified=staging_qualified,
-                    staging_database=target_database,
-                    staging_schema=target_schema,
-                    staging_table=staging_table,
+                    staging_database=targets.target_database,
+                    staging_schema=targets.target_schema,
+                    staging_table=targets.staging_table,
                     declared_columns=declared_columns,
                     statement_recorder=statement_recorder,
                 )
@@ -375,9 +290,9 @@ def _staged_lifecycle(
         ):
             staging_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
                 connection,
-                database=target_database,
-                schema=target_schema,
-                name=staging_table,
+                database=targets.target_database,
+                schema=targets.target_schema,
+                name=targets.staging_table,
             )
             validate_runtime_contract(
                 entry=entry,
@@ -396,39 +311,19 @@ def _staged_lifecycle(
             hook_results=hook_results,
         )
 
-    overrides: dict[str, str] = {entry.name: staging_qualified}
-    reused_audit_results_by_binding_key: dict[str, AuditExecutionResult] = (
-        reused_final_audit_results_by_binding_key(
-            metadata_json=reuse_origin_fingerprint.metadata_json,
-            model_audits=model_audits,
-        )
-        if reuse_origin_fingerprint is not None
-        else {}
+    final_audit_run: FinalAuditRun = run_final_model_audits(
+        relation_overrides={entry.name: staging_qualified},
+        model_audits=context.model_audits,
+        reuse_origin_fingerprint=reuse_origin_fingerprint,
+        adapter=adapter,
+        connection=connection,
+        model_locations=context.model_locations,
+        seed_locations=context.seed_locations,
+        source_map=context.source_map,
     )
-    audit_error: bool = False
-    audit: AuditPlanEntry
-    for audit in model_audits:
-        reused_result: AuditExecutionResult | None = reused_audit_results_by_binding_key.get(
-            audit_plan_binding_key(audit)
-        )
-        if reused_result is not None:
-            audit_results.append(reused_result)
-            continue
-        result: AuditExecutionResult = execute_audit(
-            audit=audit,
-            adapter=adapter,
-            connection=connection,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            relation_overrides=overrides,
-            run_scope_phase=AuditRunScope.FINAL,
-        )
-        audit_results.append(result)
-        if result.outcome == AuditOutcome.ERROR:
-            audit_error = True
+    audit_results.extend(final_audit_run.results)
 
-    if audit_error:
+    if final_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
@@ -444,14 +339,14 @@ def _staged_lifecycle(
 
     try:
         with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="check_existing"):
-            promote_relation_to_destination(
+            _ = promote_relation_to_destination(
                 adapter=adapter,
                 connection=connection,
                 origin_relation=staging_qualified,
                 destination_relation=target_qualified,
-                destination_database=target_database,
-                destination_schema=target_schema,
-                destination_name=target_table,
+                destination_database=targets.target_database,
+                destination_schema=targets.target_schema,
+                destination_name=targets.target_table,
                 statement_recorder=statement_recorder,
             )
     except Exception as exc:
@@ -465,56 +360,33 @@ def _staged_lifecycle(
             statement_recorder=statement_recorder,
         )
 
-    try:
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            post_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.post_hooks,
-                phase=HookPhase.POST_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
-            )
-        if post_hook_skipped:
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                promoted_relation=target_qualified,
-            )
-    except Exception as exc:
-        return build_failed_result(
+    post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
+        promoted_relation=target_qualified,
+    )
+    if post_hook_outcome.failure is not None:
+        return post_hook_outcome.failure
+    if post_hook_outcome.skipped:
+        return build_skipped_result(
             entry=entry,
-            phase=ExecutionPhase.POST_HOOK,
-            error=str(exc),
-            promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
             hook_results=hook_results,
+            promoted_relation=target_qualified,
         )
 
-    try_write_fingerprint(
+    fingerprint_warnings: tuple[str, ...] = try_write_fingerprint(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        warnings=warnings,
-        model_audits=model_audits,
+        run_id=context.run_id,
+        query_change_tracking=context.query_change_tracking,
+        model_audits=context.model_audits,
         audit_results=tuple(audit_results),
     )
 
@@ -523,7 +395,7 @@ def _staged_lifecycle(
         status=ExecutionStatus.SUCCESS,
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
-        warning_messages=tuple(warnings),
+        warning_messages=tuple(warnings) + fingerprint_warnings,
         lifecycle_events=statement_recorder.snapshot(),
         hook_results=tuple(hook_results),
     )
@@ -531,30 +403,21 @@ def _staged_lifecycle(
 
 def _direct_lifecycle(
     *,
-    entry: ModelPlanEntry,
-    adapter: BaseAdapter,
-    connection: Any,
-    target_qualified: str,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
-    source_map: dict[str, SourceEntry],
-    model_audits: tuple[AuditPlanEntry, ...],
+    context: ModelMaterializationContext,
+    targets: TableTargets,
+    state: TableLifecycleState,
     declared_columns: tuple[ColumnInfo, ...],
-    run_id: str,
-    query_change_tracking: bool,
-    warnings: list[str],
-    audit_results: list[AuditExecutionResult],
-    statement_recorder: StatementRecorder,
-    hook_results: list[HookExecutionResult],
-    resolved_sql: str,
-    hook_functions: tuple[DiscoveredHookFunction, ...],
-    effective_target_name: str | None,
-    effective_vars: Mapping[str, object] | None,
-    providers: ProviderContainer | None,
-    python_identity_recorder: PythonIdentityRecorder | None,
 ) -> ModelExecutionResult:
     """Direct table lifecycle: CTAS target, audit after, no staging."""
 
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
+    target_qualified: str = targets.target_qualified
+    warnings: list[str] = state.warnings
+    audit_results: list[AuditExecutionResult] = state.audit_results
+    statement_recorder: StatementRecorder = state.statement_recorder
+    hook_results: list[HookExecutionResult] = state.hook_results
     reuse_origin_fingerprint: Fingerprint | None = None
     if entry.type_enforcement and declared_columns:
         return build_failed_result(
@@ -596,7 +459,7 @@ def _direct_lifecycle(
                 adapter.create_table_as(
                     connection,
                     destination=target_qualified,
-                    sql=resolved_sql,
+                    sql=state.resolved_sql,
                     statement_recorder=statement_recorder,
                 )
     except Exception as exc:
@@ -610,38 +473,19 @@ def _direct_lifecycle(
             hook_results=hook_results,
         )
 
-    reused_audit_results_by_binding_key: dict[str, AuditExecutionResult] = (
-        reused_final_audit_results_by_binding_key(
-            metadata_json=reuse_origin_fingerprint.metadata_json,
-            model_audits=model_audits,
-        )
-        if reuse_origin_fingerprint is not None
-        else {}
+    direct_audit_run: FinalAuditRun = run_final_model_audits(
+        relation_overrides=None,
+        model_audits=context.model_audits,
+        reuse_origin_fingerprint=reuse_origin_fingerprint,
+        adapter=adapter,
+        connection=connection,
+        model_locations=context.model_locations,
+        seed_locations=context.seed_locations,
+        source_map=context.source_map,
     )
-    audit_error: bool = False
-    audit: AuditPlanEntry
-    for audit in model_audits:
-        reused_result: AuditExecutionResult | None = reused_audit_results_by_binding_key.get(
-            audit_plan_binding_key(audit)
-        )
-        if reused_result is not None:
-            audit_results.append(reused_result)
-            continue
-        result: AuditExecutionResult = execute_audit(
-            audit=audit,
-            adapter=adapter,
-            connection=connection,
-            model_locations=model_locations,
-            seed_locations=seed_locations,
-            source_map=source_map,
-            relation_overrides=None,
-            run_scope_phase=AuditRunScope.FINAL,
-        )
-        audit_results.append(result)
-        if result.outcome == AuditOutcome.ERROR:
-            audit_error = True
+    audit_results.extend(direct_audit_run.results)
 
-    if audit_error:
+    if direct_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
@@ -656,56 +500,33 @@ def _direct_lifecycle(
             hook_results=hook_results,
         )
 
-    try:
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
-            post_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.post_hooks,
-                phase=HookPhase.POST_HOOKS,
-                hook_functions=hook_functions,
-                model_name=entry.name,
-                destination=entry.destination,
-                run_id=run_id,
-                target=effective_target_name,
-                effective_vars=effective_vars,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                providers=providers,
-                python_identity_recorder=python_identity_recorder,
-            )
-        if post_hook_skipped:
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-                promoted_relation=target_qualified,
-            )
-    except Exception as exc:
-        return build_failed_result(
+    post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
+        promoted_relation=target_qualified,
+    )
+    if post_hook_outcome.failure is not None:
+        return post_hook_outcome.failure
+    if post_hook_outcome.skipped:
+        return build_skipped_result(
             entry=entry,
-            phase=ExecutionPhase.POST_HOOK,
-            error=str(exc),
-            promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
             hook_results=hook_results,
+            promoted_relation=target_qualified,
         )
 
-    try_write_fingerprint(
+    fingerprint_warnings: tuple[str, ...] = try_write_fingerprint(
         entry=entry,
         adapter=adapter,
         connection=connection,
-        run_id=run_id,
-        query_change_tracking=query_change_tracking,
-        warnings=warnings,
-        model_audits=model_audits,
+        run_id=context.run_id,
+        query_change_tracking=context.query_change_tracking,
+        model_audits=context.model_audits,
         audit_results=tuple(audit_results),
     )
 
@@ -714,7 +535,7 @@ def _direct_lifecycle(
         status=ExecutionStatus.SUCCESS,
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
-        warning_messages=tuple(warnings),
+        warning_messages=tuple(warnings) + fingerprint_warnings,
         lifecycle_events=statement_recorder.snapshot(),
         hook_results=tuple(hook_results),
     )

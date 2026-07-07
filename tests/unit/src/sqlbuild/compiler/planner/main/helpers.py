@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
@@ -20,7 +21,15 @@ from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.helpers.identity.standard import (
     build_standard_model_version_identities,
 )
-from sqlbuild.compiler.planner.models import StandardModelVersionIdentities
+from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
+from sqlbuild.compiler.planner.models import (
+    DeferralInputs,
+    PlannerOverrides,
+    PlannerPolicies,
+    PlannerSelection,
+    PlanOutput,
+    StandardModelVersionIdentities,
+)
 from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
@@ -141,4 +150,24 @@ def build_sqlbuild_model_selector_model(
             name=name,
             qualified_name=None,
         ),
+    )
+
+
+def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
+    """Adapt flat planner kwargs to the grouped build_execution_plan inputs."""
+
+    def grouped(model: type) -> dict[str, Any]:
+        names: frozenset[str] = frozenset(field.name for field in fields(model))
+        return {name: kwargs.pop(name) for name in list(kwargs) if name in names}
+
+    selection: PlannerSelection = PlannerSelection(**grouped(PlannerSelection))
+    overrides: PlannerOverrides = PlannerOverrides(**grouped(PlannerOverrides))
+    deferral: DeferralInputs = DeferralInputs(**grouped(DeferralInputs))
+    policies: PlannerPolicies = PlannerPolicies(**grouped(PlannerPolicies))
+    return build_execution_plan(
+        selection=selection,
+        overrides=overrides,
+        deferral=deferral,
+        policies=policies,
+        **kwargs,
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from sqlbuild.compiler.compile.models.core import (
@@ -30,6 +31,19 @@ _REF_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
+@dataclass(frozen=True)
+class _UpstreamRequirements:
+    """Upstream closure requirements collected for one scenario."""
+
+    model_names: frozenset[str]
+    required_ref_fixture_names: frozenset[str]
+    required_source_names: frozenset[str]
+    required_seed_names: frozenset[str]
+    required_dbt_ref_fixture_names: frozenset[str]
+    function_deps: tuple[CompiledObjectKey, ...]
+    warnings: tuple[PlanWarning, ...]
+
+
 def plan_scenario_graph(
     *,
     scenario: CompiledSqlScenario,
@@ -54,44 +68,35 @@ def plan_scenario_graph(
 
     warnings: list[PlanWarning] = []
     warnings.extend(assertion_warnings)
-    _validate_declared_names(
-        scenario=scenario,
-        target_model_names=target_model_names,
-        assertion_target_names=assertion_target_names,
-        model_map=model_map,
-        source_names=source_names,
-        seed_names=seed_names,
-        warnings=warnings,
+    warnings.extend(
+        _declared_name_warnings(
+            scenario=scenario,
+            target_model_names=target_model_names,
+            assertion_target_names=assertion_target_names,
+            model_map=model_map,
+            source_names=source_names,
+            seed_names=seed_names,
+        )
     )
 
     ref_fixture_names: frozenset[str] = frozenset(scenario.ref_fixture_names)
     source_fixture_names: frozenset[str] = frozenset(scenario.source_fixture_names)
     seed_fixture_names: frozenset[str] = frozenset(scenario.seed_fixture_names)
     dbt_ref_fixture_names: frozenset[str] = frozenset(scenario.dbt_ref_fixture_names)
-    model_names: set[str] = set()
-    required_ref_fixture_names: set[str] = set()
-    required_source_names: set[str] = set()
-    required_seed_names: set[str] = set()
-    required_dbt_ref_fixture_names: set[str] = set()
-    function_deps: list[CompiledObjectKey] = []
-    seen_function_deps: set[CompiledObjectKey] = set()
 
-    target_model_name: str
-    for target_model_name in target_model_names:
-        _walk_model_upstream(
-            model_name=target_model_name,
-            scenario_name=scenario.name,
-            model_map=model_map,
-            ref_fixture_names=ref_fixture_names,
-            model_names=model_names,
-            required_ref_fixture_names=required_ref_fixture_names,
-            required_source_names=required_source_names,
-            required_seed_names=required_seed_names,
-            required_dbt_ref_fixture_names=required_dbt_ref_fixture_names,
-            function_deps=function_deps,
-            seen_function_deps=seen_function_deps,
-            warnings=warnings,
-        )
+    requirements: _UpstreamRequirements = _collect_upstream_requirements(
+        target_model_names=target_model_names,
+        scenario_name=scenario.name,
+        model_map=model_map,
+        ref_fixture_names=ref_fixture_names,
+    )
+    warnings.extend(requirements.warnings)
+    model_names: frozenset[str] = requirements.model_names
+    required_ref_fixture_names: frozenset[str] = requirements.required_ref_fixture_names
+    required_source_names: frozenset[str] = requirements.required_source_names
+    required_seed_names: frozenset[str] = requirements.required_seed_names
+    required_dbt_ref_fixture_names: frozenset[str] = requirements.required_dbt_ref_fixture_names
+    function_deps: tuple[CompiledObjectKey, ...] = requirements.function_deps
 
     missing_source_names: tuple[str, ...] = tuple(
         sorted(required_source_names - source_fixture_names)
@@ -209,7 +214,7 @@ def _extract_assertion_target_names_with_sql_analysis(
     return tuple(names)
 
 
-def _validate_declared_names(
+def _declared_name_warnings(
     *,
     scenario: CompiledSqlScenario,
     target_model_names: tuple[str, ...],
@@ -217,8 +222,8 @@ def _validate_declared_names(
     model_map: dict[str, CompiledModel],
     source_names: frozenset[str],
     seed_names: frozenset[str],
-    warnings: list[PlanWarning],
-) -> None:
+) -> tuple[PlanWarning, ...]:
+    warnings: list[PlanWarning] = []
     expected_model_name: str
     for expected_model_name in scenario.expected_model_names:
         if expected_model_name not in model_map:
@@ -273,77 +278,83 @@ def _validate_declared_names(
                     f"'{seed_fixture_name}'."
                 )
             )
+    return tuple(warnings)
 
 
-def _walk_model_upstream(
+def _collect_upstream_requirements(
     *,
-    model_name: str,
+    target_model_names: tuple[str, ...],
     scenario_name: str,
     model_map: dict[str, CompiledModel],
     ref_fixture_names: frozenset[str],
-    model_names: set[str],
-    required_ref_fixture_names: set[str],
-    required_source_names: set[str],
-    required_seed_names: set[str],
-    required_dbt_ref_fixture_names: set[str],
-    function_deps: list[CompiledObjectKey],
-    seen_function_deps: set[CompiledObjectKey],
-    warnings: list[PlanWarning],
-) -> None:
-    if model_name in ref_fixture_names:
-        required_ref_fixture_names.add(model_name)
-        return
-    if model_name in model_names:
-        return
+) -> _UpstreamRequirements:
+    """Walk target model upstreams and collect required fixtures and functions."""
 
-    model: CompiledModel | None = model_map.get(model_name)
-    if model is None:
-        return
-    model_names.add(model_name)
+    model_names: set[str] = set()
+    required_ref_fixture_names: set[str] = set()
+    required_source_names: set[str] = set()
+    required_seed_names: set[str] = set()
+    required_dbt_ref_fixture_names: set[str] = set()
+    function_deps: list[CompiledObjectKey] = []
+    seen_function_deps: set[CompiledObjectKey] = set()
+    warnings: list[PlanWarning] = []
 
-    dep_key: CompiledObjectKey
-    for dep_key in model.deps:
-        if dep_key.resource_type == CompiledResourceType.MODEL:
-            if dep_key.name in ref_fixture_names:
-                required_ref_fixture_names.add(dep_key.name)
-                continue
-            if dep_key.name not in model_map:
-                warnings.append(
-                    _error(
-                        f"Scenario '{scenario_name}' requires model '{dep_key.name}', "
-                        "but it does not exist and no __ref__ fixture was provided."
+    def _walk(model_name: str) -> None:
+        if model_name in ref_fixture_names:
+            required_ref_fixture_names.add(model_name)
+            return
+        if model_name in model_names:
+            return
+
+        model: CompiledModel | None = model_map.get(model_name)
+        if model is None:
+            return
+        model_names.add(model_name)
+
+        dep_key: CompiledObjectKey
+        for dep_key in model.deps:
+            if dep_key.resource_type == CompiledResourceType.MODEL:
+                if dep_key.name in ref_fixture_names:
+                    required_ref_fixture_names.add(dep_key.name)
+                    continue
+                if dep_key.name not in model_map:
+                    warnings.append(
+                        _error(
+                            f"Scenario '{scenario_name}' requires model '{dep_key.name}', "
+                            "but it does not exist and no __ref__ fixture was provided."
+                        )
                     )
-                )
+                    continue
+                _walk(dep_key.name)
                 continue
-            _walk_model_upstream(
-                model_name=dep_key.name,
-                scenario_name=scenario_name,
-                model_map=model_map,
-                ref_fixture_names=ref_fixture_names,
-                model_names=model_names,
-                required_ref_fixture_names=required_ref_fixture_names,
-                required_source_names=required_source_names,
-                required_seed_names=required_seed_names,
-                required_dbt_ref_fixture_names=required_dbt_ref_fixture_names,
-                function_deps=function_deps,
-                seen_function_deps=seen_function_deps,
-                warnings=warnings,
-            )
-            continue
-        if dep_key.resource_type == CompiledResourceType.SOURCE:
-            required_source_names.add(dep_key.name)
-            continue
-        if dep_key.resource_type == CompiledResourceType.SEED:
-            required_seed_names.add(dep_key.name)
-            continue
-        if dep_key.resource_type == CompiledResourceType.DBT_REF:
-            required_dbt_ref_fixture_names.add(dep_key.name.replace(".", "__"))
-            continue
-        if dep_key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
-            if dep_key in seen_function_deps:
+            if dep_key.resource_type == CompiledResourceType.SOURCE:
+                required_source_names.add(dep_key.name)
                 continue
-            seen_function_deps.add(dep_key)
-            function_deps.append(dep_key)
+            if dep_key.resource_type == CompiledResourceType.SEED:
+                required_seed_names.add(dep_key.name)
+                continue
+            if dep_key.resource_type == CompiledResourceType.DBT_REF:
+                required_dbt_ref_fixture_names.add(dep_key.name.replace(".", "__"))
+                continue
+            if dep_key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
+                if dep_key in seen_function_deps:
+                    continue
+                seen_function_deps.add(dep_key)
+                function_deps.append(dep_key)
+
+    target_model_name: str
+    for target_model_name in target_model_names:
+        _walk(target_model_name)
+
+    return _UpstreamRequirements(
+        model_names=frozenset(model_names),
+        required_ref_fixture_names=frozenset(required_ref_fixture_names),
+        required_source_names=frozenset(required_source_names),
+        required_seed_names=frozenset(required_seed_names),
+        required_dbt_ref_fixture_names=frozenset(required_dbt_ref_fixture_names),
+        function_deps=tuple(function_deps),
+        warnings=tuple(warnings),
+    )
 
 
 def _dedupe_names(names: tuple[str, ...]) -> tuple[str, ...]:

@@ -221,24 +221,28 @@ def _read_previous_records(
             render_qualified_name=render_qualified_name,
             render_read_latest_sql=adapter.render_read_latest_source_freshness_sql,
         )
-        _merge_latest_previous_records(
+        previous_records_by_identity = _merged_latest_previous_records(
             previous_records_by_identity=previous_records_by_identity,
             candidate_records=previous_set.records,
         )
     return previous_records_by_identity
 
 
-def _merge_latest_previous_records(
+def _merged_latest_previous_records(
     *,
     previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
     candidate_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord],
-) -> None:
+) -> dict[SourceFreshnessIdentity, SourceFreshnessRecord]:
+    merged: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = dict(
+        previous_records_by_identity
+    )
     identity: SourceFreshnessIdentity
     candidate_record: SourceFreshnessRecord
     for identity, candidate_record in candidate_records.items():
-        previous_record: SourceFreshnessRecord | None = previous_records_by_identity.get(identity)
+        previous_record: SourceFreshnessRecord | None = merged.get(identity)
         if previous_record is None or candidate_record.observed_at > previous_record.observed_at:
-            previous_records_by_identity[identity] = candidate_record
+            merged[identity] = candidate_record
+    return merged
 
 
 def _source_for_observation(*, adapter: StrictAdapter, source: SourceEntry) -> SourceEntry | None:

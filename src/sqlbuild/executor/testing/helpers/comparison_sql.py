@@ -19,14 +19,14 @@ _BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"`[^`]+`(?:\s*\.\s*`
 
 def lift_step_ctes(
     sql: str, lifted_ctes: OrderedDict[str, str], *, sql_analysis_enabled: bool = True
-) -> str:
+) -> tuple[str, OrderedDict[str, str]]:
     """Lift a step's top-level CTEs into the shared comparison query when possible."""
 
     if not sql_analysis_enabled:
-        return sql
+        return sql, lifted_ctes
     split_sql: tuple[tuple[tuple[str, str], ...], str] | None = _split_top_level_with(sql)
     if split_sql is None:
-        return sql
+        return sql, lifted_ctes
     step_ctes: tuple[tuple[str, str], ...]
     body_sql: str
     step_ctes, body_sql = split_sql
@@ -36,12 +36,13 @@ def lift_step_ctes(
         existing_name: str | None = _existing_cte_name(lifted_ctes=lifted_ctes, cte_name=cte_name)
         existing_sql: str | None = lifted_ctes.get(existing_name) if existing_name else None
         if existing_sql is not None and existing_sql != cte_sql:
-            return sql
+            return sql, lifted_ctes
+    updated_ctes: OrderedDict[str, str] = OrderedDict(lifted_ctes)
     for cte_name, cte_sql in step_ctes:
-        existing_name = _existing_cte_name(lifted_ctes=lifted_ctes, cte_name=cte_name)
+        existing_name = _existing_cte_name(lifted_ctes=updated_ctes, cte_name=cte_name)
         if existing_name is None:
-            lifted_ctes[cte_name] = cte_sql
-    return body_sql
+            updated_ctes[cte_name] = cte_sql
+    return body_sql, updated_ctes
 
 
 def format_sql(
@@ -73,15 +74,18 @@ def format_sql(
         return sql
 
 
-def unique_cte_suffix(*, model_name: str, cte_name_counts: dict[str, int]) -> str:
-    """Return a readable generated CTE suffix for a chain step."""
+def unique_cte_suffix(
+    *, model_name: str, cte_name_counts: dict[str, int]
+) -> tuple[str, dict[str, int]]:
+    """Return a readable generated CTE suffix for a chain step and updated counts."""
 
     base_suffix: str = _sanitize_cte_suffix(model_name)
-    count: int = cte_name_counts.get(base_suffix, 0) + 1
-    cte_name_counts[base_suffix] = count
+    updated_counts: dict[str, int] = dict(cte_name_counts)
+    count: int = updated_counts.get(base_suffix, 0) + 1
+    updated_counts[base_suffix] = count
     if count == 1:
-        return base_suffix
-    return f"{base_suffix}_{count}"
+        return base_suffix, updated_counts
+    return f"{base_suffix}_{count}", updated_counts
 
 
 def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] | None:

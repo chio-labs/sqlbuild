@@ -66,7 +66,7 @@ def write_loader_rows_to_staging(
             inferred_types=inferred_types,
         )
         if staging_created:
-            adapter.append(
+            adapter.append(  # sc: allow-param-mutation (adapter SQL APPEND, not container mutation)
                 connection,
                 destination=staging,
                 sql=sql,

@@ -10,9 +10,6 @@ from typing import cast
 from sqlbuild.compiler.compile.helpers.analysis.validation import (
     validate_source_expression_syntax,
 )
-from sqlbuild.compiler.compile.helpers.render.macros import (
-    load_project_macros,
-)
 from sqlbuild.compiler.compile.helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -50,11 +47,11 @@ def build_source_inputs(
     effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
     macro_context: MacroContext,
+    loaded_macros: dict[str, LoadedMacro],
     no_sql_validation: bool = False,
 ) -> tuple[CompileSourceInput, ...]:
     """Normalize discovered source declarations into one collection."""
 
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     source_inputs: list[CompileSourceInput] = []
     sql_validation_enabled: bool = (
         effective_settings.sql_analysis

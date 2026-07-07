@@ -25,6 +25,20 @@ class NodeResultRecord:
 
 
 @dataclass(frozen=True)
+class NodeResultQuery:
+    """Node identity and filters for reading persisted runtime results."""
+
+    node_type: str
+    node_name: str
+    target_database: str | None
+    target_schema: str | None
+    target_name: str | None
+    statuses: tuple[str, ...] | None
+    run_id: str | None
+    limit: int
+
+
+@dataclass(frozen=True)
 class NodeResultEnvelope:
     """User-facing persisted runtime result envelope."""
 

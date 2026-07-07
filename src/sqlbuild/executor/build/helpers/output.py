@@ -13,12 +13,14 @@ from sqlbuild.compiler.planner.main.planning.model_execution_annotation import (
 from sqlbuild.compiler.planner.main.planning.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.build.constants import BUILD_SOURCE_FRESHNESS_BLOCKED_CODE
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
@@ -168,6 +170,108 @@ def format_build_output(
         lines.extend(warning_lines)
 
     return "\n".join(lines)
+
+
+def aggregate_build_result(
+    *,
+    model_results: tuple[ModelExecutionResult, ...],
+    seed_results: tuple[SeedExecutionResult, ...],
+    function_results: tuple[FunctionExecutionResult, ...],
+    load_results: tuple[LoadExecutionResult, ...],
+    test_results: tuple[SqlTestExecutionResult, ...],
+    source_audit_results: tuple[AuditExecutionResult, ...],
+    end_audit_results: tuple[AuditExecutionResult, ...],
+) -> BuildExecutionResult:
+    """Compute aggregate counts and overall build status."""
+
+    success_count: int = 0
+    failure_count: int = 0
+    skipped_count: int = 0
+    warning_count: int = 0
+
+    model_result: ModelExecutionResult
+    for model_result in model_results:
+        if model_result.status == ExecutionStatus.SUCCESS:
+            success_count += 1
+        elif model_result.status == ExecutionStatus.FAILED:
+            failure_count += 1
+        elif model_result.status == ExecutionStatus.SKIPPED:
+            skipped_count += 1
+            if model_result.error_code == BUILD_SOURCE_FRESHNESS_BLOCKED_CODE:
+                failure_count += 1
+        warning_count += len(model_result.warning_messages)
+        audit_result: AuditExecutionResult
+        for audit_result in model_result.audit_results:
+            if audit_result.outcome == AuditOutcome.WARN:
+                warning_count += 1
+
+    seed_result: SeedExecutionResult
+    for seed_result in seed_results:
+        if seed_result.status == ExecutionStatus.SUCCESS:
+            success_count += 1
+        elif seed_result.status == ExecutionStatus.FAILED:
+            failure_count += 1
+        elif seed_result.status == ExecutionStatus.SKIPPED:
+            skipped_count += 1
+
+    function_result: FunctionExecutionResult
+    for function_result in function_results:
+        if function_result.status == ExecutionStatus.SUCCESS:
+            success_count += 1
+        elif function_result.status == ExecutionStatus.FAILED:
+            failure_count += 1
+        elif function_result.status == ExecutionStatus.SKIPPED:
+            skipped_count += 1
+        warning_count += len(function_result.warning_messages)
+
+    load_result: LoadExecutionResult
+    for load_result in load_results:
+        if load_result.status == ExecutionStatus.SUCCESS:
+            success_count += 1
+        elif load_result.status == ExecutionStatus.FAILED:
+            failure_count += 1
+        elif load_result.status == ExecutionStatus.SKIPPED:
+            skipped_count += 1
+
+    test_result_entry: SqlTestExecutionResult
+    for test_result_entry in test_results:
+        if test_result_entry.outcome == SqlTestOutcome.PASS:
+            success_count += 1
+        else:
+            failure_count += 1
+
+    any_end_error: bool = False
+    end_result: AuditExecutionResult
+    for end_result in end_audit_results:
+        if end_result.outcome == AuditOutcome.ERROR:
+            any_end_error = True
+        elif end_result.outcome == AuditOutcome.WARN:
+            warning_count += 1
+
+    source_result: AuditExecutionResult
+    for source_result in source_audit_results:
+        if source_result.outcome == AuditOutcome.ERROR:
+            failure_count += 1
+        elif source_result.outcome == AuditOutcome.WARN:
+            warning_count += 1
+
+    overall_failed: bool = failure_count > 0 or any_end_error
+    status: BuildStatus = BuildStatus.FAILED if overall_failed else BuildStatus.SUCCESS
+
+    return BuildExecutionResult(
+        status=status,
+        model_results=model_results,
+        seed_results=seed_results,
+        function_results=function_results,
+        load_results=load_results,
+        test_results=test_results,
+        source_audit_results=source_audit_results,
+        end_audit_results=end_audit_results,
+        success_count=success_count,
+        failure_count=failure_count,
+        skipped_count=skipped_count,
+        warning_count=warning_count,
+    )
 
 
 def _format_header(*, target: str | None, concurrency: int) -> str:

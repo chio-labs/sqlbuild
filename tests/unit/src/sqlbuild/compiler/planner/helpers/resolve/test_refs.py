@@ -434,7 +434,7 @@ def test_given_deferred_locations_when_applying_then_replaces_expected_locations
         for n in test_case.selected_names
     )
 
-    apply_deferred_locations(
+    model_locations, seed_locations = apply_deferred_locations(
         model_locations=model_locations,
         seed_locations=seed_locations,
         deferred_locations=deferred,
