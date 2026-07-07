@@ -7,7 +7,7 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
@@ -40,6 +40,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCommandResult,
     DbtComparisonPreparation,
+    DbtInteropCommandArgs,
     DbtInteropCompiledProject,
     DbtInteropConnection,
     DbtInteropExecutionRequest,
@@ -66,7 +67,7 @@ def resolve_dbt_execution_invocation(
     """Route args, discover the project, and resolve dbt options for execution."""
 
     dbt_executable: str = request.dbt_executable or resolve_dbt_executable()
-    output_stream = request.progress_stream or sys.stdout
+    output_stream: TextIO = request.progress_stream or sys.stdout
     routed: DbtInteropRoutedArgs = route_dbt_interop_args(
         command=request.command,
         parsed=parse_dbt_execution_args(command=request.command, args=request.args),
@@ -195,12 +196,14 @@ def resolve_dbt_interop_plan(
         graph=graph,
         dbt_runner=invocation.runner,
         dbt_options=invocation.dbt_options,
-        select=invocation.routed.select,
-        exclude=invocation.routed.exclude,
-        dbt_command_args=invocation.routed.dbt_args,
-        sqlbuild_command_args=invocation.effective_sqlbuild_args,
-        dbt_executable=invocation.dbt_executable,
-        sqlbuild_executable=sqlbuild_executable,
+        command_args=DbtInteropCommandArgs(
+            select=tuple(invocation.routed.select),
+            exclude=tuple(invocation.routed.exclude),
+            dbt_command_args=tuple(invocation.routed.dbt_args),
+            sqlbuild_command_args=tuple(invocation.effective_sqlbuild_args),
+            dbt_executable=invocation.dbt_executable,
+            sqlbuild_executable=sqlbuild_executable,
+        ),
     )
     report_progress(
         on_progress,

@@ -15,6 +15,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtCommandResult,
+    DbtInteropCommandArgs,
     DbtInteropPlan,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
@@ -879,10 +880,12 @@ def test_given_dbt_interop_inputs_when_planning_then_returns_expected_plan(
         graph=graph,
         dbt_runner=runner,
         dbt_options=dbt_options,
-        select=test_case.select,
-        exclude=test_case.exclude,
-        dbt_command_args=test_case.dbt_command_args,
-        sqlbuild_command_args=test_case.sqlbuild_command_args,
+        command_args=DbtInteropCommandArgs(
+            select=tuple(test_case.select),
+            exclude=tuple(test_case.exclude),
+            dbt_command_args=tuple(test_case.dbt_command_args),
+            sqlbuild_command_args=tuple(test_case.sqlbuild_command_args),
+        ),
     )
 
     assert tuple(extract_dbt_ls_selects(call[0]) for call in invoker.calls) == (
@@ -962,7 +965,7 @@ def test_given_failing_dbt_ls_when_planning_then_raises_coded_error(
             graph=graph,
             dbt_runner=runner,
             dbt_options=_DBT_OPTIONS,
-            select=test_case.select,
+            command_args=DbtInteropCommandArgs(select=tuple(test_case.select)),
         )
 
     assert captured.value.code == test_case.expected_code

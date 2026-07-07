@@ -26,6 +26,7 @@ from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
+    DbtInteropCommandArgs,
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsResult,
@@ -42,15 +43,16 @@ def plan_dbt_interop_command(
     graph: DbtCombinedGraph,
     dbt_runner: DbtRunner,
     dbt_options: DbtCliOptions,
-    select: Sequence[str],
-    exclude: Sequence[str] = (),
-    dbt_command_args: Sequence[str] = (),
-    sqlbuild_command_args: Sequence[str] = (),
-    dbt_executable: str = "dbt",
-    sqlbuild_executable: str = "sqb",
+    command_args: DbtInteropCommandArgs,
 ) -> DbtInteropPlan:
     """Plan dbt and SQLBuild work from already-compiled interop inputs."""
 
+    select: Sequence[str] = command_args.select
+    exclude: Sequence[str] = command_args.exclude
+    dbt_command_args: Sequence[str] = command_args.dbt_command_args
+    sqlbuild_command_args: Sequence[str] = command_args.sqlbuild_command_args
+    dbt_executable: str = command_args.dbt_executable
+    sqlbuild_executable: str = command_args.sqlbuild_executable
     normalized_command: DbtInteropCommand = DbtInteropCommand(command)
     full_dbt_ls: DbtLsResult = dbt_runner.ls(
         options=dbt_options,

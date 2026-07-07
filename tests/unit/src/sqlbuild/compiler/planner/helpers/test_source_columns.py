@@ -108,31 +108,28 @@ def test_given_sources_when_gathering_columns_then_returns_expected_source_colum
     )
 
 
-KNOWN_SOURCE_COLUMNS_TEST_CASES = [
-    KnownSourceColumnsReuseTestCase(
-        description="reuses known source columns without warehouse queries",
-        known_source_columns={
-            "raw_payments": ("id", "amount_cents"),
-            "unrelated_source": ("other_id",),
-        },
-        adapter_column_names=("id", "amount_cents", "status"),
-        expected_queried_sql_count=0,
-        expected_source_column_names={"raw_payments": ("id", "amount_cents")},
-    ),
-    KnownSourceColumnsReuseTestCase(
-        description="gathers from the warehouse when no known source columns are provided",
-        known_source_columns=None,
-        adapter_column_names=("id", "amount_cents", "status"),
-        expected_queried_sql_count=1,
-        expected_source_column_names={"raw_payments": ("id", "amount_cents", "status")},
-    ),
-]
-
-
 @pytest.mark.parametrize(
     "test_case",
-    KNOWN_SOURCE_COLUMNS_TEST_CASES,
-    ids=[case.description for case in KNOWN_SOURCE_COLUMNS_TEST_CASES],
+    [
+        KnownSourceColumnsReuseTestCase(
+            description="reuses known source columns without warehouse queries",
+            known_source_columns={
+                "raw_payments": ("id", "amount_cents"),
+                "unrelated_source": ("other_id",),
+            },
+            adapter_column_names=("id", "amount_cents", "status"),
+            expected_queried_sql_count=0,
+            expected_source_column_names={"raw_payments": ("id", "amount_cents")},
+        ),
+        KnownSourceColumnsReuseTestCase(
+            description="gathers from the warehouse when no known source columns are provided",
+            known_source_columns=None,
+            adapter_column_names=("id", "amount_cents", "status"),
+            expected_queried_sql_count=1,
+            expected_source_column_names={"raw_payments": ("id", "amount_cents", "status")},
+        ),
+    ],
+    ids=lambda case: case.description,
 )
 def test_given_known_source_columns_when_building_relations_context_then_reuses_prior_gather(
     test_case: KnownSourceColumnsReuseTestCase,

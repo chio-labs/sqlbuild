@@ -61,6 +61,9 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropCompiledProject,
     DbtInteropPlan,
     DbtModelPlanningResult,
+    DbtPlanEnvironment,
+    DbtSqlbuildPlanArtifacts,
+    DbtSqlbuildPlanRequest,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     append_stale_out_of_selection_warning,
@@ -76,7 +79,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
 )
-from sqlbuild.shared.models import RelationLookup
+from sqlbuild.shared.models import ConnectionHooks, RelationLookup
 
 
 def dbt_failure_detail(result: DbtCommandResult) -> str | None:
@@ -144,28 +147,35 @@ def find_direct_dbt_dependency_unique_ids(
 
 def build_sqlbuild_plan_output(
     *,
-    project_dir: Path,
-    discovered_inputs: DiscoveredProjectInputs,
-    project: CompiledProject,
-    adapter: BaseAdapter,
-    adapter_name: str,
-    selected_model_names: tuple[str, ...],
-    required_dbt_unique_ids: tuple[str, ...],
-    forced_stale_model_names: tuple[str, ...] = (),
-    external_blocked_model_names: tuple[str, ...] = (),
-    sqlbuild_args: tuple[str, ...],
-    on_progress: Callable[[str], None] | None,
-    on_connection_start: Callable[[int], None] | None,
-    on_connection_complete: Callable[[int, float], None] | None,
-    on_connection_error: Callable[[int, float], None] | None,
-    deferred_relations: dict[str, RelationInfo] | None = None,
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
-    disable_scope_pruning: bool = False,
-    manifest: DbtManifestIndex | None = None,
-    dbt_manifest: DbtManifestIndex | None = None,
-    dbt_graph: DbtCombinedGraph | None = None,
-    dbt_source_freshness: StandardSourceFreshnessPlanningResult | None = None,
+    environment: DbtPlanEnvironment,
+    request: DbtSqlbuildPlanRequest,
+    hooks: ConnectionHooks,
 ) -> PlanOutput | None:
+    project_dir: Path = environment.project_dir
+    discovered_inputs: DiscoveredProjectInputs = environment.discovered_inputs
+    project: CompiledProject = environment.project
+    adapter: BaseAdapter = environment.adapter
+    adapter_name: str = environment.adapter_name
+    selected_model_names: tuple[str, ...] = request.selected_model_names
+    required_dbt_unique_ids: tuple[str, ...] = request.required_dbt_unique_ids
+    sqlbuild_args: tuple[str, ...] = request.sqlbuild_args
+    forced_stale_model_names: tuple[str, ...] = request.forced_stale_model_names
+    external_blocked_model_names: tuple[str, ...] = request.external_blocked_model_names
+    deferred_relations: dict[str, RelationInfo] | None = request.deferred_relations
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
+        request.dependency_baseline_entries
+    )
+    disable_scope_pruning: bool = request.disable_scope_pruning
+    manifest: DbtManifestIndex | None = request.artifacts.manifest
+    dbt_manifest: DbtManifestIndex | None = request.artifacts.dbt_manifest
+    dbt_graph: DbtCombinedGraph | None = request.artifacts.dbt_graph
+    dbt_source_freshness: StandardSourceFreshnessPlanningResult | None = (
+        request.artifacts.dbt_source_freshness
+    )
+    on_progress: Callable[[str], None] | None = hooks.on_progress
+    on_connection_start: Callable[[int], None] | None = hooks.on_connection_start
+    on_connection_complete: Callable[[int, float], None] | None = hooks.on_connection_complete
+    on_connection_error: Callable[[int, float], None] | None = hooks.on_connection_error
     if not selected_model_names:
         return None
     cursor_overrides: CursorOverrides = _parse_cursor_overrides(sqlbuild_args)
@@ -248,22 +258,24 @@ def build_sqlbuild_plan_output(
 
 def build_dbt_model_plan_output(
     *,
-    project_dir: Path,
-    discovered_inputs: DiscoveredProjectInputs,
-    project: CompiledProject,
-    adapter: BaseAdapter,
-    adapter_name: str,
+    environment: DbtPlanEnvironment,
     manifest: DbtManifestIndex,
     graph: DbtCombinedGraph | None = None,
     candidate_unique_ids: tuple[str, ...],
     selected_unique_ids: tuple[str, ...],
     full_refresh: bool = False,
     force: bool = False,
-    on_connection_start: Callable[[int], None] | None,
-    on_connection_complete: Callable[[int, float], None] | None,
-    on_connection_error: Callable[[int, float], None] | None,
-    on_progress: Callable[[str], None] | None = None,
+    hooks: ConnectionHooks,
 ) -> DbtModelPlanningResult | None:
+    project_dir: Path = environment.project_dir
+    discovered_inputs: DiscoveredProjectInputs = environment.discovered_inputs
+    project: CompiledProject = environment.project
+    adapter: BaseAdapter = environment.adapter
+    adapter_name: str = environment.adapter_name
+    on_connection_start: Callable[[int], None] | None = hooks.on_connection_start
+    on_connection_complete: Callable[[int, float], None] | None = hooks.on_connection_complete
+    on_connection_error: Callable[[int, float], None] | None = hooks.on_connection_error
+    on_progress: Callable[[str], None] | None = hooks.on_progress
     if not candidate_unique_ids:
         return None
     connection_config: dict[str, object] = resolve_connection_config(
@@ -459,6 +471,20 @@ def _parse_value(args: tuple[str, ...], flag: str) -> str | None:
     return args[index + 1]
 
 
+def _connection_progress_hooks(
+    connection_progress: Any | None,
+    on_progress: Callable[[str], None] | None,
+) -> ConnectionHooks:
+    if connection_progress is None:
+        return ConnectionHooks(on_progress=on_progress)
+    return ConnectionHooks(
+        on_progress=on_progress,
+        on_connection_start=connection_progress.on_connection_start,
+        on_connection_complete=connection_progress.on_connection_complete,
+        on_connection_error=connection_progress.on_connection_error,
+    )
+
+
 def attach_dbt_model_plan(
     *,
     plan: DbtInteropPlan,
@@ -475,11 +501,13 @@ def attach_dbt_model_plan(
     """Attach dbt model planning output and stale-selection warnings to the plan."""
 
     dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        project=compiled.project,
-        adapter=compiled.adapter,
-        adapter_name=compiled.adapter_name,
+        environment=DbtPlanEnvironment(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            project=compiled.project,
+            adapter=compiled.adapter,
+            adapter_name=compiled.adapter_name,
+        ),
         manifest=manifest,
         graph=graph,
         candidate_unique_ids=tuple(
@@ -495,16 +523,7 @@ def attach_dbt_model_plan(
         selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh=full_refresh,
         force=force,
-        on_connection_start=(
-            None if connection_progress is None else connection_progress.on_connection_start
-        ),
-        on_connection_complete=(
-            None if connection_progress is None else connection_progress.on_connection_complete
-        ),
-        on_connection_error=(
-            None if connection_progress is None else connection_progress.on_connection_error
-        ),
-        on_progress=on_progress,
+        hooks=_connection_progress_hooks(connection_progress, on_progress),
     )
     if dbt_model_plan is None:
         return plan
@@ -547,35 +566,34 @@ def attach_sqlbuild_plan_output(
     """Attach the SQLBuild-side plan output to the interop plan when present."""
 
     sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        project=compiled.project,
-        adapter=compiled.adapter,
-        adapter_name=compiled.adapter_name,
-        selected_model_names=build_unblocked_sqlbuild_model_names(plan),
-        required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
-        forced_stale_model_names=(
-            plan.dbt_model_plan.stale_sqlbuild_model_names
-            if plan.dbt_model_plan is not None
-            else ()
+        environment=DbtPlanEnvironment(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            project=compiled.project,
+            adapter=compiled.adapter,
+            adapter_name=compiled.adapter_name,
         ),
-        sqlbuild_args=sqlbuild_args,
-        on_progress=on_progress,
-        on_connection_start=(
-            None if connection_progress is None else connection_progress.on_connection_start
+        request=DbtSqlbuildPlanRequest(
+            selected_model_names=build_unblocked_sqlbuild_model_names(plan),
+            required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+            sqlbuild_args=sqlbuild_args,
+            forced_stale_model_names=(
+                plan.dbt_model_plan.stale_sqlbuild_model_names
+                if plan.dbt_model_plan is not None
+                else ()
+            ),
+            dependency_baseline_entries=(),
+            artifacts=DbtSqlbuildPlanArtifacts(
+                dbt_manifest=manifest,
+                dbt_graph=graph,
+                dbt_source_freshness=(
+                    plan.dbt_model_plan.source_freshness
+                    if plan.dbt_model_plan is not None
+                    else None
+                ),
+            ),
         ),
-        on_connection_complete=(
-            None if connection_progress is None else connection_progress.on_connection_complete
-        ),
-        on_connection_error=(
-            None if connection_progress is None else connection_progress.on_connection_error
-        ),
-        dependency_baseline_entries=(),
-        dbt_manifest=manifest,
-        dbt_graph=graph,
-        dbt_source_freshness=(
-            plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
-        ),
+        hooks=_connection_progress_hooks(connection_progress, on_progress),
     )
     if sqlbuild_plan_output is None:
         return plan

@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.shared.models import FunctionDefinition, StatementRecorder
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
@@ -337,16 +337,18 @@ def publish_function_versions(
                 continue
             adapter.create_function(
                 connection,
-                destination=target.qualified_name,
-                arguments=decode_function_arguments(record),
-                returns=record.returns,
-                body_sql=decode_function_body_sql(record),
-                return_columns=decode_function_return_columns(record),
-                language=decode_function_language(record),
-                runtime_version=record.runtime_version,
-                entry_point=record.entry_point,
-                packages=decode_function_packages(record),
-                source_file_path=None,
+                definition=FunctionDefinition(
+                    destination=target.qualified_name,
+                    arguments=decode_function_arguments(record),
+                    returns=record.returns,
+                    body_sql=decode_function_body_sql(record),
+                    return_columns=decode_function_return_columns(record),
+                    language=decode_function_language(record),
+                    runtime_version=record.runtime_version,
+                    entry_point=record.entry_point,
+                    packages=decode_function_packages(record),
+                    source_file_path=None,
+                ),
                 statement_recorder=recorder,
             )
     finally:

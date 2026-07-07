@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.execution.results import (
@@ -31,7 +32,7 @@ def run_pre_hook_phase(
 ) -> ModelExecutionResult | None:
     """Run model pre-hooks and return an early-exit result, or None to continue."""
 
-    entry = context.entry
+    entry: ModelPlanEntry = context.entry
     try:
         statement_recorder.record_many(
             render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
@@ -81,7 +82,7 @@ def run_post_hook_phase(
 ) -> PostHookPhaseOutcome:
     """Run model post-hooks and return the skip/failure phase outcome."""
 
-    entry = context.entry
+    entry: ModelPlanEntry = context.entry
     try:
         statement_recorder.record_many(
             render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)

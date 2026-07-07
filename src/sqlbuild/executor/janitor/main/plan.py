@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
 from sqlbuild.executor.janitor.helpers.classification import (
@@ -86,7 +87,7 @@ def build_janitor_plan(
     age_supported: bool = adapter.supports_relation_age_metadata()
     schema_key: tuple[str | None, str | None]
     for schema_key in sorted(target_schemas, key=lambda key: (key[0] or "", key[1] or "")):
-        schema_relations = facts.relations_by_schema.get(schema_key, ())
+        schema_relations: tuple[RelationInfo, ...] = facts.relations_by_schema.get(schema_key, ())
         source_names: set[str] | None = facts.source_schema_names.get(schema_key)
         if source_names:
             skipped_schemas.append(
