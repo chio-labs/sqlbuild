@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.46.1](https://github.com/chio-labs/sqlbuild/compare/v0.46.0...v0.46.1) (2026-07-04)
+
+
+### Bug Fixes
+
+* align dbt selection staleness warnings ([bc9e73b](https://github.com/chio-labs/sqlbuild/commit/bc9e73b12ba8c091c9611dec449b51ab5f438f09))
+
 ## [0.46.0](https://github.com/chio-labs/sqlbuild/compare/v0.45.5...v0.46.0) (2026-07-02)
 
 
