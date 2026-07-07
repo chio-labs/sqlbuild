@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, NormalizedType, StatementRecorder
+from sqlbuild.adapter.shared.models import (
+    ColumnInfo,
+    NormalizedType,
+    SnapshotChangeTarget,
+    StatementRecorder,
+)
 from sqlbuild.adapter.shared.type_normalization import normalize_type, types_equal
 from sqlbuild.adapter.shared.types import TypeFamily
 from sqlbuild.compiler.planner.models import ModelPlanEntry
@@ -669,16 +674,18 @@ def _apply_check_snapshot_changes(
         )
     else:
         statements = adapter.render_apply_check_snapshot_changes(
-            destination=target_qualified,
-            origin=delta_qualified,
-            unique_key=entry.unique_key,
+            target=SnapshotChangeTarget(
+                destination=target_qualified,
+                origin=delta_qualified,
+                unique_key=entry.unique_key,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                output_columns=output_columns,
+            ),
             check_columns=check_columns,
             updated_at_column=entry.updated_at_column,
             observed_at_column=entry.observed_at_column,
-            valid_from_column=valid_from_column,
-            valid_to_column=valid_to_column,
             initial_valid_from=entry.initial_valid_from,
-            output_columns=output_columns,
             invalidate_hard_deletes=entry.invalidate_hard_deletes,
         )
     statement_recorder.record_many(statements)

@@ -17,7 +17,10 @@ from sqlbuild.cli.commands.main.commands.dbt_sqlbuild_work import (
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.planner.models import GraphNodeKey, PlanOutput
-from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_dbt_node_fingerprint
+from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import (
+    build_dbt_fingerprint_destination,
+    try_write_dbt_node_fingerprint,
+)
 from sqlbuild.integrations.dbt.helpers.planning.graph_projection import dbt_graph_node_key
 from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
     build_dbt_write_identity_hashes,
@@ -36,6 +39,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCommandExecutionResult,
     DbtDeferClonePlan,
+    DbtDeferClonePrephaseContext,
     DbtExecutionOutcome,
     DbtInteropCompiledProject,
     DbtInteropExecutionRequest,
@@ -43,8 +47,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtModelPlanningResult,
     DbtNodeExecutionResult,
+    DbtPlanEnvironment,
     DbtPlannedWork,
     DbtPreExecutionOutputs,
+    DbtSqlbuildPlanArtifacts,
+    DbtSqlbuildPlanRequest,
     DbtSqlbuildReplanResult,
     DbtTrackedExecution,
     DbtWriteIdentities,
@@ -92,6 +99,7 @@ from sqlbuild.integrations.dbt.types import (
 )
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.helpers.output.display import DisplayOptions
+from sqlbuild.shared.models import ConnectionHooks
 
 
 def resolve_dbt_planned_work(
@@ -111,11 +119,13 @@ def resolve_dbt_planned_work(
         use_color=request.use_color,
     )
     dbt_model_plan: DbtModelPlanningResult | None = build_dbt_model_plan_output(
-        project_dir=request.project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        project=compiled.project,
-        adapter=compiled.adapter,
-        adapter_name=compiled.adapter_name,
+        environment=DbtPlanEnvironment(
+            project_dir=request.project_dir,
+            discovered_inputs=invocation.discovered_inputs,
+            project=compiled.project,
+            adapter=compiled.adapter,
+            adapter_name=compiled.adapter_name,
+        ),
         manifest=manifest,
         graph=graph,
         candidate_unique_ids=tuple(
@@ -131,10 +141,12 @@ def resolve_dbt_planned_work(
         selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh="--full-refresh" in invocation.routed.dbt_args,
         force=invocation.effective_force,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=request.on_progress,
+        hooks=ConnectionHooks(
+            on_progress=request.on_progress,
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
+        ),
     )
     if dbt_model_plan is not None:
         plan = replace(plan, dbt_model_plan=dbt_model_plan)
@@ -304,34 +316,43 @@ def resolve_dbt_pre_execution_outputs(
         use_color=request.use_color,
     )
     sqlbuild_plan_output: PlanOutput | None = build_sqlbuild_plan_output(
-        project_dir=request.project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        project=compiled.project,
-        adapter=compiled.adapter,
-        adapter_name=compiled.adapter_name,
-        selected_model_names=plan.selection.sqlbuild_model_names,
-        required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
-        external_blocked_model_names=(
-            *(
-                plan.dbt_model_plan.blocked_sqlbuild_model_names
-                if plan.dbt_model_plan is not None
-                else ()
-            ),
-            *missing_relation_blocked_models,
+        environment=DbtPlanEnvironment(
+            project_dir=request.project_dir,
+            discovered_inputs=invocation.discovered_inputs,
+            project=compiled.project,
+            adapter=compiled.adapter,
+            adapter_name=compiled.adapter_name,
         ),
-        sqlbuild_args=invocation.effective_sqlbuild_args,
-        on_progress=None,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
-        dependency_baseline_entries=(),
-        disable_scope_pruning=request.command == DbtInteropCommand.TEST,
-        manifest=manifest if request.command == DbtInteropCommand.TEST else None,
-        dbt_manifest=manifest,
-        dbt_graph=graph,
-        dbt_source_freshness=(
-            plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
+        request=DbtSqlbuildPlanRequest(
+            selected_model_names=plan.selection.sqlbuild_model_names,
+            required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+            sqlbuild_args=invocation.effective_sqlbuild_args,
+            external_blocked_model_names=(
+                *(
+                    plan.dbt_model_plan.blocked_sqlbuild_model_names
+                    if plan.dbt_model_plan is not None
+                    else ()
+                ),
+                *missing_relation_blocked_models,
+            ),
+            deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
+            dependency_baseline_entries=(),
+            disable_scope_pruning=request.command == DbtInteropCommand.TEST,
+            artifacts=DbtSqlbuildPlanArtifacts(
+                manifest=manifest if request.command == DbtInteropCommand.TEST else None,
+                dbt_manifest=manifest,
+                dbt_graph=graph,
+                dbt_source_freshness=(
+                    plan.dbt_model_plan.source_freshness
+                    if plan.dbt_model_plan is not None
+                    else None
+                ),
+            ),
+        ),
+        hooks=ConnectionHooks(
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
         ),
     )
     if sqlbuild_plan_output is not None:
@@ -394,13 +415,15 @@ def run_dbt_defer_clone_prephases(
 
     if defer_clone.enabled:
         _ = run_dbt_defer_clone_prephase(
-            project_dir=request.project_dir,
-            discovered_inputs=invocation.discovered_inputs,
-            dbt_options=invocation.dbt_options,
-            runner=invocation.runner,
-            adapter=compiled.adapter,
-            project=compiled.project,
-            connection_config=connection_config,
+            context=DbtDeferClonePrephaseContext(
+                project_dir=request.project_dir,
+                discovered_inputs=invocation.discovered_inputs,
+                dbt_options=invocation.dbt_options,
+                runner=invocation.runner,
+                adapter=compiled.adapter,
+                project=compiled.project,
+                connection_config=connection_config,
+            ),
             current_manifest=manifest,
             unique_ids=tuple(sorted(defer_clone.unique_ids)),
             on_progress=request.on_progress,
@@ -486,10 +509,7 @@ def execute_dbt_with_state_tracking(
             result=result,
             adapter=compiled.adapter,
             connection=state_connection,
-            run_id=compiled.project.run_id,
-            fingerprint_database=compiled.project.effective_target_database,
-            fingerprint_schema=compiled.project.effective_target_schema,
-            target_name=compiled.project.effective_target_name,
+            destination=build_dbt_fingerprint_destination(compiled.project),
             warnings=fingerprint_warnings,
             query_sql=identities.query_sql_by_unique_id.get(result.unique_id),
             seed_identity_hash=identities.seed_identity_by_unique_id.get(result.unique_id),
@@ -573,10 +593,7 @@ def write_buffered_dbt_fingerprints(
                 result=dbt_result,
                 adapter=compiled.adapter,
                 connection=connection,
-                run_id=compiled.project.run_id,
-                fingerprint_database=compiled.project.effective_target_database,
-                fingerprint_schema=compiled.project.effective_target_schema,
-                target_name=compiled.project.effective_target_name,
+                destination=build_dbt_fingerprint_destination(compiled.project),
                 warnings=fingerprint_warnings,
                 query_sql=identities.query_sql_by_unique_id.get(dbt_result.unique_id),
                 seed_identity_hash=identities.seed_identity_by_unique_id.get(dbt_result.unique_id),
@@ -707,31 +724,40 @@ def resolve_sqlbuild_execution_plan_output(
         use_color=request.use_color,
     )
     plan_output = build_sqlbuild_plan_output(
-        project_dir=request.project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        project=compiled.project,
-        adapter=compiled.adapter,
-        adapter_name=compiled.adapter_name,
-        selected_model_names=plan.selection.sqlbuild_model_names,
-        required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
-        forced_stale_model_names=outcome.stale_sqlbuild_model_names,
-        external_blocked_model_names=(
-            *outcome.blocked_sqlbuild_model_names,
-            *missing_relation_blocked_models,
+        environment=DbtPlanEnvironment(
+            project_dir=request.project_dir,
+            discovered_inputs=invocation.discovered_inputs,
+            project=compiled.project,
+            adapter=compiled.adapter,
+            adapter_name=compiled.adapter_name,
         ),
-        sqlbuild_args=invocation.effective_sqlbuild_args,
-        on_progress=None,
-        on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
-        dependency_baseline_entries=(),
-        disable_scope_pruning=request.command == DbtInteropCommand.TEST,
-        manifest=manifest if request.command == DbtInteropCommand.TEST else None,
-        dbt_manifest=manifest,
-        dbt_graph=graph,
-        dbt_source_freshness=(
-            plan.dbt_model_plan.source_freshness if plan.dbt_model_plan is not None else None
+        request=DbtSqlbuildPlanRequest(
+            selected_model_names=plan.selection.sqlbuild_model_names,
+            required_dbt_unique_ids=plan.selection.dbt_required_unique_ids,
+            sqlbuild_args=invocation.effective_sqlbuild_args,
+            forced_stale_model_names=outcome.stale_sqlbuild_model_names,
+            external_blocked_model_names=(
+                *outcome.blocked_sqlbuild_model_names,
+                *missing_relation_blocked_models,
+            ),
+            deferred_relations=build_deferred_dbt_relations(plan=plan, manifest=manifest),
+            dependency_baseline_entries=(),
+            disable_scope_pruning=request.command == DbtInteropCommand.TEST,
+            artifacts=DbtSqlbuildPlanArtifacts(
+                manifest=manifest if request.command == DbtInteropCommand.TEST else None,
+                dbt_manifest=manifest,
+                dbt_graph=graph,
+                dbt_source_freshness=(
+                    plan.dbt_model_plan.source_freshness
+                    if plan.dbt_model_plan is not None
+                    else None
+                ),
+            ),
+        ),
+        hooks=ConnectionHooks(
+            on_connection_start=connection_progress.on_connection_start,
+            on_connection_complete=connection_progress.on_connection_complete,
+            on_connection_error=connection_progress.on_connection_error,
         ),
     )
     return DbtSqlbuildReplanResult(

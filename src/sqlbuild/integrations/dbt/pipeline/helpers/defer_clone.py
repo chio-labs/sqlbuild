@@ -38,6 +38,7 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
 )
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import (
+    build_dbt_fingerprint_destination,
     try_write_dbt_node_fingerprint,
 )
 from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
@@ -56,6 +57,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtCombinedGraphKey,
+    DbtDeferClonePrephaseContext,
     DbtLsNode,
     DbtNodeExecutionResult,
     DbtProductionRefCompileResult,
@@ -88,13 +90,7 @@ def resolve_dbt_defer_clone_from(
 
 def run_dbt_defer_clone_prephase(
     *,
-    project_dir: Path,
-    discovered_inputs: DiscoveredProjectInputs,
-    dbt_options: DbtCliOptions,
-    runner: DbtRunner,
-    adapter: BaseAdapter,
-    project: CompiledProject,
-    connection_config: dict[str, object],
+    context: DbtDeferClonePrephaseContext,
     current_manifest: DbtManifestIndex,
     unique_ids: tuple[str, ...],
     on_progress: Callable[[str], None] | None,
@@ -102,6 +98,13 @@ def run_dbt_defer_clone_prephase(
     use_color: bool,
     caused_by_names: tuple[str, ...],
 ) -> CloneExecutionResult | None:
+    project_dir: Path = context.project_dir
+    discovered_inputs: DiscoveredProjectInputs = context.discovered_inputs
+    dbt_options: DbtCliOptions = context.dbt_options
+    runner: DbtRunner = context.runner
+    adapter: BaseAdapter = context.adapter
+    project: CompiledProject = context.project
+    connection_config: dict[str, object] = context.connection_config
     if not unique_ids:
         report_progress(on_progress, "defer-clone enabled but no clonable dbt boundary resolved.")
         return None
@@ -376,10 +379,7 @@ def _write_defer_clone_dbt_fingerprints(
             ),
             adapter=adapter,
             connection=connection,
-            run_id=project.run_id,
-            fingerprint_database=project.effective_target_database,
-            fingerprint_schema=project.effective_target_schema,
-            target_name=project.effective_target_name,
+            destination=build_dbt_fingerprint_destination(project),
             warnings=warnings,
             query_sql=reuse_model.query_sql,
             version_hash_override=(

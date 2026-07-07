@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import RelationReuseKind
 from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_plan
 from sqlbuild.executor.run.models import ModelMaterializationContext
@@ -18,9 +22,9 @@ def create_staging_relation(
 ) -> Fingerprint | None:
     """Create the staging relation via reuse plan or CTAS; return the reuse fingerprint."""
 
-    entry = context.entry
-    adapter = context.adapter
-    connection = context.connection
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
     adapter.drop(
         connection,
         destination=staging_qualified,

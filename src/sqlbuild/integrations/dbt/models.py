@@ -8,10 +8,15 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
-from sqlbuild.compiler.planner.models import GraphNodeKey, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    DependencyBaselinePlanEntry,
+    GraphNodeKey,
+    PlanOutput,
+)
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
@@ -764,3 +769,74 @@ class DbtSqlbuildReplanResult:
 
     plan_output: PlanOutput | None
     missing_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]]
+
+
+@dataclass(frozen=True)
+class DbtFingerprintDestination:
+    """Run-scoped fingerprint destination coordinates for dbt node writes."""
+
+    run_id: str
+    fingerprint_database: str | None
+    fingerprint_schema: str | None
+    target_name: str | None
+
+
+@dataclass(frozen=True)
+class DbtInteropCommandArgs:
+    """Selection, passthrough args, and executables for a dbt interop command."""
+
+    select: tuple[str, ...]
+    exclude: tuple[str, ...] = ()
+    dbt_command_args: tuple[str, ...] = ()
+    sqlbuild_command_args: tuple[str, ...] = ()
+    dbt_executable: str = "dbt"
+    sqlbuild_executable: str = "sqb"
+
+
+@dataclass(frozen=True)
+class DbtDeferClonePrephaseContext:
+    """Runtime environment inputs for a dbt defer-clone prephase."""
+
+    project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    dbt_options: DbtCliOptions
+    runner: Any
+    adapter: BaseAdapter
+    project: CompiledProject
+    connection_config: dict[str, object]
+
+
+@dataclass(frozen=True)
+class DbtPlanEnvironment:
+    """Compiled project and adapter environment for dbt plan-output builds."""
+
+    project_dir: Path
+    discovered_inputs: DiscoveredProjectInputs
+    project: CompiledProject
+    adapter: BaseAdapter
+    adapter_name: str
+
+
+@dataclass(frozen=True)
+class DbtSqlbuildPlanArtifacts:
+    """Optional dbt manifest, graph, and source-freshness planning artifacts."""
+
+    manifest: DbtManifestIndex | None = None
+    dbt_manifest: DbtManifestIndex | None = None
+    dbt_graph: DbtCombinedGraph | None = None
+    dbt_source_freshness: StandardSourceFreshnessPlanningResult | None = None
+
+
+@dataclass(frozen=True)
+class DbtSqlbuildPlanRequest:
+    """Selection, overrides, and dbt artifacts for a SQLBuild plan-output build."""
+
+    selected_model_names: tuple[str, ...]
+    required_dbt_unique_ids: tuple[str, ...]
+    sqlbuild_args: tuple[str, ...]
+    forced_stale_model_names: tuple[str, ...] = ()
+    external_blocked_model_names: tuple[str, ...] = ()
+    deferred_relations: dict[str, RelationInfo] | None = None
+    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = ()
+    disable_scope_pruning: bool = False
+    artifacts: DbtSqlbuildPlanArtifacts = field(default_factory=DbtSqlbuildPlanArtifacts)

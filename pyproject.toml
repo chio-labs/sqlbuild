@@ -115,6 +115,7 @@ max-statements = 70
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/test_*.py" = ["E501"]
+"tests/**/helpers.py" = ["PLR0913"]
 
 [tool.uv]
 package = true

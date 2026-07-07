@@ -167,8 +167,9 @@ class CompileOnlyDbtRunner(DbtRunner):
 def emit_connection_progress(**kwargs: object) -> None:
     """Emit one successful connection progress cycle from a mocked planner."""
 
-    start: object = kwargs["on_connection_start"]
-    complete: object = kwargs["on_connection_complete"]
+    hooks: object = kwargs["hooks"]
+    start: object = getattr(hooks, "on_connection_start", None)
+    complete: object = getattr(hooks, "on_connection_complete", None)
     assert callable(start)
     assert callable(complete)
     on_start: Callable[[int], None] = cast(Callable[[int], None], start)

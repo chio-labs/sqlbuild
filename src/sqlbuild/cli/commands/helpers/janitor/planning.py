@@ -48,6 +48,12 @@ from sqlbuild.executor.janitor.models import (
 )
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.spec.models.targets import resolve_target_config
+from sqlbuild.virtual.state.models import (
+    CheckpointRetentionInspection,
+    DetachedVirtualEnvironmentInspection,
+    ExpiredVirtualEnvironmentInspection,
+    StateJanitorInspection,
+)
 
 
 def inspect_janitor_retention(
@@ -58,17 +64,19 @@ def inspect_janitor_retention(
 ) -> JanitorRetentionInspection:
     """Inspect virtual state retention candidates."""
 
-    checkpoint = checkpoint_retention(
+    checkpoint: CheckpointRetentionInspection | None = checkpoint_retention(
         project_dir=invocation.effective_project_dir,
         discovered_inputs=invocation.discovered_inputs,
         virtual_environment_name=compile_context.project.effective_target_name,
     )
-    detached_environment = detached_environment_retention(
-        project_dir=invocation.effective_project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        retention_days=settings.retention_days,
+    detached_environment: DetachedVirtualEnvironmentInspection | None = (
+        detached_environment_retention(
+            project_dir=invocation.effective_project_dir,
+            discovered_inputs=invocation.discovered_inputs,
+            retention_days=settings.retention_days,
+        )
     )
-    expired_environment = expired_environment_retention(
+    expired_environment: ExpiredVirtualEnvironmentInspection | None = expired_environment_retention(
         project_dir=invocation.effective_project_dir,
         discovered_inputs=invocation.discovered_inputs,
         active_virtual_environment_name=compile_context.project.effective_target_name,
@@ -78,7 +86,7 @@ def inspect_janitor_retention(
         invocation=invocation,
         compile_context=compile_context,
     )
-    state = state_janitor_retention(
+    state: StateJanitorInspection | None = state_janitor_retention(
         project_dir=invocation.effective_project_dir,
         discovered_inputs=invocation.discovered_inputs,
         retention_days=settings.retention_days,

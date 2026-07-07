@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.shared.models import FunctionDefinition, StatementRecorder
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
@@ -71,16 +71,18 @@ def execute_function(
         )
         adapter.create_function(
             connection,
-            destination=function_entry.destination.qualified_name,
-            arguments=function_entry.arguments,
-            returns=function_entry.returns,
-            body_sql=function_entry.body_sql,
-            return_columns=function_entry.return_columns,
-            language=function_entry.language,
-            runtime_version=function_entry.runtime_version,
-            entry_point=function_entry.entry_point,
-            packages=function_entry.packages,
-            source_file_path=function_entry.source_file_path,
+            definition=FunctionDefinition(
+                destination=function_entry.destination.qualified_name,
+                arguments=function_entry.arguments,
+                returns=function_entry.returns,
+                body_sql=function_entry.body_sql,
+                return_columns=function_entry.return_columns,
+                language=function_entry.language,
+                runtime_version=function_entry.runtime_version,
+                entry_point=function_entry.entry_point,
+                packages=function_entry.packages,
+                source_file_path=function_entry.source_file_path,
+            ),
             statement_recorder=statement_recorder,
         )
         _ = _try_write_function_fingerprint(

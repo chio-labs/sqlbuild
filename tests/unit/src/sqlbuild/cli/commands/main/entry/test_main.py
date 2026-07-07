@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest
 from sqlbuild.cli.commands.helpers.compile.models import CompileCommandRequest
@@ -23,8 +23,6 @@ from sqlbuild.cli.commands.helpers.scenario.models import (
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
 )
-from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
-from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.main.commands.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -35,7 +33,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
 )
-from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import build_handlers
+from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import (
+    build_handlers,
+    build_json_recording_handler,
+)
 
 
 @pytest.mark.parametrize(
@@ -930,23 +931,10 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
     test_case: MainTestCase,
 ) -> None:
     received_args: list[tuple[bool, Path | None]] = []
-
-    def record_json_handler(*args: object) -> int:
-        if isinstance(
-            args[0],
-            (
-                AuditCommandRequest,
-                BuildCommandRequest,
-                LoadCommandRequest,
-                ScenarioTestCommandRequest,
-                SeedCommandRequest,
-                TestCommandRequest,
-            ),
-        ):
-            received_args.append((bool(args[0].json_output), args[0].json_output_path))
-            return test_case.expected_exit_code
-        received_args.append((bool(args[-2]), args[-1] if isinstance(args[-1], Path) else None))
-        return test_case.expected_exit_code
+    record_json_handler: Callable[..., int] = build_json_recording_handler(
+        received_args=received_args,
+        exit_code=test_case.expected_exit_code,
+    )
 
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,

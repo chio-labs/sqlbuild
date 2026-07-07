@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RowDiffResult, SchemaDiffResult
+from sqlbuild.adapter.shared.models import RowDiffResult, RowDiffTolerances, SchemaDiffResult
 from sqlbuild.executor.diff.helpers.bounds import resolve_bounded_cursors
 from sqlbuild.executor.diff.helpers.config import parse_row_diff_tolerances
 from sqlbuild.executor.diff.helpers.selection import (
@@ -123,7 +123,7 @@ def _execute_model_row_diff(
         model=right_model,
         bounded=bounded,
     )
-    tolerances = parse_row_diff_tolerances(
+    tolerances: RowDiffTolerances = parse_row_diff_tolerances(
         right_model.config.values.get("row_diff_tolerances"),
         label=f"model '{name}' row_diff_tolerances",
     )
