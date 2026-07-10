@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.shared.types import AdapterExecute, FrameworkType
 from sqlbuild.executor.node_results.helpers.ddl_lock import run_with_node_result_ddl_lock
 from sqlbuild.executor.node_results.helpers.serialization import encode_json_b64
 from sqlbuild.executor.node_results.helpers.sql import build_create_table_sql, build_insert_sql
@@ -15,7 +15,7 @@ from sqlbuild.executor.node_results.models import NodeResultRecord
 def write_node_result_record(
     *,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     database: str | None,
     schema: str,
     record: NodeResultRecord,
@@ -36,11 +36,11 @@ def write_node_result_record(
     )
 
     def initialize_node_result_table() -> None:
-        _ = execute(connection, create_sql)
+        _ = execute(connection, sql=create_sql)
         if render_create_index_sqls is not None:
             index_sql: str
             for index_sql in render_create_index_sqls(database=database, schema=schema):
-                _ = execute(connection, index_sql)
+                _ = execute(connection, sql=index_sql)
 
     _ = run_with_node_result_ddl_lock(initialize_node_result_table)
     insert_sql: str = build_insert_sql(
@@ -59,4 +59,4 @@ def write_node_result_record(
         ),
         render_qualified_name=render_qualified_name,
     )
-    _ = execute(connection, insert_sql)
+    _ = execute(connection, sql=insert_sql)

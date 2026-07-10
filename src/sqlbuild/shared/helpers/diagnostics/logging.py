@@ -36,7 +36,7 @@ def log_sql(*, logger: logging.Logger, sql: str, action: str = "execute") -> Non
     )
 
 
-def log_debug_event(logger: logging.Logger, message: str, **context: object) -> None:
+def log_debug_event(logger: logging.Logger, *, message: str, **context: object) -> None:
     """Log a structured diagnostics event without SQL."""
 
     logger.debug(message, extra=context)

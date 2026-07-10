@@ -427,14 +427,14 @@ def _strip_config_block(raw_code: str) -> str:
     """Return raw_code with leading config blocks and snapshot wrappers removed."""
 
     body: str = raw_code
-    if _find_jinja_statement(body, "snapshot") is not None:
-        body = _remove_jinja_statement(body, "snapshot")
-        body = _remove_jinja_statement(body, "endsnapshot")
+    if _find_jinja_statement(body, keyword="snapshot") is not None:
+        body = _remove_jinja_statement(body, keyword="snapshot")
+        body = _remove_jinja_statement(body, keyword="endsnapshot")
     body = _remove_config_call(body)
     return body.strip()
 
 
-def _find_jinja_statement(text: str, keyword: str) -> int | None:
+def _find_jinja_statement(text: str, *, keyword: str) -> int | None:
     marker: str = "{%"
     index: int = 0
     while True:
@@ -449,8 +449,8 @@ def _find_jinja_statement(text: str, keyword: str) -> int | None:
         index = end + 2
 
 
-def _remove_jinja_statement(text: str, keyword: str) -> str:
-    start: int | None = _find_jinja_statement(text, keyword)
+def _remove_jinja_statement(text: str, *, keyword: str) -> str:
+    start: int | None = _find_jinja_statement(text, keyword=keyword)
     if start is None:
         return text
     end: int = text.find("%}", start)
@@ -465,16 +465,16 @@ def _remove_config_call(text: str) -> str:
         if start == -1:
             return text
         inner_start: int = start + len(marker)
-        call_index: int = _skip_whitespace(text, inner_start)
+        call_index: int = _skip_whitespace(text, index=inner_start)
         if text[call_index:].startswith("config"):
-            close: int | None = _find_config_expression_close(text, call_index)
+            close: int | None = _find_config_expression_close(text, config_index=call_index)
             if close is None:
                 return text
             return text[:start] + text[close:]
         index = start + len(marker)
 
 
-def _find_config_expression_close(text: str, config_index: int) -> int | None:
+def _find_config_expression_close(text: str, *, config_index: int) -> int | None:
     """Return the index past the config block's closing braces, skipping nested braces."""
 
     paren_open: int = text.find("(", config_index)
@@ -495,7 +495,7 @@ def _find_config_expression_close(text: str, config_index: int) -> int | None:
     return None
 
 
-def _skip_whitespace(text: str, index: int) -> int:
+def _skip_whitespace(text: str, *, index: int) -> int:
     while index < len(text) and text[index].isspace():
         index += 1
     return index

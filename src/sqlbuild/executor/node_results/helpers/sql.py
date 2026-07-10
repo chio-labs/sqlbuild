@@ -134,9 +134,9 @@ def build_read_history_sql(
     predicates: list[str] = [
         f"{COLUMN_NODE_TYPE} = {_required_string_literal(query.node_type)}",
         f"{COLUMN_NODE_NAME} = {_required_string_literal(query.node_name)}",
-        _optional_equality(COLUMN_TARGET_DATABASE, query.target_database),
-        _optional_equality(COLUMN_TARGET_SCHEMA, query.target_schema),
-        _optional_equality(COLUMN_TARGET_NAME, query.target_name),
+        _optional_equality(COLUMN_TARGET_DATABASE, value=query.target_database),
+        _optional_equality(COLUMN_TARGET_SCHEMA, value=query.target_schema),
+        _optional_equality(COLUMN_TARGET_NAME, value=query.target_name),
     ]
     if query.statuses is not None:
         status_literals: str = ", ".join(
@@ -170,7 +170,7 @@ def _select_columns() -> str:
     )
 
 
-def _optional_equality(column: str, value: str | None) -> str:
+def _optional_equality(column: str, *, value: str | None) -> str:
     if value is None:
         return f"{column} IS NULL"
     return f"{column} = {_required_string_literal(value)}"

@@ -9,7 +9,7 @@ from typing import TextIO
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
 from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.shared.types import NodeStartCallback
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,7 @@ class StandardLifecycleCallbacks:
     on_node_complete: Callable[[object], None]
     progress_stream: TextIO
     use_color: bool
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None
+    on_node_start: NodeStartCallback | None = None
 
 
 from sqlbuild.cli.commands.shared.helpers.python_nodes.lifecycle_state import (  # noqa: E402,F401

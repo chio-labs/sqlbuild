@@ -28,7 +28,7 @@ def query_capture_relation_row_count(
 
     query_result: QueryResult = adapter.query(
         connection,
-        f"SELECT COUNT(*) FROM {source_relation_name}",
+        sql=f"SELECT COUNT(*) FROM {source_relation_name}",
         limit=1,
     )
     if len(query_result.rows) != 1 or len(query_result.rows[0]) != 1:

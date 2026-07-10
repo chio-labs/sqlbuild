@@ -19,12 +19,12 @@ class ConnectionMixin(ABC):
         ...
 
     @abstractmethod
-    def execute(self, connection: Any, sql: str) -> Any:
+    def execute(self, connection: Any, *, sql: str) -> Any:
         """Execute a SQL statement and return the result."""
         ...
 
     @abstractmethod
-    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+    def query(self, connection: Any, *, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and normalize row-returning results for CLI display."""
         ...
 
@@ -35,15 +35,15 @@ class ConnectionMixin(ABC):
 
     def begin(self, connection: Any) -> None:
         """Begin a transaction."""
-        self.execute(connection, "BEGIN")
+        self.execute(connection, sql="BEGIN")
 
     def commit(self, connection: Any) -> None:
         """Commit the current transaction."""
-        self.execute(connection, "COMMIT")
+        self.execute(connection, sql="COMMIT")
 
     def rollback(self, connection: Any) -> None:
         """Roll back the current transaction."""
-        self.execute(connection, "ROLLBACK")
+        self.execute(connection, sql="ROLLBACK")
 
     @contextlib.contextmanager
     def transaction(self, connection: Any) -> Generator[None]:

@@ -195,7 +195,7 @@ def acquire_model_lease(
     try:
         return acquire_model_version_lease(
             backend,
-            connection,
+            connection=connection,
             schema=config_schema,
             model_name=model_name,
             version_hash=version_hash,
@@ -211,7 +211,7 @@ def release_model_lease(
 ) -> None:
     connection: Any = backend.connect(config_connection)
     try:
-        release_state_lease(backend, connection, schema=config_schema, lease=lease)
+        release_state_lease(backend, connection=connection, schema=config_schema, lease=lease)
     finally:
         backend.close(connection)
 
@@ -330,7 +330,7 @@ def attach_origin_database_for_clone(
     alias: str = "__sqb_clone_origin"
     adapter.execute(
         destination_connection,
-        f"ATTACH '{str(origin_database)}' AS {alias} (READ_ONLY)",
+        sql=f"ATTACH '{str(origin_database)}' AS {alias} (READ_ONLY)",
     )
     return alias
 
@@ -420,8 +420,8 @@ def build_clone_project_context(clone_pipeline: ClonePipelineResult) -> ClonePro
 
 def resolve_clone_versions(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     clone_pipeline: ClonePipelineResult,
     context: CloneProjectContext,
@@ -433,7 +433,7 @@ def resolve_clone_versions(
         return _resolve_workspace_clone_versions(clone_pipeline=clone_pipeline, context=context)
     return _read_virtual_environment_clone_versions(
         backend,
-        state_connection,
+        state_connection=state_connection,
         schema=schema,
         context=context,
         virtual_environment_name=virtual_environment_name,
@@ -694,8 +694,8 @@ def _resolve_workspace_clone_versions(
 
 def _read_virtual_environment_clone_versions(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     context: CloneProjectContext,
     virtual_environment_name: str,

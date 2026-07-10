@@ -127,6 +127,7 @@ def build_combined_downstream_deps(
 
 def expand_combined_upstream(
     key: DbtCombinedGraphKey,
+    *,
     upstream: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
 ) -> frozenset[DbtCombinedGraphKey]:
     """Return all transitive upstream combined graph keys."""
@@ -136,6 +137,7 @@ def expand_combined_upstream(
 
 def expand_combined_downstream(
     key: DbtCombinedGraphKey,
+    *,
     downstream: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
 ) -> frozenset[DbtCombinedGraphKey]:
     """Return all transitive downstream combined graph keys."""

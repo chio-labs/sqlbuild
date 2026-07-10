@@ -10,6 +10,7 @@ from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.types import CloneItemCallback
 from sqlbuild.integrations.dbt.constants import (
     DBT_MATERIALIZATION_EPHEMERAL,
     DBT_MATERIALIZATION_VIEW,
@@ -104,7 +105,7 @@ def execute_dbt_clone(
     selected_nodes: tuple[DbtLsNode, ...],
     hard_copy: bool,
     on_start: Callable[[int], None] | None = None,
-    on_item: Callable[[int, int, CloneItemResult], None] | None = None,
+    on_item: CloneItemCallback | None = None,
 ) -> CloneExecutionResult:
     """Clone selected dbt models from reuse manifest relations into current relations."""
 
@@ -166,7 +167,7 @@ def execute_dbt_clone(
             )
         results.append(item_result)
         if on_item is not None:
-            on_item(index, total, item_result)
+            on_item(index, total=total, item=item_result)
     return CloneExecutionResult(item_results=tuple(results))
 
 

@@ -120,7 +120,7 @@ def load_compiled_dbt_manifest(
     """Compile the dbt project and load its manifest index."""
 
     dbt_compile_start: float = time.monotonic()
-    report_progress(on_progress, "Compiling dbt project...")
+    report_progress(on_progress, message="Compiling dbt project...")
     compile_result: DbtCommandResult = runner.compile(
         options=dbt_options,
         full_refresh=full_refresh,
@@ -128,13 +128,15 @@ def load_compiled_dbt_manifest(
     if compile_result.returncode != 0:
         raise DbtInteropRuntimeError("dbt compile failed", help=dbt_failure_detail(compile_result))
     report_progress(
-        on_progress, f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
+        on_progress, message=f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
     )
     manifest_start: float = time.monotonic()
-    report_progress(on_progress, "Loading dbt manifest...")
+    report_progress(on_progress, message="Loading dbt manifest...")
     manifest_path: Path = resolve_dbt_manifest_path(options=dbt_options)
     manifest: DbtManifestIndex = load_dbt_manifest_index(manifest_path=manifest_path)
-    report_progress(on_progress, f"Loaded dbt manifest. ({time.monotonic() - manifest_start:.2f}s)")
+    report_progress(
+        on_progress, message=f"Loaded dbt manifest. ({time.monotonic() - manifest_start:.2f}s)"
+    )
     return manifest
 
 
@@ -150,7 +152,7 @@ def compile_dbt_interop_project(
     """Resolve the adapter and compile the SQLBuild project against the dbt manifest."""
 
     sqlbuild_compile_start: float = time.monotonic()
-    report_progress(on_progress, "Compiling SQLBuild project...")
+    report_progress(on_progress, message="Compiling SQLBuild project...")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
@@ -165,7 +167,7 @@ def compile_dbt_interop_project(
     )
     report_progress(
         on_progress,
-        f"Compiled SQLBuild project. ({time.monotonic() - sqlbuild_compile_start:.2f}s)",
+        message=f"Compiled SQLBuild project. ({time.monotonic() - sqlbuild_compile_start:.2f}s)",
     )
     return DbtInteropCompiledProject(adapter_name=adapter_name, adapter=adapter, project=project)
 
@@ -182,13 +184,13 @@ def resolve_dbt_interop_plan(
     """Build the combined dbt graph and resolve dbt and SQLBuild selection."""
 
     graph_start: float = time.monotonic()
-    report_progress(on_progress, "Building dbt interop graph...")
+    report_progress(on_progress, message="Building dbt interop graph...")
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=compiled.project)
     report_progress(
-        on_progress, f"Built dbt interop graph. ({time.monotonic() - graph_start:.2f}s)"
+        on_progress, message=f"Built dbt interop graph. ({time.monotonic() - graph_start:.2f}s)"
     )
     selection_start: float = time.monotonic()
-    report_progress(on_progress, "Resolving dbt and SQLBuild selection...")
+    report_progress(on_progress, message="Resolving dbt and SQLBuild selection...")
     plan: DbtInteropPlan = plan_dbt_interop_command(
         command=command,
         project=compiled.project,
@@ -207,7 +209,7 @@ def resolve_dbt_interop_plan(
     )
     report_progress(
         on_progress,
-        f"Resolved dbt and SQLBuild selection. ({time.monotonic() - selection_start:.2f}s)",
+        message=f"Resolved dbt and SQLBuild selection. ({time.monotonic() - selection_start:.2f}s)",
     )
     return DbtInteropPlanResolution(graph=graph, plan=plan)
 
@@ -246,7 +248,7 @@ def prepare_dbt_comparison_manifests(
         dbt_args=dbt_args,
     )
     runner: DbtRunner = DbtRunner()
-    report_progress(on_progress, "Compiling dbt project...")
+    report_progress(on_progress, message="Compiling dbt project...")
     compile_start: float = time.monotonic()
     compile_result: DbtCommandResult = runner.compile(options=dbt_options)
     if compile_result.returncode != 0:
@@ -254,14 +256,16 @@ def prepare_dbt_comparison_manifests(
             "dbt compile failed",
             help=compile_result.stderr or compile_result.stdout,
         )
-    report_progress(on_progress, f"Compiled dbt project. ({time.monotonic() - compile_start:.2f}s)")
-    report_progress(on_progress, "Loading dbt manifest...")
+    report_progress(
+        on_progress, message=f"Compiled dbt project. ({time.monotonic() - compile_start:.2f}s)"
+    )
+    report_progress(on_progress, message="Loading dbt manifest...")
     current_manifest: DbtManifestIndex = load_dbt_manifest_index(
         manifest_path=resolve_dbt_manifest_path(options=dbt_options)
     )
-    report_progress(on_progress, "Loaded dbt manifest.")
+    report_progress(on_progress, message="Loaded dbt manifest.")
     report_progress(
-        on_progress, f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
+        on_progress, message=f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
     )
     production_ref_start: float = time.monotonic()
     production_ref_compile: DbtProductionRefCompileResult = compile_production_ref_manifest(
@@ -275,7 +279,7 @@ def prepare_dbt_comparison_manifests(
     )
     report_progress(
         on_progress,
-        f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
+        message=f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
         f"({time.monotonic() - production_ref_start:.2f}s)",
     )
     return DbtComparisonPreparation(
@@ -331,11 +335,12 @@ def connect_dbt_interop_warehouse(
         adapter_name=adapter_name,
         discovered_inputs=discovered_inputs,
     )
-    report_progress(on_progress, f"Connecting to {adapter_name}...")
+    report_progress(on_progress, message=f"Connecting to {adapter_name}...")
     connect_start: float = time.monotonic()
     connection: Any = adapter.connect(connection_config)
     report_progress(
-        on_progress, f"Connected to {adapter_name}. ({time.monotonic() - connect_start:.2f}s)"
+        on_progress,
+        message=f"Connected to {adapter_name}. ({time.monotonic() - connect_start:.2f}s)",
     )
     return DbtInteropConnection(
         adapter=adapter,

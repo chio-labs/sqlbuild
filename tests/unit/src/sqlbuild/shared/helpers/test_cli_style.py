@@ -118,6 +118,6 @@ def test_given_cli_style_when_rendering_custom_status_text_then_styles_the_full_
 ) -> None:
     style: CliStyle = CliStyle(use_color=test_case.use_color)
 
-    assert style.status("OK", "[OK found]") == test_case.expected_status_ok
-    assert style.status("ERROR", "[ERROR failed]") == test_case.expected_status_error
-    assert style.status("SKIP", "[SKIP blocked]") == test_case.expected_status_skip
+    assert style.status("OK", text="[OK found]") == test_case.expected_status_ok
+    assert style.status("ERROR", text="[ERROR failed]") == test_case.expected_status_error
+    assert style.status("SKIP", text="[SKIP blocked]") == test_case.expected_status_skip

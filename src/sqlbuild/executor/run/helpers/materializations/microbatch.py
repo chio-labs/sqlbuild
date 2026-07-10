@@ -150,7 +150,7 @@ def execute_microbatch_entry(
         window_text: str = f"{batch.start}..{batch.end}"
         log_debug_event(
             _DEBUG_LOGGER,
-            "",
+            message="",
             sqlbuild_subject="model",
             sqlbuild_name=entry.name,
             sqlbuild_event="batch_start",
@@ -348,7 +348,7 @@ def execute_microbatch_entry(
             )
         log_debug_event(
             _DEBUG_LOGGER,
-            "",
+            message="",
             sqlbuild_subject="model",
             sqlbuild_name=entry.name,
             sqlbuild_event="batch_complete",
@@ -650,7 +650,7 @@ def _discover_cursor_range(
             f"MAX({cursor_input.cursor_column}) AS _max FROM {cursor_input.relation}"
         )
     discovery_sql: str = "SELECT MIN(_min), MAX(_max) FROM (" + " UNION ALL ".join(parts) + ")"
-    cursor: Any = adapter.execute(connection, discovery_sql)
+    cursor: Any = adapter.execute(connection, sql=discovery_sql)
     row: Any = cursor.fetchone()
     if row is None or row[0] is None or row[1] is None:
         return None

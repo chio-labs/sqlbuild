@@ -185,7 +185,7 @@ def _execute_ingress_python_node(
     results.record_python_result(name=node.name, result=result)
     if result.status == PythonNodeStatus.SUCCESS:
         if callbacks.identity_recorder is not None:
-            callbacks.identity_recorder(node.identity, None)
+            callbacks.identity_recorder(node.identity, _target_name=None)
         else:
             try_write_python_node_identity_fingerprint(
                 identity=node.identity,
@@ -217,7 +217,7 @@ def _execute_ingress_loader(
     if source_entry is None:
         raise ExecutorInputError(f"No source entry found for Python ingress loader '{loader.name}'")
     if callbacks.on_node_start is not None:
-        callbacks.on_node_start(source_entry.name, load_resource_kind(source_entry))
+        callbacks.on_node_start(source_entry.name, resource_kind=load_resource_kind(source_entry))
     result: LoadExecutionResult = execute_source_load(
         source_entry=source_entry,
         loader_function=loader,
@@ -253,7 +253,7 @@ def _execute_ingress_loader(
     )
     if result.status == ExecutionStatus.SUCCESS:
         if callbacks.identity_recorder is not None:
-            callbacks.identity_recorder(node.identity, source_entry.name)
+            callbacks.identity_recorder(node.identity, _target_name=source_entry.name)
         else:
             try_write_python_node_identity_fingerprint(
                 identity=node.identity,

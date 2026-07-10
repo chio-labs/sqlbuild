@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.shared.types import AdapterExecute, FrameworkType
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_WRITE_ATTEMPTS,
     FINGERPRINT_WRITE_RETRY_BASE_SECONDS,
@@ -22,7 +22,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 def write_fingerprint(
     *,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     database: str | None,
     schema: str,
     fingerprint: Fingerprint,
@@ -75,16 +75,16 @@ def write_fingerprint(
 def _execute_write_statements(
     *,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     create_sql: str,
     index_sqls: tuple[str, ...],
     insert_sql: str,
 ) -> None:
-    _ = execute(connection, create_sql)
+    _ = execute(connection, sql=create_sql)
     index_sql: str
     for index_sql in index_sqls:
-        _ = execute(connection, index_sql)
-    _ = execute(connection, insert_sql)
+        _ = execute(connection, sql=index_sql)
+    _ = execute(connection, sql=insert_sql)
 
 
 def _log_write_retry(*, fingerprint: Fingerprint, attempt: int, error: Exception) -> None:

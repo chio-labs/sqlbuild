@@ -48,7 +48,9 @@ def format_compile_text(
 
     style: CliStyle = CliStyle(use_color=use_color)
     lines: list[str] = [
-        style.success_strong(f"Compile ready ({_count_label(len(graph.project.models), 'model')})"),
+        style.success_strong(
+            f"Compile ready ({_count_label(len(graph.project.models), singular='model')})"
+        ),
         "",
     ]
     visible_models: tuple[CompiledModel, ...] = graph.project.models[:_HUMAN_MODEL_LIMIT]
@@ -80,15 +82,15 @@ def format_compile_text(
             )
         )
         lines.append("")
-    error_count: int = _diagnostic_count(diagnostics, DiagnosticSeverity.ERROR)
-    warning_count: int = _diagnostic_count(diagnostics, DiagnosticSeverity.WARNING)
+    error_count: int = _diagnostic_count(diagnostics, severity=DiagnosticSeverity.ERROR)
+    warning_count: int = _diagnostic_count(diagnostics, severity=DiagnosticSeverity.WARNING)
     lines.append(
         f"  {style.success_strong('Compiled:')} "
-        f"{_count_label(len(graph.project.models), 'model')}, "
-        f"{_count_label(len(graph.project.seeds), 'seed')}, "
-        f"{_count_label(len(graph.project.functions), 'function')}, "
-        f"{_count_label(error_count, 'error')}, "
-        f"{_count_label(warning_count, 'warning')}"
+        f"{_count_label(len(graph.project.models), singular='model')}, "
+        f"{_count_label(len(graph.project.seeds), singular='seed')}, "
+        f"{_count_label(len(graph.project.functions), singular='function')}, "
+        f"{_count_label(error_count, singular='error')}, "
+        f"{_count_label(warning_count, singular='warning')}"
     )
     lines.append(f"  {style.muted('Wrote:')} {_relative_target_path(_compiled_sql_dir(written))}/")
     if manifest:
@@ -140,8 +142,8 @@ def _summary(graph: ProjectGraph, *, diagnostics: tuple[CompilerDiagnostic, ...]
         "audits": len(project.audits),
         "tests": len(project.sql_tests),
         "execution_layers": _execution_layer_count(graph),
-        "errors": _diagnostic_count(diagnostics, DiagnosticSeverity.ERROR),
-        "warnings": _diagnostic_count(diagnostics, DiagnosticSeverity.WARNING),
+        "errors": _diagnostic_count(diagnostics, severity=DiagnosticSeverity.ERROR),
+        "warnings": _diagnostic_count(diagnostics, severity=DiagnosticSeverity.WARNING),
     }
 
 
@@ -301,14 +303,14 @@ def _fit(text: str, *, width: int) -> str:
     return text.ljust(width)
 
 
-def _count_label(count: int, singular: str) -> str:
+def _count_label(count: int, *, singular: str) -> str:
     if count == 1:
         return f"{count} {singular}"
     return f"{count} {singular}s"
 
 
 def _diagnostic_count(
-    diagnostics: tuple[CompilerDiagnostic, ...], severity: DiagnosticSeverity
+    diagnostics: tuple[CompilerDiagnostic, ...], *, severity: DiagnosticSeverity
 ) -> int:
     return sum(1 for diagnostic in diagnostics if diagnostic.severity == severity)
 
@@ -393,7 +395,7 @@ def _format_diagnostic_text(
     diagnostic: CompilerDiagnostic, *, source_texts: dict[Path, str], style: CliStyle
 ) -> list[str]:
     header: str = f"{diagnostic.severity}[{diagnostic.code}]: {diagnostic.message}"
-    lines: list[str] = [_style_diagnostic(header, diagnostic, style=style)]
+    lines: list[str] = [_style_diagnostic(header, diagnostic=diagnostic, style=style)]
     if diagnostic.resource_name is not None:
         label: str = "model"
         resource: str = diagnostic.resource_name
@@ -471,7 +473,7 @@ def _model_source_texts(models: tuple[CompiledModel, ...]) -> dict[Path, str]:
     return {model.relative_path: model.authored_sql for model in models if model.authored_sql}
 
 
-def _style_diagnostic(text: str, diagnostic: CompilerDiagnostic, *, style: CliStyle) -> str:
+def _style_diagnostic(text: str, *, diagnostic: CompilerDiagnostic, style: CliStyle) -> str:
     if diagnostic.severity == DiagnosticSeverity.ERROR:
         return style.error(text)
     if diagnostic.severity == DiagnosticSeverity.WARNING:

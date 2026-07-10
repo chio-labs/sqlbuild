@@ -184,7 +184,7 @@ class DbtRunner:
 
     def _invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         invoker: DbtInvoker = self.invoker if self.invoker is not None else _subprocess_invoker
-        return cast(DbtCommandResult, invoker(argv, cwd))
+        return cast(DbtCommandResult, invoker(argv, cwd=cwd))
 
     def invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         """Run an explicit dbt argv."""
@@ -210,7 +210,7 @@ def _append_common_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> 
     return argv
 
 
-def _subprocess_invoker(argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
+def _subprocess_invoker(argv: tuple[str, ...], *, cwd: Path | None) -> DbtCommandResult:
     try:
         completed: subprocess.CompletedProcess[str] = subprocess.run(
             argv,

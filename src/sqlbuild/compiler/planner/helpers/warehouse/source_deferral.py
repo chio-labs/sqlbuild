@@ -104,12 +104,18 @@ def _selected_managed_source_refs(
     for model in project.models:
         if model.key not in selected_keys:
             continue
-        names.update(_direct_managed_source_refs(model.query_sql, managed_source_names))
+        names.update(
+            _direct_managed_source_refs(model.query_sql, managed_source_names=managed_source_names)
+        )
     function: CompiledFunction
     for function in project.functions:
         if function.key not in selected_keys:
             continue
-        names.update(_direct_managed_source_refs(function.body_sql, managed_source_names))
+        names.update(
+            _direct_managed_source_refs(
+                function.body_sql, managed_source_names=managed_source_names
+            )
+        )
     audit: CompiledAudit
     for audit in project.audits:
         if audit.scope_deps and not any(dep in selected_keys for dep in audit.scope_deps):
@@ -124,7 +130,9 @@ def _selected_managed_source_refs(
     return tuple(sorted(names))
 
 
-def _direct_managed_source_refs(sql: str, managed_source_names: frozenset[str]) -> frozenset[str]:
+def _direct_managed_source_refs(
+    sql: str, *, managed_source_names: frozenset[str]
+) -> frozenset[str]:
     names: set[str] = set()
     match: re.Match[str]
     for match in _SOURCE_PATTERN.finditer(sql):

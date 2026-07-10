@@ -106,7 +106,7 @@ def test_given_expression_rule_when_querying_then_snowflake_matches_nullability_
 
     result: QueryResult = adapter.query(
         connection,
-        f"SELECT {test_case.sql_expression} IS NULL AS is_null",
+        sql=f"SELECT {test_case.sql_expression} IS NULL AS is_null",
         limit=None,
     )
 
@@ -146,7 +146,7 @@ def test_given_sql_when_querying_then_returns_expected_result(
     adapter: SnowflakeAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=test_case.limit)
+    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=test_case.limit)
 
     assert result == test_case.expected_result
 
@@ -236,10 +236,10 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
     )
     query_column_names: tuple[str, ...] = adapter.query_column_names(
         connection,
-        "SELECT * FROM (SELECT 1 AS order_id, 'ok' AS status) AS named_rows",
+        sql="SELECT * FROM (SELECT 1 AS order_id, 'ok' AS status) AS named_rows",
     )
     described_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
-        connection, orders_relation
+        connection, relation=orders_relation
     )
 
     assert relation_exists == test_case.expected_relation_exists
@@ -292,7 +292,7 @@ def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advan
     )
     time.sleep(1)
 
-    adapter.execute(connection, f"INSERT INTO {table_target} VALUES (2)")
+    adapter.execute(connection, sql=f"INSERT INTO {table_target} VALUES (2)")
     changed_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
         connection,
         database=snowflake_database,
@@ -717,7 +717,7 @@ def test_given_reuse_origin_when_creating_relation_then_snowflake_uses_expected_
     recorder: StatementRecorder = build_statement_recorder()
     adapter.execute(
         connection,
-        f"CREATE OR REPLACE TABLE {origin} AS "
+        sql=f"CREATE OR REPLACE TABLE {origin} AS "
         "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
     )
 

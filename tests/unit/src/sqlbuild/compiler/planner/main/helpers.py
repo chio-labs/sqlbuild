@@ -61,7 +61,7 @@ def build_standard_pruning_project(
 def write_standard_model_state(
     *, adapter: DuckDbAdapter, connection: object, project: CompiledProject
 ) -> StandardModelVersionIdentities:
-    adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS staging")
+    adapter.execute(connection, sql="CREATE SCHEMA IF NOT EXISTS staging")
     identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=project.functions,
         seeds=project.seeds,
@@ -76,7 +76,7 @@ def write_standard_model_state(
     for model in project.models:
         adapter.execute(
             connection,
-            f"CREATE OR REPLACE TABLE staging.{model.name} AS SELECT 1 AS id",
+            sql=f"CREATE OR REPLACE TABLE staging.{model.name} AS SELECT 1 AS id",
         )
         write_fingerprint(
             connection=connection,

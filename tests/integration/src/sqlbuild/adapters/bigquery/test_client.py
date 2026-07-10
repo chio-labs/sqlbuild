@@ -113,7 +113,7 @@ def test_given_expression_rule_when_querying_then_bigquery_matches_nullability_e
 
     result: QueryResult = adapter.query(
         connection,
-        f"SELECT {test_case.sql_expression} IS NULL AS is_null",
+        sql=f"SELECT {test_case.sql_expression} IS NULL AS is_null",
         limit=None,
     )
 
@@ -170,10 +170,10 @@ def test_given_sql_when_querying_then_returns_expected_result(
         name="__sqb_query_temp",
     )
 
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=test_case.limit)
+    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=test_case.limit)
     ddl_result: QueryResult = adapter.query(
         connection,
-        f"CREATE OR REPLACE TABLE {ddl_target} (id INT64)",
+        sql=f"CREATE OR REPLACE TABLE {ddl_target} (id INT64)",
         limit=20,
     )
 
@@ -266,10 +266,10 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
     )
     query_column_names: tuple[str, ...] = adapter.query_column_names(
         connection,
-        "SELECT * FROM (SELECT 1 AS order_id, 'ok' AS status) AS named_rows",
+        sql="SELECT * FROM (SELECT 1 AS order_id, 'ok' AS status) AS named_rows",
     )
     described_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
-        connection, orders_relation
+        connection, relation=orders_relation
     )
 
     assert relation_exists == test_case.expected_relation_exists
@@ -321,7 +321,7 @@ def test_given_table_dml_when_getting_freshness_metadata_then_modified_time_adva
         name=table_name,
     )
 
-    adapter.execute(connection, f"INSERT INTO {table_target} VALUES (2)")
+    adapter.execute(connection, sql=f"INSERT INTO {table_target} VALUES (2)")
     initial_data_version: object = initial_metadata.data_version
     assert isinstance(initial_data_version, test_case.expected_data_version_type)
     changed_metadata: TableFreshnessMetadata = wait_for_bigquery_freshness_after(
@@ -780,7 +780,7 @@ def test_given_reuse_origin_when_creating_relation_then_bigquery_uses_expected_c
     recorder: StatementRecorder = build_statement_recorder()
     adapter.execute(
         connection,
-        f"CREATE OR REPLACE TABLE {origin} AS "
+        sql=f"CREATE OR REPLACE TABLE {origin} AS "
         "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
     )
 

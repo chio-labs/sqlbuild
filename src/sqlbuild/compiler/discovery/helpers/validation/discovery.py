@@ -293,7 +293,7 @@ def _validate_loader_dependencies(loader_functions: tuple[DiscoveredLoaderFuncti
     visiting: set[str] = set()
     visited: set[str] = set()
 
-    def visit(loader_function: DiscoveredLoaderFunction, path: tuple[str, ...]) -> None:
+    def visit(loader_function: DiscoveredLoaderFunction, *, path: tuple[str, ...]) -> None:
         if loader_function.name in visited:
             return
         if loader_function.name in visiting:
@@ -303,12 +303,12 @@ def _validate_loader_dependencies(loader_functions: tuple[DiscoveredLoaderFuncti
         dependency: object
         for dependency in loader_function.depends_on:
             if dependency in loader_by_function:
-                visit(loader_by_function[dependency], (*path, loader_function.name))
+                visit(loader_by_function[dependency], path=(*path, loader_function.name))
         visiting.remove(loader_function.name)
         visited.add(loader_function.name)
 
     for loader_function in loader_functions:
-        visit(loader_function, ())
+        visit(loader_function, path=())
 
 
 def _validate_python_node_dependencies(
@@ -357,6 +357,7 @@ def _validate_python_node_dependencies(
 
     def visit(
         current: DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction,
+        *,
         path: tuple[str, ...],
     ) -> None:
         if current.name in visited:
@@ -371,13 +372,13 @@ def _validate_python_node_dependencies(
                 continue
             visit(
                 node_by_dependency_key[_python_node_dependency_key(dependency)],
-                (*path, current.name),
+                path=(*path, current.name),
             )
         visiting.remove(current.name)
         visited.add(current.name)
 
     for node in nodes:
-        visit(node, ())
+        visit(node, path=())
 
 
 def _validate_check_dependencies(

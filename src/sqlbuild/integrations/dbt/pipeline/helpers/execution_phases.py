@@ -479,12 +479,12 @@ def execute_dbt_with_state_tracking(
     if query_change_tracking and compiled.adapter_name != BuiltinAdapter.DUCKDB:
         state_connect_start: float = time.monotonic()
         report_progress(
-            request.on_progress, "Connecting to warehouse for dbt fingerprint writes..."
+            request.on_progress, message="Connecting to warehouse for dbt fingerprint writes..."
         )
         state_connection = compiled.adapter.connect(connection_config)
         report_progress(
             request.on_progress,
-            "Connected for dbt fingerprint writes. "
+            message="Connected for dbt fingerprint writes. "
             f"({time.monotonic() - state_connect_start:.2f}s)",
         )
 
@@ -550,7 +550,7 @@ def execute_dbt_with_state_tracking(
         )
     if execution.returncode == 0 and watermark_context is not None:
         watermark_start: float = time.monotonic()
-        report_progress(request.on_progress, "Recording dbt node source watermarks...")
+        report_progress(request.on_progress, message="Recording dbt node source watermarks...")
         watermark_connection: object = compiled.adapter.connect(connection_config)
         try:
             write_dbt_node_source_watermark_records(
@@ -564,7 +564,9 @@ def execute_dbt_with_state_tracking(
             compiled.adapter.close(watermark_connection)
         report_progress(
             request.on_progress,
-            f"Recorded dbt node source watermarks. ({time.monotonic() - watermark_start:.2f}s)",
+            message=(
+                f"Recorded dbt node source watermarks. ({time.monotonic() - watermark_start:.2f}s)"
+            ),
         )
     return DbtTrackedExecution(
         execution=execution,
@@ -584,7 +586,7 @@ def write_buffered_dbt_fingerprints(
     """Write buffered dbt fingerprints on a fresh connection after execution."""
 
     fingerprint_start: float = time.monotonic()
-    report_progress(request.on_progress, "Recording dbt fingerprints...")
+    report_progress(request.on_progress, message="Recording dbt fingerprints...")
     connection: object = compiled.adapter.connect(connection_config)
     try:
         dbt_result: DbtNodeExecutionResult
@@ -605,7 +607,7 @@ def write_buffered_dbt_fingerprints(
         compiled.adapter.close(connection)
     report_progress(
         request.on_progress,
-        f"Recorded dbt fingerprints. ({time.monotonic() - fingerprint_start:.2f}s)",
+        message=f"Recorded dbt fingerprints. ({time.monotonic() - fingerprint_start:.2f}s)",
     )
 
 
@@ -650,7 +652,7 @@ def _prepare_dbt_watermark_context(
     ):
         return None
     watermark_connect_start: float = time.monotonic()
-    report_progress(request.on_progress, "Reading dbt node source watermarks...")
+    report_progress(request.on_progress, message="Reading dbt node source watermarks...")
     connection: object = compiled.adapter.connect(connection_config)
     try:
         watermark_context: NodeSourceWatermarkExecutionContext | None = (
@@ -668,7 +670,9 @@ def _prepare_dbt_watermark_context(
         compiled.adapter.close(connection)
     report_progress(
         request.on_progress,
-        f"Read dbt node source watermarks. ({time.monotonic() - watermark_connect_start:.2f}s)",
+        message=(
+            f"Read dbt node source watermarks. ({time.monotonic() - watermark_connect_start:.2f}s)"
+        ),
     )
     return watermark_context
 
@@ -809,7 +813,7 @@ def write_sqlbuild_skip_notice(
     if skip_reason_message is not None:
         invocation.output_stream.write("\n")
         invocation.output_stream.flush()
-        report_progress(request.on_progress, skip_reason_message)
+        report_progress(request.on_progress, message=skip_reason_message)
     if current_message is not None:
         style: CliStyle = CliStyle(use_color=request.use_color)
         invocation.output_stream.write(style.muted(current_message) + "\n")

@@ -6,7 +6,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent, RelationInfo
 from sqlbuild.adapter.shared.types import TablePromotionMode
@@ -21,7 +20,7 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.build.types import BeforeModelMaterializeCallback, BuildStatus
 from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
@@ -29,7 +28,7 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.shared.types import ConnectionElapsedCallback, NodeStartCallback
 from sqlbuild.spec.models.project import SnapshotsConfig
 
 
@@ -64,12 +63,12 @@ class BuildCallbacks:
 
     on_progress: Callable[[str], None] | None = None
     on_sub_progress: Callable[[str], None] | None = None
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None
+    on_node_start: NodeStartCallback | None = None
     on_node_complete: Callable[[object], None] | None = None
-    before_model_materialize: Callable[[ModelPlanEntry, Any], None] | None = None
+    before_model_materialize: BeforeModelMaterializeCallback | None = None
     on_connection_start: Callable[[int], None] | None = None
-    on_connection_complete: Callable[[int, float], None] | None = None
-    on_connection_error: Callable[[int, float], None] | None = None
+    on_connection_complete: ConnectionElapsedCallback | None = None
+    on_connection_error: ConnectionElapsedCallback | None = None
     python_identity_recorder: PythonIdentityRecorder | None = None
 
 

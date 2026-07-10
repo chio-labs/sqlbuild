@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from sqlbuild.virtual.state.constants import STATE_TABLES
 from sqlbuild.virtual.state.models import (
     StateSchemaValidationIssue,
     StateSchemaValidationResult,
 )
-from sqlbuild.virtual.state.types import StateColumnType, StateSchemaValidationIssueKind
+from sqlbuild.virtual.state.types import (
+    StateColumnType,
+    StateSchemaValidationIssueKind,
+    StateTypeMatcher,
+)
 
 
 def build_validation_result(
@@ -17,7 +19,7 @@ def build_validation_result(
     existing_tables: set[str],
     columns_by_table: dict[str, dict[str, str]],
     expected_columns: dict[str, dict[str, StateColumnType]],
-    type_matches: Callable[[str, StateColumnType], bool],
+    type_matches: StateTypeMatcher,
     expected_indexes: dict[str, dict[str, tuple[str, ...]]] | None = None,
     existing_indexes_by_table: dict[str, set[str]] | None = None,
 ) -> StateSchemaValidationResult:
@@ -50,7 +52,7 @@ def build_validation_result(
                     )
                 )
                 continue
-            if not type_matches(actual_type, expected_type):
+            if not type_matches(actual_type, expected_type=expected_type):
                 issues.append(
                     StateSchemaValidationIssue(
                         kind=StateSchemaValidationIssueKind.WRONG_TYPE,

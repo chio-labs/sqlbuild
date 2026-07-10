@@ -58,7 +58,7 @@ def collect_tracked_relation_keys(
         except Exception as error:
             log_debug_event(
                 _DEBUG_LOGGER,
-                "janitor fingerprint tracking read failed; skipping schema",
+                message="janitor fingerprint tracking read failed; skipping schema",
                 database=database,
                 schema=schema,
                 sqlbuild_error=str(error),

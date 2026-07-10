@@ -8,7 +8,7 @@ from typing import TextIO
 from sqlbuild.executor.clone.helpers.prephase_progress import (
     run_prephase_clone_stream as _run_prephase_clone_stream,
 )
-from sqlbuild.executor.clone.models import CloneItemResult
+from sqlbuild.executor.clone.types import CloneItemCallback
 
 
 def run_prephase_clone_stream[RESULT](
@@ -17,7 +17,7 @@ def run_prephase_clone_stream[RESULT](
     title: str,
     caused_by_names: tuple[str, ...],
     use_color: bool,
-    run_clone: Callable[[Callable[[int, int, CloneItemResult], None]], RESULT],
+    run_clone: Callable[[CloneItemCallback], RESULT],
 ) -> RESULT:
     """Run clone work with shared prephase streaming output."""
 

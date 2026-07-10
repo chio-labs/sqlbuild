@@ -90,9 +90,9 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     if args.command == CliCommand.DAG:
         return handlers.run_dag(
             project_dir,
-            args.no_sql_validation,
-            args.json,
-            args.vars,
+            no_sql_validation=args.no_sql_validation,
+            json_output=args.json,
+            cli_vars=args.vars,
         )
     if args.command == CliCommand.PLAN:
         return handlers.run_plan(
@@ -267,15 +267,15 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     if args.command == CliCommand.LINEAGE:
         return handlers.run_lineage(
             project_dir,
-            args.no_sql_validation,
-            args.lineage_target,
-            args.lineage_format,
-            args.lineage_direction,
-            args.lineage_depth,
-            select,
-            tuple(args.exclude),
-            ColumnLineageMode(args.lineage_mode),
-            args.vars,
+            no_sql_validation=args.no_sql_validation,
+            target=args.lineage_target,
+            output_format=args.lineage_format,
+            direction=args.lineage_direction,
+            depth=args.lineage_depth,
+            select=select,
+            exclude=tuple(args.exclude),
+            lineage_mode=ColumnLineageMode(args.lineage_mode),
+            cli_vars=args.vars,
         )
     if args.command == CliCommand.CLONE:
         if args.from_target is None or args.to_target is None:
@@ -322,14 +322,14 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     if args.command == CliCommand.RECONCILE:
         return handlers.run_reconcile(
             project_dir,
-            args.no_color,
-            args.virtual_env,
-            args.reconcile_command,
-            getattr(args, "reconcile_model", None),
-            getattr(args, "reconcile_seed", None),
-            getattr(args, "reconcile_physical_relation", None),
-            getattr(args, "auto_approve", False),
-            args.vars,
+            no_color=args.no_color,
+            virtual_environment=args.virtual_env,
+            reconcile_command=args.reconcile_command,
+            model_name=getattr(args, "reconcile_model", None),
+            seed_name=getattr(args, "reconcile_seed", None),
+            physical_relation_name=getattr(args, "reconcile_physical_relation", None),
+            auto_approve=getattr(args, "auto_approve", False),
+            cli_vars=args.vars,
         )
     if args.command == CliCommand.PROMOTE:
         if args.from_virtual_environment is None or args.to_virtual_environment is None:
@@ -369,18 +369,18 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         query_limit: int | None = None if args.query_no_limit else args.query_limit
         return handlers.run_query(
             project_dir,
-            args.query_sql,
-            args.target,
-            args.query_format,
-            query_limit,
+            sql=args.query_sql,
+            selected_target=args.target,
+            output_format=args.query_format,
+            limit=query_limit,
         )
     if args.command == CliCommand.DEBUG:
         return handlers.run_debug(
             project_dir,
-            args.no_color,
-            args.no_connection,
-            args.target,
-            args.json,
+            no_color=args.no_color,
+            no_connection=args.no_connection,
+            selected_target=args.target,
+            json_output=args.json,
         )
     if args.command == CliCommand.JANITOR:
         return handlers.run_janitor(
@@ -397,14 +397,14 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             raise CliUserError("state requires a subcommand such as 'init'", code="C901")
         return handlers.run_state(
             project_dir,
-            args.state_command,
-            args.state_backup_id,
-            args.auto_approve,
-            args.no_color,
-            args.state_checkpoint_command,
-            args.state_checkpoint_id,
-            args.virtual_env,
-            getattr(args, "allow_copy", False),
+            state_command=args.state_command,
+            backup_id=args.state_backup_id,
+            auto_approve=args.auto_approve,
+            no_color=args.no_color,
+            checkpoint_command=args.state_checkpoint_command,
+            checkpoint_id=args.state_checkpoint_id,
+            virtual_environment=args.virtual_env,
+            allow_copy=getattr(args, "allow_copy", False),
         )
     if args.command == CliCommand.INIT:
         return handlers.run_init(project_dir)
@@ -420,9 +420,9 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         if args.skills_command == "update":
             return handlers.run_skills_update(
                 project_dir,
-                args.skills_global,
-                tuple(args.skills_target),
-                args.skills_force,
+                global_install=args.skills_global,
+                targets=tuple(args.skills_target),
+                force=args.skills_force,
             )
         raise CliUserError("skills requires a subcommand such as 'update'", code="C807")
     if args.command == CliCommand.SCENARIO:

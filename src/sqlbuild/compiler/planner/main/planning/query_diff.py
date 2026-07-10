@@ -7,7 +7,7 @@ import difflib
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 
 
-def format_query_diff(previous: str, current: str) -> list[str]:
+def format_query_diff(previous: str, *, current: str) -> list[str]:
     """Format a unified diff between previous and current SQL/text."""
 
     style: CliStyle = CliStyle(use_color=True)

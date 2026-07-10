@@ -117,7 +117,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         )
         if database is not None:
             query += f" AND catalog_name = {_duckdb_string_literal(database)}"
-        cursor: Any = self.execute(connection, query)
+        cursor: Any = self.execute(connection, sql=query)
         return cursor.fetchone() is not None
 
     def render_create_schema(
@@ -146,7 +146,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def move_or_copy_relation(
         self,
@@ -179,7 +179,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def render_drop_view(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""
@@ -207,7 +207,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def replace_table_from_relation(
         self,
@@ -224,7 +224,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def default_database(self) -> str | None:
         """Return None; DuckDB-backed adapters default only schema."""
@@ -1058,7 +1058,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             },
         )
 
-    def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:
             return value
         if cursor_type == CursorKind.TIMESTAMP:
@@ -1091,32 +1091,32 @@ class DuckDbBackedAdapter(BaseAdapter):
         extensions: list[str] | tuple[str, ...] = config.get("extensions", ())
         extension_name: str
         for extension_name in extensions:
-            self.execute(connection, f"INSTALL '{extension_name}'")
-            self.execute(connection, f"LOAD '{extension_name}'")
+            self.execute(connection, sql=f"INSTALL '{extension_name}'")
+            self.execute(connection, sql=f"LOAD '{extension_name}'")
 
         settings: dict[str, object] = config.get("settings", {})
         setting_key: str
         setting_value: object
         for setting_key, setting_value in settings.items():
-            self.execute(connection, f"SET {setting_key} = '{setting_value}'")
+            self.execute(connection, sql=f"SET {setting_key} = '{setting_value}'")
 
         attach_entries: list[dict[str, object]] = config.get("attach", [])
         attach_entry: dict[str, object]
         for attach_entry in attach_entries:
-            self.execute(connection, self.duckdb_build_attach_sql(attach_entry))
+            self.execute(connection, sql=self.duckdb_build_attach_sql(attach_entry))
 
         return connection
 
-    def execute(self, connection: Any, sql: str) -> Any:
+    def execute(self, connection: Any, *, sql: str) -> Any:
         """Execute a SQL statement against a DuckDB connection."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.duckdb"), sql=sql)
         return connection.execute(sql)
 
-    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+    def query(self, connection: Any, *, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""
 
-        cursor: Any = self.execute(connection, sql)
+        cursor: Any = self.execute(connection, sql=sql)
         description: Any | None = getattr(cursor, "description", None)
         if description is None:
             return QueryResult()
@@ -1133,17 +1133,17 @@ class DuckDbBackedAdapter(BaseAdapter):
             truncated=len(fetched_rows) > limit,
         )
 
-    def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
+    def describe_relation(self, connection: Any, *, relation: str) -> tuple[ColumnInfo, ...]:
         """Return column metadata for a relation using DuckDB DESCRIBE."""
 
-        cursor: Any = self.execute(connection, f"DESCRIBE {relation}")
+        cursor: Any = self.execute(connection, sql=f"DESCRIBE {relation}")
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
-    def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
         """Return DuckDB query column names using DESCRIBE SELECT."""
 
         cursor: Any = self.execute(
-            connection, f"DESCRIBE SELECT * FROM ({sql}) AS __describe_source"
+            connection, sql=f"DESCRIBE SELECT * FROM ({sql}) AS __describe_source"
         )
         return tuple(str(row[0]) for row in cursor.fetchall())
 
@@ -1157,7 +1157,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         """Return the maximum cursor value currently present in a relation."""
 
         quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        cursor: Any = self.execute(connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}")
         row: Any | None = cursor.fetchone()
         if row is None:
             return None
@@ -1219,7 +1219,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             query += f" AND table_schema = {_duckdb_string_literal(schema)}"
         if database is not None:
             query += f" AND table_catalog = {_duckdb_string_literal(database)}"
-        result: Any = self.execute(connection, query).fetchone()
+        result: Any = self.execute(connection, sql=query).fetchone()
         return result is not None
 
     def list_relations(
@@ -1241,7 +1241,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             query += f" AND table_name IN ({quoted_names})"
         if database is not None:
             query += f" AND table_catalog = {_duckdb_string_literal(database)}"
-        rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=query).fetchall()
         return tuple(
             RelationInfo(
                 database=database,
@@ -1271,7 +1271,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             query += f" AND function_name IN ({quoted_names})"
         if database is not None:
             query += f" AND database_name = {_duckdb_string_literal(database)}"
-        rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=query).fetchall()
         return tuple(
             FunctionInfo(
                 database=database,
@@ -1299,7 +1299,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         if database is not None:
             query += f" AND table_catalog = {_duckdb_string_literal(database)}"
         query += " ORDER BY ordinal_position"
-        rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=query).fetchall()
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in rows)
 
     def get_all_columns(
@@ -1322,7 +1322,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         if database is not None:
             query += f" AND table_catalog = {_duckdb_string_literal(database)}"
         query += " ORDER BY table_name, ordinal_position"
-        rows: list[tuple[Any, ...]] = self.execute(connection, query).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=query).fetchall()
         result: dict[str, list[ColumnInfo]] = {}
         row: tuple[Any, ...]
         for row in rows:
@@ -1417,7 +1417,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             statement_recorder.record_many(statements)
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
             return
         del body_sql, runtime_version, packages
         if source_file_path is None or entry_point is None:
@@ -1526,7 +1526,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def create_view_as(
         self,
@@ -1540,7 +1540,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop(
         self,
@@ -1554,7 +1554,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         unqualified_destination: str = destination.rsplit(".", 1)[-1]
@@ -1590,7 +1590,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def swap(
         self,
@@ -1605,7 +1605,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def render_clone(
         self,
@@ -1656,8 +1656,8 @@ class DuckDbBackedAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
-    def relation_names_match(self, left: str, right: str) -> bool:
-        return self._relation_names_match_impl(left, right)
+    def relation_names_match(self, left: str, *, right: str) -> bool:
+        return self._relation_names_match_impl(left, right=right)
 
     def clone(
         self,
@@ -1678,7 +1678,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def durable_clone(
         self,
@@ -1695,7 +1695,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def load_seed(
         self,
@@ -1725,7 +1725,7 @@ class DuckDbBackedAdapter(BaseAdapter):
                 f"auto_detect=true{read_csv_options})"
             )
             statement_recorder.record(stmt)
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
             return
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
         type_map: str = ", ".join(f"'{col.name}': '{col.type}'" for col in columns)
@@ -1737,7 +1737,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def append(
         self,
@@ -1754,7 +1754,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def delete_insert(
         self,
@@ -1774,7 +1774,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def delete_insert_cursor(
         self,
@@ -1800,7 +1800,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def merge(
         self,
@@ -1812,14 +1812,14 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
+        source_columns: tuple[str, ...] = self.query_column_names(connection, sql=sql)
         statements: tuple[str, ...] = self.render_merge(
             destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def render_merge(
         self,
@@ -1889,7 +1889,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop_columns(
         self,
@@ -1905,7 +1905,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def alter_column_types(
         self,
@@ -1921,7 +1921,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def diff_schema(
         self,
@@ -1932,8 +1932,8 @@ class DuckDbBackedAdapter(BaseAdapter):
     ) -> SchemaDiffResult:
         """Compare column metadata between two DuckDB relations."""
 
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
-        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, right)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
+        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=right)
         left_map: dict[str, str] = {col.name: col.type for col in left_columns}
         right_map: dict[str, str] = {col.name: col.type for col in right_columns}
 
@@ -1983,7 +1983,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         """Compare row-level data between two DuckDB relations."""
 
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2061,7 +2061,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"{column_count_sql} "
             f"FROM __left FULL OUTER JOIN __right ON {join_condition}"
         )
-        row: tuple[Any, ...] = self.execute(connection, diff_sql).fetchone()
+        row: tuple[Any, ...] = self.execute(connection, sql=diff_sql).fetchone()
         column_results: tuple[RowDiffColumnResult, ...] = tuple(
             RowDiffColumnResult(
                 name=col,
@@ -2098,7 +2098,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         query: str = f"SELECT COUNT(*) FROM {relation}"
         if cursor_filter:
             query += f" WHERE {cursor_filter}"
-        result: Any = self.execute(connection, query).fetchone()
+        result: Any = self.execute(connection, sql=query).fetchone()
         return int(result[0])
 
     def sample_unequal_rows(
@@ -2116,7 +2116,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2176,7 +2176,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"AND ({unequal_condition}) "
             f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
         samples: list[RowDiffSampleRow] = []
         row: tuple[Any, ...]
         for row in rows:
@@ -2260,7 +2260,7 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"WHERE {side_condition} "
             f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
         return tuple(tuple((key, row[index]) for index, key in enumerate(keys)) for row in rows)
 
     def validate_row_diff_keys(
@@ -2277,7 +2277,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
-        null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
+        null_row: tuple[Any, ...] = self.execute(connection, sql=null_count_sql).fetchone()
         if int(null_row[0]) > 0:
             raise AdapterUserError(
                 f"row diff {relation_label} relation contains null unique_key values"
@@ -2290,7 +2290,9 @@ class DuckDbBackedAdapter(BaseAdapter):
             f"GROUP BY {key_list} HAVING COUNT(*) > 1"
             f") AS __duplicates"
         )
-        duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
+        duplicate_row: tuple[Any, ...] = self.execute(
+            connection, sql=duplicate_count_sql
+        ).fetchone()
         if int(duplicate_row[0]) > 0:
             raise AdapterUserError(
                 f"row diff {relation_label} relation contains duplicate unique_key values"

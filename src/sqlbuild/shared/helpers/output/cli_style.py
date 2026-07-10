@@ -109,7 +109,7 @@ class CliStyle:
     def dbt_execution_label(self, text: str) -> str:
         return self.theme.dbt_execution_label.apply(text, use_color=self.use_color)
 
-    def status(self, status: str, text: str | None = None) -> str:
+    def status(self, status: str, *, text: str | None = None) -> str:
         """Style status text according to the status word."""
 
         rendered: str = status if text is None else text

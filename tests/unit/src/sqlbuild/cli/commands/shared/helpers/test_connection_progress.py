@@ -105,7 +105,11 @@ def test_given_connection_progress_event_when_reporting_then_writes_expected_mes
     )
 
     reporter.on_connection_start(test_case.connection_count)
-    reporter.on_connection_complete(test_case.connection_count, test_case.elapsed_seconds)
-    reporter.on_connection_error(test_case.connection_count, test_case.elapsed_seconds)
+    reporter.on_connection_complete(
+        test_case.connection_count, elapsed_seconds=test_case.elapsed_seconds
+    )
+    reporter.on_connection_error(
+        test_case.connection_count, elapsed_seconds=test_case.elapsed_seconds
+    )
 
     assert stream.getvalue().splitlines() == list(test_case.expected_lines)

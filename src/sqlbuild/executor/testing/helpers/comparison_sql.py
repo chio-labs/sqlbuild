@@ -18,7 +18,7 @@ _BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"`[^`]+`(?:\s*\.\s*`
 
 
 def lift_step_ctes(
-    sql: str, lifted_ctes: OrderedDict[str, str], *, sql_analysis_enabled: bool = True
+    sql: str, *, lifted_ctes: OrderedDict[str, str], sql_analysis_enabled: bool = True
 ) -> tuple[str, OrderedDict[str, str]]:
     """Lift a step's top-level CTEs into the shared comparison query when possible."""
 
@@ -104,7 +104,7 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "comparison SQL top-level WITH parse failed; falling back",
+            message="comparison SQL top-level WITH parse failed; falling back",
             sqlbuild_error=str(error),
         )
         return None
@@ -180,7 +180,7 @@ def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "comparison SQL generation failed; falling back",
+            message="comparison SQL generation failed; falling back",
             sqlbuild_error=str(error),
         )
         return None

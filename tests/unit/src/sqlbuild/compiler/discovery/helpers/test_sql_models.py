@@ -323,7 +323,7 @@ def test_given_sql_model_header_variants_when_parsing_then_it_returns_expected_h
 ) -> None:
     header_values: dict[str, object]
     query: str
-    header_values, query = parse_model_sql(test_case.contents, Path("orders.sql"))
+    header_values, query = parse_model_sql(test_case.contents, file_path=Path("orders.sql"))
 
     assert header_values == test_case.expected_header_values
     assert query == test_case.expected_query
@@ -468,7 +468,7 @@ def test_given_invalid_sql_model_contents_when_parsing_then_it_raises_clear_erro
     test_case: ParseModelSqlErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        parse_model_sql(test_case.contents, Path("orders.sql"))
+        parse_model_sql(test_case.contents, file_path=Path("orders.sql"))
 
 
 @pytest.mark.parametrize(

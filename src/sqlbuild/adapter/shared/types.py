@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import StrEnum
+from typing import Protocol
 
 from sqlbuild.compiler.lineage.types import InferredNullability
 
 type FunctionNullabilityRule = Callable[[tuple[InferredNullability, ...]], InferredNullability]
+
+
+class AdapterExecute[ConnectionT, ResultT](Protocol):
+    def __call__(self, connection: ConnectionT, /, *, sql: str) -> ResultT: ...
 
 
 class BuiltinAdapter(StrEnum):

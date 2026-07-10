@@ -89,6 +89,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtLineageDirection,
 )
+from sqlbuild.shared.types import ConnectionElapsedCallback
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry
@@ -173,9 +174,9 @@ def emit_connection_progress(**kwargs: object) -> None:
     assert callable(start)
     assert callable(complete)
     on_start: Callable[[int], None] = cast(Callable[[int], None], start)
-    on_complete: Callable[[int, float], None] = cast(Callable[[int, float], None], complete)
+    on_complete: ConnectionElapsedCallback = cast(ConnectionElapsedCallback, complete)
     on_start(1)
-    on_complete(1, 0.0)
+    on_complete(1, elapsed_seconds=0.0)
 
 
 def build_dbt_ls_command_result(
@@ -1590,7 +1591,7 @@ def setup_dbt_model_planning_state(
     """Create optional relation and fingerprint state for dbt model planning tests."""
 
     if create_relation:
-        adapter.execute(connection, "CREATE TABLE main.orders AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE main.orders AS SELECT 1 AS id")
     if fingerprint_hash is not None:
         write_dbt_test_fingerprint(
             adapter=adapter,
@@ -1735,7 +1736,7 @@ def create_dbt_clone_relation(
 ) -> None:
     """Create a dbt clone table from literal rows in a real DuckDB schema."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     selects: list[str] = []
     row: tuple[object, ...]
     for row in rows:
@@ -1743,7 +1744,7 @@ def create_dbt_clone_relation(
         status: str = cast(str, row[1])
         selects.append(f"SELECT {order_id} AS order_id, '{status}' AS status")
     union_sql: str = " UNION ALL ".join(selects)
-    adapter.execute(connection, f"CREATE OR REPLACE TABLE {schema}.{name} AS {union_sql}")
+    adapter.execute(connection, sql=f"CREATE OR REPLACE TABLE {schema}.{name} AS {union_sql}")
 
 
 def create_dbt_clone_relation_when_requested(
@@ -1756,7 +1757,7 @@ def create_dbt_clone_relation_when_requested(
 ) -> None:
     """Create a dbt clone fixture relation when requested by a test case."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     if create:
         create_dbt_clone_relation(
             adapter=adapter,
@@ -1773,7 +1774,7 @@ def read_dbt_clone_rows(
 
     result: QueryResult = adapter.query(
         connection,
-        f"SELECT order_id, status FROM {schema}.{name} ORDER BY order_id",
+        sql=f"SELECT order_id, status FROM {schema}.{name} ORDER BY order_id",
         limit=None,
     )
     return result.rows
@@ -1805,11 +1806,11 @@ def create_dbt_diff_relation(
 ) -> None:
     """Create a dbt diff order table from literal rows in a real DuckDB schema."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     union_sql: str = " UNION ALL ".join(
         f"SELECT {order_id} AS order_id, {amount} AS amount_cents" for order_id, amount in rows
     )
-    adapter.execute(connection, f"CREATE TABLE {schema}.{name} AS {union_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {schema}.{name} AS {union_sql}")
 
 
 def build_dbt_diff_schema_only_options() -> DbtDiffOptions:
@@ -1861,10 +1862,10 @@ def create_dbt_diff_unique_key_relation(
 ) -> None:
     """Create a two-column-key dbt diff relation for unique key tests."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     adapter.execute(
         connection,
-        f"CREATE TABLE {schema}.dbt_orders AS "
+        sql=f"CREATE TABLE {schema}.dbt_orders AS "
         f"SELECT 1 AS order_id, 1 AS line_id, {amount_cents} AS amount_cents",
     )
 
@@ -1878,8 +1879,8 @@ def create_dbt_diff_relation_with_columns(
 ) -> None:
     """Create a dbt diff relation from an explicit column projection."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
-    adapter.execute(connection, f"CREATE TABLE {schema}.dbt_orders AS SELECT {column_sql}")
+    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection, sql=f"CREATE TABLE {schema}.dbt_orders AS SELECT {column_sql}")
 
 
 def create_dbt_diff_cursor_relation(
@@ -1892,13 +1893,13 @@ def create_dbt_diff_cursor_relation(
 ) -> None:
     """Create a dbt diff relation that carries a bounded cursor column."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     cursor_value: str = (
         "cast('2026-06-17 00:00:00' as timestamp)" if cursor_kind == "timestamp" else "10"
     )
     adapter.execute(
         connection,
-        f"CREATE TABLE {schema}.dbt_orders AS "
+        sql=f"CREATE TABLE {schema}.dbt_orders AS "
         f"SELECT 1 AS order_id, 100 AS amount_cents, {cursor_value} AS {cursor_column}",
     )
 
@@ -1909,7 +1910,7 @@ def create_dbt_diff_relation_when_requested(
     """Create a dbt diff relation only when requested, else just the schema."""
 
     if not create:
-        adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+        adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
         return
     create_dbt_diff_relation(
         adapter=adapter,

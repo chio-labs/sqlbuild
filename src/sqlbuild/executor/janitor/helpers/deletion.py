@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 def apply_janitor_deletions[T](
     candidates: tuple[T, ...],
+    *,
     delete: Callable[[T], object] | None,
 ) -> tuple[T, ...]:
     """Run the delete callback for each candidate, returning the deleted ones."""

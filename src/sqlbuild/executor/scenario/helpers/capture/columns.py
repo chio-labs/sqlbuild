@@ -124,7 +124,7 @@ def build_scenario_snapshot_columns(
 
     column_infos: tuple[ColumnInfo, ...] = adapter.describe_relation(
         connection,
-        relation_name,
+        relation=relation_name,
     )
     return tuple(
         ScenarioSnapshotColumn(
@@ -329,7 +329,7 @@ def _local_type_with_polyglot(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "scenario snapshot type polyglot conversion failed; falling back",
+            message="scenario snapshot type polyglot conversion failed; falling back",
             warehouse_type=warehouse_type,
             sql_analysis_dialect=sql_analysis_dialect,
             sqlbuild_error=str(error),

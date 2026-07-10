@@ -175,7 +175,7 @@ def execute_python_check_nodes(
                 check_function.name
             ].identity
             if identity_recorder is not None:
-                identity_recorder(identity, None)
+                identity_recorder(identity, _target_name=None)
             else:
                 try_write_python_node_identity_fingerprint(
                     identity=identity,

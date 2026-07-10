@@ -25,8 +25,8 @@ def create_state_operation_handle(operation_type: StateOperationType) -> StateOp
 
 def write_state_operation_started(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     handle: StateOperationHandle,
     virtual_environment_name: str,
@@ -36,7 +36,7 @@ def write_state_operation_started(
 
     record_state_operation(
         backend,
-        state_connection,
+        connection=state_connection,
         schema=schema,
         operation_id=handle.operation_id,
         operation_type=handle.operation_type,
@@ -49,8 +49,8 @@ def write_state_operation_started(
 
 def write_state_operation_result(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     handle: StateOperationHandle,
     status: StateOperationStatus,
@@ -60,7 +60,7 @@ def write_state_operation_result(
 
     record_state_operation(
         backend,
-        state_connection,
+        connection=state_connection,
         schema=schema,
         operation_id=handle.operation_id,
         operation_type=None,
@@ -73,8 +73,8 @@ def write_state_operation_result(
 
 def acquire_virtual_environment_lease_or_raise(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     virtual_environment_name: str,
     owner_prefix: str,
@@ -85,7 +85,7 @@ def acquire_virtual_environment_lease_or_raise(
 
     lease: StateLockLease | None = acquire_virtual_environment_lease(
         backend,
-        state_connection,
+        connection=state_connection,
         schema=schema,
         virtual_environment_name=virtual_environment_name,
         owner_id=f"{owner_prefix}:{uuid.uuid4()}",

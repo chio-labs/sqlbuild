@@ -173,7 +173,9 @@ def _find_single_safe_latest_owner(
         for other in model_keys:
             if other == candidate:
                 continue
-            reachable: frozenset[CompiledObjectKey] = expand_downstream(other, downstream_deps)
+            reachable: frozenset[CompiledObjectKey] = expand_downstream(
+                other, downstream=downstream_deps
+            )
             if candidate not in reachable:
                 all_reach = False
                 break
@@ -189,7 +191,7 @@ def _find_single_safe_latest_owner(
         other_candidate: CompiledObjectKey
         for other_candidate in ordered[1:]:
             reachable_from_deepest: frozenset[CompiledObjectKey] = expand_downstream(
-                deepest, downstream_deps
+                deepest, downstream=downstream_deps
             )
             if other_candidate in reachable_from_deepest:
                 deepest = other_candidate
@@ -198,7 +200,7 @@ def _find_single_safe_latest_owner(
         for check_key in model_key_set:
             if check_key == deepest:
                 continue
-            if deepest not in expand_downstream(check_key, downstream_deps):
+            if deepest not in expand_downstream(check_key, downstream=downstream_deps):
                 all_others_reach = False
                 break
         if all_others_reach:

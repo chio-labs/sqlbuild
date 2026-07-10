@@ -296,7 +296,7 @@ def test_given_bigquery_rows_when_querying_then_returns_normalized_result(
         location="europe-west2",
     )
 
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=test_case.limit)
+    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=test_case.limit)
 
     assert result.columns == test_case.expected_columns
     assert result.rows == test_case.expected_rows
@@ -569,7 +569,7 @@ def test_given_bigquery_job_failure_when_executing_then_includes_error_details(
     adapter: BigQueryAdapter = BigQueryAdapter()
 
     with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment) as error:
-        adapter.execute(connection, "SELECT missing_column")
+        adapter.execute(connection, sql="SELECT missing_column")
 
     assert error.value.code == test_case.expected_error_code
 
@@ -597,7 +597,9 @@ def test_given_cursor_bounds_when_rendering_then_bigquery_returns_expected_liter
 ) -> None:
     adapter: BigQueryAdapter = BigQueryAdapter()
 
-    result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
+    result: str = adapter.render_cursor_bound_literal(
+        test_case.value, cursor_type=test_case.cursor_type
+    )
 
     assert result == test_case.expected_literal
 

@@ -49,7 +49,7 @@ def discover_test_directories(python_files: Iterable[Path]) -> list[Path]:
     return sorted(directories)
 
 
-def module_name_for_file(repo_root: Path, file_path: Path) -> str:
+def module_name_for_file(repo_root: Path, *, file_path: Path) -> str:
     """Convert a file path into its importable module path."""
 
     relative_path: Path = file_path.resolve().relative_to(repo_root.resolve())

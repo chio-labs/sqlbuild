@@ -363,7 +363,7 @@ def test_given_view_selected_before_dependency_when_executing_clone_then_clones_
                 build_dbt_diff_ls_node(unique_id="model.analytics.base_orders", name="base_orders"),
             ),
             hard_copy=True,
-            on_item=lambda _index, _total, item: streamed_item_names.append(item.name),
+            on_item=lambda index, *, total, item: streamed_item_names.append(item.name),
         )
 
         assert tuple(item.name for item in result.item_results) == test_case.expected_item_names

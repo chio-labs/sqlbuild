@@ -80,6 +80,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
 )
 from sqlbuild.shared.models import ConnectionHooks, RelationLookup
+from sqlbuild.shared.types import ConnectionElapsedCallback
 
 
 def dbt_failure_detail(result: DbtCommandResult) -> str | None:
@@ -174,8 +175,8 @@ def build_sqlbuild_plan_output(
     )
     on_progress: Callable[[str], None] | None = hooks.on_progress
     on_connection_start: Callable[[int], None] | None = hooks.on_connection_start
-    on_connection_complete: Callable[[int, float], None] | None = hooks.on_connection_complete
-    on_connection_error: Callable[[int, float], None] | None = hooks.on_connection_error
+    on_connection_complete: ConnectionElapsedCallback | None = hooks.on_connection_complete
+    on_connection_error: ConnectionElapsedCallback | None = hooks.on_connection_error
     if not selected_model_names:
         return None
     cursor_overrides: CursorOverrides = _parse_cursor_overrides(sqlbuild_args)
@@ -201,10 +202,10 @@ def build_sqlbuild_plan_output(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - start)
+            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - start)
+        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
     try:
         try:
             plan_output: PlanOutput = build_execution_plan(
@@ -273,8 +274,8 @@ def build_dbt_model_plan_output(
     adapter: BaseAdapter = environment.adapter
     adapter_name: str = environment.adapter_name
     on_connection_start: Callable[[int], None] | None = hooks.on_connection_start
-    on_connection_complete: Callable[[int, float], None] | None = hooks.on_connection_complete
-    on_connection_error: Callable[[int, float], None] | None = hooks.on_connection_error
+    on_connection_complete: ConnectionElapsedCallback | None = hooks.on_connection_complete
+    on_connection_error: ConnectionElapsedCallback | None = hooks.on_connection_error
     on_progress: Callable[[str], None] | None = hooks.on_progress
     if not candidate_unique_ids:
         return None
@@ -291,15 +292,15 @@ def build_dbt_model_plan_output(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - start)
+            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - start)
+        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
     try:
         planning_start: float = time.monotonic()
         report_progress(
             on_progress,
-            "Inspecting dbt model state: checking warehouse relations and fingerprints...",
+            message="Inspecting dbt model state: checking warehouse relations and fingerprints...",
         )
         result: DbtModelPlanningResult = build_dbt_model_planning_result(
             manifest=manifest,
@@ -314,7 +315,7 @@ def build_dbt_model_plan_output(
         )
         report_progress(
             on_progress,
-            f"Inspected dbt model state. ({time.monotonic() - planning_start:.2f}s)",
+            message=f"Inspected dbt model state. ({time.monotonic() - planning_start:.2f}s)",
         )
         return result
     finally:
@@ -455,14 +456,14 @@ def _merged_source_freshness(
 
 def _parse_cursor_overrides(args: tuple[str, ...]) -> CursorOverrides:
     return CursorOverrides(
-        start_ts=_parse_value(args, "--start-cursor-ts"),
-        end_ts=_parse_value(args, "--end-cursor-ts"),
-        start_int=_parse_value(args, "--start-cursor-int"),
-        end_int=_parse_value(args, "--end-cursor-int"),
+        start_ts=_parse_value(args, flag="--start-cursor-ts"),
+        end_ts=_parse_value(args, flag="--end-cursor-ts"),
+        start_int=_parse_value(args, flag="--start-cursor-int"),
+        end_int=_parse_value(args, flag="--end-cursor-int"),
     )
 
 
-def _parse_value(args: tuple[str, ...], flag: str) -> str | None:
+def _parse_value(args: tuple[str, ...], *, flag: str) -> str | None:
     if flag not in args:
         return None
     index: int = args.index(flag)
@@ -473,6 +474,7 @@ def _parse_value(args: tuple[str, ...], flag: str) -> str | None:
 
 def _connection_progress_hooks(
     connection_progress: Any | None,
+    *,
     on_progress: Callable[[str], None] | None,
 ) -> ConnectionHooks:
     if connection_progress is None:
@@ -523,7 +525,7 @@ def attach_dbt_model_plan(
         selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh=full_refresh,
         force=force,
-        hooks=_connection_progress_hooks(connection_progress, on_progress),
+        hooks=_connection_progress_hooks(connection_progress, on_progress=on_progress),
     )
     if dbt_model_plan is None:
         return plan
@@ -593,7 +595,7 @@ def attach_sqlbuild_plan_output(
                 ),
             ),
         ),
-        hooks=_connection_progress_hooks(connection_progress, on_progress),
+        hooks=_connection_progress_hooks(connection_progress, on_progress=on_progress),
     )
     if sqlbuild_plan_output is None:
         return plan

@@ -63,7 +63,7 @@ def _normalize_with_polyglot(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "type normalization polyglot parse failed; falling back",
+            message="type normalization polyglot parse failed; falling back",
             type_sql=type_sql,
             dialect=str(dialect),
             sqlbuild_error=str(error),

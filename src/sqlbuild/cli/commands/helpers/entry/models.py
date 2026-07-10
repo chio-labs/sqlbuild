@@ -14,6 +14,15 @@ from sqlbuild.cli.commands.helpers.compile.models import CompileCommandRequest
 from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
 from sqlbuild.cli.commands.helpers.entry.namespace import CliNamespace  # noqa: F401
+from sqlbuild.cli.commands.helpers.entry.types import (
+    DagCommandHandler,
+    DebugCommandHandler,
+    LineageCommandHandler,
+    QueryCommandHandler,
+    ReconcileCommandHandler,
+    SkillsUpdateCommandHandler,
+    StateCommandHandler,
+)
 from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandRequest
 from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
@@ -27,7 +36,6 @@ from sqlbuild.cli.commands.helpers.scenario.models import (
 )
 from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)
@@ -43,7 +51,7 @@ class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[[CompileCommandRequest], int]
-    run_dag: Callable[[Path | None, bool, bool, dict[str, object]], int]
+    run_dag: DagCommandHandler
     run_plan: Callable[[PlanCommandRequest], int]
     run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
@@ -67,45 +75,16 @@ class CliEntrypointHandlers:
     run_load: Callable[[LoadCommandRequest], int]
     run_clone: Callable[[CloneCommandRequest], int]
     run_diff: Callable[[DiffCommandRequest], int]
-    run_reconcile: Callable[
-        [
-            Path | None,
-            bool,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            bool,
-            dict[str, object],
-        ],
-        int,
-    ]
+    run_reconcile: ReconcileCommandHandler
     run_promote: Callable[[PromoteCommandRequest], int]
     run_rollback: Callable[[RollbackCommandRequest], int]
-    run_query: Callable[[Path | None, str | None, str | None, str, int | None], int]
-    run_debug: Callable[[Path | None, bool, bool, str | None, bool], int]
-    run_lineage: Callable[
-        [
-            Path | None,
-            bool,
-            str | None,
-            str,
-            str,
-            str,
-            tuple[str, ...],
-            tuple[str, ...],
-            ColumnLineageMode,
-            dict[str, object],
-        ],
-        int,
-    ]
+    run_query: QueryCommandHandler
+    run_debug: DebugCommandHandler
+    run_lineage: LineageCommandHandler
     run_janitor: Callable[[JanitorCommandRequest], int]
-    run_state: Callable[
-        [Path | None, str, str | None, bool, bool, str | None, str | None, str | None, bool], int
-    ]
+    run_state: StateCommandHandler
     run_init: Callable[[Path | None], int]
     run_playground: Callable[[PlaygroundCommandRequest], int]
-    run_skills_update: Callable[[Path | None, bool, tuple[str, ...], bool], int]
+    run_skills_update: SkillsUpdateCommandHandler
     run_scenario: Callable[[ScenarioTestCommandRequest], int]
     run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]

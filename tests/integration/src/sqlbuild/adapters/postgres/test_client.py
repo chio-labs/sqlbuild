@@ -66,9 +66,9 @@ def test_given_table_when_describing_then_postgres_returns_columns_in_order(
     postgres_schema: str,
 ) -> None:
     target: str = qualified_name(schema=postgres_schema, name=test_case.table_name)
-    adapter.execute(connection, test_case.ddl.format(target=target))
+    adapter.execute(connection, sql=test_case.ddl.format(target=target))
 
-    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, target)
+    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, relation=target)
 
     assert columns == test_case.expected_columns
 
@@ -92,7 +92,7 @@ def test_given_sql_when_querying_then_postgres_returns_named_rows(
     adapter: PostgresAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=None)
+    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=None)
 
     assert result == test_case.expected_result
 
@@ -155,7 +155,7 @@ def test_given_reuse_origin_when_creating_hard_copy_then_postgres_copies_rows(
     recorder: StatementRecorder = build_statement_recorder()
     adapter.execute(
         connection,
-        f"CREATE TABLE {origin} AS SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
+        sql=f"CREATE TABLE {origin} AS SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
     )
 
     create_relation_from_reuse_origin(
@@ -202,9 +202,9 @@ def test_given_merge_sql_when_merging_then_postgres_upserts_without_constraint(
     target: str = qualified_name(schema=postgres_schema, name=test_case.table_name)
     adapter.execute(
         connection,
-        f"CREATE TABLE {target} (id INTEGER, name VARCHAR)",
+        sql=f"CREATE TABLE {target} (id INTEGER, name VARCHAR)",
     )
-    adapter.execute(connection, f"INSERT INTO {target} {test_case.initial_sql}")
+    adapter.execute(connection, sql=f"INSERT INTO {target} {test_case.initial_sql}")
 
     adapter.merge(
         connection,
@@ -374,8 +374,8 @@ def test_given_two_relations_when_diffing_rows_then_postgres_returns_diff_counts
 ) -> None:
     left: str = qualified_name(schema=postgres_schema, name="left_rel")
     right: str = qualified_name(schema=postgres_schema, name="right_rel")
-    adapter.execute(connection, f"CREATE TABLE {left} AS {test_case.left_sql}")
-    adapter.execute(connection, f"CREATE TABLE {right} AS {test_case.right_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {left} AS {test_case.left_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {right} AS {test_case.right_sql}")
 
     result: RowDiffResult = adapter.diff_rows(
         connection,
@@ -430,8 +430,8 @@ def test_given_invalid_diff_when_diffing_rows_then_postgres_raises_clear_error(
 ) -> None:
     left: str = qualified_name(schema=postgres_schema, name="left_rel")
     right: str = qualified_name(schema=postgres_schema, name="right_rel")
-    adapter.execute(connection, f"CREATE TABLE {left} AS {test_case.left_sql}")
-    adapter.execute(connection, f"CREATE TABLE {right} AS {test_case.right_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {left} AS {test_case.left_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {right} AS {test_case.right_sql}")
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         adapter.diff_rows(
@@ -471,8 +471,8 @@ def test_given_table_when_counting_rows_then_postgres_returns_expected_count(
     postgres_schema: str,
 ) -> None:
     target: str = qualified_name(schema=postgres_schema, name=test_case.table_name)
-    adapter.execute(connection, f"CREATE TABLE {target} (id INTEGER)")
-    adapter.execute(connection, f"INSERT INTO {target} VALUES {test_case.values_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {target} (id INTEGER)")
+    adapter.execute(connection, sql=f"INSERT INTO {target} VALUES {test_case.values_sql}")
 
     count: int = adapter.count_rows(
         connection,
@@ -525,8 +525,8 @@ def test_given_mismatched_rows_when_sampling_then_postgres_returns_changed_cells
 ) -> None:
     left: str = qualified_name(schema=postgres_schema, name="left_rel")
     right: str = qualified_name(schema=postgres_schema, name="right_rel")
-    adapter.execute(connection, f"CREATE TABLE {left} AS {test_case.left_sql}")
-    adapter.execute(connection, f"CREATE TABLE {right} AS {test_case.right_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {left} AS {test_case.left_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {right} AS {test_case.right_sql}")
 
     samples: tuple[RowDiffSampleRow, ...] = adapter.sample_unequal_rows(
         connection,
@@ -571,8 +571,8 @@ def test_given_side_only_rows_when_sampling_then_postgres_returns_key_values(
 ) -> None:
     left: str = qualified_name(schema=postgres_schema, name="left_rel")
     right: str = qualified_name(schema=postgres_schema, name="right_rel")
-    adapter.execute(connection, f"CREATE TABLE {left} AS {test_case.left_sql}")
-    adapter.execute(connection, f"CREATE TABLE {right} AS {test_case.right_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {left} AS {test_case.left_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {right} AS {test_case.right_sql}")
 
     side_only: tuple[tuple[tuple[str, object], ...], ...] = adapter.sample_side_only_rows(
         connection,
@@ -630,8 +630,8 @@ def test_given_two_tables_when_diffing_schema_then_postgres_detects_column_chang
 ) -> None:
     left: str = qualified_name(schema=postgres_schema, name="left_rel")
     right: str = qualified_name(schema=postgres_schema, name="right_rel")
-    adapter.execute(connection, test_case.left_ddl.format(target=left))
-    adapter.execute(connection, test_case.right_ddl.format(target=right))
+    adapter.execute(connection, sql=test_case.left_ddl.format(target=left))
+    adapter.execute(connection, sql=test_case.right_ddl.format(target=right))
 
     result: SchemaDiffResult = adapter.diff_schema(connection, left=left, right=right)
 

@@ -96,7 +96,7 @@ def test_given_real_dbt_manifest_and_sqlbuild_project_when_building_graph_then_e
         graph_key_stable_ids(
             expand_combined_downstream(
                 dbt_model_graph_key(test_case.expected_downstream_from),
-                graph.downstream_deps,
+                downstream=graph.downstream_deps,
             )
         )
         == test_case.expected_downstream_keys

@@ -60,10 +60,14 @@ def resolve_dbt_interop_sqlbuild_selection(
             key: DbtCombinedGraphKey
             if parsed.upstream:
                 for key in tuple(path_keys):
-                    expanded_keys.update(expand_combined_upstream(key, graph.upstream_deps))
+                    expanded_keys.update(
+                        expand_combined_upstream(key, upstream=graph.upstream_deps)
+                    )
             if parsed.downstream:
                 for key in tuple(path_keys):
-                    expanded_keys.update(expand_combined_downstream(key, graph.downstream_deps))
+                    expanded_keys.update(
+                        expand_combined_downstream(key, downstream=graph.downstream_deps)
+                    )
             _add_expanded_keys(
                 keys=frozenset(expanded_keys),
                 selected_sqlbuild=selected_sqlbuild,
@@ -83,10 +87,14 @@ def resolve_dbt_interop_sqlbuild_selection(
             key: DbtCombinedGraphKey
             if parsed.upstream:
                 for key in tuple(direct_keys):
-                    expanded_keys.update(expand_combined_upstream(key, graph.upstream_deps))
+                    expanded_keys.update(
+                        expand_combined_upstream(key, upstream=graph.upstream_deps)
+                    )
             if parsed.downstream:
                 for key in tuple(direct_keys):
-                    expanded_keys.update(expand_combined_downstream(key, graph.downstream_deps))
+                    expanded_keys.update(
+                        expand_combined_downstream(key, downstream=graph.downstream_deps)
+                    )
             _add_expanded_keys(
                 keys=frozenset(expanded_keys),
                 selected_sqlbuild=selected_sqlbuild,
@@ -101,7 +109,7 @@ def resolve_dbt_interop_sqlbuild_selection(
         anchor_result[term] = anchor_unique_ids
         for unique_id in anchor_unique_ids:
             downstream_keys: frozenset[DbtCombinedGraphKey] = expand_combined_downstream(
-                dbt_model_graph_key(unique_id), graph.downstream_deps
+                dbt_model_graph_key(unique_id), downstream=graph.downstream_deps
             )
             _add_expanded_keys(
                 keys=downstream_keys,

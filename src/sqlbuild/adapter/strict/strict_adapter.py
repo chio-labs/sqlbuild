@@ -98,7 +98,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
+    def describe_relation(self, connection: Any, *, relation: str) -> tuple[ColumnInfo, ...]:
         """Return relation column metadata."""
         ...
 
@@ -125,7 +125,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query."""
         ...
 
@@ -331,7 +331,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def relation_names_match(self, left: str, right: str) -> bool:
+    def relation_names_match(self, left: str, *, right: str) -> bool:
         """Return whether two relation name strings identify the same adapter relation."""
         ...
 
@@ -854,7 +854,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
         """Render one cursor bound literal for this adapter and cursor type."""
         ...
 

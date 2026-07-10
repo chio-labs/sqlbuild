@@ -99,7 +99,7 @@ def _normalize_postgres(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtP
     output: dict[str, object] = dict(resolved.output)
     connection: dict[str, object] = _copy_present(
         output,
-        (
+        keys=(
             "host",
             "port",
             "user",
@@ -256,7 +256,7 @@ def _normalize_sqlserver(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbt
     )
 
 
-def _copy_present(output: dict[str, object], keys: tuple[str, ...]) -> dict[str, object]:
+def _copy_present(output: dict[str, object], *, keys: tuple[str, ...]) -> dict[str, object]:
     return {key: output[key] for key in keys if key in output}
 
 

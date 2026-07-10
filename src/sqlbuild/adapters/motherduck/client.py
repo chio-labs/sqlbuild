@@ -153,19 +153,19 @@ class MotherDuckAdapter(DuckDbBackedAdapter):
         extensions: list[str] | tuple[str, ...] = duckdb_config.get("extensions", ())
         extension_name: str
         for extension_name in extensions:
-            self.execute(connection, f"INSTALL '{extension_name}'")
-            self.execute(connection, f"LOAD '{extension_name}'")
+            self.execute(connection, sql=f"INSTALL '{extension_name}'")
+            self.execute(connection, sql=f"LOAD '{extension_name}'")
 
         settings: dict[str, object] = duckdb_config.get("settings", {})
         setting_key: str
         setting_value: object
         for setting_key, setting_value in settings.items():
-            self.execute(connection, f"SET {setting_key} = '{setting_value}'")
+            self.execute(connection, sql=f"SET {setting_key} = '{setting_value}'")
 
         attach_entries: list[dict[str, object]] = duckdb_config.get("attach", [])
         attach_entry: dict[str, object]
         for attach_entry in attach_entries:
-            self.execute(connection, self.duckdb_build_attach_sql(attach_entry))
+            self.execute(connection, sql=self.duckdb_build_attach_sql(attach_entry))
 
         return connection
 

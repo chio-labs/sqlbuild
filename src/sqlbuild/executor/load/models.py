@@ -14,13 +14,14 @@ from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent, Statement
 from sqlbuild.adapter.shared.types import LoaderLogicalType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
+from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.shared.types import ConnectionElapsedCallback, ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -63,7 +64,7 @@ class LoaderRelationRef:
             return None
         sql: str = f"SELECT MAX({column}) FROM {self.destination}"
         self.statement_recorder.record(sql)
-        cursor: Any = self.adapter.execute(self.connection, sql)
+        cursor: Any = self.adapter.execute(self.connection, sql=sql)
         row: object | None = cursor.fetchone()
         if row is None:
             return None
@@ -119,11 +120,11 @@ class LoaderContext:
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(self.connection, sql=sql)
 
     def query(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
@@ -332,11 +333,11 @@ class LoadCallbacks:
     """Progress callbacks for one load pipeline run."""
 
     on_load_start: Callable[[SourceEntry], None] | None = None
-    on_load_progress: Callable[[SourceEntry, str], None] | None = None
+    on_load_progress: LoadProgressCallback | None = None
     on_load_complete: Callable[[LoadExecutionResult], None] | None = None
     on_connection_start: Callable[[int], None] | None = None
-    on_connection_complete: Callable[[int, float], None] | None = None
-    on_connection_error: Callable[[int, float], None] | None = None
+    on_connection_complete: ConnectionElapsedCallback | None = None
+    on_connection_error: ConnectionElapsedCallback | None = None
 
 
 @dataclass(frozen=True)

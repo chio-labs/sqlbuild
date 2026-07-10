@@ -22,27 +22,27 @@ def resolve_repo_root(paths: Iterable[Path]) -> Path:
     return root
 
 
-def iter_scoped_python_files(repo_root: Path, paths: Iterable[Path]) -> list[Path]:
+def iter_scoped_python_files(repo_root: Path, *, paths: Iterable[Path]) -> list[Path]:
     """Collect Python files within the structure-checker scope."""
 
     files: set[Path] = set()
     for path in paths:
         resolved: Path = path.resolve()
         if resolved.is_file() and resolved.suffix == ".py":
-            if is_scoped_python_file(repo_root, resolved):
+            if is_scoped_python_file(repo_root, file_path=resolved):
                 files.add(resolved)
             continue
 
         if resolved.is_dir():
             for file_path in resolved.rglob("*.py"):
                 resolved_file_path: Path = file_path.resolve()
-                if is_scoped_python_file(repo_root, resolved_file_path):
+                if is_scoped_python_file(repo_root, file_path=resolved_file_path):
                     files.add(resolved_file_path)
 
     return sorted(files)
 
 
-def is_scoped_python_file(repo_root: Path, file_path: Path) -> bool:
+def is_scoped_python_file(repo_root: Path, *, file_path: Path) -> bool:
     """Return whether the file is inside the checker's enforced scope."""
 
     try:
@@ -61,7 +61,7 @@ def is_scoped_python_file(repo_root: Path, file_path: Path) -> bool:
     )
 
 
-def module_name_for_file(repo_root: Path, file_path: Path) -> str:
+def module_name_for_file(repo_root: Path, *, file_path: Path) -> str:
     """Convert a file path into its importable module path."""
 
     relative_path: Path = file_path.resolve().relative_to(repo_root.resolve())

@@ -237,7 +237,7 @@ def infer_columns_with_sql_analysis(
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders=placeholders)
 
     polyglot_columns: tuple[InferredColumn, ...] | None | bool = _infer_columns_with_polyglot(
         cleaned_sql=cleaned_sql,
@@ -262,7 +262,7 @@ def analyze_columns_with_polyglot(
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders=placeholders)
     return _infer_columns_with_polyglot(
         cleaned_sql=cleaned_sql,
         dialect=profile.sql_analysis_dialect,
@@ -289,7 +289,7 @@ def analyze_columns_and_lineage_with_polyglot(
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders=placeholders)
     compact_analysis: (
         tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None
     ) = _analyze_columns_and_lineage_with_compact_polyglot(
@@ -316,7 +316,7 @@ def analyze_columns_and_lineage_with_polyglot(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "column and lineage analysis parse failed; falling back",
+            message="column and lineage analysis parse failed; falling back",
             sqlbuild_error=str(error),
         )
         return PolyglotAnalysisResult(analysis_succeeded=False)
@@ -358,7 +358,7 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "compact query analysis failed; falling back",
+            message="compact query analysis failed; falling back",
             sqlbuild_error=str(error),
         )
         return None
@@ -454,7 +454,7 @@ def _compact_analysis_schema(
             {
                 "name": table_name,
                 "columns": [
-                    _compact_analysis_schema_column(column_name, columns[column_name])
+                    _compact_analysis_schema_column(column_name, nullability=columns[column_name])
                     for column_name in sorted(columns)
                 ],
             }
@@ -466,6 +466,7 @@ def _compact_analysis_schema(
 
 def _compact_analysis_schema_column(
     column_name: str,
+    *,
     nullability: InferredNullability,
 ) -> dict[str, object]:
     column: dict[str, object] = {"name": column_name, "type": "UNKNOWN"}
@@ -627,7 +628,7 @@ def _infer_columns_with_polyglot(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "column inference parse failed; falling back",
+            message="column inference parse failed; falling back",
             sqlbuild_error=str(error),
         )
         return False
@@ -652,7 +653,7 @@ def _infer_columns_from_polyglot_ast(
         except Exception as error:
             log_debug_event(
                 _DEBUG_LOGGER,
-                "column inference select lookup failed; falling back",
+                message="column inference select lookup failed; falling back",
                 sqlbuild_error=str(error),
             )
             return None
@@ -707,7 +708,7 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
         except Exception as error:
             log_debug_event(
                 _DEBUG_LOGGER,
-                "column lineage select lookup failed; falling back",
+                message="column lineage select lookup failed; falling back",
                 sqlbuild_error=str(error),
             )
             return None, (), False
@@ -859,7 +860,7 @@ def _polyglot_reference_alias_map(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "column lineage table discovery failed; falling back",
+            message="column lineage table discovery failed; falling back",
             sqlbuild_error=str(error),
         )
         return alias_map
@@ -947,7 +948,7 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "column lineage expression payload extraction failed; falling back",
+            message="column lineage expression payload extraction failed; falling back",
             sqlbuild_error=str(error),
         )
         return ()
@@ -1012,7 +1013,7 @@ def _polyglot_has_aggregation(expression: Any) -> bool:
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "column lineage aggregation detection failed; falling back",
+            message="column lineage aggregation detection failed; falling back",
             sqlbuild_error=str(error),
         )
         return False
@@ -1028,7 +1029,7 @@ def _polyglot_cast_type(expression: Any) -> str | None:
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "column inference cast type extraction failed; falling back",
+            message="column inference cast type extraction failed; falling back",
             sqlbuild_error=str(error),
         )
         return None
@@ -1375,7 +1376,7 @@ def _polyglot_name_payload_value(payload: object) -> str:
     return ""
 
 
-def substitute_placeholder_defaults(query_sql: str, placeholders: dict[str, str]) -> str:
+def substitute_placeholder_defaults(query_sql: str, *, placeholders: dict[str, str]) -> str:
     """Replace @@@name tokens with their default values for SQL analysis parsing."""
 
     if not placeholders:

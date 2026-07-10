@@ -278,9 +278,9 @@ def _analyze_model_sql_in_parallel(
         return {
             _model_name(model_input): _analyze_model_sql(
                 model_input,
-                column_nullability_by_table,
-                inference_profile,
-                allow_compact_analysis,
+                column_nullability_by_table=column_nullability_by_table,
+                inference_profile=inference_profile,
+                allow_compact_analysis=allow_compact_analysis,
             )
             for model_input in model_inputs
         }
@@ -290,9 +290,9 @@ def _analyze_model_sql_in_parallel(
             executor.map(
                 lambda model_input: _analyze_model_sql(
                     model_input,
-                    column_nullability_by_table,
-                    inference_profile,
-                    allow_compact_analysis,
+                    column_nullability_by_table=column_nullability_by_table,
+                    inference_profile=inference_profile,
+                    allow_compact_analysis=allow_compact_analysis,
                 ),
                 model_inputs,
             )
@@ -305,6 +305,7 @@ def _analyze_model_sql_in_parallel(
 
 def _analyze_model_sql(
     model_input: CompileModelInput,
+    *,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
@@ -361,7 +362,7 @@ def _schema_column_nullability(
     columns: tuple[SchemaColumn, ...],
 ) -> dict[str, InferredNullability]:
     return {
-        column.name: _declared_column_nullability(column.nullable, column.audits)
+        column.name: _declared_column_nullability(column.nullable, audits=column.audits)
         for column in columns
     }
 
@@ -370,13 +371,14 @@ def _source_column_nullability(
     columns: tuple[SourceColumnEntry, ...],
 ) -> dict[str, InferredNullability]:
     return {
-        column.name: _declared_column_nullability(column.nullable, column.audits)
+        column.name: _declared_column_nullability(column.nullable, audits=column.audits)
         for column in columns
     }
 
 
 def _declared_column_nullability(
     nullable: bool | None,
+    *,
     audits: tuple[SchemaAuditInstance, ...],
 ) -> InferredNullability:
     if nullable is False:

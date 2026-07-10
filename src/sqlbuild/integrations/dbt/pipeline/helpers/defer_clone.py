@@ -106,7 +106,9 @@ def run_dbt_defer_clone_prephase(
     project: CompiledProject = context.project
     connection_config: dict[str, object] = context.connection_config
     if not unique_ids:
-        report_progress(on_progress, "defer-clone enabled but no clonable dbt boundary resolved.")
+        report_progress(
+            on_progress, message="defer-clone enabled but no clonable dbt boundary resolved."
+        )
         return None
     production_ref: DbtProductionRefConfig = discovered_inputs.project_config.dbt.production_ref
     if production_ref.git_ref is None or production_ref.generate_schema_name_override is None:
@@ -119,7 +121,7 @@ def run_dbt_defer_clone_prephase(
             ),
         )
     report_progress(
-        on_progress, f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
+        on_progress, message=f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
     )
     production_ref_start: float = time.monotonic()
     production_ref_compile: DbtProductionRefCompileResult = compile_production_ref_manifest(
@@ -133,7 +135,7 @@ def run_dbt_defer_clone_prephase(
     )
     report_progress(
         on_progress,
-        f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
+        message=f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
         f"({time.monotonic() - production_ref_start:.2f}s)",
     )
     selected_nodes: tuple[DbtLsNode, ...] = tuple(
@@ -388,7 +390,7 @@ def _write_defer_clone_dbt_fingerprints(
             ),
         )
     if warnings:
-        report_progress(on_progress, "; ".join(warnings))
+        report_progress(on_progress, message="; ".join(warnings))
 
 
 def _write_defer_clone_dbt_node_source_watermarks(
@@ -466,7 +468,7 @@ def _write_defer_clone_dbt_node_source_watermarks(
     )
     report_progress(
         on_progress,
-        f"Recorded dbt defer-clone node source watermarks ({len(records)}).",
+        message=f"Recorded dbt defer-clone node source watermarks ({len(records)}).",
     )
 
 

@@ -123,14 +123,14 @@ def format_dbt_interop_plan(
         )
     )
     lines.append("")
-    _format_dbt_section(lines, plan, display_options=resolved_display_options)
-    _format_anchor_section(lines, plan, display_options=resolved_display_options)
+    _format_dbt_section(lines, plan=plan, display_options=resolved_display_options)
+    _format_anchor_section(lines, plan=plan, display_options=resolved_display_options)
     lines.append("")
     _format_sqlbuild_section(
-        lines, plan, use_color=use_color, display_options=resolved_display_options
+        lines, plan=plan, use_color=use_color, display_options=resolved_display_options
     )
-    _format_path_translation_section(lines, plan)
-    _format_warning_section(lines, plan)
+    _format_path_translation_section(lines, plan=plan)
+    _format_warning_section(lines, plan=plan)
     result: str = "\n".join(lines)
     return result if use_color else _strip_ansi(result)
 
@@ -178,7 +178,7 @@ def format_dbt_interop_plan_json(plan: DbtInteropPlan) -> str:
 
 
 def _format_dbt_section(
-    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
 ) -> None:
     style: CliStyle = CliStyle(use_color=True)
     dbt_selected_count: int = len(plan.dbt_selected_unique_ids)
@@ -193,12 +193,12 @@ def _format_dbt_section(
             + ")"
         )
     )
-    _format_dbt_resource_summary(lines, plan)
+    _format_dbt_resource_summary(lines, plan=plan)
     if plan.dbt_skip_reason is not None:
         lines.append(style.muted(f"  skipped: {_dbt_skip_reason_label(plan.dbt_skip_reason)}"))
         if plan.dbt_model_plan is not None:
-            _format_dbt_model_plan(lines, plan, display_options=display_options)
-            _format_dbt_non_model_sections(lines, plan, display_options=display_options)
+            _format_dbt_model_plan(lines, plan=plan, display_options=display_options)
+            _format_dbt_non_model_sections(lines, plan=plan, display_options=display_options)
         return
     display_argv: str = _format_display_argv(
         plan.dbt_command_argv,
@@ -212,7 +212,7 @@ def _format_dbt_section(
             f"{style.command(_format_display_argv(argv, display_options=display_options))}"
         )
     if _is_verbose(display_options) or plan.dbt_model_plan is None:
-        _format_dbt_selected_nodes(lines, plan, display_options=display_options)
+        _format_dbt_selected_nodes(lines, plan=plan, display_options=display_options)
     if _is_verbose(display_options) and plan.selection.dbt_required_unique_ids:
         lines.append("")
         lines.append(style.dbt_label(f"  required: {len(plan.selection.dbt_required_unique_ids)}"))
@@ -234,12 +234,12 @@ def _format_dbt_section(
             indent="    ",
             options=display_options,
         )
-    _format_dbt_model_plan(lines, plan, display_options=display_options)
-    _format_dbt_non_model_sections(lines, plan, display_options=display_options)
+    _format_dbt_model_plan(lines, plan=plan, display_options=display_options)
+    _format_dbt_non_model_sections(lines, plan=plan, display_options=display_options)
 
 
 def _format_dbt_model_plan(
-    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
 ) -> None:
     if plan.dbt_model_plan is None:
         return
@@ -263,7 +263,7 @@ def _format_dbt_model_plan(
     if run_ids:
         _format_dbt_run_reason_sections(
             lines,
-            entries_by_action[DbtModelPlanAction.RUN],
+            run_entries=entries_by_action[DbtModelPlanAction.RUN],
             style=style,
             name_column_width=name_column_width,
             display_options=display_options,
@@ -276,7 +276,7 @@ def _format_dbt_model_plan(
         for entry in visible_current:
             _append_dbt_model_plan_entry(
                 lines,
-                entry,
+                entry=entry,
                 style=style,
                 name_column_width=name_column_width,
             )
@@ -295,7 +295,7 @@ def _format_dbt_model_plan(
         for entry in visible_blocked:
             _append_dbt_model_plan_entry(
                 lines,
-                entry,
+                entry=entry,
                 style=style,
                 name_column_width=name_column_width,
             )
@@ -322,8 +322,8 @@ def _format_dbt_model_plan(
 
 def _format_dbt_run_reason_sections(
     lines: list[str],
-    run_entries: tuple[DbtModelPlanEntry, ...],
     *,
+    run_entries: tuple[DbtModelPlanEntry, ...],
     style: CliStyle,
     name_column_width: int,
     display_options: DisplayOptions,
@@ -352,7 +352,7 @@ def _format_dbt_run_reason_sections(
         for entry in visible_entries_for_reason:
             _append_dbt_model_plan_entry(
                 lines,
-                entry,
+                entry=entry,
                 style=style,
                 name_column_width=name_column_width,
             )
@@ -365,7 +365,7 @@ def _format_dbt_run_reason_sections(
         )
 
 
-def _format_dbt_resource_summary(lines: list[str], plan: DbtInteropPlan) -> None:
+def _format_dbt_resource_summary(lines: list[str], *, plan: DbtInteropPlan) -> None:
     if plan.dbt_model_plan is None:
         return
     selected_resource_count: int = len(plan.dbt_selected_unique_ids)
@@ -440,14 +440,14 @@ def _format_count_breakdown(resource_counts: Counter[str]) -> str:
     for label in ordered_labels:
         count: int = resource_counts.get(label, 0)
         if count:
-            parts.append(f"{count} {_pluralize(label, count)}")
+            parts.append(f"{count} {_pluralize(label, count=count)}")
     for label, count in sorted(resource_counts.items()):
         if label not in ordered_labels and count:
-            parts.append(f"{count} {_pluralize(label, count)}")
+            parts.append(f"{count} {_pluralize(label, count=count)}")
     return ", ".join(parts)
 
 
-def _pluralize(label: str, count: int) -> str:
+def _pluralize(label: str, *, count: int) -> str:
     if count == 1:
         return label
     if label == "unit test":
@@ -456,7 +456,7 @@ def _pluralize(label: str, count: int) -> str:
 
 
 def _append_dbt_model_plan_entry(
-    lines: list[str], entry: DbtModelPlanEntry, *, style: CliStyle, name_column_width: int
+    lines: list[str], *, entry: DbtModelPlanEntry, style: CliStyle, name_column_width: int
 ) -> None:
     lines.append(
         "    "
@@ -467,10 +467,10 @@ def _append_dbt_model_plan_entry(
             name_column_width=name_column_width,
         )
     )
-    _append_dbt_query_diff(lines, entry, style=style)
+    _append_dbt_query_diff(lines, entry=entry, style=style)
 
 
-def _append_dbt_query_diff(lines: list[str], entry: DbtModelPlanEntry, *, style: CliStyle) -> None:
+def _append_dbt_query_diff(lines: list[str], *, entry: DbtModelPlanEntry, style: CliStyle) -> None:
     if entry.reason != DbtModelPlanReason.CHECKSUM_CHANGED:
         return
     if entry.previous_query_sql is None or entry.fingerprint_query_sql is None:
@@ -478,7 +478,12 @@ def _append_dbt_query_diff(lines: list[str], entry: DbtModelPlanEntry, *, style:
     if entry.previous_query_sql == entry.fingerprint_query_sql:
         return
     lines.append(style.label("      query diff:"))
-    lines.extend(format_query_diff(entry.previous_query_sql, entry.fingerprint_query_sql))
+    lines.extend(
+        format_query_diff(
+            entry.previous_query_sql,
+            current=entry.fingerprint_query_sql,
+        )
+    )
 
 
 def _dbt_model_plan_reason_label(reason: DbtModelPlanReason) -> str:
@@ -516,7 +521,7 @@ def _dbt_skip_reason_label(reason: DbtInteropSkipReason) -> str:
 
 
 def _format_dbt_non_model_sections(
-    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
 ) -> None:
     run_ids: frozenset[str] = frozenset(plan.dbt_non_model_run_unique_ids)
     pruned_seed_ids: frozenset[str] = frozenset(plan.dbt_pruned_seed_unique_ids)
@@ -688,7 +693,7 @@ def _format_dbt_model_plan_json(plan: DbtInteropPlan) -> dict[str, object] | Non
 
 
 def _format_dbt_selected_nodes(
-    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
 ) -> None:
     if not plan.dbt_selected_nodes:
         return
@@ -768,8 +773,8 @@ def _append_dbt_overflow_line(
 
 def _format_sqlbuild_section(
     lines: list[str],
-    plan: DbtInteropPlan,
     *,
+    plan: DbtInteropPlan,
     use_color: bool,
     display_options: DisplayOptions,
 ) -> None:
@@ -783,7 +788,7 @@ def _format_sqlbuild_section(
     for argv in plan.sqlbuild_command_argvs:
         lines.append(f"  {style.label('command')}: {style.command(' '.join(argv))}")
     if plan.sqlbuild_plan_output is None:
-        _format_sqlbuild_model_fallback(lines, plan, display_options=display_options)
+        _format_sqlbuild_model_fallback(lines, plan=plan, display_options=display_options)
         return
     sqlbuild_plan: str = format_plan(
         plan.sqlbuild_plan_output,
@@ -832,19 +837,19 @@ def _format_dbt_test_plan(
     )
     _format_dbt_test_section(
         lines,
-        plan,
+        plan=plan,
         dbt_model_names=dbt_model_names,
         dbt_test_node_count=dbt_test_node_count,
         display_options=display_options,
     )
     _format_sqlbuild_test_section(
         lines,
-        plan,
+        plan=plan,
         sqlbuild_test_count=sqlbuild_test_count,
         sqlbuild_audit_count=sqlbuild_audit_count,
         display_options=display_options,
     )
-    _format_warning_section(lines, plan)
+    _format_warning_section(lines, plan=plan)
     result: str = "\n".join(lines)
     return result if use_color else _strip_ansi(result)
 
@@ -854,11 +859,13 @@ def _format_test_plan_ready_counts(
 ) -> str:
     parts: list[str] = []
     if dbt_model_count:
-        parts.append(f"{dbt_model_count} dbt {_pluralize('model', dbt_model_count)}")
+        parts.append(f"{dbt_model_count} dbt {_pluralize('model', count=dbt_model_count)}")
     if sqlbuild_test_count:
-        parts.append(f"{sqlbuild_test_count} SQLBuild {_pluralize('test', sqlbuild_test_count)}")
+        parts.append(
+            f"{sqlbuild_test_count} SQLBuild {_pluralize('test', count=sqlbuild_test_count)}"
+        )
     if sqlbuild_audit_count:
-        parts.append(f"{sqlbuild_audit_count} {_pluralize('audit', sqlbuild_audit_count)}")
+        parts.append(f"{sqlbuild_audit_count} {_pluralize('audit', count=sqlbuild_audit_count)}")
     if not parts:
         return "nothing selected"
     return ", ".join(parts)
@@ -866,8 +873,8 @@ def _format_test_plan_ready_counts(
 
 def _format_dbt_test_section(
     lines: list[str],
-    plan: DbtInteropPlan,
     *,
+    plan: DbtInteropPlan,
     dbt_model_names: tuple[str, ...],
     dbt_test_node_count: int,
     display_options: DisplayOptions,
@@ -876,7 +883,7 @@ def _format_dbt_test_section(
     lines.append("")
     lines.append(
         style.dbt_section(
-            f"dbt ({len(dbt_model_names)} {_pluralize('model', len(dbt_model_names))})"
+            f"dbt ({len(dbt_model_names)} {_pluralize('model', count=len(dbt_model_names))})"
         )
     )
     if not dbt_model_names:
@@ -901,8 +908,8 @@ def _format_dbt_test_section(
 
 def _format_sqlbuild_test_section(
     lines: list[str],
-    plan: DbtInteropPlan,
     *,
+    plan: DbtInteropPlan,
     sqlbuild_test_count: int,
     sqlbuild_audit_count: int,
     display_options: DisplayOptions,
@@ -912,24 +919,25 @@ def _format_sqlbuild_test_section(
         lines.append("")
         lines.append(
             style.object_name(
-                f"SQLBuild tests ({sqlbuild_test_count} {_pluralize('test', sqlbuild_test_count)})"
+                f"SQLBuild tests "
+                f"({sqlbuild_test_count} {_pluralize('test', count=sqlbuild_test_count)})"
             )
         )
         _format_sqlbuild_test_groups(
             lines,
-            plan.sqlbuild_plan_output,
+            plan_output=plan.sqlbuild_plan_output,
             display_options=display_options,
         )
     if sqlbuild_audit_count:
-        audit_label: str = _pluralize("audit", sqlbuild_audit_count)
+        audit_label: str = _pluralize("audit", count=sqlbuild_audit_count)
         lines.append("")
         lines.append(style.object_name(f"SQLBuild audits ({sqlbuild_audit_count} {audit_label})"))
 
 
 def _format_sqlbuild_test_groups(
     lines: list[str],
-    plan_output: PlanOutput | None,
     *,
+    plan_output: PlanOutput | None,
     display_options: DisplayOptions,
 ) -> None:
     if plan_output is None:
@@ -978,7 +986,7 @@ def _dbt_test_nodes(plan: DbtInteropPlan) -> tuple[DbtLsNode, ...]:
 
 
 def _format_sqlbuild_model_fallback(
-    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
 ) -> None:
     style: CliStyle = CliStyle(use_color=True)
     name_width: int = resolve_name_column_width(plan.selection.sqlbuild_model_names)
@@ -1006,7 +1014,7 @@ def _format_sqlbuild_model_fallback(
 
 
 def _format_anchor_section(
-    lines: list[str], plan: DbtInteropPlan, *, display_options: DisplayOptions
+    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
 ) -> None:
     if not _is_verbose(display_options) or not plan.selection.dbt_anchor_terms:
         return
@@ -1034,7 +1042,7 @@ def _is_verbose(display_options: DisplayOptions) -> bool:
     return display_options.max_entries_per_section is None
 
 
-def _format_path_translation_section(lines: list[str], plan: DbtInteropPlan) -> None:
+def _format_path_translation_section(lines: list[str], *, plan: DbtInteropPlan) -> None:
     if not plan.selection.path_translations:
         return
     style: CliStyle = CliStyle(use_color=True)
@@ -1048,7 +1056,7 @@ def _format_path_translation_section(lines: list[str], plan: DbtInteropPlan) -> 
         lines.append(f"  {original} -> {translated}")
 
 
-def _format_warning_section(lines: list[str], plan: DbtInteropPlan) -> None:
+def _format_warning_section(lines: list[str], *, plan: DbtInteropPlan) -> None:
     if not plan.warnings:
         return
     style: CliStyle = CliStyle(use_color=True)

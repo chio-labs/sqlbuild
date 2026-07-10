@@ -43,7 +43,7 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.models import CursorWindow, SqlResourceRef
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.shared.types import NodeStartCallback
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -68,7 +68,7 @@ def prepare_standard_python_lifecycle(
     end_cursor_int: int | None = cursor_window.end_cursor_int
     use_color: bool = callbacks.use_color
     progress_stream: TextIO = callbacks.progress_stream
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = callbacks.on_node_start
+    on_node_start: NodeStartCallback | None = callbacks.on_node_start
     on_node_complete: Callable[[object], None] = callbacks.on_node_complete
     selected_task_asset_names: frozenset[str] = (
         task_asset_python_node_names(

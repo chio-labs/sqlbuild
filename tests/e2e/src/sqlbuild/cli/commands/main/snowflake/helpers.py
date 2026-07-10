@@ -243,7 +243,7 @@ def cleanup_snowflake_schema(*, schema_name: str) -> None:
     try:
         adapter.execute(
             connection,
-            f"DROP SCHEMA IF EXISTS {database_name}.{schema_name} CASCADE",
+            sql=f"DROP SCHEMA IF EXISTS {database_name}.{schema_name} CASCADE",
         )
     finally:
         adapter.close(connection)
@@ -357,7 +357,7 @@ def execute_snowflake_sql(*, schema_name: str, sql: str) -> None:
     config: dict[str, object] = build_snowflake_connection_config(schema=schema_name)
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, sql)
+        adapter.execute(connection, sql=sql)
     finally:
         adapter.close(connection)
 

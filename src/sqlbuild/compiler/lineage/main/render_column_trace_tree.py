@@ -27,7 +27,7 @@ def render_column_trace_tree[Column, Edge](
 
     lines: list[str] = render_column_trace_branch(
         target,
-        deps,
+        deps=deps,
         prefix="",
         seen={column_id(target)},
         column_id=column_id,

@@ -56,7 +56,7 @@ def validate_sql_syntax(
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders=placeholders)
 
     error_message: str | None = _validate_sql_with_polyglot(cleaned_sql, dialect=dialect)
     if error_message is None:
@@ -182,7 +182,7 @@ def _validate_sql_syntax_with_message(
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders)
+        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders=placeholders)
 
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:

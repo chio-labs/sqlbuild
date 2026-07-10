@@ -23,10 +23,12 @@ class DiagnosticsFileFormatter(logging.Formatter):
         )
         sql: str | None = _get_record_sql(record)
         if sql is None:
-            return _append_exception(record, f"{prefix} {record.getMessage()}")
+            return _append_exception(record, rendered=f"{prefix} {record.getMessage()}")
         return _append_exception(
             record,
-            f"{prefix} {record.getMessage()}\n{SQL_SEPARATOR}\n{sql.rstrip()}\n{SQL_SEPARATOR}",
+            rendered=(
+                f"{prefix} {record.getMessage()}\n{SQL_SEPARATOR}\n{sql.rstrip()}\n{SQL_SEPARATOR}"
+            ),
         )
 
 
@@ -41,14 +43,14 @@ class DiagnosticsConsoleFormatter(logging.Formatter):
         header: str = _format_console_header(record, use_color=self._use_color)
         sql: str | None = _get_record_sql(record)
         if sql is None:
-            return _append_exception(record, header)
+            return _append_exception(record, rendered=header)
         if _render_sql_inline(sql):
-            return _append_exception(record, f"{header}  {sql.strip()}")
+            return _append_exception(record, rendered=f"{header}  {sql.strip()}")
         style: CliStyle = CliStyle(use_color=self._use_color)
         separator: str = style.muted(SQL_SEPARATOR)
         return _append_exception(
             record,
-            f"{header}\n{separator}\n{sql.rstrip()}\n{separator}",
+            rendered=f"{header}\n{separator}\n{sql.rstrip()}\n{separator}",
         )
 
 
@@ -139,7 +141,7 @@ def _get_record_sql(record: logging.LogRecord) -> str | None:
     return None
 
 
-def _append_exception(record: logging.LogRecord, rendered: str) -> str:
+def _append_exception(record: logging.LogRecord, *, rendered: str) -> str:
     if record.exc_info is None:
         return rendered
     exception_text: str = logging.Formatter().formatException(record.exc_info)

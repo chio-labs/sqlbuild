@@ -59,6 +59,7 @@ class VirtualBuildPlanHook:
     def on_plan_ready(
         self,
         project: object,
+        *,
         plan_output: PlanOutput,
         python_plan_entries: tuple[PythonPlanEntry, ...],
     ) -> VirtualBuildExecutionHooks:

@@ -232,8 +232,8 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
     )
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
     try:
-        adapter.execute(connection, "CREATE TABLE main.base_orders AS SELECT 1 AS id")
-        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE main.base_orders AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id")
         for unique_id in test_case.expected_reasons_by_unique_id:
             write_dbt_test_fingerprint(
                 adapter=adapter,
@@ -325,9 +325,9 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
     )
     seed_name: str
     try:
-        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id")
         for seed_name in test_case.existing_seed_names:
-            adapter.execute(connection, f"CREATE TABLE main.{seed_name} AS SELECT 1 AS id")
+            adapter.execute(connection, sql=f"CREATE TABLE main.{seed_name} AS SELECT 1 AS id")
         for seed_name in test_case.seed_names:
             seed: DbtManifestSeed = manifest.seeds_by_unique_id[f"seed.analytics.{seed_name}"]
             assert seed.identity_hash is not None
@@ -1350,10 +1350,11 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
     try:
         adapter.execute(
             connection,
-            "CREATE TABLE main.raw_orders AS SELECT TIMESTAMP '2000-01-01 00:00:00' AS loaded_at",
+            sql="CREATE TABLE main.raw_orders AS "
+            "SELECT TIMESTAMP '2000-01-01 00:00:00' AS loaded_at",
         )
-        adapter.execute(connection, "CREATE TABLE main.stg_orders AS SELECT 1 AS id")
-        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE main.stg_orders AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id")
         write_dbt_test_fingerprint(
             adapter=adapter,
             connection=connection,
@@ -1569,10 +1570,11 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
         )
         adapter.execute(
             connection,
-            "CREATE TABLE main.raw_orders AS SELECT TIMESTAMP '2026-01-02 00:00:00' AS loaded_at",
+            sql="CREATE TABLE main.raw_orders AS "
+            "SELECT TIMESTAMP '2026-01-02 00:00:00' AS loaded_at",
         )
-        adapter.execute(connection, "CREATE TABLE main.stg_orders AS SELECT 1 AS id")
-        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE main.stg_orders AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id")
         write_dbt_test_fingerprint(
             adapter=adapter,
             connection=connection,

@@ -62,7 +62,7 @@ def resolve_model_sql(
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = context.source_warehouse_columns
     star_exclude_keyword: str = context.star_exclude_keyword
     query_sql: str = model.query_sql
-    cursor_type: str | None = get_config_str(model, "cursor_type")
+    cursor_type: str | None = get_config_str(model, key="cursor_type")
 
     cursor_bounds: CursorBounds | None = _compute_model_cursor_bounds(
         model=model,
@@ -181,8 +181,8 @@ def _compute_model_cursor_bounds(
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
 
-    materialized: str | None = get_config_str(model, "materialized")
-    cursor_column: str | None = get_config_str(model, "cursor")
+    materialized: str | None = get_config_str(model, key="materialized")
+    cursor_column: str | None = get_config_str(model, key="cursor")
 
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
@@ -204,9 +204,9 @@ def _compute_model_cursor_bounds(
     if cursor_snapshot is None:
         return None
 
-    lookback: str | None = get_config_str(model, "lookback")
+    lookback: str | None = get_config_str(model, key="lookback")
     cursor_start: str | None = get_config_cursor_start(model)
-    incremental_mode: str | None = get_config_str(model, "incremental_mode")
+    incremental_mode: str | None = get_config_str(model, key="incremental_mode")
     is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
 
     backfill_duration: str | None = None
@@ -215,7 +215,7 @@ def _compute_model_cursor_bounds(
 
     return compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
-        cursor_type=get_config_str(model, "cursor_type"),
+        cursor_type=get_config_str(model, key="cursor_type"),
         cursor_start=cursor_start,
         lookback=lookback,
         backfill_duration=backfill_duration,
@@ -228,7 +228,7 @@ def _compute_model_cursor_bounds(
 def _get_cursor_inputs(model: CompiledModel) -> dict[str, str]:
     """Resolve cursor column mapping per upstream ref."""
 
-    cursor_column: str | None = get_config_str(model, "cursor")
+    cursor_column: str | None = get_config_str(model, key="cursor")
     if cursor_column is None:
         return {}
 

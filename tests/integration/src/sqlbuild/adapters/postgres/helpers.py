@@ -27,13 +27,13 @@ def execute_statements(
     *, adapter: PostgresAdapter, connection: Any, statements: tuple[str, ...]
 ) -> None:
     for statement in statements:
-        adapter.execute(connection, statement)
+        adapter.execute(connection, sql=statement)
 
 
 def fetch_rows(
     *, adapter: PostgresAdapter, connection: Any, sql: str
 ) -> tuple[tuple[object, ...], ...]:
-    cursor: Any = adapter.execute(connection, sql)
+    cursor: Any = adapter.execute(connection, sql=sql)
     return tuple(tuple(row) for row in cursor.fetchall())
 
 

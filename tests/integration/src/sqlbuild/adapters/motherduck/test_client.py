@@ -32,7 +32,7 @@ def test_given_sql_when_querying_then_motherduck_returns_named_rows(
     adapter: MotherDuckAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=None)
+    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=None)
 
     assert result == test_case.expected_result
 

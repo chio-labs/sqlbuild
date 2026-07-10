@@ -212,7 +212,7 @@ class BuildProgressCallbacks:
             styled_continuation: str = self._style.muted(continuation)
             self._stream.write(f"{styled_continuation}\n")
 
-    def on_node_start(self, name: str, resource_kind: ExecutionResourceKind) -> None:
+    def on_node_start(self, name: str, *, resource_kind: ExecutionResourceKind) -> None:
         self._current_node_name = name
         self._current_node_type = resource_kind
         self._current_sub_message = ""
@@ -231,10 +231,10 @@ class BuildProgressCallbacks:
         display_type: str = materialization_type_display(self._current_node_type)
         status: str = self._style.status(_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
         self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
-        name_display: str = _truncate_name(self._current_node_name, self._name_width)
+        name_display: str = _truncate_name(self._current_node_name, width=self._name_width)
         if self._current_sub_message:
             name_display = _truncate_name(
-                f"{self._current_node_name}  {self._current_sub_message}", self._name_width
+                f"{self._current_node_name}  {self._current_sub_message}", width=self._name_width
             )
         nw: int = self._name_width
         line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
@@ -303,7 +303,7 @@ class BuildProgressCallbacks:
         if isinstance(node_result, SeedExecutionResult):
             status: str = self._style.status(_execution_status_display(node_result.status))
             duration: str = _format_duration(node_result.duration_ms)
-            seed_name: str = _truncate_name(node_result.seed_name, self._name_width)
+            seed_name: str = _truncate_name(node_result.seed_name, width=self._name_width)
             self._write_top_level_result_line(
                 ctr=ctr,
                 resource_type="seed",
@@ -323,7 +323,7 @@ class BuildProgressCallbacks:
         if isinstance(node_result, FunctionExecutionResult):
             status: str = self._style.status(_execution_status_display(node_result.status))
             duration: str = _format_duration(node_result.duration_ms)
-            function_name: str = _truncate_name(node_result.function_name, self._name_width)
+            function_name: str = _truncate_name(node_result.function_name, width=self._name_width)
             self._write_top_level_result_line(
                 ctr=ctr,
                 resource_type=node_result.function_kind,
@@ -343,7 +343,7 @@ class BuildProgressCallbacks:
         if isinstance(node_result, LoadExecutionResult):
             status = self._style.status(_execution_status_display(node_result.status))
             duration = _format_duration(node_result.duration_ms)
-            source_name: str = _truncate_name(node_result.source_name, self._name_width)
+            source_name: str = _truncate_name(node_result.source_name, width=self._name_width)
             detail: str = _load_result_detail(node_result)
             self._write_top_level_result_line(
                 ctr=ctr,
@@ -378,7 +378,7 @@ class BuildProgressCallbacks:
         name_display: str = model_result.model_name
         if annotation:
             name_display = f"{model_result.model_name}  ({annotation})"
-        name_display = _truncate_name(name_display, self._name_width)
+        name_display = _truncate_name(name_display, width=self._name_width)
 
         status: str = self._style.status(_execution_status_display(model_result.status))
         duration: str = _format_duration(model_result.duration_ms)
@@ -449,7 +449,7 @@ class BuildProgressCallbacks:
         entry: _AuditDisplayEntry
         for entry in display_audits:
             audit_status: str = self._style.status(_audit_outcome_display(entry.outcome))
-            audit_name: str = _truncate_name(entry.display_name, sub_nw)
+            audit_name: str = _truncate_name(entry.display_name, width=sub_nw)
             audit_detail: str = ""
             if entry.reused:
                 audit_detail = "  proof reused"
@@ -496,7 +496,7 @@ class BuildProgressCallbacks:
             if hook_result.phase != phase:
                 continue
             hook_status: str = self._style.status(_execution_status_display(hook_result.status))
-            hook_name: str = _truncate_name(hook_result.label, label_width)
+            hook_name: str = _truncate_name(hook_result.label, width=label_width)
             label: str = "pre_hook" if phase == HookPhase.PRE_HOOKS else "post_hook"
             detail: str = _hook_skip_detail(hook_result)
             self._stream.write(
@@ -1066,7 +1066,7 @@ def _format_display_sql(sql: str) -> str:
     return f"{stripped};"
 
 
-def _truncate_name(name: str, width: int) -> str:
+def _truncate_name(name: str, *, width: int) -> str:
     """Truncate a display name to fit within the given width."""
 
     if len(name) <= width:

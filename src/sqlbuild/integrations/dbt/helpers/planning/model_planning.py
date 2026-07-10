@@ -280,7 +280,7 @@ def _expand_candidate_unique_ids(
     unique_id: str
     for unique_id in candidate_unique_ids:
         upstream: frozenset[DbtCombinedGraphKey] = expand_combined_upstream(
-            dbt_model_graph_key(unique_id), graph.upstream_deps
+            dbt_model_graph_key(unique_id), upstream=graph.upstream_deps
         )
         key: DbtCombinedGraphKey
         for key in upstream:
@@ -532,7 +532,7 @@ def _downstream_sqlbuild_model_names(
     unique_id: str
     for unique_id in dbt_unique_ids:
         downstream: frozenset[DbtCombinedGraphKey] = expand_combined_downstream(
-            dbt_model_graph_key(unique_id), graph.downstream_deps
+            dbt_model_graph_key(unique_id), downstream=graph.downstream_deps
         )
         key: DbtCombinedGraphKey
         for key in downstream:

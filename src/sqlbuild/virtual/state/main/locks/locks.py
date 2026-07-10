@@ -12,8 +12,8 @@ from sqlbuild.virtual.state.models import StateLockLease
 
 def acquire_virtual_environment_lease(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     virtual_environment_name: str,
     owner_id: str,
@@ -24,7 +24,7 @@ def acquire_virtual_environment_lease(
 
     return acquire_virtual_environment_lock(
         backend,
-        connection,
+        connection=connection,
         schema=schema,
         virtual_environment_name=virtual_environment_name,
         owner_id=owner_id,

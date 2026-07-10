@@ -74,6 +74,7 @@ def run_dbt_command(
 
 def _run_dbt_plan(
     project_dir: Path | None,
+    *,
     args: tuple[str, ...],
     no_color: bool = False,
 ) -> int:

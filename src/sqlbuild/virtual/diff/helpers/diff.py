@@ -268,10 +268,10 @@ def execute_virtual_diff_between_relations(
         connection = adapter.connect(connection_config)
     except Exception:
         if hooks.on_connection_error is not None:
-            hooks.on_connection_error(1, time.perf_counter() - started_at)
+            hooks.on_connection_error(1, elapsed_seconds=time.perf_counter() - started_at)
         raise
     if hooks.on_connection_complete is not None:
-        hooks.on_connection_complete(1, time.perf_counter() - started_at)
+        hooks.on_connection_complete(1, elapsed_seconds=time.perf_counter() - started_at)
     try:
         return execute_diff(
             adapter=adapter,

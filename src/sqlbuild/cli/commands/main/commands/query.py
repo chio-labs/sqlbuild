@@ -20,6 +20,7 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 def run_query(
     project_dir: Path | None,
+    *,
     sql: str | None,
     selected_target: str | None = None,
     output_format: str = "long",
@@ -53,7 +54,7 @@ def run_query(
     )
     connection: object = adapter.connect(connection_config)
     try:
-        result: QueryResult = adapter.query(connection, query_sql, limit=limit)
+        result: QueryResult = adapter.query(connection, sql=query_sql, limit=limit)
     finally:
         adapter.close(connection)
 

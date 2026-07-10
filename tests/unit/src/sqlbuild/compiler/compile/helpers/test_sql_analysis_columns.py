@@ -810,6 +810,8 @@ def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast
 def test_given_sql_with_placeholders_when_substituting_then_returns_expected(
     test_case: SubstitutePlaceholderDefaultsTestCase,
 ) -> None:
-    result: str = substitute_placeholder_defaults(test_case.query_sql, test_case.placeholders)
+    result: str = substitute_placeholder_defaults(
+        test_case.query_sql, placeholders=test_case.placeholders
+    )
 
     assert result == test_case.expected_sql

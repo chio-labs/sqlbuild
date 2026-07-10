@@ -22,6 +22,7 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
+from sqlbuild.shared.types import ExecutionResourceKind, NodeStartCallback
 from tests.integration.src.sqlbuild.executor.build.concurrent._test_types import (
     ConcurrentBuildTestCase,
 )
@@ -95,10 +96,11 @@ def build_ordering_trace_callbacks(
     completed_at_start: list[tuple[str, frozenset[str]]],
     completed_names: set[str],
     lock: threading.Lock,
-) -> tuple[Any, Any]:
+) -> tuple[NodeStartCallback, Any]:
     """Build on_node_start/on_node_complete callbacks that record ordering traces."""
 
-    def on_node_start(name: str, _materialization_type: str) -> None:
+    def on_node_start(name: str, /, *, resource_kind: ExecutionResourceKind) -> None:
+        del resource_kind
         with lock:
             snapshot: frozenset[str] = frozenset(completed_names)
             completed_at_start.append((name, snapshot))

@@ -40,7 +40,7 @@ def build_sql_test_comparison_sql(
         actual_sql: str
         actual_sql, lifted_ctes = lift_step_ctes(
             step.resolved_sql,
-            lifted_ctes,
+            lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
         )
         comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
@@ -49,7 +49,7 @@ def build_sql_test_comparison_sql(
         expected_sql: str
         expected_sql, lifted_ctes = lift_step_ctes(
             step.expected_cte_sql,
-            lifted_ctes,
+            lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
         )
         comparison_ctes.append(f"{expected_cte} AS ({expected_sql})")
@@ -74,7 +74,7 @@ def build_sql_test_comparison_sql(
         assertion_sql: str
         assertion_sql, lifted_ctes = lift_step_ctes(
             assertion.resolved_sql,
-            lifted_ctes,
+            lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
         )
         comparison_ctes.append(f"{assertion_cte} AS ({assertion_sql})")

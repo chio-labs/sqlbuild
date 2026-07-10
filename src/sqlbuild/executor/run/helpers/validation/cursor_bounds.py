@@ -68,7 +68,7 @@ def resolve_runtime_cursor_bounds(
         + " UNION ALL ".join(upstream_parts)
         + f"){derived_alias}"
     )
-    cursor: Any = adapter.execute(connection, sql)
+    cursor: Any = adapter.execute(connection, sql=sql)
     row: Any = cursor.fetchone()
     if row is None or row[1] is None:
         return None
@@ -83,11 +83,12 @@ def resolve_runtime_cursor_bounds(
         if start_raw is None:
             return None
         start: str | None = _normalize_bound(
-            _floor_timestamp_bound(start_raw, effective_grain), is_end=False
+            _floor_timestamp_bound(start_raw, grain=effective_grain), is_end=False
         )
         end: str | None = _normalize_bound(
             _increment_timestamp_bound(
-                _floor_timestamp_bound(row[1], effective_grain), effective_grain
+                _floor_timestamp_bound(row[1], grain=effective_grain),
+                grain=effective_grain,
             ),
             is_end=False,
         )
@@ -154,14 +155,14 @@ def _query_target_max_raw(
     ):
         return None
     sql: str = f"SELECT MAX({cursor_column}) FROM {target_relation}"
-    cursor: Any = adapter.execute(connection, sql)
+    cursor: Any = adapter.execute(connection, sql=sql)
     row: Any = cursor.fetchone()
     if row is None or row[0] is None:
         return None
     return row[0]
 
 
-def _floor_timestamp_bound(value: object, grain: str) -> object:
+def _floor_timestamp_bound(value: object, *, grain: str) -> object:
     if not isinstance(value, datetime):
         return value
     if grain == CursorGrain.SECOND:
@@ -179,7 +180,7 @@ def _floor_timestamp_bound(value: object, grain: str) -> object:
     return value
 
 
-def _increment_timestamp_bound(value: object, grain: str) -> object:
+def _increment_timestamp_bound(value: object, *, grain: str) -> object:
     if not isinstance(value, datetime):
         return value
     if grain == CursorGrain.SECOND:

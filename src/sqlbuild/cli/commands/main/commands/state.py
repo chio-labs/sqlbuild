@@ -19,6 +19,7 @@ from sqlbuild.virtual.state.types import StateCommand
 
 def run_state(
     project_dir: Path | None,
+    *,
     state_command: str,
     backup_id: str | None = None,
     auto_approve: bool = False,

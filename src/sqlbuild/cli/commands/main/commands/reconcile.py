@@ -22,6 +22,7 @@ from sqlbuild.virtual.reconcile.main.reconcile import run_virtual_reconcile
 
 def run_reconcile(
     project_dir: Path | None,
+    *,
     no_color: bool,
     virtual_environment: str | None,
     reconcile_command: str | None,

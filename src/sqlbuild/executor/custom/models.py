@@ -47,7 +47,7 @@ class MaterializationContext:
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""
@@ -100,7 +100,7 @@ class PrepareVersionContext:
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""

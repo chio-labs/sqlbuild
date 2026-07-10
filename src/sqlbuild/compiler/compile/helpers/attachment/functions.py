@@ -256,7 +256,7 @@ def _build_python_function_input(
             f"Python function file {python_function_file.relative_path} must declare returns"
         )
     arguments: tuple[FunctionArgument, ...] = _parse_python_function_arguments(
-        python_function_file, effective_vars
+        python_function_file, effective_vars=effective_vars
     )
     returns: str = _expand_function_header_value(
         raw_value=raw_returns.strip(),
@@ -387,7 +387,7 @@ def _parse_function_arguments(
 
 
 def _parse_python_function_arguments(
-    function_file: DiscoveredPythonFunctionFile, effective_vars: dict[str, object]
+    function_file: DiscoveredPythonFunctionFile, *, effective_vars: dict[str, object]
 ) -> tuple[FunctionArgument, ...]:
     raw_arguments: object | None = function_file.header_values.get("arguments")
     if raw_arguments is None:

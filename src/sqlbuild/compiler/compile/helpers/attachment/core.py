@@ -782,12 +782,12 @@ def build_layered_model_values(
 
     values: dict[str, object] = project_defaults_to_mapping(defaults)
     if matched_path_default is not None:
-        values = _merged_with_tag_union(values, path_defaults[matched_path_default])
-    return _merged_with_tag_union(values, model_header_values)
+        values = _merged_with_tag_union(values, overlay=path_defaults[matched_path_default])
+    return _merged_with_tag_union(values, overlay=model_header_values)
 
 
 def _merged_with_tag_union(
-    base: dict[str, object], overlay: dict[str, object]
+    base: dict[str, object], *, overlay: dict[str, object]
 ) -> dict[str, object]:
     """Merge overlay into a copy of base, preserving special config merge semantics."""
 
@@ -810,18 +810,18 @@ def _merged_with_tag_union(
         result["row_diff_exclude_columns"] = tuple(
             _merge_string_sequence(
                 base_row_diff_exclude_columns,
-                overlay_row_diff_exclude_columns,
+                overlay=overlay_row_diff_exclude_columns,
             )
         )
     if overlay_row_diff_tolerances is not None and base_row_diff_tolerances is not None:
         result["row_diff_tolerances"] = _merge_row_diff_tolerances_mapping(
             base_row_diff_tolerances,
-            overlay_row_diff_tolerances,
+            overlay=overlay_row_diff_tolerances,
         )
     return result
 
 
-def _merge_string_sequence(base: object, overlay: object) -> list[str]:
+def _merge_string_sequence(base: object, *, overlay: object) -> list[str]:
     """Merge string sequence-like values while preserving first occurrence order."""
 
     merged: list[str] = list(_as_string_list(base))
@@ -832,7 +832,7 @@ def _merge_string_sequence(base: object, overlay: object) -> list[str]:
     return merged
 
 
-def _merge_row_diff_tolerances_mapping(base: object, overlay: object) -> object:
+def _merge_row_diff_tolerances_mapping(base: object, *, overlay: object) -> object:
     """Deep merge row diff tolerance mappings by section and rule key."""
 
     if not isinstance(base, dict) or not isinstance(overlay, dict):
@@ -1079,7 +1079,7 @@ def _merge_schema_tags(
         return config
     merged_values: dict[str, object] = _merged_with_tag_union(
         dict(config.values),
-        {"tags": list(schema_entry.tags)},
+        overlay={"tags": list(schema_entry.tags)},
     )
     return CompileModelConfig(
         values=merged_values,
@@ -1419,14 +1419,14 @@ def validate_declared_schema_models_are_attached(
                 )
 
 
-def _str_from_dict(values: dict[str, object], key: str) -> str | None:
+def _str_from_dict(values: dict[str, object], *, key: str) -> str | None:
     """Extract a string value from a dict."""
 
     raw: object | None = values.get(key)
     return raw if isinstance(raw, str) else None
 
 
-def _bool_from_dict(values: dict[str, object], key: str) -> bool:
+def _bool_from_dict(values: dict[str, object], *, key: str) -> bool:
     raw: object | None = values.get(key)
     if raw is None:
         return False

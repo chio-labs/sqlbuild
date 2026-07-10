@@ -64,7 +64,7 @@ def execute_sql_test(
         )
 
     try:
-        cursor: Any = adapter.execute(connection, comparison_sql)
+        cursor: Any = adapter.execute(connection, sql=comparison_sql)
         rows: list[Any] = cursor.fetchall()
     except Exception as error:
         error_message = (

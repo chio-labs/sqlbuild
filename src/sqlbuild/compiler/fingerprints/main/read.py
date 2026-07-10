@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.shared.types import AdapterExecute
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.helpers.sql import (
@@ -19,7 +20,7 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 def read_latest_fingerprints(
     *,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     table_exists: bool,
     database: str | None,
     schema: str,
@@ -44,7 +45,7 @@ def read_latest_fingerprints(
         schema=schema,
     )
     try:
-        result: Any = execute(connection, read_sql)
+        result: Any = execute(connection, sql=read_sql)
     except Exception as error:
         raise FingerprintInputError(
             f"Unable to read fingerprints from {qualified_name}. This can happen after "

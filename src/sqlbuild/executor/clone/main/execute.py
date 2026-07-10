@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
@@ -12,6 +11,7 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.helpers.operations import clone_relation, recreate_view
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.types import CloneItemCallback
 from sqlbuild.shared.models import RelationLookup
 
 
@@ -46,7 +46,7 @@ def execute_clone(
     origin_connection: Any,
     destination_connection: Any,
     hard_copy: bool,
-    on_item: Callable[[int, int, CloneItemResult], None] | None = None,
+    on_item: CloneItemCallback | None = None,
 ) -> CloneExecutionResult:
     origin_models_by_name: dict[str, ModelPlanEntry] = {
         entry.name: entry for entry in origin_model_entries
@@ -118,6 +118,6 @@ def execute_clone(
             )
         results.append(item_result)
         if on_item is not None:
-            on_item(index, total, item_result)
+            on_item(index, total=total, item=item_result)
 
     return CloneExecutionResult(item_results=tuple(results))

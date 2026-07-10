@@ -214,7 +214,7 @@ def _classify_type_with_polyglot(warehouse_type: str) -> CursorType | None:
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "cursor type classification parse failed; falling back",
+            message="cursor type classification parse failed; falling back",
             sqlbuild_warehouse_type=warehouse_type,
             sqlbuild_error=str(error),
         )

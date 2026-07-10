@@ -25,7 +25,7 @@ def resolve_replay_on_change(
     return _resolve_replay_value(replay_on_change)
 
 
-def pick_more_aggressive(a: BackfillResult, b: BackfillResult) -> BackfillResult:
+def pick_more_aggressive(a: BackfillResult, *, b: BackfillResult) -> BackfillResult:
     """Return the more aggressive of two backfill results."""
 
     if _ACTION_PRIORITY[a.action] >= _ACTION_PRIORITY[b.action]:

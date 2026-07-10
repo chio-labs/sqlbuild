@@ -177,7 +177,7 @@ def _query_relation_rows(
 ) -> tuple[dict[str, object], ...]:
     query_result: QueryResult = adapter.query(
         connection,
-        f"SELECT * FROM {_source_relation_name(adapter=adapter, relation_plan=relation_plan)}",
+        sql=f"SELECT * FROM {_source_relation_name(adapter=adapter, relation_plan=relation_plan)}",
         limit=None,
     )
     rows: list[dict[str, object]] = []

@@ -64,7 +64,7 @@ def execute_statements(
 
     statement: str
     for statement in statements:
-        adapter.execute(connection, statement)
+        adapter.execute(connection, sql=statement)
 
 
 def fetch_rows(
@@ -72,7 +72,7 @@ def fetch_rows(
 ) -> tuple[tuple[object, ...], ...]:
     """Fetch all rows for a query."""
 
-    cursor: Any = adapter.execute(connection, sql)
+    cursor: Any = adapter.execute(connection, sql=sql)
     try:
         return tuple(tuple(row) for row in cursor.fetchall())
     finally:
@@ -87,7 +87,7 @@ def create_schema_if_missing(*, schema: str) -> None:
     database_name: str = str(config["database"])
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {database_name}.{schema}")
+        adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {database_name}.{schema}")
     finally:
         adapter.close(connection)
 

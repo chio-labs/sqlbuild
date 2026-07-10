@@ -18,8 +18,8 @@ _CONTINUATION_MID: str = "│   "
 
 def render_dependency_branch[Node: Hashable](
     node: Node,
-    deps: dict[Node, list[Node]],
     *,
+    deps: dict[Node, list[Node]],
     prefix: str,
     seen: set[Node],
     format_node: Callable[[Node], str],
@@ -44,7 +44,7 @@ def render_dependency_branch[Node: Hashable](
         lines.extend(
             render_dependency_branch(
                 child,
-                deps,
+                deps=deps,
                 prefix=prefix + continuation,
                 seen=seen | {child},
                 format_node=format_node,
@@ -58,8 +58,8 @@ def render_dependency_branch[Node: Hashable](
 
 def render_column_trace_branch[Column, Edge](
     column: Column,
-    deps: dict[str, list[Edge]],
     *,
+    deps: dict[str, list[Edge]],
     prefix: str,
     seen: set[str],
     column_id: Callable[[Column], str],
@@ -90,7 +90,7 @@ def render_column_trace_branch[Column, Edge](
         lines.extend(
             render_column_trace_branch(
                 related,
-                deps,
+                deps=deps,
                 prefix=prefix + continuation,
                 seen=seen | {related_id},
                 column_id=column_id,

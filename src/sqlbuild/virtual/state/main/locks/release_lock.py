@@ -11,11 +11,11 @@ from sqlbuild.virtual.state.models import StateLockLease
 
 def release_state_lease(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     lease: StateLockLease,
 ) -> bool:
     """Release a state lock lease."""
 
-    return release_state_lock(backend, connection, schema=schema, lease=lease)
+    return release_state_lock(backend, connection=connection, schema=schema, lease=lease)

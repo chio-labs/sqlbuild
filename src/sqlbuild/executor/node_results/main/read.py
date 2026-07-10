@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.shared.types import AdapterExecute
 from sqlbuild.executor.node_results.constants import NODE_RESULTS_TABLE_NAME
 from sqlbuild.executor.node_results.helpers.serialization import decode_json_b64
 from sqlbuild.executor.node_results.helpers.sql import build_read_history_sql
@@ -15,7 +16,7 @@ from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResult
 def read_node_results(
     *,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     relation_exists: Callable[..., bool],
     database: str | None,
     schema: str,
@@ -39,7 +40,7 @@ def read_node_results(
         query=query,
         render_qualified_name=render_qualified_name,
     )
-    result: Any = execute(connection, read_sql)
+    result: Any = execute(connection, sql=read_sql)
     rows: list[tuple[Any, ...]] = result.fetchall()
     return tuple(_row_to_envelope(row) for row in rows[: query.limit])
 

@@ -83,7 +83,7 @@ def test_given_expression_rule_when_querying_then_duckdb_matches_nullability_exp
 
     result: QueryResult = adapter.query(
         connection,
-        f"SELECT {test_case.sql_expression} IS NULL AS is_null",
+        sql=f"SELECT {test_case.sql_expression} IS NULL AS is_null",
         limit=None,
     )
 
@@ -166,7 +166,7 @@ def test_given_sql_when_querying_then_returns_normalized_query_result(
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=test_case.limit)
+    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=test_case.limit)
 
     assert result == test_case.expected_result
 

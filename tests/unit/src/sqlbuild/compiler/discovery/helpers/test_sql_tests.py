@@ -76,7 +76,7 @@ def test_given_sql_test_file_variants_when_parsing_then_it_returns_expected_raw_
     test_case: ParseSqlTestFileTestCase,
 ) -> None:
     discovered_blocks: tuple[DiscoveredSqlTestBlock, ...] = parse_sql_test_file(
-        test_case.contents, Path("tests/unit/orders.sql")
+        test_case.contents, file_path=Path("tests/unit/orders.sql")
     )
 
     assert tuple(block.name for block in discovered_blocks) == test_case.expected_names
@@ -171,4 +171,4 @@ def test_given_invalid_sql_test_file_contents_when_parsing_then_it_raises_clear_
     test_case: ParseSqlTestFileErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        parse_sql_test_file(test_case.contents, Path("tests/unit/orders.sql"))
+        parse_sql_test_file(test_case.contents, file_path=Path("tests/unit/orders.sql"))

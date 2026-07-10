@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import sqlbuild.executor.build.types
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
@@ -295,8 +296,10 @@ def run_virtual_build(
         plan_output=plan.plan_output,
         selected_model_names=reads.selected_model_names,
     )
+    output: PlanOutput = plan.plan_output
+    entries: tuple[PythonPlanEntry, ...] = python_plan.plan_entries
     exec_hooks: VirtualBuildExecutionHooks = (
-        hooks.on_plan_ready(rewritten.project, plan.plan_output, python_plan.plan_entries)
+        hooks.on_plan_ready(rewritten.project, plan_output=output, python_plan_entries=entries)
         if hooks.on_plan_ready is not None
         else VirtualBuildExecutionHooks()
     )
@@ -627,10 +630,10 @@ def _plan_virtual_build(
             planning_connection: Any = adapter.connect(runtime.connection_config)
         except Exception:
             if hooks.on_connection_error is not None:
-                hooks.on_connection_error(1, time.monotonic() - connection_start)
+                hooks.on_connection_error(1, elapsed_seconds=time.monotonic() - connection_start)
             raise
         if hooks.on_connection_complete is not None:
-            hooks.on_connection_complete(1, time.monotonic() - connection_start)
+            hooks.on_connection_complete(1, elapsed_seconds=time.monotonic() - connection_start)
         try:
             warehouse_result: PlannerWarehouseSnapshotResult = build_warehouse_snapshot_phase(
                 project=project,
@@ -758,7 +761,7 @@ def _prepare_virtual_python_execution(
 
 
 def _build_python_identity_recorder(runtime: _VirtualBuildRuntime) -> PythonIdentityRecorder:
-    def record_python_identity(identity: Any, _target_name: str | None) -> None:
+    def record_python_identity(identity: Any, *, _target_name: str | None) -> None:
         state_connection: Any = runtime.backend.connect(runtime.config.connection)
         try:
             try_record_virtual_python_node_identity(
@@ -930,8 +933,8 @@ def _build_before_model_materialize(
     reads: _VirtualBuildStateReads,
     run_id: str,
     prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]],
-) -> Callable[[ModelPlanEntry, Any], None]:
-    def before_model_materialize(entry: ModelPlanEntry, connection: Any) -> None:
+) -> sqlbuild.executor.build.types.BeforeModelMaterializeCallback:
+    def before_model_materialize(entry: ModelPlanEntry, *, connection: Any) -> None:
         if entry.action not in INCREMENTAL_ACTIONS and entry.action != PlanAction.CUSTOM:
             return
         parent_relation: PhysicalRelationRecord | None = reads.bound_physical_relations.get(
@@ -1461,7 +1464,7 @@ def _persist_successful_virtual_build(
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
             create_finalized_virtual_environment_checkpoint(
                 runtime.backend,
-                state_connection,
+                connection=state_connection,
                 schema=runtime.config.schema,
                 virtual_environment_name=names.target_vde_name,
                 refs=refs,

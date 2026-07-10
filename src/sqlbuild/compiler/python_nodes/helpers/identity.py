@@ -240,7 +240,7 @@ def _is_first_party_source(*, source_path: Path, allowed_roots: tuple[Path, ...]
     resolved: Path = source_path.resolve()
     if any(part in _IGNORED_PATH_PARTS for part in resolved.parts):
         return False
-    return any(_is_relative_to(resolved, root) for root in allowed_roots)
+    return any(_is_relative_to(resolved, root=root) for root in allowed_roots)
 
 
 def _source_path(obj: object) -> Path | None:
@@ -292,12 +292,12 @@ def _display_path(*, source_path: Path | None, roots: Iterable[Path]) -> str:
         key=lambda item: len(item.parts),
         reverse=True,
     ):
-        if _is_relative_to(resolved, root):
+        if _is_relative_to(resolved, root=root):
             return resolved.relative_to(root).as_posix()
     return resolved.as_posix()
 
 
-def _is_relative_to(path: Path, root: Path) -> bool:
+def _is_relative_to(path: Path, *, root: Path) -> bool:
     try:
         path.relative_to(root.resolve())
     except ValueError:

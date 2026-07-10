@@ -20,8 +20,8 @@ from sqlbuild.virtual.state.models import (
 
 def create_finalized_virtual_environment_checkpoint(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     virtual_environment_name: str,
     refs: tuple[VirtualEnvironmentModelRefRecord, ...],

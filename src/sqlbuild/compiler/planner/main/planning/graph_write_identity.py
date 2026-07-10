@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 
 from sqlbuild.compiler.planner.helpers.identity.graph import (
     build_graph_write_identity_hashes as _build_graph_write_identity_hashes,
 )
 from sqlbuild.compiler.planner.models import GraphIdentityNode, GraphNodeKey
+from sqlbuild.compiler.planner.types import GraphIdentityComposer
 
 
 def build_graph_write_identity_hashes(
@@ -16,7 +17,7 @@ def build_graph_write_identity_hashes(
     execution_order: tuple[GraphNodeKey, ...],
     selected_keys: frozenset[GraphNodeKey],
     base_identity_hashes: Mapping[GraphNodeKey, str],
-    compose_identity: Callable[[str, tuple[tuple[GraphNodeKey, str], ...]], str],
+    compose_identity: GraphIdentityComposer,
 ) -> dict[GraphNodeKey, str]:
     """Build write identity hashes from caller-supplied available upstream hashes."""
 

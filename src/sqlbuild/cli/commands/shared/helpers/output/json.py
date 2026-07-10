@@ -379,7 +379,7 @@ def _python_source_diff(entry: PythonPlanEntry) -> list[str]:
     current: str | None = _python_definition_source_text(entry.current_definition_json)
     if previous is None or current is None or previous == current:
         return []
-    return _unified_diff(previous, current)
+    return _unified_diff(previous, current=current)
 
 
 def _python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
@@ -387,7 +387,7 @@ def _python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
     current: str | None = _python_dependency_source_text(entry.current_metadata_json)
     if previous is None or current is None or previous == current:
         return []
-    return _unified_diff(previous, current)
+    return _unified_diff(previous, current=current)
 
 
 def _python_definition_source_text(raw_json: str | None) -> str | None:
@@ -453,7 +453,7 @@ def _json_object(raw_json: str | None) -> dict[str, object] | None:
     return cast(dict[str, object], payload) if isinstance(payload, dict) else None
 
 
-def _unified_diff(previous: str, current: str) -> list[str]:
+def _unified_diff(previous: str, *, current: str) -> list[str]:
     return [
         line.rstrip("\n")
         for line in difflib.unified_diff(

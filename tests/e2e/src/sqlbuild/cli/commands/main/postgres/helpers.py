@@ -241,7 +241,7 @@ def ensure_postgres_schema_ready(*, schema_name: str, config: dict[str, object])
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+        adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
     finally:
         adapter.close(connection)
 
@@ -250,7 +250,7 @@ def cleanup_postgres_schema(*, schema_name: str, config: dict[str, object]) -> N
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+        adapter.execute(connection, sql=f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
     finally:
         adapter.close(connection)
 
@@ -260,11 +260,11 @@ def cleanup_postgres_state_schemas(*, schema_name: str, config: dict[str, object
     connection: Any = adapter.connect(config)
     try:
         adapter.execute(
-            connection, f"DROP SCHEMA IF EXISTS {quote_identifier(schema_name)} CASCADE"
+            connection, sql=f"DROP SCHEMA IF EXISTS {quote_identifier(schema_name)} CASCADE"
         )
         cursor: Any = adapter.execute(
             connection,
-            "SELECT schema_name FROM information_schema.schemata "
+            sql="SELECT schema_name FROM information_schema.schemata "
             f"WHERE schema_name LIKE '{schema_name}__backup_%'",
         )
         backup_schemas: tuple[str, ...] = tuple(str(row[0]) for row in cursor.fetchall())
@@ -272,7 +272,7 @@ def cleanup_postgres_state_schemas(*, schema_name: str, config: dict[str, object
         for backup_schema in backup_schemas:
             adapter.execute(
                 connection,
-                f"DROP SCHEMA IF EXISTS {quote_identifier(backup_schema)} CASCADE",
+                sql=f"DROP SCHEMA IF EXISTS {quote_identifier(backup_schema)} CASCADE",
             )
     finally:
         adapter.close(connection)
@@ -282,7 +282,7 @@ def fetch_postgres_rows(*, sql: str, config: dict[str, object]) -> tuple[tuple[o
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
     try:
-        cursor: Any = adapter.execute(connection, sql)
+        cursor: Any = adapter.execute(connection, sql=sql)
         return tuple(tuple(row) for row in cursor.fetchall())
     finally:
         adapter.close(connection)
@@ -292,7 +292,7 @@ def execute_postgres_sql(*, sql: str, config: dict[str, object]) -> None:
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, sql)
+        adapter.execute(connection, sql=sql)
     finally:
         adapter.close(connection)
 

@@ -41,7 +41,7 @@ def test_given_state_lock_service_when_acquiring_scoped_locks_then_uses_expected
 
     virtual_environment_lease: StateLockLease | None = acquire_virtual_environment_lock(
         backend,
-        connection,
+        connection=connection,
         schema=test_case.schema,
         virtual_environment_name="dev",
         owner_id=test_case.owner_id,
@@ -50,7 +50,7 @@ def test_given_state_lock_service_when_acquiring_scoped_locks_then_uses_expected
     )
     model_version_lease: StateLockLease | None = acquire_model_version_lock(
         backend,
-        connection,
+        connection=connection,
         schema=test_case.schema,
         model_name="fact_orders",
         version_hash="abc123",
@@ -60,7 +60,7 @@ def test_given_state_lock_service_when_acquiring_scoped_locks_then_uses_expected
     )
     state_migration_lease: StateLockLease | None = acquire_state_migration_lock(
         backend,
-        connection,
+        connection=connection,
         schema=test_case.schema,
         owner_id=test_case.owner_id,
         ttl=test_case.ttl,
@@ -81,7 +81,7 @@ def test_given_state_lock_service_when_acquiring_scoped_locks_then_uses_expected
     )
     assert release_state_lock(
         backend,
-        connection,
+        connection=connection,
         schema=test_case.schema,
         lease=virtual_environment_lease,
     )
@@ -114,7 +114,7 @@ def test_given_state_lock_service_when_backend_reports_conflict_then_returns_non
 
     lease: StateLockLease | None = acquire_virtual_environment_lock(
         backend,
-        connection,
+        connection=connection,
         schema=test_case.schema,
         virtual_environment_name="dev",
         owner_id=test_case.owner_id,

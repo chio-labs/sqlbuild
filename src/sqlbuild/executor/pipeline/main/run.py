@@ -113,7 +113,9 @@ def run_build_pipeline(
             worker_connections.append(adapter.connect(connection_config))
     except Exception:
         if inputs.callbacks.on_connection_error is not None:
-            inputs.callbacks.on_connection_error(effective_concurrency, time.monotonic() - start)
+            inputs.callbacks.on_connection_error(
+                effective_concurrency, elapsed_seconds=time.monotonic() - start
+            )
         conn: Any
         for _i, conn in enumerate(worker_connections):
             logger.debug("close worker connection index=%s", _i)
@@ -123,7 +125,9 @@ def run_build_pipeline(
             adapter.close(scheduler_connection)
         raise
     if inputs.callbacks.on_connection_complete is not None:
-        inputs.callbacks.on_connection_complete(effective_concurrency, time.monotonic() - start)
+        inputs.callbacks.on_connection_complete(
+            effective_concurrency, elapsed_seconds=time.monotonic() - start
+        )
     try:
         return execute_build_plan(
             plan=plan,

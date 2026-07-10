@@ -24,9 +24,9 @@ def render_playground_completion_text(
     doc: CliDocument = CliDocument(style)
     doc.header("SQLBuild playground created")
     doc.blank()
-    doc.field("Project", display_path)
-    doc.field("Adapter", "DuckDB")
-    doc.field("Example", _example_name(target.template))
+    doc.field("Project", value=display_path)
+    doc.field("Adapter", value="DuckDB")
+    doc.field("Example", value=_example_name(target.template))
     doc.blank()
     doc.title_section("Try")
     doc.commands(

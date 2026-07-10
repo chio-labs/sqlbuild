@@ -1,0 +1,7 @@
+roots = ["src/sqlbuild"]
+tests = ["tests"]
+tooling = ["scripts"]
+select = ["SF"]
+
+[thresholds]
+max_positional_args = 1

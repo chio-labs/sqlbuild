@@ -24,7 +24,7 @@ from scripts.testing.test_conventions.rules import (
 )
 
 
-def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violation]:
+def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Violation]:
     """Run test convention checks for the provided paths."""
 
     target_paths: list[Path] = (
@@ -44,7 +44,9 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
         parsed_modules[file_path] = parse_python_module(file_path)
 
     for test_directory in test_directories:
-        violations.extend(check_test_directory_path(actual_repo_root, test_directory))
+        violations.extend(
+            check_test_directory_path(actual_repo_root, test_directory=test_directory)
+        )
 
         test_types_path: Path = test_directory / "_test_types.py"
         if not test_types_path.exists():
@@ -67,27 +69,29 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
 
         test_types_info, test_types_violations = check_test_types_file(
             actual_repo_root,
-            test_types_path,
-            module,
+            file_path=test_types_path,
+            module=module,
         )
         local_test_types_by_directory[test_directory] = test_types_info
         violations.extend(test_types_violations)
 
     for file_path, module in parsed_modules.items():
-        if not _is_in_test_directory(file_path, test_directories):
+        if not _is_in_test_directory(file_path, test_directories=test_directories):
             continue
 
-        violations.extend(check_no_relative_imports(file_path, module))
+        violations.extend(check_no_relative_imports(file_path, module=module))
 
         if file_path.name == "__init__.py":
-            violations.extend(check_init_module(actual_repo_root, file_path, module))
+            violations.extend(
+                check_init_module(actual_repo_root, file_path=file_path, module=module)
+            )
             continue
 
         if file_path.name == "_test_types.py":
             continue
 
         if file_path.name == "scenario_models.py":
-            violations.extend(check_scenario_models_file(file_path, module))
+            violations.extend(check_scenario_models_file(file_path, module=module))
             continue
 
         if not file_path.name.endswith(".py") or not file_path.name.startswith("test_"):
@@ -101,12 +105,19 @@ def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violat
 
         context, context_violations = build_module_context(
             actual_repo_root,
-            file_path,
-            module,
-            local_test_types,
+            file_path=file_path,
+            module=module,
+            local_test_types=local_test_types,
         )
         violations.extend(context_violations)
-        violations.extend(check_test_file(file_path, module, local_test_types, context))
+        violations.extend(
+            check_test_file(
+                file_path,
+                module=module,
+                local_test_types=local_test_types,
+                context=context,
+            )
+        )
 
     return sorted(
         violations,
@@ -130,5 +141,5 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if violations else 0
 
 
-def _is_in_test_directory(file_path: Path, test_directories: list[Path]) -> bool:
+def _is_in_test_directory(file_path: Path, *, test_directories: list[Path]) -> bool:
     return any(parent == file_path.parent for parent in test_directories)

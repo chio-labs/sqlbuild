@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.shared.types import AdapterExecute
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,
@@ -128,7 +129,7 @@ def gather_warehouse_snapshot(
     project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     full_refresh: bool = False,
     on_progress: Callable[[str], None] | None = None,
@@ -371,7 +372,7 @@ def _gather_fingerprints(
     *,
     adapter: BaseAdapter,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     database: str | None,
     schemas: tuple[str, ...] | None,
     fingerprint_state_schemas: frozenset[str],
@@ -426,7 +427,7 @@ def _gather_cursor_snapshots(
     project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
     on_progress: Callable[[str], None] | None,
@@ -491,12 +492,12 @@ def _collect_cursor_models(
             if model_key not in selected_keys:
                 continue
 
-        cursor_column: str | None = _get_config_str(model, "cursor")
-        materialized: str | None = _get_config_str(model, "materialized")
+        cursor_column: str | None = _get_config_str(model, key="cursor")
+        materialized: str | None = _get_config_str(model, key="materialized")
         if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
             continue
 
-        cursor_inputs: dict[str, str] = _get_cursor_inputs(model, cursor_column)
+        cursor_inputs: dict[str, str] = _get_cursor_inputs(model, cursor_column=cursor_column)
 
         target_tag: str | None = None
         target_relation: str | None = None
@@ -588,7 +589,7 @@ def _execute_cursor_queries_batched(
     *,
     queries: list[_CursorQuery],
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     on_progress: Callable[[str], None] | None,
 ) -> dict[str, str]:
     """Execute cursor queries in UNION ALL batches and return tag -> value results."""
@@ -620,7 +621,7 @@ def _execute_cursor_batch(
     *,
     batch: list[_CursorQuery],
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
 ) -> dict[str, str]:
     """Execute one batch of cursor queries as a UNION ALL and return tag -> value."""
 
@@ -643,11 +644,11 @@ def _execute_cursor_batch(
         sql = " UNION ALL ".join(parts)
 
     try:
-        result: Any = execute(connection, sql)
+        result: Any = execute(connection, sql=sql)
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "cursor bounds batch query failed; treating batch as unavailable",
+            message="cursor bounds batch query failed; treating batch as unavailable",
             sqlbuild_batch_tags=", ".join(query.tag for query in batch),
             sqlbuild_error=str(error),
         )
@@ -695,7 +696,7 @@ def _assemble_cursor_snapshots(
     return snapshots
 
 
-def _get_cursor_inputs(model: CompiledModel, cursor_column: str) -> dict[str, str]:
+def _get_cursor_inputs(model: CompiledModel, *, cursor_column: str) -> dict[str, str]:
     """Resolve cursor column mapping per upstream ref."""
 
     raw: object | None = model.config.values.get("cursor_inputs")
@@ -734,7 +735,7 @@ def _resolve_upstream_qualified_name(
     return None
 
 
-def _get_config_str(model: CompiledModel, key: str) -> str | None:
+def _get_config_str(model: CompiledModel, *, key: str) -> str | None:
     """Extract a string config value from model config."""
 
     raw: object | None = model.config.values.get(key)

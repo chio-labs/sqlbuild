@@ -230,6 +230,7 @@ def _cycle_origin_notes(
 
 def expand_upstream(
     key: CompiledObjectKey,
+    *,
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     """Return all transitive upstream keys reachable from the given key."""
@@ -239,6 +240,7 @@ def expand_upstream(
 
 def expand_downstream(
     key: CompiledObjectKey,
+    *,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     """Return all transitive downstream keys reachable from the given key."""
@@ -248,6 +250,7 @@ def expand_downstream(
 
 def find_path_keys(
     start: CompiledObjectKey,
+    *,
     end: CompiledObjectKey,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:

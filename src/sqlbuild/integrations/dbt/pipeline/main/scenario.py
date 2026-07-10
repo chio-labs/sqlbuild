@@ -74,7 +74,7 @@ def build_dbt_scenario_project(
         no_sql_validation=no_sql_validation,
         external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
-    report_progress(on_progress, "Compiled SQLBuild project.")
+    report_progress(on_progress, message="Compiled SQLBuild project.")
     target_names: tuple[str, ...] = resolve_dbt_scenario_target_names(
         project=project,
         manifest=manifest,

@@ -153,11 +153,11 @@ class PostgresAdapter(BaseAdapter):
 
         return self.max_identifier_length
 
-    def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query without materializing full rows."""
 
         cursor: Any = self.execute(
-            connection, f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0"
+            connection, sql=f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0"
         )
         description: Any | None = getattr(cursor, "description", None)
         if description is None:
@@ -174,7 +174,7 @@ class PostgresAdapter(BaseAdapter):
         """Return the maximum cursor value currently present in a relation."""
 
         quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        cursor: Any = self.execute(connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}")
         row: Any | None = cursor.fetchone()
         if row is None:
             return None
@@ -211,13 +211,13 @@ class PostgresAdapter(BaseAdapter):
         )
         if database is not None:
             query += f" AND catalog_name = {_quote_sql_string(database)}"
-        cursor: Any = self.execute(connection, query)
+        cursor: Any = self.execute(connection, sql=query)
         return cursor.fetchone() is not None
 
-    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+    def query(self, connection: Any, *, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""
 
-        cursor: Any = self.execute(connection, sql)
+        cursor: Any = self.execute(connection, sql=sql)
         description: Any | None = getattr(cursor, "description", None)
         if description is None:
             return QueryResult()
@@ -372,7 +372,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
@@ -560,8 +560,8 @@ class PostgresAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
-    def relation_names_match(self, left: str, right: str) -> bool:
-        return self._relation_names_match_impl(left, right)
+    def relation_names_match(self, left: str, *, right: str) -> bool:
+        return self._relation_names_match_impl(left, right=right)
 
     def render_replace_table_from_relation(
         self, *, destination: str, origin: str
@@ -638,7 +638,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def create_view_as(
         self,
@@ -652,7 +652,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def create_function(
         self,
@@ -675,7 +675,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop(
         self,
@@ -689,7 +689,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop_view(
         self,
@@ -705,7 +705,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def rename(
         self,
@@ -734,7 +734,7 @@ class PostgresAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def clone(
         self,
@@ -755,7 +755,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def durable_clone(
         self,
@@ -772,7 +772,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def replace_table_from_relation(
         self,
@@ -789,7 +789,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def move_or_copy_relation(
         self,
@@ -837,7 +837,7 @@ class PostgresAdapter(BaseAdapter):
             statement_recorder.record_many(statements)
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
             return
         if not allow_copy_fallback:
             raise AdapterUserError("Postgres relation move/copy requires --allow-copy")
@@ -850,7 +850,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def append(
         self,
@@ -867,7 +867,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def delete_insert(
         self,
@@ -887,7 +887,7 @@ class PostgresAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def delete_insert_cursor(
         self,
@@ -913,7 +913,7 @@ class PostgresAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def count_rows(
         self,
@@ -947,7 +947,7 @@ class PostgresAdapter(BaseAdapter):
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
-        null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
+        null_row: tuple[Any, ...] = self.execute(connection, sql=null_count_sql).fetchone()
         if int(null_row[0]) > 0:
             raise AdapterUserError(
                 f"row diff {relation_label} relation contains null unique_key values"
@@ -960,7 +960,9 @@ class PostgresAdapter(BaseAdapter):
             f"GROUP BY {key_list} HAVING COUNT(*) > 1"
             f") AS __duplicates"
         )
-        duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
+        duplicate_row: tuple[Any, ...] = self.execute(
+            connection, sql=duplicate_count_sql
+        ).fetchone()
         if int(duplicate_row[0]) > 0:
             raise AdapterUserError(
                 f"row diff {relation_label} relation contains duplicate unique_key values"
@@ -1570,7 +1572,7 @@ class PostgresAdapter(BaseAdapter):
 
         return ExpressionInferenceProfile(sql_analysis_dialect=self.sql_analysis_dialect())
 
-    def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
         """Render one generic cursor bound literal from a normalized string value."""
 
         if cursor_type == CursorKind.INTEGER:
@@ -1759,7 +1761,7 @@ class PostgresAdapter(BaseAdapter):
         raw_connection: Any = psycopg.connect(**config, autocommit=True)
         return _PostgresConnection(raw_connection)
 
-    def execute(self, connection: _PostgresConnection, sql: str) -> Any:
+    def execute(self, connection: _PostgresConnection, *, sql: str) -> Any:
         log_sql(logger=logging.getLogger("sqlbuild.adapter.postgres"), sql=sql)
         return connection.execute(sql)
 
@@ -1772,7 +1774,7 @@ class PostgresAdapter(BaseAdapter):
     def default_database(self) -> str | None:
         return None
 
-    def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
+    def describe_relation(self, connection: Any, *, relation: str) -> tuple[ColumnInfo, ...]:
         parts: list[str] = relation.split(".")
         name: str = parts[-1]
         schema: str | None = parts[-2] if len(parts) >= 2 else None
@@ -1817,7 +1819,7 @@ class PostgresAdapter(BaseAdapter):
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
         create_sql: str = f"CREATE TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
-        self.execute(connection, create_sql)
+        self.execute(connection, sql=create_sql)
 
         column_names: tuple[str, ...] = tuple(col.name for col in columns)
         placeholders: str = ", ".join(["%s"] * len(column_names))
@@ -1870,7 +1872,7 @@ class PostgresAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
+        source_columns: tuple[str, ...] = self.query_column_names(connection, sql=sql)
         non_key_columns: tuple[str, ...] = tuple(col for col in source_columns if col not in keys)
         col_list: str = ", ".join(self.render_identifier(column) for column in source_columns)
         key_match_sql: str = " AND ".join(
@@ -1888,14 +1890,14 @@ class PostgresAdapter(BaseAdapter):
                 f"FROM {source_select_sql} WHERE {key_match_sql}"
             )
             statement_recorder.record(update_sql)
-            self.execute(connection, update_sql)
+            self.execute(connection, sql=update_sql)
         insert_sql: str = (
             f"INSERT INTO {destination} ({col_list}) "
             f"SELECT {col_list} FROM {source_select_sql} "
             f"WHERE NOT EXISTS (SELECT 1 FROM {destination} AS __target WHERE {key_match_sql})"
         )
         statement_recorder.record(insert_sql)
-        self.execute(connection, insert_sql)
+        self.execute(connection, sql=insert_sql)
 
     def add_columns(
         self,
@@ -1910,7 +1912,7 @@ class PostgresAdapter(BaseAdapter):
         )
         statement_recorder.record_many(statements)
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop_columns(
         self,
@@ -1925,7 +1927,7 @@ class PostgresAdapter(BaseAdapter):
         )
         statement_recorder.record_many(statements)
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def alter_column_types(
         self,
@@ -1940,7 +1942,7 @@ class PostgresAdapter(BaseAdapter):
         )
         statement_recorder.record_many(statements)
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def diff_schema(
         self,
@@ -1949,8 +1951,8 @@ class PostgresAdapter(BaseAdapter):
         left: str,
         right: str,
     ) -> SchemaDiffResult:
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
-        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, right)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
+        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=right)
         left_map: dict[str, str] = {col.name: col.type for col in left_columns}
         right_map: dict[str, str] = {col.name: col.type for col in right_columns}
         added: list[ColumnInfo] = []
@@ -1991,7 +1993,7 @@ class PostgresAdapter(BaseAdapter):
         end_cursor: Any | None = None,
     ) -> RowDiffResult:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2058,7 +2060,7 @@ class PostgresAdapter(BaseAdapter):
             f"COUNT(CASE WHEN __left.{keys[0]} IS NULL THEN 1 END) AS right_only"
             f"{column_count_sql} FROM __left FULL OUTER JOIN __right ON {join_condition}"
         )
-        row: tuple[Any, ...] = self.execute(connection, diff_sql).fetchone()
+        row: tuple[Any, ...] = self.execute(connection, sql=diff_sql).fetchone()
         column_results: tuple[RowDiffColumnResult, ...] = tuple(
             RowDiffColumnResult(
                 name=col,
@@ -2093,7 +2095,7 @@ class PostgresAdapter(BaseAdapter):
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2147,7 +2149,7 @@ class PostgresAdapter(BaseAdapter):
             f"AND ({unequal_condition}) "
             f"ORDER BY {', '.join(f'__key_{k}' for k in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
         samples: list[RowDiffSampleRow] = []
         for row in rows:
             key_values: tuple[tuple[str, object], ...] = tuple(
@@ -2214,7 +2216,7 @@ class PostgresAdapter(BaseAdapter):
             f"WHERE {side_condition} "
             f"ORDER BY {', '.join(f'__key_{k}' for k in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
         return tuple(tuple((k, row[i]) for i, k in enumerate(keys)) for row in rows)
 
     def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
