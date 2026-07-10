@@ -20,7 +20,7 @@ def validate_and_evolve_existing_target(
     staging_columns: tuple[ColumnInfo, ...],
     statement_recorder: StatementRecorder,
 ) -> None:
-    target_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, target)
+    target_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, relation=target)
     target_by_name: dict[str, ColumnInfo] = {
         column.name.lower(): column for column in target_columns
     }

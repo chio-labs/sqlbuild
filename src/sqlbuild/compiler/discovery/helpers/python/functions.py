@@ -8,7 +8,7 @@ from pathlib import Path
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 
 
-def parse_python_function(contents: str, file_path: Path) -> tuple[dict[str, object], str, str]:
+def parse_python_function(contents: str, *, file_path: Path) -> tuple[dict[str, object], str, str]:
     """Parse one @udf-decorated Python function without importing project code."""
 
     try:
@@ -66,7 +66,7 @@ def parse_python_function(contents: str, file_path: Path) -> tuple[dict[str, obj
         raise ModelSqlParseError(
             f"Python function '{file_path}' @udf(...) entry_point must be a non-empty string"
         )
-    return values, entry_point.strip(), _build_warehouse_python_body(module, function_node)
+    return values, entry_point.strip(), _build_warehouse_python_body(module, udf_node=function_node)
 
 
 def _as_udf_call(decorator: ast.expr) -> ast.Call | None:
@@ -81,7 +81,7 @@ def _as_udf_call(decorator: ast.expr) -> ast.Call | None:
 
 
 def _build_warehouse_python_body(
-    module: ast.Module, udf_node: ast.FunctionDef | ast.AsyncFunctionDef
+    module: ast.Module, *, udf_node: ast.FunctionDef | ast.AsyncFunctionDef
 ) -> str:
     body: list[ast.stmt] = []
     node: ast.stmt

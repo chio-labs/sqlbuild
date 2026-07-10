@@ -102,10 +102,10 @@ def run_compile_pipeline(
         connection: Any = adapter.connect(effective_config)
     except Exception:
         if resolved_hooks.on_connection_error is not None:
-            resolved_hooks.on_connection_error(1, time.monotonic() - start)
+            resolved_hooks.on_connection_error(1, elapsed_seconds=time.monotonic() - start)
         raise
     if resolved_hooks.on_connection_complete is not None:
-        resolved_hooks.on_connection_complete(1, time.monotonic() - start)
+        resolved_hooks.on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
     try:
         return _build_result(
             discovered_inputs=discovered_inputs,

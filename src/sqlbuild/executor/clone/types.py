@@ -3,6 +3,20 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from sqlbuild.executor.clone.models import CloneItemResult
+
+
+class CloneItemCallback(Protocol):
+    def __call__(self, index: int, *, total: int, item: CloneItemResult) -> None: ...
+
+
+class CloneStartCallback(Protocol):
+    def __call__(
+        self, origin_target_name: str, *, destination_target_name: str, total: int
+    ) -> None: ...
 
 
 class CloneStatus(StrEnum):

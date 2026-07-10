@@ -61,7 +61,7 @@ def cleanup_motherduck_schema(*, schema_name: str) -> None:
     config: dict[str, object] = build_motherduck_connection_config()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+        adapter.execute(connection, sql=f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
     finally:
         adapter.close(connection)
 

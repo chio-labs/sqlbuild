@@ -20,7 +20,7 @@ from sqlbuild.compiler.discovery.helpers.sql.constants import (
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock
 
 
-def parse_sql_test_file(contents: str, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:
+def parse_sql_test_file(contents: str, *, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:
     """Parse one SQL-native test file into one or more raw TEST(...) blocks."""
 
     raw_test_blocks: tuple[str, ...] = _split_sql_test_blocks(

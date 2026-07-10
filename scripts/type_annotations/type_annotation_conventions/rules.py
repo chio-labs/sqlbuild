@@ -14,7 +14,7 @@ def parse_python_module(file_path: Path) -> ast.Module:
     return ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
 
 
-def check_module(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_module(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Validate type annotation conventions for a parsed module."""
 
     visitor = _TypeAnnotationVisitor(file_path)

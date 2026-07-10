@@ -98,7 +98,9 @@ def test_given_cursor_bounds_when_rendering_then_duckdb_returns_expected_literal
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
 
-    result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
+    result: str = adapter.render_cursor_bound_literal(
+        test_case.value, cursor_type=test_case.cursor_type
+    )
 
     assert result == test_case.expected_literal
 
@@ -120,9 +122,9 @@ def test_given_duckdb_relation_when_getting_max_cursor_then_returns_relation_max
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: object = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, 'CREATE TABLE events ("event""time" INTEGER)')
-        adapter.execute(connection, "INSERT INTO events VALUES (1), (7), (3)")
-        adapter.execute(connection, 'CREATE TABLE empty_events ("event""time" INTEGER)')
+        adapter.execute(connection, sql='CREATE TABLE events ("event""time" INTEGER)')
+        adapter.execute(connection, sql="INSERT INTO events VALUES (1), (7), (3)")
+        adapter.execute(connection, sql='CREATE TABLE empty_events ("event""time" INTEGER)')
 
         populated_value: object | None = adapter.get_relation_max_cursor(
             connection,

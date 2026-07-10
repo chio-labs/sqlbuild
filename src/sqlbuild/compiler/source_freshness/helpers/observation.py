@@ -183,7 +183,7 @@ def _query_single_data_version(
     sql: str,
 ) -> object:
     try:
-        result: QueryResult = adapter.query(connection, sql, limit=None)
+        result: QueryResult = adapter.query(connection, sql=sql, limit=None)
     except Exception as exc:
         raise SourceFreshnessObservationError(
             f"source '{source_name}' freshness query failed: {exc}"

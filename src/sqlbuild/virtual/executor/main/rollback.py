@@ -69,7 +69,7 @@ def run_virtual_rollback(
             on_progress("Inspecting virtual state...")
         lease = acquire_virtual_environment_lease_or_raise(
             backend,
-            state_connection,
+            state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
             owner_prefix="rollback",
@@ -77,14 +77,14 @@ def run_virtual_rollback(
         )
         checkpoint_state: RollbackCheckpointState = read_rollback_checkpoint_state(
             backend,
-            state_connection,
+            state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
             checkpoint_id=options.checkpoint_id,
         )
         resolution: RollbackResolution = resolve_rollback_final_refs(
             backend,
-            state_connection,
+            state_connection=state_connection,
             schema=config.schema,
             graph=context.graph,
             virtual_environment_name=virtual_environment_name,
@@ -96,7 +96,7 @@ def run_virtual_rollback(
         )
         relations: VirtualEnvironmentPhysicalRelations = read_rollback_physical_relations(
             backend,
-            state_connection,
+            state_connection=state_connection,
             schema=config.schema,
             checkpoint_id=checkpoint_state.target_checkpoint.checkpoint_id,
             resolution=resolution,
@@ -109,7 +109,7 @@ def run_virtual_rollback(
         )
         update: RollbackRefUpdate = build_rollback_ref_update(
             backend,
-            state_connection,
+            state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
             resolution=resolution,
@@ -127,7 +127,7 @@ def run_virtual_rollback(
         if lease is not None:
             _ = release_state_lease(
                 backend,
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 lease=lease,
             )

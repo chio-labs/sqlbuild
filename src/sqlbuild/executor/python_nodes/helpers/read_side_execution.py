@@ -155,7 +155,7 @@ class ReadSidePythonExecutionTracker:
         self._completed_python_names.add(node.name)
         if result.status == PythonNodeStatus.SUCCESS:
             if self._identity_recorder is not None:
-                self._identity_recorder(node.identity, None)
+                self._identity_recorder(node.identity, _target_name=None)
             else:
                 try_write_python_node_identity_fingerprint(
                     identity=node.identity,

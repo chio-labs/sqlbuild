@@ -6,6 +6,8 @@ import queue
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild.executor.shared.types import WorkerFailureBuilder, WorkerSuccessBuilder
+
 
 def run_worker_with_completion[KeyT, ResultT, CompletionT](
     *,
@@ -13,8 +15,8 @@ def run_worker_with_completion[KeyT, ResultT, CompletionT](
     connection_pool: queue.Queue[Any],
     completion_queue: queue.Queue[CompletionT],
     execute: Callable[[Any], ResultT],
-    build_success: Callable[[KeyT, ResultT], CompletionT],
-    build_failure: Callable[[KeyT, Exception], CompletionT],
+    build_success: WorkerSuccessBuilder[KeyT, ResultT, CompletionT],
+    build_failure: WorkerFailureBuilder[KeyT, CompletionT],
 ) -> None:
     """Execute work with one pooled connection and always publish one completion."""
 
@@ -23,8 +25,8 @@ def run_worker_with_completion[KeyT, ResultT, CompletionT](
         try:
             result: ResultT = execute(connection)
         except Exception as exc:
-            completion_queue.put(build_failure(key, exc))
+            completion_queue.put(build_failure(key, error=exc))
         else:
-            completion_queue.put(build_success(key, result))
+            completion_queue.put(build_success(key, result=result))
     finally:
         connection_pool.put(connection)

@@ -15,6 +15,7 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.dbt.types import DbtInteropSqlbuildTestAction
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.shared.types import ConnectionElapsedCallback
 from tests.unit.src.sqlbuild.cli.commands.helpers._test_types import (
     DbtSqlbuildWorkOutputTestCase,
 )
@@ -83,8 +84,8 @@ def test_given_sqlbuild_test_work_when_preflight_completes_then_separates_first_
     output_stream: StringIO = StringIO()
 
     def fake_run_test_pipeline(**kwargs: object) -> tuple[SqlTestExecutionResult, ...]:
-        on_connection_complete: Callable[[int, float], None] = cast(
-            Callable[[int, float], None], kwargs["on_connection_complete"]
+        on_connection_complete: ConnectionElapsedCallback = cast(
+            ConnectionElapsedCallback, kwargs["on_connection_complete"]
         )
         on_progress: Callable[[str], None] = cast(Callable[[str], None], kwargs["on_progress"])
         on_test_start: Callable[[SqlTestPlanEntry], None] = cast(
@@ -93,7 +94,7 @@ def test_given_sqlbuild_test_work_when_preflight_completes_then_separates_first_
         on_test_complete: Callable[[SqlTestExecutionResult], None] = cast(
             Callable[[SqlTestExecutionResult], None], kwargs["on_test_complete"]
         )
-        on_connection_complete(1, 0.0)
+        on_connection_complete(1, elapsed_seconds=0.0)
         on_progress("Preparing test functions...")
         on_progress("Prepared test functions. (0.00s)")
         entry: SqlTestPlanEntry = chained_sql_test_entry()

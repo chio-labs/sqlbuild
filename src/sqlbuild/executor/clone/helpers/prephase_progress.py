@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import TextIO
 
 from sqlbuild.executor.clone.models import CloneItemResult
-from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.executor.clone.types import CloneAction, CloneItemCallback, CloneStatus
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.models import PrephaseProgressRow
 
@@ -26,7 +26,7 @@ def run_prephase_clone_stream[RESULT](
     title: str,
     caused_by_names: tuple[str, ...],
     use_color: bool,
-    run_clone: Callable[[Callable[[int, int, CloneItemResult], None]], RESULT],
+    run_clone: Callable[[CloneItemCallback], RESULT],
 ) -> RESULT:
     write_prephase_header(stream=stream, title=title, use_color=use_color)
     stop_spinner: threading.Event = threading.Event()
@@ -40,7 +40,7 @@ def run_prephase_clone_stream[RESULT](
         progress=progress,
     )
 
-    def on_item(index: int, total: int, item: CloneItemResult) -> None:
+    def on_item(index: int, *, total: int, item: CloneItemResult) -> None:
         progress["completed"] = index
         progress["total"] = total
         with write_lock:
@@ -122,7 +122,7 @@ def write_prephase_row(
     style: CliStyle = CliStyle(use_color=use_color)
     index_width: int = len(str(total)) * 2 + 1
     ctr: str = f"{index}/{total}".rjust(index_width)
-    name: str = _truncate(row.name, _NAME_WIDTH)
+    name: str = _truncate(row.name, width=_NAME_WIDTH)
     status: str = _pad_styled(value=style.status(row.status), plain_value=row.status, width=6)
     duration: str = _format_duration(row.duration_seconds)
     detail: str = row.detail
@@ -151,7 +151,7 @@ def _format_duration(duration_seconds: float | None) -> str:
     return f"{duration_seconds:.2f}s"
 
 
-def _truncate(value: str, width: int) -> str:
+def _truncate(value: str, *, width: int) -> str:
     if len(value) <= width:
         return value
     if width <= 3:

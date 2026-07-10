@@ -34,7 +34,9 @@ def run_dbt_clone_command(
     )
     streamed_state: dict[str, bool] = {"started": False}
 
-    def _on_clone_start(origin_target_name: str, destination_target_name: str, total: int) -> None:
+    def _on_clone_start(
+        origin_target_name: str, *, destination_target_name: str, total: int
+    ) -> None:
         progress.finish()
         item_stream.write(
             render_clone_header(
@@ -48,7 +50,7 @@ def run_dbt_clone_command(
         item_stream.flush()
         streamed_state["started"] = True
 
-    def _on_clone_item(index: int, total: int, item: CloneItemResult) -> None:
+    def _on_clone_item(index: int, *, total: int, item: CloneItemResult) -> None:
         if not streamed_state["started"]:
             progress.finish()
             streamed_state["started"] = True

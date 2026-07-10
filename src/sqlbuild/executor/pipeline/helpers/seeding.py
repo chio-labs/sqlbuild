@@ -12,6 +12,7 @@ from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import PlanOutput, SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.seed.main.execute import execute_seed
+from sqlbuild.shared.types import ConnectionElapsedCallback
 
 
 def run_seed_pipeline(
@@ -24,8 +25,8 @@ def run_seed_pipeline(
     query_change_tracking: bool = False,
     on_seed_complete: Callable[[SeedExecutionResult], None] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    on_connection_complete: ConnectionElapsedCallback | None = None,
+    on_connection_error: ConnectionElapsedCallback | None = None,
 ) -> tuple[SeedExecutionResult, ...]:
     """Execute all seed loads from a compiled plan."""
 
@@ -42,13 +43,13 @@ def run_seed_pipeline(
             connections.append(adapter.connect(connection_config))
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(effective_concurrency, time.monotonic() - start)
+            on_connection_error(effective_concurrency, elapsed_seconds=time.monotonic() - start)
         connection: Any
         for connection in connections:
             adapter.close(connection)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(effective_concurrency, time.monotonic() - start)
+        on_connection_complete(effective_concurrency, elapsed_seconds=time.monotonic() - start)
 
     results: list[SeedExecutionResult | None] = [None] * len(seed_entries)
     try:

@@ -11,7 +11,9 @@ from sqlbuild.shared.classes.transient_status_reporter import TransientStatusRep
 from sqlbuild.shared.helpers.output.colors import supports_color
 
 
-def run_dbt_debug_command(project_dir: Path | None, args: tuple[str, ...], no_color: bool) -> int:
+def run_dbt_debug_command(
+    project_dir: Path | None, *, args: tuple[str, ...], no_color: bool
+) -> int:
     """Execute `sqb dbt debug`."""
 
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()

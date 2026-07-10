@@ -357,8 +357,8 @@ def publish_function_versions(
 
 def read_rollback_checkpoint_state(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     virtual_environment_name: str,
     checkpoint_id: str | None,
@@ -433,8 +433,8 @@ def read_rollback_checkpoint_state(
 
 def resolve_rollback_final_refs(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     graph: ProjectGraph,
     virtual_environment_name: str,
@@ -546,8 +546,8 @@ def resolve_rollback_final_refs(
 
 def read_rollback_physical_relations(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     checkpoint_id: str,
     resolution: RollbackResolution,
@@ -588,8 +588,8 @@ def read_rollback_physical_relations(
 
 def build_rollback_ref_update(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     virtual_environment_name: str,
     resolution: RollbackResolution,

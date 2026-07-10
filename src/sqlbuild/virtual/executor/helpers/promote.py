@@ -60,8 +60,8 @@ def read_seed_physical_relations(
 
 def read_promote_environment_state(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     from_virtual_environment_name: str,
     to_virtual_environment_name: str,
@@ -147,8 +147,8 @@ def read_promote_environment_state(
 
 def build_promote_semantics(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     graph: ProjectGraph,
     environment_state: PromoteEnvironmentState,
@@ -338,8 +338,8 @@ def resolve_promote_final_refs(
 
 def build_promote_ref_update(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     from_virtual_environment_name: str,
     to_virtual_environment_name: str,
@@ -444,8 +444,8 @@ def build_promote_ref_update(
 
 def write_promote_environment_update(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     to_virtual_environment_name: str,
     update: PromoteRefUpdate,
@@ -462,7 +462,7 @@ def write_promote_environment_update(
     if finalized and update.refs:
         create_finalized_virtual_environment_checkpoint(
             backend,
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=to_virtual_environment_name,
             refs=update.refs,
@@ -473,8 +473,8 @@ def write_promote_environment_update(
 
 def read_promote_physical_relations(
     backend: Any,
-    state_connection: Any,
     *,
+    state_connection: Any,
     schema: str,
     update: PromoteRefUpdate,
 ) -> VirtualEnvironmentPhysicalRelations:

@@ -132,7 +132,7 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
                 run_tests=False,
             ),
             callbacks=BuildCallbacks(
-                on_node_start=lambda name, _kind: node_starts.append(name),
+                on_node_start=lambda name, *, resource_kind: node_starts.append(name),
             ),
             customizations=BuildCustomizations(
                 loader_functions=(loader_function,),
@@ -189,12 +189,12 @@ def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_
         ),
     )
 
-    def before_model_materialize(entry: ModelPlanEntry, hook_connection: object) -> None:
+    def before_model_materialize(entry: ModelPlanEntry, *, connection: object) -> None:
         events.append(f"hook:{entry.name}")
         hook_actions: dict[bool, Callable[[], object]] = {
             True: lambda: (_ for _ in ()).throw(RuntimeError("hook failed")),
             False: lambda: adapter.execute(
-                hook_connection, "CREATE TABLE hook_seed AS SELECT 1 AS id"
+                connection, sql="CREATE TABLE hook_seed AS SELECT 1 AS id"
             ),
         }
         hook_actions[test_case.hook_raises]()
@@ -213,7 +213,7 @@ def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_
                 run_tests=False,
             ),
             callbacks=BuildCallbacks(
-                on_node_start=lambda name, _kind: events.append(f"start:{name}"),
+                on_node_start=lambda name, *, resource_kind: events.append(f"start:{name}"),
                 before_model_materialize=before_model_materialize,
             ),
         )
@@ -722,7 +722,7 @@ def test_given_upstream_table_without_watermark_when_downstream_runs_then_record
     )
 
     try:
-        adapter.execute(connection, "CREATE TABLE b AS SELECT 1 AS id")
+        adapter.execute(connection, sql="CREATE TABLE b AS SELECT 1 AS id")
         result: BuildExecutionResult = execute_build_plan(
             plan=plan,
             adapter=adapter,
@@ -998,7 +998,7 @@ def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_ski
                 run_tests=False,
             ),
             callbacks=BuildCallbacks(
-                on_node_start=lambda name, _kind: node_starts.append(name),
+                on_node_start=lambda name, *, resource_kind: node_starts.append(name),
             ),
         )
     finally:
@@ -1072,7 +1072,7 @@ def test_given_model_plan_action_skip_when_build_runs_then_downstream_model_is_s
                 run_tests=False,
             ),
             callbacks=BuildCallbacks(
-                on_node_start=lambda name, _kind: node_starts.append(name),
+                on_node_start=lambda name, *, resource_kind: node_starts.append(name),
             ),
         )
     finally:

@@ -47,9 +47,9 @@ def test_given_table_when_describing_then_sqlserver_returns_columns_in_order(
     sqlserver_schema: str,
 ) -> None:
     target: str = qualified_name(schema=sqlserver_schema, name=test_case.table_name)
-    adapter.execute(connection, test_case.ddl.format(target=target))
+    adapter.execute(connection, sql=test_case.ddl.format(target=target))
 
-    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, target)
+    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, relation=target)
 
     assert columns == test_case.expected_columns
 
@@ -70,7 +70,7 @@ def test_given_sql_when_querying_then_sqlserver_returns_named_rows(
     adapter: SqlServerAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=None)
+    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=None)
 
     assert result == test_case.expected_result
 
@@ -133,7 +133,7 @@ def test_given_reuse_origin_when_creating_hard_copy_then_sqlserver_copies_rows(
     recorder: StatementRecorder = build_statement_recorder()
     adapter.execute(
         connection,
-        f"SELECT * INTO {origin} FROM "
+        sql=f"SELECT * INTO {origin} FROM "
         "(SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob') AS origin_rows",
     )
 
@@ -179,8 +179,8 @@ def test_given_merge_sql_when_merging_then_sqlserver_upserts_without_constraint(
 ) -> None:
     recorder: StatementRecorder = build_statement_recorder()
     target: str = qualified_name(schema=sqlserver_schema, name=test_case.table_name)
-    adapter.execute(connection, f"CREATE TABLE {target} (id INT, name NVARCHAR(100))")
-    adapter.execute(connection, f"INSERT INTO {target} {test_case.initial_sql}")
+    adapter.execute(connection, sql=f"CREATE TABLE {target} (id INT, name NVARCHAR(100))")
+    adapter.execute(connection, sql=f"INSERT INTO {target} {test_case.initial_sql}")
 
     adapter.merge(
         connection,

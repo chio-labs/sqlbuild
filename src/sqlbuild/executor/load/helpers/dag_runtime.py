@@ -18,6 +18,7 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
+from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.shared.helpers.load_execution import (
     load_resource_kind,
@@ -154,7 +155,7 @@ def load_dag_worker(
     connection_pool: queue.Queue[Any],
     runtime: LoadRuntimeParams,
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
-    on_load_progress: Callable[[SourceEntry, str], None] | None = None,
+    on_load_progress: LoadProgressCallback | None = None,
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
 
@@ -171,7 +172,7 @@ def load_dag_worker(
             on_progress=(
                 None
                 if on_load_progress is None
-                else lambda message: on_load_progress(source_by_name[source_name], message)
+                else lambda message: on_load_progress(source_by_name[source_name], message=message)
             ),
         )
 
@@ -181,7 +182,7 @@ def load_dag_worker(
         completion_queue=completion_queue,
         execute=_execute,
         build_success=_load_dag_success_completion,
-        build_failure=lambda failed_source_name, error: _load_dag_failure_completion(
+        build_failure=lambda failed_source_name, *, error: _load_dag_failure_completion(
             source_name=failed_source_name,
             source_by_name=source_by_name,
             error=error,
@@ -190,7 +191,7 @@ def load_dag_worker(
 
 
 def _load_dag_success_completion(
-    source_name: str, result: LoadExecutionResult
+    source_name: str, *, result: LoadExecutionResult
 ) -> tuple[str, LoadExecutionResult]:
     return (source_name, result)
 

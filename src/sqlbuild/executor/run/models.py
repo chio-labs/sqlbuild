@@ -55,11 +55,11 @@ class HookContext:
 
     def execute_sql(self, sql: str) -> None:
         self.statement_recorder.record(sql)
-        self.adapter.execute(self.connection, sql)
+        self.adapter.execute(self.connection, sql=sql)
 
     def query(self, sql: str) -> list[tuple[object, ...]]:
         self.statement_recorder.record(sql)
-        result: QueryResult = self.adapter.query(self.connection, sql, limit=None)
+        result: QueryResult = self.adapter.query(self.connection, sql=sql, limit=None)
         return list(result.rows)
 
     def log(self, message: str) -> None:

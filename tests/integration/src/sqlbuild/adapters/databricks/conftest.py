@@ -46,9 +46,9 @@ def connection(
     config: dict[str, object] = build_databricks_connection_config(schema=databricks_schema)
     schema_target: str = f"{databricks_catalog}.{databricks_schema}"
     conn: Any = adapter.connect(config)
-    adapter.execute(conn, f"CREATE SCHEMA IF NOT EXISTS {schema_target}")
+    adapter.execute(conn, sql=f"CREATE SCHEMA IF NOT EXISTS {schema_target}")
     try:
         yield conn
     finally:
-        adapter.execute(conn, f"DROP SCHEMA IF EXISTS {schema_target} CASCADE")
+        adapter.execute(conn, sql=f"DROP SCHEMA IF EXISTS {schema_target} CASCADE")
         adapter.close(conn)

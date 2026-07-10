@@ -56,7 +56,7 @@ def adopt_into_virtual_state(
     operation_id: str = f"adopt:{active_target_name}"
     record_state_operation(
         backend,
-        state_connection,
+        connection=state_connection,
         schema=config.schema,
         operation_id=operation_id,
         operation_type=StateOperationType.ADOPT,
@@ -193,7 +193,7 @@ def adopt_into_virtual_state(
         )
         record_state_operation(
             backend,
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             operation_id=operation_id,
             operation_type=None,
@@ -206,7 +206,7 @@ def adopt_into_virtual_state(
     except BaseException as error:
         record_state_operation(
             backend,
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             operation_id=operation_id,
             operation_type=None,

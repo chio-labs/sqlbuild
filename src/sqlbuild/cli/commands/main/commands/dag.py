@@ -22,6 +22,7 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 def run_dag(
     project_dir: Path | None,
+    *,
     no_sql_validation: bool = False,
     json_output: bool = False,
     cli_vars: dict[str, object] | None = None,

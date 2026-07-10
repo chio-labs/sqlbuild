@@ -23,7 +23,7 @@ def parse_python_module(file_path: Path) -> ast.Module:
     return ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
 
 
-def check_test_directory_path(repo_root: Path, test_directory: Path) -> list[Violation]:
+def check_test_directory_path(repo_root: Path, *, test_directory: Path) -> list[Violation]:
     """Validate scope and mirrored layout for test directories."""
 
     relative_parts = test_directory.resolve().relative_to(repo_root.resolve()).parts
@@ -51,10 +51,14 @@ def check_test_directory_path(repo_root: Path, test_directory: Path) -> list[Vio
 
     mirrored_root = relative_parts[2]
     if mirrored_root == "src":
-        return _check_src_mirroring(repo_root, test_directory, relative_parts)
+        return _check_src_mirroring(
+            repo_root, test_directory=test_directory, relative_parts=relative_parts
+        )
 
     if mirrored_root == "scripts":
-        return _check_scripts_mirroring(repo_root, test_directory, relative_parts)
+        return _check_scripts_mirroring(
+            repo_root, test_directory=test_directory, relative_parts=relative_parts
+        )
 
     return [
         Violation(
@@ -68,6 +72,7 @@ def check_test_directory_path(repo_root: Path, test_directory: Path) -> list[Vio
 
 def _check_src_mirroring(
     repo_root: Path,
+    *,
     test_directory: Path,
     relative_parts: tuple[str, ...],
 ) -> list[Violation]:
@@ -118,6 +123,7 @@ def _check_src_mirroring(
 
 def _check_scripts_mirroring(
     repo_root: Path,
+    *,
     test_directory: Path,
     relative_parts: tuple[str, ...],
 ) -> list[Violation]:
@@ -147,7 +153,7 @@ def _check_scripts_mirroring(
     return []
 
 
-def check_init_module(repo_root: Path, file_path: Path, module: ast.Module) -> list[Violation]:
+def check_init_module(repo_root: Path, *, file_path: Path, module: ast.Module) -> list[Violation]:
     """Validate __init__.py contents."""
 
     if is_docstring_only_module(module):
@@ -162,7 +168,7 @@ def check_init_module(repo_root: Path, file_path: Path, module: ast.Module) -> l
     ]
 
 
-def check_no_relative_imports(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_relative_imports(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject relative imports in test directories."""
 
     violations: list[Violation] = []
@@ -181,6 +187,7 @@ def check_no_relative_imports(file_path: Path, module: ast.Module) -> list[Viola
 
 def check_test_types_file(
     repo_root: Path,
+    *,
     file_path: Path,
     module: ast.Module,
 ) -> tuple[LocalTestTypesInfo, list[Violation]]:
@@ -230,14 +237,14 @@ def check_test_types_file(
 
     return (
         LocalTestTypesInfo(
-            module_name=module_name_for_file(repo_root, file_path),
+            module_name=module_name_for_file(repo_root, file_path=file_path),
             dataclass_names=frozenset(dataclass_names),
         ),
         violations,
     )
 
 
-def check_scenario_models_file(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_scenario_models_file(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Validate local scenario_models.py declarations."""
 
     violations: list[Violation] = []
@@ -274,6 +281,7 @@ def check_scenario_models_file(file_path: Path, module: ast.Module) -> list[Viol
 
 def build_module_context(
     repo_root: Path,
+    *,
     file_path: Path,
     module: ast.Module,
     local_test_types: LocalTestTypesInfo,
@@ -281,7 +289,7 @@ def build_module_context(
     """Build reusable module metadata for test checks."""
 
     expected_test_types_module = module_name_for_file(
-        repo_root, file_path.parent / "_test_types.py"
+        repo_root, file_path=file_path.parent / "_test_types.py"
     )
     imported_local_test_case_types: set[str] = set()
     violations: list[Violation] = []
@@ -331,6 +339,7 @@ def build_module_context(
 
 def check_test_file(
     file_path: Path,
+    *,
     module: ast.Module,
     local_test_types: LocalTestTypesInfo,
     context: ModuleContext,
@@ -349,18 +358,25 @@ def check_test_file(
             )
         )
 
-    violations.extend(_check_top_level_test_module_shape(file_path, module))
+    violations.extend(_check_top_level_test_module_shape(file_path, module=module))
 
     for node in ast.walk(module):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
             "test_"
         ):
-            violations.extend(_check_test_function(file_path, node, local_test_types, context))
+            violations.extend(
+                _check_test_function(
+                    file_path,
+                    function_node=node,
+                    local_test_types=local_test_types,
+                    context=context,
+                )
+            )
 
     return violations
 
 
-def _check_top_level_test_module_shape(file_path: Path, module: ast.Module) -> list[Violation]:
+def _check_top_level_test_module_shape(file_path: Path, *, module: ast.Module) -> list[Violation]:
     if file_path.name == "_test_helpers.py":
         return []
 
@@ -444,6 +460,7 @@ def _is_test_case_list_assignment(node: ast.stmt) -> bool:
 
 def _check_test_function(
     file_path: Path,
+    *,
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
     local_test_types: LocalTestTypesInfo,
     context: ModuleContext,
@@ -507,8 +524,15 @@ def _check_test_function(
             )
         )
 
-    violations.extend(_check_parametrize_shape(file_path, function_node, parametrize, context))
-    violations.extend(_check_no_if_statements(file_path, function_node))
+    violations.extend(
+        _check_parametrize_shape(
+            file_path,
+            function_node=function_node,
+            decorator=parametrize,
+            context=context,
+        )
+    )
+    violations.extend(_check_no_if_statements(file_path, function_node=function_node))
 
     if not _references_expected_field(function_node):
         violations.append(
@@ -525,6 +549,7 @@ def _check_test_function(
 
 def _check_no_if_statements(
     file_path: Path,
+    *,
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> list[Violation]:
     violations: list[Violation] = []
@@ -550,6 +575,7 @@ def _check_no_if_statements(
 
 def _check_parametrize_shape(
     file_path: Path,
+    *,
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
     decorator: ast.Call,
     context: ModuleContext,
@@ -606,7 +632,7 @@ def _check_parametrize_shape(
         return violations
 
     if isinstance(values_expression, ast.ListComp):
-        if not _is_local_test_case_constructor(values_expression.elt, context):
+        if not _is_local_test_case_constructor(values_expression.elt, context=context):
             violations.append(
                 Violation(
                     code="TC024",
@@ -664,7 +690,7 @@ def _check_parametrize_shape(
                     message="test cases must use local dataclass instances, not dict literals",
                 )
             )
-        elif not _is_local_test_case_constructor(element, context):
+        elif not _is_local_test_case_constructor(element, context=context):
             violations.append(
                 Violation(
                     code="TC024",
@@ -704,7 +730,7 @@ def _references_expected_field(function_node: ast.FunctionDef | ast.AsyncFunctio
     return False
 
 
-def _is_local_test_case_constructor(expression: ast.expr, context: ModuleContext) -> bool:
+def _is_local_test_case_constructor(expression: ast.expr, *, context: ModuleContext) -> bool:
     if isinstance(expression, ast.Call) and isinstance(expression.func, ast.Name):
         return expression.func.id in context.imported_local_test_case_types
     return False

@@ -461,7 +461,7 @@ def _validate_unique_snapshot_keys(
         f"SELECT COUNT(*) FROM (SELECT {key_list} FROM {delta_qualified} "
         f"GROUP BY {key_list} HAVING COUNT(*) > 1) AS __snapshot_duplicate_keys"
     )
-    cursor: Any = adapter.execute(connection, duplicate_sql)
+    cursor: Any = adapter.execute(connection, sql=duplicate_sql)
     row: tuple[Any, ...] | None = cursor.fetchone()
     if row is not None and int(row[0]) > 0:
         identity_label: str = (
@@ -543,7 +543,7 @@ def _create_initial_snapshot_target(
     statement_recorder.record_many(statements)
     statement: str
     for statement in statements:
-        adapter.execute(connection, statement)
+        adapter.execute(connection, sql=statement)
 
 
 def _apply_snapshot_changes(
@@ -625,7 +625,7 @@ def _apply_timestamp_snapshot_changes(
         with adapter.transaction(connection):
             statement: str
             for statement in statements:
-                adapter.execute(connection, statement)
+                adapter.execute(connection, sql=statement)
         return
     statements: tuple[str, ...] = adapter.render_apply_timestamp_snapshot_changes(
         destination=target_qualified,
@@ -643,7 +643,7 @@ def _apply_timestamp_snapshot_changes(
     with adapter.transaction(connection):
         statement: str
         for statement in statements:
-            adapter.execute(connection, statement)
+            adapter.execute(connection, sql=statement)
 
 
 def _apply_check_snapshot_changes(
@@ -692,7 +692,7 @@ def _apply_check_snapshot_changes(
     with adapter.transaction(connection):
         statement: str
         for statement in statements:
-            adapter.execute(connection, statement)
+            adapter.execute(connection, sql=statement)
 
 
 def _expanded_check_columns(

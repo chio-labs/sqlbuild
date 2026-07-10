@@ -50,7 +50,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "sql test assembly parse failed; falling back",
+            message="sql test assembly parse failed; falling back",
             sqlbuild_error=str(error),
         )
         return None
@@ -59,7 +59,9 @@ def try_resolve_test_model_sql_with_sql_analysis(
     generated_ctes: OrderedDict[str, str] = OrderedDict()
     generated_names: set[str] = _collect_existing_cte_names(parsed_dict)
 
-    def _ensure_available(generated_name: str, referenced_name: str, referenced_kind: str) -> None:
+    def _ensure_available(
+        generated_name: str, *, referenced_name: str, referenced_kind: str
+    ) -> None:
         if generated_name not in generated_names:
             generated_names.add(generated_name)
             return
@@ -79,11 +81,13 @@ def try_resolve_test_model_sql_with_sql_analysis(
             helper_parts.append(f"{helper_cte.name} AS ({helper_cte.sql_body})")
         return f"WITH {', '.join(helper_parts)} {mock_body}"
 
-    def _target_for_marker(function_name: str, referenced_name: str) -> str | None:
+    def _target_for_marker(function_name: str, *, referenced_name: str) -> str | None:
         if function_name == SqlReferenceKind.REF.function_name:
             generated_name: str = f"{REF_TEST_CTE_PREFIX}{referenced_name}"
             if referenced_name in resolved_chain:
-                _ensure_available(generated_name, referenced_name, "ref")
+                _ensure_available(
+                    generated_name, referenced_name=referenced_name, referenced_kind="ref"
+                )
                 chain_sql: SqlAnalysisResolvedTestSql = resolved_chain[referenced_name]
                 dependency_name: str
                 dependency_sql: str
@@ -94,7 +98,9 @@ def try_resolve_test_model_sql_with_sql_analysis(
                 return generated_name
             if referenced_name in mock_refs:
                 reachable_mocks.add(referenced_name)
-                _ensure_available(generated_name, referenced_name, "ref")
+                _ensure_available(
+                    generated_name, referenced_name=referenced_name, referenced_kind="ref"
+                )
                 generated_ctes.setdefault(
                     generated_name, _wrap_mock_body(mock_refs[referenced_name])
                 )
@@ -105,7 +111,11 @@ def try_resolve_test_model_sql_with_sql_analysis(
             generated_name = f"{SOURCE_TEST_CTE_PREFIX}{referenced_name}"
             if referenced_name in mock_sources:
                 reachable_mocks.add(referenced_name)
-                _ensure_available(generated_name, referenced_name, "source")
+                _ensure_available(
+                    generated_name,
+                    referenced_name=referenced_name,
+                    referenced_kind="source",
+                )
                 generated_ctes.setdefault(
                     generated_name,
                     _wrap_mock_body(mock_sources[referenced_name]),
@@ -117,7 +127,9 @@ def try_resolve_test_model_sql_with_sql_analysis(
             generated_name = f"{SEED_TEST_CTE_PREFIX}{referenced_name}"
             if referenced_name in mock_seeds:
                 reachable_mocks.add(referenced_name)
-                _ensure_available(generated_name, referenced_name, "seed")
+                _ensure_available(
+                    generated_name, referenced_name=referenced_name, referenced_kind="seed"
+                )
                 generated_ctes.setdefault(
                     generated_name,
                     _wrap_mock_body(mock_seeds[referenced_name]),
@@ -129,7 +141,11 @@ def try_resolve_test_model_sql_with_sql_analysis(
             generated_name = f"{DBT_REF_TEST_CTE_PREFIX}{referenced_name}"
             if referenced_name in mock_dbt_refs:
                 reachable_mocks.add(referenced_name)
-                _ensure_available(generated_name, referenced_name, "dbt_ref")
+                _ensure_available(
+                    generated_name,
+                    referenced_name=referenced_name,
+                    referenced_kind="dbt_ref",
+                )
                 generated_ctes.setdefault(
                     generated_name,
                     _wrap_mock_body(mock_dbt_refs[referenced_name]),
@@ -250,7 +266,7 @@ def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "sql test assembly generation failed; falling back",
+            message="sql test assembly generation failed; falling back",
             sqlbuild_error=str(error),
         )
         return None

@@ -92,9 +92,11 @@ def run_interactive_state_operation(
     try:
         state_connection: Any = backend.connect(config.connection)
     except BaseException:
-        state_progress.on_connection_error(1, time.perf_counter() - state_started_at)
+        state_progress.on_connection_error(
+            1, elapsed_seconds=time.perf_counter() - state_started_at
+        )
         raise
-    state_progress.on_connection_complete(1, time.perf_counter() - state_started_at)
+    state_progress.on_connection_complete(1, elapsed_seconds=time.perf_counter() - state_started_at)
     warehouse_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
         stream=sys.stdout,
@@ -105,10 +107,14 @@ def run_interactive_state_operation(
     try:
         warehouse_connection: Any = adapter.connect(connection_config)
     except BaseException:
-        warehouse_progress.on_connection_error(1, time.perf_counter() - warehouse_started_at)
+        warehouse_progress.on_connection_error(
+            1, elapsed_seconds=time.perf_counter() - warehouse_started_at
+        )
         backend.close(state_connection)
         raise
-    warehouse_progress.on_connection_complete(1, time.perf_counter() - warehouse_started_at)
+    warehouse_progress.on_connection_complete(
+        1, elapsed_seconds=time.perf_counter() - warehouse_started_at
+    )
     status: TransientStatusReporter = TransientStatusReporter(
         stream=sys.stdout,
         use_color=use_color,

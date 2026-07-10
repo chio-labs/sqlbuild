@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.shared.types import AdapterExecute
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
 from sqlbuild.compiler.source_freshness.helpers.sql import (
     build_qualified_table_name,
@@ -20,7 +21,7 @@ from sqlbuild.compiler.source_freshness.models import (
 def read_latest_source_freshness(
     *,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     table_exists: bool,
     database: str | None,
     schema: str,
@@ -42,7 +43,7 @@ def read_latest_source_freshness(
         schema=schema,
     )
     try:
-        result: Any = execute(connection, read_sql)
+        result: Any = execute(connection, sql=read_sql)
     except Exception as error:
         raise SourceFreshnessInputError(
             f"Unable to read source freshness records from {qualified_name}. This can happen "

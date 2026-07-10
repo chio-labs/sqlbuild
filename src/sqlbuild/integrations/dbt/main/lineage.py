@@ -48,7 +48,7 @@ def build_dbt_lineage_output(
         depth=preparation.lineage_args.depth,
     )
     if column_lineage_selected_keys:
-        report_progress(on_progress, "Inspecting dbt source and seed schemas...")
+        report_progress(on_progress, message="Inspecting dbt source and seed schemas...")
     column_trace: DbtColumnLineageTrace | None = select_dbt_column_lineage_target(
         project=preparation.project,
         manifest=preparation.manifest,

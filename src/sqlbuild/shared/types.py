@@ -65,6 +65,18 @@ class LocalNodePlanReason(StrEnum):
     NO_CHANGE = "no_change"
 
 
+class ConnectionElapsedCallback(Protocol):
+    """Report elapsed time for a connection lifecycle event."""
+
+    def __call__(self, connection_count: int, *, elapsed_seconds: int | float) -> None: ...
+
+
+class NodeStartCallback(Protocol):
+    """Report the start of an execution node."""
+
+    def __call__(self, name: str, /, *, resource_kind: ExecutionResourceKind) -> None: ...
+
+
 class SqlReferenceKind(StrEnum):
     REF = "ref"
     SEED = "seed"

@@ -453,7 +453,9 @@ def test_given_relation_when_describing_then_postgres_queries_information_schema
     cursor: FakePostgresCursor = FakePostgresCursor(rows=test_case.cursor_rows)
     connection: FakePostgresConnection = FakePostgresConnection(cursor)
 
-    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, test_case.relation)
+    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
+        connection, relation=test_case.relation
+    )
 
     assert columns == test_case.expected_columns
     assert len(connection.executed_sql) == 1

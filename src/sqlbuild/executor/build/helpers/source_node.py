@@ -50,7 +50,7 @@ def execute_build_source_node(
     if callbacks.on_progress is not None:
         callbacks.on_progress(f"source: {source_entry.name}")
     if callbacks.on_node_start is not None:
-        callbacks.on_node_start(source_entry.name, resource_kind)
+        callbacks.on_node_start(source_entry.name, resource_kind=resource_kind)
     start: float = time.monotonic()
     result_store: StandardNodeResultStore = build_standard_node_result_store(
         adapter=adapter,

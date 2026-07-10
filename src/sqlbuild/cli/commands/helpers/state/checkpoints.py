@@ -246,37 +246,52 @@ def _format_checkpoint_diff(
         f"  {'checkpoint seeds':<16} {style.accent(f'{len(checkpoint_only_seed_refs):,}')}"
     )
     _append_ref_diff_lines(
-        document, "Changed refs", changed, current_ref_map, checkpoint_ref_map, style
-    )
-    _append_ref_diff_lines(
-        document, "Current only", current_only, current_ref_map, checkpoint_ref_map, style
-    )
-    _append_ref_diff_lines(
-        document, "Checkpoint only", checkpoint_only, current_ref_map, checkpoint_ref_map, style
+        document,
+        label="Changed refs",
+        model_names=changed,
+        current_ref_map=current_ref_map,
+        checkpoint_ref_map=checkpoint_ref_map,
+        style=style,
     )
     _append_ref_diff_lines(
         document,
-        "Changed seed refs",
-        changed_seed_refs,
-        current_seed_ref_map,
-        checkpoint_seed_ref_map,
-        style,
+        label="Current only",
+        model_names=current_only,
+        current_ref_map=current_ref_map,
+        checkpoint_ref_map=checkpoint_ref_map,
+        style=style,
     )
     _append_ref_diff_lines(
         document,
-        "Current only seed refs",
-        current_only_seed_refs,
-        current_seed_ref_map,
-        checkpoint_seed_ref_map,
-        style,
+        label="Checkpoint only",
+        model_names=checkpoint_only,
+        current_ref_map=current_ref_map,
+        checkpoint_ref_map=checkpoint_ref_map,
+        style=style,
     )
     _append_ref_diff_lines(
         document,
-        "Checkpoint only seed refs",
-        checkpoint_only_seed_refs,
-        current_seed_ref_map,
-        checkpoint_seed_ref_map,
-        style,
+        label="Changed seed refs",
+        model_names=changed_seed_refs,
+        current_ref_map=current_seed_ref_map,
+        checkpoint_ref_map=checkpoint_seed_ref_map,
+        style=style,
+    )
+    _append_ref_diff_lines(
+        document,
+        label="Current only seed refs",
+        model_names=current_only_seed_refs,
+        current_ref_map=current_seed_ref_map,
+        checkpoint_ref_map=checkpoint_seed_ref_map,
+        style=style,
+    )
+    _append_ref_diff_lines(
+        document,
+        label="Checkpoint only seed refs",
+        model_names=checkpoint_only_seed_refs,
+        current_ref_map=current_seed_ref_map,
+        checkpoint_ref_map=checkpoint_seed_ref_map,
+        style=style,
     )
     document.blank()
     return document.render(trailing_newline=False)
@@ -284,6 +299,7 @@ def _format_checkpoint_diff(
 
 def _append_ref_diff_lines(
     document: CliDocument,
+    *,
     label: str,
     model_names: tuple[str, ...],
     current_ref_map: dict[str, str],

@@ -161,7 +161,7 @@ def parse_python_module(file_path: Path) -> ast.Module:
     return ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
 
 
-def check_no_relative_imports(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_relative_imports(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject relative imports in runtime and script code."""
 
     violations: list[Violation] = []
@@ -223,7 +223,7 @@ def _is_sc045_term_allowed(*, path_text: str, term: str) -> bool:
     return False
 
 
-def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_raw_color_helper_imports(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject direct raw color helper imports outside low-level styling modules."""
 
     if file_path.as_posix().endswith("src/sqlbuild/shared/helpers/colors.py"):
@@ -267,7 +267,7 @@ def check_no_raw_color_helper_imports(file_path: Path, module: ast.Module) -> li
 
 
 def check_no_singular_source_freshness_writer(
-    file_path: Path, module: ast.Module
+    file_path: Path, *, module: ast.Module
 ) -> list[Violation]:
     """Reject per-record source freshness writer imports and calls."""
 
@@ -343,13 +343,13 @@ def _call_name(node: ast.Call) -> str | None:
 
 
 def check_no_internal_reexport_modules(
-    repo_root: Path, file_path: Path, module: ast.Module
+    repo_root: Path, *, file_path: Path, module: ast.Module
 ) -> list[Violation]:
     """Reject internal modules that only re-export imports from another module."""
 
-    if not _is_runtime_file(repo_root, file_path):
+    if not _is_runtime_file(repo_root, file_path=file_path):
         return []
-    if _is_allowed_reexport_surface(repo_root, file_path):
+    if _is_allowed_reexport_surface(repo_root, file_path=file_path):
         return []
     if not _is_pure_reexport_module(module):
         return []
@@ -367,11 +367,11 @@ def check_no_internal_reexport_modules(
 
 
 def check_no_internal_helper_exports(
-    repo_root: Path, file_path: Path, module: ast.Module
+    repo_root: Path, *, file_path: Path, module: ast.Module
 ) -> list[Violation]:
     """Reject __all__ export surfaces inside internal helper packages."""
 
-    if not _is_runtime_file(repo_root, file_path):
+    if not _is_runtime_file(repo_root, file_path=file_path):
         return []
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     if "helpers" not in relative_parts:
@@ -396,7 +396,7 @@ def check_no_internal_helper_exports(
     return violations
 
 
-def check_source_file_line_count(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_source_file_line_count(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Reject oversized runtime source files outside explicit backend allowlists."""
 
     relative_path: Path = file_path.resolve().relative_to(repo_root.resolve())
@@ -424,7 +424,7 @@ def check_source_file_line_count(repo_root: Path, file_path: Path) -> list[Viola
     ]
 
 
-def check_helpers_package_layout(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_helpers_package_layout(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Enforce consistent flat-or-subfolder helper package layout."""
 
     package_dir: Path | None = _role_package_layout_dir(file_path=file_path, package_name="helpers")
@@ -443,7 +443,7 @@ def check_helpers_package_layout(repo_root: Path, file_path: Path) -> list[Viola
     )
 
 
-def check_main_package_layout(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_main_package_layout(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Enforce consistent flat-or-subfolder main package layout."""
 
     support_violation: Violation | None = _main_support_folder_violation(
@@ -584,7 +584,7 @@ def check_banned_generic_filename(file_path: Path) -> list[Violation]:
     ]
 
 
-def check_top_level_domain_role_placement(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_top_level_domain_role_placement(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Reject direct role files or role directories under top-level runtime domains."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
@@ -633,7 +633,7 @@ def check_top_level_domain_role_placement(repo_root: Path, file_path: Path) -> l
     return []
 
 
-def check_top_level_domain_direct_modules(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_top_level_domain_direct_modules(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Reject direct modules under top-level runtime domains except role files."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
@@ -664,7 +664,7 @@ def check_top_level_domain_direct_modules(repo_root: Path, file_path: Path) -> l
 
 
 def check_public_provider_module_shape(
-    repo_root: Path, file_path: Path, module: ast.Module
+    repo_root: Path, *, file_path: Path, module: ast.Module
 ) -> list[Violation]:
     """Keep the public sqlbuild.providers module intentionally tiny."""
 
@@ -712,7 +712,7 @@ def check_public_provider_module_shape(
 
 
 def check_nested_runtime_package_direct_modules(
-    repo_root: Path, file_path: Path
+    repo_root: Path, *, file_path: Path
 ) -> list[Violation]:
     """Reject ad hoc direct modules in nested runtime packages outside helpers/."""
 
@@ -780,7 +780,7 @@ def check_nested_runtime_package_direct_modules(
 
 
 def check_nested_runtime_package_direct_subpackages(
-    repo_root: Path, file_path: Path
+    repo_root: Path, *, file_path: Path
 ) -> list[Violation]:
     """Reject arbitrary direct child packages under nested runtime packages."""
 
@@ -825,7 +825,7 @@ def check_nested_runtime_package_direct_subpackages(
     ]
 
 
-def check_main_entry_name_collisions(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_main_entry_name_collisions(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Reject duplicate flat-module and package entry names directly under main/."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
@@ -855,7 +855,7 @@ def check_main_entry_name_collisions(repo_root: Path, file_path: Path) -> list[V
     ]
 
 
-def check_dev_tooling_location(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_dev_tooling_location(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Reject obvious dev-tooling modules under src/sqlbuild."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
@@ -919,7 +919,7 @@ def check_classes_module_name(file_path: Path) -> list[Violation]:
 
 
 def check_classes_package_module_shape(
-    repo_root: Path, file_path: Path, module: ast.Module
+    repo_root: Path, *, file_path: Path, module: ast.Module
 ) -> list[Violation]:
     """Require runtime classes/ modules to define exactly one class."""
 
@@ -944,7 +944,7 @@ def check_classes_package_module_shape(
     ]
 
 
-def check_init_module(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_init_module(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Validate __init__.py contents."""
 
     if file_path.name != "__init__.py":
@@ -965,7 +965,7 @@ def check_init_module(file_path: Path, module: ast.Module) -> list[Violation]:
     ]
 
 
-def check_types_module(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_types_module(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Validate types.py contents."""
 
     if file_path.name != "types.py":
@@ -974,6 +974,8 @@ def check_types_module(file_path: Path, module: ast.Module) -> list[Violation]:
     violations: list[Violation] = []
     for node in _non_docstring_body(module):
         if isinstance(node, (ast.Import, ast.ImportFrom, ast.Assign, ast.AnnAssign, ast.TypeAlias)):
+            continue
+        if _is_type_checking_import_block(node):
             continue
         if isinstance(node, ast.ClassDef) and _is_allowed_type_class(node):
             continue
@@ -1001,7 +1003,17 @@ def check_types_module(file_path: Path, module: ast.Module) -> list[Violation]:
     return violations
 
 
-def check_models_module(file_path: Path, module: ast.Module) -> list[Violation]:
+def _is_type_checking_import_block(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.If)
+        and isinstance(node.test, ast.Name)
+        and node.test.id == "TYPE_CHECKING"
+        and not node.orelse
+        and all(isinstance(statement, (ast.Import, ast.ImportFrom)) for statement in node.body)
+    )
+
+
+def check_models_module(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Validate models.py contents."""
 
     if file_path.name != "models.py":
@@ -1039,7 +1051,7 @@ def check_models_module(file_path: Path, module: ast.Module) -> list[Violation]:
     return violations
 
 
-def check_main_public_function_shape(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_main_public_function_shape(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Cap main/ top-level functions so they stay phase-shaped orchestrators."""
 
     if not _is_main_package_module(file_path):
@@ -1101,7 +1113,7 @@ def check_main_public_function_shape(file_path: Path, module: ast.Module) -> lis
     return violations
 
 
-def check_main_discarded_call_results(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_main_discarded_call_results(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Require main/ orchestrators to consume phase call results."""
 
     if not _is_main_package_module(file_path):
@@ -1137,7 +1149,7 @@ def check_main_discarded_call_results(file_path: Path, module: ast.Module) -> li
 
 
 def check_no_parameter_mutation_in_phase_helpers(
-    repo_root: Path, file_path: Path, module: ast.Module
+    repo_root: Path, *, file_path: Path, module: ast.Module
 ) -> list[Violation]:
     """Reject hidden dataflow from mutating function parameters in phase helpers."""
 
@@ -1180,7 +1192,7 @@ def check_no_parameter_mutation_in_phase_helpers(
     return violations
 
 
-def check_constants_module(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_constants_module(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Validate constants.py contents."""
 
     if file_path.name != "constants.py":
@@ -1203,10 +1215,14 @@ def check_constants_module(file_path: Path, module: ast.Module) -> list[Violatio
     return violations
 
 
-def check_model_declarations_outside_models(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_model_declarations_outside_models(
+    file_path: Path, *, module: ast.Module
+) -> list[Violation]:
     """Reject model declarations outside models.py."""
 
-    if file_path.name == "models.py" or _is_within_role_package(file_path, "models"):
+    if file_path.name == "models.py" or _is_within_role_package(
+        file_path, role_directory_name="models"
+    ):
         return []
 
     violations: list[Violation] = []
@@ -1223,7 +1239,7 @@ def check_model_declarations_outside_models(file_path: Path, module: ast.Module)
     return violations
 
 
-def check_no_raw_runtime_diagnostics(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_raw_runtime_diagnostics(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject raw built-in raises and asserts in production runtime code."""
 
     if not _is_runtime_source_file(file_path):
@@ -1258,7 +1274,7 @@ def check_no_raw_runtime_diagnostics(file_path: Path, module: ast.Module) -> lis
     return violations
 
 
-def check_no_swallowed_exception_probes(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_swallowed_exception_probes(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject broad exception handlers that silently answer existence probes."""
 
     if not _is_runtime_source_file(file_path):
@@ -1286,7 +1302,7 @@ def check_no_swallowed_exception_probes(file_path: Path, module: ast.Module) -> 
     return violations
 
 
-def check_no_metadata_calls_in_loops(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_metadata_calls_in_loops(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject per-iteration warehouse metadata calls that scale as N+1 queries."""
 
     if not _is_runtime_source_file(file_path):
@@ -1337,7 +1353,7 @@ def check_no_metadata_calls_in_loops(file_path: Path, module: ast.Module) -> lis
     return violations
 
 
-def check_no_ad_hoc_dbt_ref_scans(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_ad_hoc_dbt_ref_scans(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject direct dbt ref-kind scans outside the centralized resolver."""
 
     path_text: str = file_path.as_posix()
@@ -1366,7 +1382,7 @@ def check_no_ad_hoc_dbt_ref_scans(file_path: Path, module: ast.Module) -> list[V
     return violations
 
 
-def check_no_ad_hoc_dbt_graph_projection(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_ad_hoc_dbt_graph_projection(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject direct planner graph-key construction in dbt code outside projection helpers."""
 
     path_text: str = file_path.as_posix()
@@ -1397,7 +1413,9 @@ def check_no_ad_hoc_dbt_graph_projection(file_path: Path, module: ast.Module) ->
     return violations
 
 
-def check_no_ad_hoc_selector_plus_parsing(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_no_ad_hoc_selector_plus_parsing(
+    file_path: Path, *, module: ast.Module
+) -> list[Violation]:
     """Reject local +selector marker parsing in planner and dbt selection code."""
 
     path_text: str = file_path.as_posix()
@@ -1433,7 +1451,7 @@ def check_no_ad_hoc_selector_plus_parsing(file_path: Path, module: ast.Module) -
     return violations
 
 
-def check_single_project_macro_load_site(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_single_project_macro_load_site(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject load_project_macros usage outside the single compile-input load site."""
 
     path_text: str = file_path.as_posix()
@@ -1468,7 +1486,7 @@ def check_single_project_macro_load_site(file_path: Path, module: ast.Module) ->
     return violations
 
 
-def check_single_line_docstrings(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_single_line_docstrings(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject new multiline docstrings in runtime and script code."""
 
     violations: list[Violation] = []
@@ -1678,7 +1696,7 @@ def _call_is_inside_loop(*, node: ast.AST, parents: dict[ast.AST, ast.AST]) -> b
     return False
 
 
-def check_private_definition_ordering(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_private_definition_ordering(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject private dataclasses and constants that appear after function definitions."""
 
     violations: list[Violation] = []
@@ -1738,16 +1756,22 @@ def _private_assignment_target(node: ast.stmt) -> str | None:
     return None
 
 
-def check_type_declarations_outside_types(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_type_declarations_outside_types(
+    file_path: Path, *, module: ast.Module
+) -> list[Violation]:
     """Reject type-layer declarations outside types.py."""
 
-    if file_path.name == "types.py" or _is_within_role_package(file_path, "types"):
+    if file_path.name == "types.py" or _is_within_role_package(
+        file_path, role_directory_name="types"
+    ):
         return []
 
     violations: list[Violation] = []
     for node in ast.walk(module):
         if isinstance(node, ast.ClassDef) and _is_allowed_type_class(node):
-            if node.name.startswith("_") and _is_within_role_package(file_path, "helpers"):
+            if node.name.startswith("_") and _is_within_role_package(
+                file_path, role_directory_name="helpers"
+            ):
                 continue
             violations.append(
                 Violation(
@@ -1791,11 +1815,13 @@ def check_type_declarations_outside_types(file_path: Path, module: ast.Module) -
 
 
 def check_exception_declarations_outside_exceptions(
-    file_path: Path, module: ast.Module
+    file_path: Path, *, module: ast.Module
 ) -> list[Violation]:
     """Reject custom exception declarations outside exceptions.py."""
 
-    if file_path.name == "exceptions.py" or _is_within_role_package(file_path, "exceptions"):
+    if file_path.name == "exceptions.py" or _is_within_role_package(
+        file_path, role_directory_name="exceptions"
+    ):
         if _is_direct_child_of_helpers_root(file_path):
             return [
                 Violation(
@@ -1824,7 +1850,7 @@ def check_exception_declarations_outside_exceptions(
     return violations
 
 
-def check_constants_outside_constants(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_constants_outside_constants(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Reject uppercase module-level constant assignments outside constants.py."""
 
     if file_path.name == "constants.py":
@@ -1855,7 +1881,7 @@ def check_constants_outside_constants(file_path: Path, module: ast.Module) -> li
     return violations
 
 
-def check_helpers_package_shape(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_helpers_package_shape(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Keep helpers/ shallow and free of generic entrypoints."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
@@ -1888,7 +1914,7 @@ def check_helpers_package_shape(repo_root: Path, file_path: Path) -> list[Violat
     ]
 
 
-def check_shared_package_structure(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_shared_package_structure(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Reject orchestration entrypoints inside shared/ packages."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
@@ -1915,7 +1941,7 @@ def check_shared_package_structure(repo_root: Path, file_path: Path) -> list[Vio
     ]
 
 
-def check_integrations_package_structure(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_integrations_package_structure(repo_root: Path, *, file_path: Path) -> list[Violation]:
     """Enforce client.py instead of main.py within client-style packages."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
@@ -1941,7 +1967,7 @@ def check_integrations_package_structure(repo_root: Path, file_path: Path) -> li
 
 
 def check_adapter_class_entry_module_shape(
-    repo_root: Path, file_path: Path, module: ast.Module
+    repo_root: Path, *, file_path: Path, module: ast.Module
 ) -> list[Violation]:
     """Enforce focused single-class entry modules within adapter/ subpackages."""
 
@@ -2000,7 +2026,7 @@ def check_adapter_class_entry_module_shape(
 
 
 def check_client_module_shape(
-    repo_root: Path, file_path: Path, module: ast.Module
+    repo_root: Path, *, file_path: Path, module: ast.Module
 ) -> list[Violation]:
     """Enforce focused single-class client.py modules within client-style packages."""
 
@@ -2048,7 +2074,9 @@ def check_client_module_shape(
     return violations
 
 
-def check_integration_adapter_helpers_module(repo_root: Path, file_path: Path) -> list[Violation]:
+def check_integration_adapter_helpers_module(
+    repo_root: Path, *, file_path: Path
+) -> list[Violation]:
     """Reject adapter-local helper modules that hide overrideable adapter behavior."""
 
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).parts
@@ -2077,6 +2105,7 @@ def check_integration_adapter_helpers_module(repo_root: Path, file_path: Path) -
 
 def check_adapter_contract_implementation_shortcuts(
     repo_root: Path,
+    *,
     file_path: Path,
     module: ast.Module,
     contract_class_names: frozenset[str] | None = None,
@@ -2133,12 +2162,13 @@ def check_adapter_contract_implementation_shortcuts(
 
 def check_no_sibling_package_imports(
     repo_root: Path,
+    *,
     file_path: Path,
     module: ast.Module,
 ) -> list[Violation]:
     """Reject direct imports from sibling subpackages instead of parent shared/."""
 
-    current_package_parts = _subpackage_parts(repo_root, file_path)
+    current_package_parts = _subpackage_parts(repo_root, file_path=file_path)
     if len(current_package_parts) < 3:
         return []
     if current_package_parts[-1] == "shared":
@@ -2157,7 +2187,7 @@ def check_no_sibling_package_imports(
             continue
         if len(imported_parts) <= len(parent_package_parts):
             continue
-        if _is_within_same_helpers_package(current_package_parts, imported_parts):
+        if _is_within_same_helpers_package(current_package_parts, imported_parts=imported_parts):
             continue
 
         sibling_name = imported_parts[len(parent_package_parts)]
@@ -2186,7 +2216,7 @@ def check_no_sibling_package_imports(
             continue
         if len(imported_parts) == len(parent_package_parts) + 1:
             continue
-        if _is_allowed_sibling_public_surface(parent_package_parts, imported_parts):
+        if _is_allowed_sibling_public_surface(parent_package_parts, imported_parts=imported_parts):
             continue
 
         violations.append(
@@ -2210,9 +2240,13 @@ def check_no_sibling_package_imports(
                 continue
             if len(imported_parts) <= len(parent_package_parts) + 1:
                 continue
-            if _is_within_same_helpers_package(current_package_parts, imported_parts):
+            if _is_within_same_helpers_package(
+                current_package_parts, imported_parts=imported_parts
+            ):
                 continue
-            if _is_allowed_sibling_public_surface(parent_package_parts, imported_parts):
+            if _is_allowed_sibling_public_surface(
+                parent_package_parts, imported_parts=imported_parts
+            ):
                 continue
 
             sibling_name = imported_parts[len(parent_package_parts)]
@@ -2250,7 +2284,7 @@ def check_no_sibling_package_imports(
 
 
 def _is_within_same_helpers_package(
-    current_package_parts: tuple[str, ...], imported_parts: tuple[str, ...]
+    current_package_parts: tuple[str, ...], *, imported_parts: tuple[str, ...]
 ) -> bool:
     if "helpers" not in current_package_parts:
         return False
@@ -2264,11 +2298,11 @@ def _is_within_same_helpers_package(
 
 
 def check_shared_package_imports(
-    repo_root: Path, file_path: Path, module: ast.Module
+    repo_root: Path, *, file_path: Path, module: ast.Module
 ) -> list[Violation]:
     """Reject shared/ imports that reach into sibling package internals."""
 
-    current_package_parts = _subpackage_parts(repo_root, file_path)
+    current_package_parts = _subpackage_parts(repo_root, file_path=file_path)
     if len(current_package_parts) < 3 or current_package_parts[-1] != "shared":
         return []
 
@@ -2278,7 +2312,7 @@ def check_shared_package_imports(
     for node in ast.walk(module):
         if isinstance(node, ast.ImportFrom) and node.module is not None:
             imported_parts = tuple(node.module.split("."))
-            if _is_forbidden_shared_import(parent_package_parts, imported_parts):
+            if _is_forbidden_shared_import(parent_package_parts, imported_parts=imported_parts):
                 violations.append(
                     Violation(
                         code="SC013",
@@ -2294,7 +2328,7 @@ def check_shared_package_imports(
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imported_parts = tuple(alias.name.split("."))
-                if _is_forbidden_shared_import(parent_package_parts, imported_parts):
+                if _is_forbidden_shared_import(parent_package_parts, imported_parts=imported_parts):
                     violations.append(
                         Violation(
                             code="SC013",
@@ -2312,6 +2346,7 @@ def check_shared_package_imports(
 
 def check_cross_package_internal_imports(
     repo_root: Path,
+    *,
     file_path: Path,
     module: ast.Module,
 ) -> list[Violation]:
@@ -2356,7 +2391,9 @@ def check_cross_package_internal_imports(
                 continue
             if len(imported_parts) == 3:
                 continue
-            if _has_deep_internal_segment(imported_parts[3:], _DEEP_INTERNAL_SEGMENTS):
+            if _has_deep_internal_segment(
+                imported_parts[3:], internal_segments=_DEEP_INTERNAL_SEGMENTS
+            ):
                 violations.append(
                     Violation(
                         code="SC033",
@@ -2381,7 +2418,9 @@ def check_cross_package_internal_imports(
             target_module: str = imported_parts[2]
             if target_module in _PUBLIC_MODULES:
                 continue
-            if _has_deep_internal_segment(imported_parts[2:], _DEEP_INTERNAL_SEGMENTS):
+            if _has_deep_internal_segment(
+                imported_parts[2:], internal_segments=_DEEP_INTERNAL_SEGMENTS
+            ):
                 violations.append(
                     Violation(
                         code="SC033",
@@ -2401,18 +2440,20 @@ def check_cross_package_internal_imports(
     return violations
 
 
-def _has_deep_internal_segment(parts: tuple[str, ...], internal_segments: frozenset[str]) -> bool:
+def _has_deep_internal_segment(
+    parts: tuple[str, ...], *, internal_segments: frozenset[str]
+) -> bool:
     """Check whether any segment in the import path is a deep internal boundary."""
 
     return any(seg in internal_segments for seg in parts)
 
 
-def _is_runtime_file(repo_root: Path, file_path: Path) -> bool:
+def _is_runtime_file(repo_root: Path, *, file_path: Path) -> bool:
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     return len(relative_parts) >= 3 and relative_parts[:2] == ("src", "sqlbuild")
 
 
-def _is_allowed_reexport_surface(repo_root: Path, file_path: Path) -> bool:
+def _is_allowed_reexport_surface(repo_root: Path, *, file_path: Path) -> bool:
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     if file_path.name == "__init__.py":
         return True
@@ -2534,25 +2575,27 @@ def _strict_adapter_contract_method_names() -> frozenset[str]:
 
 def _is_base_adapter_method_alias(node: ast.stmt) -> bool:
     if isinstance(node, ast.Assign):
-        return isinstance(node.value, ast.Attribute) and _is_name(node.value.value, "BaseAdapter")
+        return isinstance(node.value, ast.Attribute) and _is_name(
+            node.value.value, name="BaseAdapter"
+        )
     if isinstance(node, ast.AnnAssign):
         return (
             node.value is not None
             and isinstance(node.value, ast.Attribute)
-            and _is_name(node.value.value, "BaseAdapter")
+            and _is_name(node.value.value, name="BaseAdapter")
         )
     return False
 
 
 def _is_super_call(node: ast.AST) -> bool:
-    return isinstance(node, ast.Call) and _is_name(node.func, "super")
+    return isinstance(node, ast.Call) and _is_name(node.func, name="super")
 
 
-def _is_name(node: ast.AST, name: str) -> bool:
+def _is_name(node: ast.AST, *, name: str) -> bool:
     return isinstance(node, ast.Name) and node.id == name
 
 
-def check_entry_module_shape(file_path: Path, module: ast.Module) -> list[Violation]:
+def check_entry_module_shape(file_path: Path, *, module: ast.Module) -> list[Violation]:
     """Enforce entry modules as focused single-entry surfaces."""
 
     if not _is_entry_module(file_path):
@@ -2656,15 +2699,19 @@ def _is_string_expr(node: ast.stmt) -> bool:
 
 
 def _is_allowed_type_class(node: ast.ClassDef) -> bool:
-    if _is_dataclass_class(node) or _inherits_from_base_names(node, MODEL_CLASS_BASE_NAMES):
+    if _is_dataclass_class(node) or _inherits_from_base_names(
+        node, base_names=MODEL_CLASS_BASE_NAMES
+    ):
         return False
-    return _inherits_from_base_names(node, TYPE_CLASS_BASE_NAMES)
+    return _inherits_from_base_names(node, base_names=TYPE_CLASS_BASE_NAMES)
 
 
 def _is_allowed_model_class(node: ast.ClassDef) -> bool:
     if node.name.startswith("_"):
         return False
-    return _is_dataclass_class(node) or _inherits_from_base_names(node, MODEL_CLASS_BASE_NAMES)
+    return _is_dataclass_class(node) or _inherits_from_base_names(
+        node, base_names=MODEL_CLASS_BASE_NAMES
+    )
 
 
 def _is_exception_class(node: ast.ClassDef) -> bool:
@@ -2838,14 +2885,14 @@ def _line_allows_parameter_mutation(*, source_lines: list[str], line_number: int
     return _PARAMETER_MUTATION_ALLOW_COMMENT in source_lines[line_number - 1]
 
 
-def _inherits_from_base_names(node: ast.ClassDef, base_names: frozenset[str]) -> bool:
+def _inherits_from_base_names(node: ast.ClassDef, *, base_names: frozenset[str]) -> bool:
     return any(_base_name(base) in base_names for base in node.bases)
 
 
 def _is_local_model_union_alias(
     *, file_path: Path, module: ast.Module, node: ast.TypeAlias
 ) -> bool:
-    if not _is_within_role_package(file_path, "models"):
+    if not _is_within_role_package(file_path, role_directory_name="models"):
         return False
 
     model_class_names: frozenset[str] = frozenset(
@@ -2962,7 +3009,7 @@ def _is_newtype_assignment(node: ast.AST) -> bool:
     return _base_name(value.func) == "NewType"
 
 
-def _is_within_role_package(file_path: Path, role_directory_name: str) -> bool:
+def _is_within_role_package(file_path: Path, *, role_directory_name: str) -> bool:
     return role_directory_name in file_path.parts[:-1]
 
 
@@ -3006,7 +3053,7 @@ def _is_orchestration_integration_public_entry(file_path: Path) -> bool:
     )
 
 
-def _subpackage_parts(repo_root: Path, file_path: Path) -> tuple[str, ...]:
+def _subpackage_parts(repo_root: Path, *, file_path: Path) -> tuple[str, ...]:
     relative_parts = file_path.resolve().relative_to(repo_root.resolve()).with_suffix("").parts
 
     if len(relative_parts) >= 4 and relative_parts[:2] == ("src", "sqlbuild"):
@@ -3021,6 +3068,7 @@ def _subpackage_parts(repo_root: Path, file_path: Path) -> tuple[str, ...]:
 
 def _is_forbidden_shared_import(
     parent_package_parts: tuple[str, ...],
+    *,
     imported_parts: tuple[str, ...],
 ) -> bool:
     if imported_parts[: len(parent_package_parts)] != parent_package_parts:
@@ -3037,6 +3085,7 @@ def _is_forbidden_shared_import(
 
 def _is_allowed_sibling_public_surface(
     parent_package_parts: tuple[str, ...],
+    *,
     imported_parts: tuple[str, ...],
 ) -> bool:
     public_surface_names: frozenset[str] = frozenset({"models", "types", "constants", "exceptions"})

@@ -63,7 +63,7 @@ def run_virtual_clone(
     try:
         versions: CloneVersions = resolve_clone_versions(
             backend,
-            state_connection,
+            state_connection=state_connection,
             schema=config.schema,
             clone_pipeline=clone_pipeline,
             context=context,

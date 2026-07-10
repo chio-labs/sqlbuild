@@ -21,6 +21,7 @@ from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
 from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.shared.types import ConnectionElapsedCallback
 
 
 def run_test_pipeline(
@@ -29,8 +30,8 @@ def run_test_pipeline(
     connection_config: dict[str, object],
     adapter: BaseAdapter,
     on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    on_connection_complete: ConnectionElapsedCallback | None = None,
+    on_connection_error: ConnectionElapsedCallback | None = None,
     on_progress: Callable[[str], None] | None = None,
     on_test_start: Callable[[SqlTestPlanEntry], None] | None = None,
     on_test_complete: Callable[[SqlTestExecutionResult], None] | None = None,
@@ -44,10 +45,10 @@ def run_test_pipeline(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - start)
+            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - start)
+        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
     try:
         preflight_start: float = time.monotonic()
         if on_progress is not None:

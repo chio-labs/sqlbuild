@@ -12,8 +12,8 @@ from sqlbuild.virtual.state.types import StateOperationStatus, StateOperationTyp
 
 def record_state_operation(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     operation_id: str,
     operation_type: StateOperationType | None,

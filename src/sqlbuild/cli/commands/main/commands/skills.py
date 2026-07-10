@@ -10,6 +10,7 @@ from sqlbuild.cli.commands.helpers.skills.update import update_sqlbuild_skills
 
 def run_skills_update(
     project_dir: Path | None,
+    *,
     global_install: bool = False,
     targets: tuple[str, ...] = (),
     force: bool = False,

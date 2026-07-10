@@ -10,6 +10,7 @@ from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.shared.types import ConnectionElapsedCallback
 
 
 def run_audit_pipeline(
@@ -18,8 +19,8 @@ def run_audit_pipeline(
     connection_config: dict[str, object],
     adapter: BaseAdapter,
     on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    on_connection_complete: ConnectionElapsedCallback | None = None,
+    on_connection_error: ConnectionElapsedCallback | None = None,
     on_audit_start: Callable[[AuditPlanEntry], None] | None = None,
     on_audit_complete: Callable[[AuditExecutionResult], None] | None = None,
 ) -> tuple[AuditExecutionResult, ...]:
@@ -34,10 +35,10 @@ def run_audit_pipeline(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - start)
+            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - start)
+        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
     try:
         results: list[AuditExecutionResult] = []
         entry: AuditPlanEntry

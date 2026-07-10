@@ -80,7 +80,9 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
 ) -> None:
     model_entries: tuple[SchemaModelEntry, ...]
     seed_entries: tuple[SchemaSeedEntry, ...]
-    model_entries, seed_entries = parse_schema_yml(test_case.contents, Path("seeds/lookups.yml"))
+    model_entries, seed_entries = parse_schema_yml(
+        test_case.contents, file_path=Path("seeds/lookups.yml")
+    )
 
     assert tuple(entry.name for entry in model_entries) == test_case.expected_model_names
     assert tuple(entry.name for entry in seed_entries) == test_case.expected_seed_names
@@ -162,7 +164,7 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
 def test_given_seed_csv_settings_when_parsing_then_it_returns_normalized_settings(
     test_case: ParseSeedCsvSettingsYamlTestCase,
 ) -> None:
-    _, seed_entries = parse_schema_yml(test_case.contents, Path("seeds/lookups.yml"))
+    _, seed_entries = parse_schema_yml(test_case.contents, file_path=Path("seeds/lookups.yml"))
 
     assert seed_entries[0].csv_settings == SeedCsvSettings(
         delimiter=test_case.expected_delimiter,
@@ -365,4 +367,4 @@ def test_given_invalid_schema_yaml_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSchemaYamlErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        parse_schema_yml(test_case.contents, Path("seeds/lookups.yml"))
+        parse_schema_yml(test_case.contents, file_path=Path("seeds/lookups.yml"))

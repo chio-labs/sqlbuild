@@ -271,7 +271,7 @@ def _record_python_hook_identity(
         decorator_config={"description": hook_function.description},
     )
     if python_identity_recorder is not None:
-        python_identity_recorder(identity, model_name)
+        python_identity_recorder(identity, _target_name=model_name)
     else:
         try_write_python_node_identity_fingerprint(
             identity=identity,
@@ -294,7 +294,7 @@ def _execute_sql_hook(
     hook_results: list[HookExecutionResult] | None,
 ) -> None:
     try:
-        adapter.execute(connection, statement)
+        adapter.execute(connection, sql=statement)
     except Exception as exc:
         _record_hook_result(
             hook_results=hook_results,

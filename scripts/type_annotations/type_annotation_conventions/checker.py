@@ -17,14 +17,14 @@ from scripts.type_annotations.type_annotation_conventions.rules import (
 )
 
 
-def check_paths(paths: list[Path], repo_root: Path | None = None) -> list[Violation]:
+def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Violation]:
     """Run type annotation convention checks for the provided paths."""
 
     target_paths: list[Path] = [path.resolve() for path in paths] if paths else _default_paths()
     violations: list[Violation] = []
     for file_path in iter_python_files(target_paths):
         module: object = parse_python_module(file_path)
-        violations.extend(check_module(file_path, module))
+        violations.extend(check_module(file_path, module=module))
 
     return sorted(
         violations,

@@ -15,7 +15,7 @@ from sqlbuild.executor.run.helpers.reuse.core import (
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.shared.types import ExecutionResourceKind, NodeStartCallback
 
 
 def execute_dependency_baseline_entries(
@@ -23,7 +23,7 @@ def execute_dependency_baseline_entries(
     entries: tuple[DependencyBaselinePlanEntry, ...],
     adapter: BaseAdapter,
     connection: Any,
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
+    on_node_start: NodeStartCallback | None = None,
     on_node_complete: Callable[[object], None] | None = None,
 ) -> tuple[ModelExecutionResult, ...]:
     """Copy/clone dependency baseline relations without writing model fingerprints."""
@@ -32,7 +32,7 @@ def execute_dependency_baseline_entries(
     entry: DependencyBaselinePlanEntry
     for entry in entries:
         if on_node_start is not None:
-            on_node_start(entry.name, ExecutionResourceKind.TABLE)
+            on_node_start(entry.name, resource_kind=ExecutionResourceKind.TABLE)
         result: ModelExecutionResult = _execute_dependency_baseline_entry(
             entry=entry,
             adapter=adapter,

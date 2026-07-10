@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import Protocol
 
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 
 type ExecutablePythonNode = DiscoveredTaskFunction | DiscoveredAssetFunction
-type PythonIdentityRecorder = Callable[[PythonNodeIdentity | None, str | None], None]
+
+
+class PythonIdentityRecorder(Protocol):
+    def __call__(
+        self, identity: PythonNodeIdentity | None, *, _target_name: str | None
+    ) -> None: ...

@@ -95,7 +95,9 @@ def test_given_external_source_load_when_preloading_then_records_progress_and_no
             effective_vars={},
         ),
         callbacks=BuildCallbacks(
-            on_node_start=lambda name, kind: started_nodes.append((name, kind)),
+            on_node_start=lambda name, *, resource_kind: started_nodes.append(
+                (name, resource_kind)
+            ),
             on_node_complete=completed_results.append,
         ),
     )

@@ -10,6 +10,7 @@ from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.shared.constants import DEFAULT_MAX_DISPLAY_ENTRIES
 from sqlbuild.shared.exceptions.errors import SharedInputError
 from sqlbuild.shared.types import (
+    ConnectionElapsedCallback,
     LocalNodePlanAction,
     LocalNodePlanReason,
     PythonCheckSeverity,
@@ -327,8 +328,8 @@ class ConnectionHooks:
 
     on_progress: Callable[[str], None] | None = None
     on_connection_start: Callable[[int], None] | None = None
-    on_connection_complete: Callable[[int, float], None] | None = None
-    on_connection_error: Callable[[int, float], None] | None = None
+    on_connection_complete: ConnectionElapsedCallback | None = None
+    on_connection_error: ConnectionElapsedCallback | None = None
 
 
 @dataclass(frozen=True)

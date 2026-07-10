@@ -197,7 +197,7 @@ def _merged_known_entry(
 ) -> SourceWatermarkEntry | UnknownSourceWatermarkEntry:
     if existing_entry is None:
         return entry
-    merged_entry: SourceWatermarkEntry | None = _merge_source_entries(existing_entry, entry)
+    merged_entry: SourceWatermarkEntry | None = _merge_source_entries(existing_entry, right=entry)
     if merged_entry is None:
         return _unknown_entry(
             identity,
@@ -208,18 +208,19 @@ def _merged_known_entry(
 
 def _merge_source_entries(
     left: SourceWatermarkEntry,
+    *,
     right: SourceWatermarkEntry,
 ) -> SourceWatermarkEntry | None:
     if left.data_version_hash == right.data_version_hash:
-        return _older_observation(left, right)
+        return _older_observation(left, right=right)
     left_value_kind: SourceFreshnessValueKind | None = _value_kind(left.value_kind)
     right_value_kind: SourceFreshnessValueKind | None = _value_kind(right.value_kind)
     if left_value_kind != right_value_kind:
         return None
     if left_value_kind is SourceFreshnessValueKind.TIMESTAMP:
-        return _older_timestamp_version(left, right)
+        return _older_timestamp_version(left, right=right)
     if left_value_kind is SourceFreshnessValueKind.INTEGER:
-        return _older_integer_version(left, right)
+        return _older_integer_version(left, right=right)
     return None
 
 
@@ -232,6 +233,7 @@ def _value_kind(value: str) -> SourceFreshnessValueKind | None:
 
 def _older_timestamp_version(
     left: SourceWatermarkEntry,
+    *,
     right: SourceWatermarkEntry,
 ) -> SourceWatermarkEntry | None:
     if left.data_version is None or right.data_version is None:
@@ -243,6 +245,7 @@ def _older_timestamp_version(
 
 def _older_integer_version(
     left: SourceWatermarkEntry,
+    *,
     right: SourceWatermarkEntry,
 ) -> SourceWatermarkEntry | None:
     if left.data_version is None or right.data_version is None:
@@ -252,6 +255,7 @@ def _older_integer_version(
 
 def _older_observation(
     left: SourceWatermarkEntry,
+    *,
     right: SourceWatermarkEntry,
 ) -> SourceWatermarkEntry:
     return left if left.observed_at <= right.observed_at else right

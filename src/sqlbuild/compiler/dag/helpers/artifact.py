@@ -49,7 +49,9 @@ def build_dag_artifact(
     nodes: tuple[DagNode, ...] = (
         *(_build_source_node(source) for source in graph.project.sources),
         *(
-            _build_loader_node(graph.project, loader, source_by_loader=_source_by_loader(graph))
+            _build_loader_node(
+                graph.project, loader=loader, source_by_loader=_source_by_loader(graph)
+            )
             for loader in graph.project.loader_functions
             if loader.name not in _source_by_loader(graph)
         ),
@@ -79,7 +81,9 @@ def _build_source_node(source: CompiledSource) -> DagNode:
         database=entry.database,
         schema=entry.schema,
         name=entry.table or entry.name,
-        qualified_name=_qualified_name(entry.database, entry.schema, entry.table or entry.name),
+        qualified_name=_qualified_name(
+            entry.database, schema=entry.schema, name=entry.table or entry.name
+        ),
     )
     return DagNode(
         id=_node_id(source.key),
@@ -96,8 +100,8 @@ def _build_source_node(source: CompiledSource) -> DagNode:
 
 def _build_loader_node(
     project: CompiledProject,
-    loader: DiscoveredLoaderFunction,
     *,
+    loader: DiscoveredLoaderFunction,
     source_by_loader: dict[str, SourceEntry],
 ) -> DagNode:
     entry: SourceEntry = source_by_loader.get(loader.name) or _loader_to_source_entry(
@@ -107,7 +111,9 @@ def _build_loader_node(
         database=entry.database,
         schema=entry.schema,
         name=entry.table or entry.name,
-        qualified_name=_qualified_name(entry.database, entry.schema, entry.table or entry.name),
+        qualified_name=_qualified_name(
+            entry.database, schema=entry.schema, name=entry.table or entry.name
+        ),
     )
     return DagNode(
         id=_loader_node_id(loader.name),
@@ -139,7 +145,7 @@ def _build_python_node(node: DiscoveredPythonNode) -> DagNode:
         column_lineage = _python_column_lineage(node.asset.column_lineage)
         materialization_type = "python_asset"
     return DagNode(
-        id=_python_node_id(node.kind, node.name),
+        id=_python_node_id(node.kind, node_name=node.name),
         kind=node.kind.value,
         name=node.name,
         asset_key=(node.kind.value, node.name),
@@ -266,8 +272,8 @@ def _build_python_edges(python_graph: PythonNodeGraph) -> tuple[DagEdge, ...]:
         downstream_node: DiscoveredPythonNode = python_graph.nodes_by_name[edge.downstream_name]
         edges.append(
             DagEdge(
-                from_id=_python_node_id(upstream_node.kind, upstream_node.name),
-                to_id=_python_node_id(downstream_node.kind, downstream_node.name),
+                from_id=_python_node_id(upstream_node.kind, node_name=upstream_node.name),
+                to_id=_python_node_id(downstream_node.kind, node_name=downstream_node.name),
             )
         )
     for node in python_graph.nodes:
@@ -275,7 +281,7 @@ def _build_python_edges(python_graph: PythonNodeGraph) -> tuple[DagEdge, ...]:
             edges.append(
                 DagEdge(
                     from_id=_sql_ref_node_id(sql_dep),
-                    to_id=_python_node_id(node.kind, node.name),
+                    to_id=_python_node_id(node.kind, node_name=node.name),
                 )
             )
     return tuple(edges)
@@ -373,12 +379,15 @@ def _build_scenario_check(scenario: CompiledSqlScenario) -> DagCheck:
 
 def _build_python_check(node: DiscoveredPythonNode, *, python_graph: PythonNodeGraph) -> DagCheck:
     checked_asset_ids: tuple[str, ...] = tuple(
-        _python_node_id(python_graph.nodes_by_name[edge.upstream_name].kind, edge.upstream_name)
+        _python_node_id(
+            python_graph.nodes_by_name[edge.upstream_name].kind,
+            node_name=edge.upstream_name,
+        )
         for edge in python_graph.dependency_edges
         if edge.downstream_name == node.name
     )
     return DagCheck(
-        id=_python_node_id(node.kind, node.name),
+        id=_python_node_id(node.kind, node_name=node.name),
         kind="python_check",
         name=node.name,
         checked_asset_ids=checked_asset_ids,
@@ -427,7 +436,7 @@ def _loader_node_id(loader_name: str) -> str:
     return f"loader:{loader_name}"
 
 
-def _python_node_id(kind: PythonNodeKind, node_name: str) -> str:
+def _python_node_id(kind: PythonNodeKind, *, node_name: str) -> str:
     if kind == PythonNodeKind.LOADER:
         return _loader_node_id(node_name)
     return f"{kind.value}:{node_name}"
@@ -532,7 +541,7 @@ def _python_column_lineage(
     }
 
 
-def _qualified_name(database: str | None, schema: str | None, name: str) -> str:
+def _qualified_name(database: str | None, *, schema: str | None, name: str) -> str:
     return ".".join(part for part in (database, schema, name) if part)
 
 

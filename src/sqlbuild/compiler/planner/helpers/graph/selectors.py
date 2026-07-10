@@ -166,7 +166,7 @@ def expand_required_build_resources(
     key: CompiledObjectKey
     for key in tuple(selected_keys):
         upstream_key: CompiledObjectKey
-        for upstream_key in expand_upstream(key, upstream):
+        for upstream_key in expand_upstream(key, upstream=upstream):
             if include_upstream_functions and upstream_key.resource_type in {
                 CompiledResourceType.UDF,
                 CompiledResourceType.TABLE_FN,
@@ -252,11 +252,13 @@ def _resolve_single(
             raise PlannerInputError(f"unknown selector name '{start_name}'", code="S007")
         if end_key is None:
             raise PlannerInputError(f"unknown selector name '{end_name}'", code="S007")
-        result: set[CompiledObjectKey] = set(find_path_keys(start_key, end_key, downstream))
+        result: set[CompiledObjectKey] = set(
+            find_path_keys(start_key, end=end_key, downstream=downstream)
+        )
         if parsed.upstream:
-            result.update(expand_upstream(start_key, upstream))
+            result.update(expand_upstream(start_key, upstream=upstream))
         if parsed.downstream:
-            result.update(expand_downstream(end_key, downstream))
+            result.update(expand_downstream(end_key, downstream=downstream))
         return frozenset(result)
 
     if parsed.kind == SelectorKind.TAG:
@@ -275,15 +277,15 @@ def _resolve_single(
             downstream=downstream,
         )
 
-    key: CompiledObjectKey | None = _lookup_key(parsed, all_keys)
+    key: CompiledObjectKey | None = _lookup_key(parsed, all_keys=all_keys)
     if key is None:
         raise PlannerInputError(f"unknown selector name '{parsed.value}'", code="S007")
 
     result: set[CompiledObjectKey] = {key}
     if parsed.upstream:
-        result.update(expand_upstream(key, upstream))
+        result.update(expand_upstream(key, upstream=upstream))
     if parsed.downstream:
-        result.update(expand_downstream(key, downstream))
+        result.update(expand_downstream(key, downstream=downstream))
     return frozenset(result)
 
 
@@ -304,10 +306,10 @@ def _resolve_tag(
     key: CompiledObjectKey
     if parsed.upstream:
         for key in tagged_keys:
-            result.update(expand_upstream(key, upstream))
+            result.update(expand_upstream(key, upstream=upstream))
     if parsed.downstream:
         for key in tagged_keys:
-            result.update(expand_downstream(key, downstream))
+            result.update(expand_downstream(key, downstream=downstream))
     return frozenset(result)
 
 
@@ -325,7 +327,7 @@ def _resolve_path(
     matched_keys: frozenset[CompiledObjectKey] = frozenset(
         key
         for key, indexed_folder in path_index.items()
-        if _path_matches(indexed_folder, selector_folder)
+        if _path_matches(indexed_folder, selector_folder=selector_folder)
     )
     if not matched_keys:
         raise PlannerInputError(f"no models found under path '{folder}'.", code="S009")
@@ -334,10 +336,10 @@ def _resolve_path(
     key: CompiledObjectKey
     if parsed.upstream:
         for key in matched_keys:
-            result.update(expand_upstream(key, upstream))
+            result.update(expand_upstream(key, upstream=upstream))
     if parsed.downstream:
         for key in matched_keys:
-            result.update(expand_downstream(key, downstream))
+            result.update(expand_downstream(key, downstream=downstream))
     return frozenset(result)
 
 
@@ -356,7 +358,7 @@ def _model_path_candidate(folder: str) -> str:
     )
 
 
-def _path_matches(indexed_folder: str, selector_folder: str) -> bool:
+def _path_matches(indexed_folder: str, *, selector_folder: str) -> bool:
     if selector_folder == "":
         return True
     return indexed_folder == selector_folder or indexed_folder.startswith(f"{selector_folder}/")
@@ -364,6 +366,7 @@ def _path_matches(indexed_folder: str, selector_folder: str) -> bool:
 
 def _lookup_key(
     parsed: ParsedSelector,
+    *,
     all_keys: dict[str, CompiledObjectKey],
 ) -> CompiledObjectKey | None:
     """Look up the object key for a parsed selector."""

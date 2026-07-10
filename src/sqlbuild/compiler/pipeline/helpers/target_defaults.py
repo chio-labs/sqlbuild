@@ -30,9 +30,9 @@ def apply_target_defaults(
             m,
             destination=_resolve_target(
                 m.destination,
-                default_schema,
-                default_database,
-                render_qualified_name,
+                default_schema=default_schema,
+                default_database=default_database,
+                render_qualified_name=render_qualified_name,
             ),
         )
         for m in project.models
@@ -42,9 +42,9 @@ def apply_target_defaults(
             s,
             destination=_resolve_target(
                 s.destination,
-                default_schema,
-                default_database,
-                render_qualified_name,
+                default_schema=default_schema,
+                default_database=default_database,
+                render_qualified_name=render_qualified_name,
             ),
         )
         for s in project.seeds
@@ -63,9 +63,9 @@ def apply_target_defaults(
             ),
             fingerprint_destination=_resolve_target(
                 f.fingerprint_destination,
-                default_schema,
-                default_database,
-                render_qualified_name,
+                default_schema=default_schema,
+                default_database=default_database,
+                render_qualified_name=render_qualified_name,
             ),
         )
         for f in project.functions
@@ -93,9 +93,9 @@ def _resolve_function_target(
     )
     resolved: CompiledRelationLocation = _resolve_target(
         function.destination,
-        default_schema if apply_defaults else None,
-        default_database if apply_defaults else None,
-        render_qualified_name,
+        default_schema=default_schema if apply_defaults else None,
+        default_database=default_database if apply_defaults else None,
+        render_qualified_name=render_qualified_name,
     )
     if not apply_defaults and resolved.qualified_name is None:
         return replace(resolved, qualified_name=resolved.name)
@@ -104,6 +104,7 @@ def _resolve_function_target(
 
 def _resolve_target(
     target: CompiledRelationLocation,
+    *,
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],

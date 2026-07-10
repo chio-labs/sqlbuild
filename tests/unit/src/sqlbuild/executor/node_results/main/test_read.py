@@ -28,7 +28,7 @@ from tests.unit.src.sqlbuild.executor.node_results.main.helpers import (
 def test_given_non_dict_metadata_when_reading_node_results_then_returns_empty_metadata(
     test_case: NodeResultReadTestCase,
 ) -> None:
-    def execute(_connection: object, _sql: str) -> NodeResultReadFakeResult:
+    def execute(_connection: object, /, *, sql: str) -> NodeResultReadFakeResult:
         return NodeResultReadFakeResult(
             [
                 (

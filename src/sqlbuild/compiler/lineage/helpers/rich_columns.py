@@ -141,7 +141,7 @@ def _build_polyglot_model_column_lineage(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "rich column lineage analysis failed; skipping model",
+            message="rich column lineage analysis failed; skipping model",
             sqlbuild_model=model.name,
             sqlbuild_error=str(error),
         )

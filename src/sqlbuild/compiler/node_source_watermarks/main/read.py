@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.shared.types import AdapterExecute
 from sqlbuild.compiler.node_source_watermarks.constants import (
     NODE_SOURCE_WATERMARK_TABLE_NAME,
 )
@@ -25,7 +26,7 @@ from sqlbuild.compiler.node_source_watermarks.models import (
 def read_latest_node_source_watermarks(
     *,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     table_exists: bool,
     database: str | None,
     schema: str,
@@ -44,7 +45,7 @@ def read_latest_node_source_watermarks(
     try:
         result: Any = execute(
             connection,
-            render_read_latest_sql(database=database, schema=schema),
+            sql=render_read_latest_sql(database=database, schema=schema),
         )
     except Exception as error:
         raise NodeSourceWatermarkInputError(

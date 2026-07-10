@@ -16,7 +16,7 @@ def virtual_environment_lock_key(virtual_environment_name: str) -> str:
     return f"virtual_env:{virtual_environment_name}"
 
 
-def model_version_lock_key(model_name: str, version_hash: str) -> str:
+def model_version_lock_key(model_name: str, *, version_hash: str) -> str:
     """Return the lock key for a physical model version mutation."""
 
     return f"model_version:{model_name}:{version_hash}"
@@ -24,8 +24,8 @@ def model_version_lock_key(model_name: str, version_hash: str) -> str:
 
 def acquire_virtual_environment_lock(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     virtual_environment_name: str,
     owner_id: str,
@@ -36,7 +36,7 @@ def acquire_virtual_environment_lock(
 
     return acquire_state_lock(
         backend,
-        connection,
+        connection=connection,
         schema=schema,
         lock_key=virtual_environment_lock_key(virtual_environment_name),
         owner_id=owner_id,
@@ -47,8 +47,8 @@ def acquire_virtual_environment_lock(
 
 def acquire_model_version_lock(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     model_name: str,
     version_hash: str,
@@ -60,9 +60,9 @@ def acquire_model_version_lock(
 
     return acquire_state_lock(
         backend,
-        connection,
+        connection=connection,
         schema=schema,
-        lock_key=model_version_lock_key(model_name, version_hash),
+        lock_key=model_version_lock_key(model_name, version_hash=version_hash),
         owner_id=owner_id,
         ttl=ttl,
         now=now,
@@ -71,8 +71,8 @@ def acquire_model_version_lock(
 
 def acquire_state_migration_lock(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     owner_id: str,
     ttl: timedelta,
@@ -82,7 +82,7 @@ def acquire_state_migration_lock(
 
     return acquire_state_lock(
         backend,
-        connection,
+        connection=connection,
         schema=schema,
         lock_key=STATE_MIGRATION_LOCK_KEY,
         owner_id=owner_id,
@@ -93,8 +93,8 @@ def acquire_state_migration_lock(
 
 def acquire_state_lock(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     lock_key: str,
     owner_id: str,
@@ -119,8 +119,8 @@ def acquire_state_lock(
 
 def release_state_lock(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     lease: StateLockLease,
 ) -> bool:

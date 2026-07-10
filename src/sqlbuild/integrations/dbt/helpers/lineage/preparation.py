@@ -53,7 +53,7 @@ def prepare_dbt_lineage_inputs(
         dbt_args=lineage_args.dbt_args,
     )
     runner: DbtRunner = DbtRunner()
-    report_progress(on_progress, "Compiling dbt project...")
+    report_progress(on_progress, message="Compiling dbt project...")
     dbt_compile_start: float = time.monotonic()
     compile_result: DbtCommandResult = runner.compile(options=dbt_options)
     if compile_result.returncode != 0:
@@ -62,13 +62,13 @@ def prepare_dbt_lineage_inputs(
             help=compile_result.stderr or compile_result.stdout,
         )
     report_progress(
-        on_progress, f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
+        on_progress, message=f"Compiled dbt project. ({time.monotonic() - dbt_compile_start:.2f}s)"
     )
-    report_progress(on_progress, "Loading dbt manifest...")
+    report_progress(on_progress, message="Loading dbt manifest...")
     manifest: DbtManifestIndex = load_dbt_manifest_index(
         manifest_path=resolve_dbt_manifest_path(options=dbt_options)
     )
-    report_progress(on_progress, "Loaded dbt manifest.")
+    report_progress(on_progress, message="Loaded dbt manifest.")
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,

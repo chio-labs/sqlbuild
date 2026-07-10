@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from typing import TextIO
 
 from sqlbuild.cli.commands.helpers.clone.models import (
@@ -17,6 +16,7 @@ from sqlbuild.cli.commands.helpers.clone.output import render_clone_item_line
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.types import CloneItemCallback
 
 
 def execute_clone_plan(
@@ -29,7 +29,7 @@ def execute_clone_plan(
     """Execute the standard clone plan and copy fingerprints."""
 
     clone_start: float = time.monotonic()
-    on_item: Callable[[int, int, CloneItemResult], None] = _build_on_clone_item(
+    on_item: CloneItemCallback = _build_on_clone_item(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
     )
@@ -59,10 +59,8 @@ def execute_clone_plan(
     return CloneRunOutcome(result=result, elapsed=time.monotonic() - clone_start)
 
 
-def _build_on_clone_item(
-    *, stream: TextIO, use_color: bool
-) -> Callable[[int, int, CloneItemResult], None]:
-    def _on_clone_item(index: int, total: int, item: CloneItemResult) -> None:
+def _build_on_clone_item(*, stream: TextIO, use_color: bool) -> CloneItemCallback:
+    def _on_clone_item(index: int, *, total: int, item: CloneItemResult) -> None:
         stream.write(
             render_clone_item_line(index=index, total=total, item=item, use_color=use_color) + "\n"
         )

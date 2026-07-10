@@ -13,6 +13,7 @@ from sqlbuild.adapter.shared.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.shared.types import ConnectionElapsedCallback
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.freshness.main.current_records import (
     build_current_virtual_source_freshness_records,
@@ -167,8 +168,8 @@ def open_planning_connection(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     on_connection_start: Callable[[int], None] | None,
-    on_connection_complete: Callable[[int, float], None] | None,
-    on_connection_error: Callable[[int, float], None] | None,
+    on_connection_complete: ConnectionElapsedCallback | None,
+    on_connection_error: ConnectionElapsedCallback | None,
 ) -> Any:
     """Open one warehouse connection for planning with progress callbacks."""
 
@@ -179,8 +180,8 @@ def open_planning_connection(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(1, time.monotonic() - start)
+            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, time.monotonic() - start)
+        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
     return connection

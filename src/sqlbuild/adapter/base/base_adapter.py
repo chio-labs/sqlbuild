@@ -86,10 +86,10 @@ class BaseAdapter(StrictAdapter):
 
         return self.max_identifier_length
 
-    def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
+    def describe_relation(self, connection: Any, *, relation: str) -> tuple[ColumnInfo, ...]:
         """Return relation column metadata using a generic DESCRIBE statement."""
 
-        cursor: Any = self.execute(connection, f"DESCRIBE {relation}")
+        cursor: Any = self.execute(connection, sql=f"DESCRIBE {relation}")
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
     def get_table_freshness_metadata(
@@ -121,11 +121,11 @@ class BaseAdapter(StrictAdapter):
             )
         return results
 
-    def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query without materializing full rows."""
 
         cursor: Any = self.execute(
-            connection, f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0"
+            connection, sql=f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0"
         )
         description: Any | None = getattr(cursor, "description", None)
         if description is None:
@@ -142,7 +142,7 @@ class BaseAdapter(StrictAdapter):
         """Return the maximum cursor value currently present in a relation."""
 
         quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        cursor: Any = self.execute(connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}")
         row: Any | None = cursor.fetchone()
         if row is None:
             return None
@@ -179,13 +179,13 @@ class BaseAdapter(StrictAdapter):
         )
         if database is not None:
             query += f" AND catalog_name = {_quote_sql_string(database)}"
-        cursor: Any = self.execute(connection, query)
+        cursor: Any = self.execute(connection, sql=query)
         return cursor.fetchone() is not None
 
-    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+    def query(self, connection: Any, *, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""
 
-        cursor: Any = self.execute(connection, sql)
+        cursor: Any = self.execute(connection, sql=sql)
         description: Any | None = getattr(cursor, "description", None)
         if description is None:
             return QueryResult()
@@ -340,7 +340,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TABLE {destination} AS {sql}",)
@@ -525,8 +525,8 @@ class BaseAdapter(StrictAdapter):
             cursor_type=cursor_type,
         )
 
-    def relation_names_match(self, left: str, right: str) -> bool:
-        return self._relation_names_match_impl(left, right)
+    def relation_names_match(self, left: str, *, right: str) -> bool:
+        return self._relation_names_match_impl(left, right=right)
 
     def _render_query_with_cursor_bounds_impl(
         self,
@@ -538,8 +538,8 @@ class BaseAdapter(StrictAdapter):
         cursor_type: str | None,
     ) -> str:
         quoted_cursor: str = self.render_identifier(cursor_column)
-        start_literal: str = self.render_cursor_bound_literal(cursor_start, cursor_type)
-        end_literal: str = self.render_cursor_bound_literal(cursor_end, cursor_type)
+        start_literal: str = self.render_cursor_bound_literal(cursor_start, cursor_type=cursor_type)
+        end_literal: str = self.render_cursor_bound_literal(cursor_end, cursor_type=cursor_type)
         return (
             f"SELECT * FROM ({sql}) AS __sqlbuild_cursor_bounded "
             f"WHERE {quoted_cursor} >= {start_literal} AND {quoted_cursor} < {end_literal}"
@@ -554,7 +554,9 @@ class BaseAdapter(StrictAdapter):
         cursor_type: str | None,
     ) -> str:
         quoted_cursor: str = self.render_identifier(cursor_column)
-        end_literal: str = self.render_cursor_bound_literal(cursor_end_exclusive, cursor_type)
+        end_literal: str = self.render_cursor_bound_literal(
+            cursor_end_exclusive, cursor_type=cursor_type
+        )
         return f"SELECT * FROM {origin} WHERE {quoted_cursor} < {end_literal}"
 
     def _render_seed_select_after_cursor_impl(
@@ -566,10 +568,12 @@ class BaseAdapter(StrictAdapter):
         cursor_type: str | None,
     ) -> str:
         quoted_cursor: str = self.render_identifier(cursor_column)
-        start_literal: str = self.render_cursor_bound_literal(cursor_start_exclusive, cursor_type)
+        start_literal: str = self.render_cursor_bound_literal(
+            cursor_start_exclusive, cursor_type=cursor_type
+        )
         return f"SELECT * FROM {origin} WHERE {quoted_cursor} > {start_literal}"
 
-    def _relation_names_match_impl(self, left: str, right: str) -> bool:
+    def _relation_names_match_impl(self, left: str, *, right: str) -> bool:
         return left.replace('"', "") == right.replace('"', "")
 
     def render_replace_table_from_relation(
@@ -1064,7 +1068,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def create_view_as(
         self,
@@ -1078,7 +1082,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def create_function(
         self,
@@ -1101,7 +1105,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop(
         self,
@@ -1115,7 +1119,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop_view(
         self,
@@ -1131,7 +1135,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def rename(
         self,
@@ -1160,7 +1164,7 @@ class BaseAdapter(StrictAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def clone(
         self,
@@ -1181,7 +1185,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def durable_clone(
         self,
@@ -1198,7 +1202,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def replace_table_from_relation(
         self,
@@ -1215,7 +1219,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def move_or_copy_relation(
         self,
@@ -1241,7 +1245,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def load_seed(
         self,
@@ -1272,7 +1276,7 @@ class BaseAdapter(StrictAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def delete_insert(
         self,
@@ -1292,7 +1296,7 @@ class BaseAdapter(StrictAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def delete_insert_cursor(
         self,
@@ -1318,7 +1322,7 @@ class BaseAdapter(StrictAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def merge(
         self,
@@ -1448,7 +1452,7 @@ class BaseAdapter(StrictAdapter):
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
-        null_row: tuple[Any, ...] = self.execute(connection, null_count_sql).fetchone()
+        null_row: tuple[Any, ...] = self.execute(connection, sql=null_count_sql).fetchone()
         if int(null_row[0]) > 0:
             raise AdapterUserError(
                 f"row diff {relation_label} relation contains null unique_key values"
@@ -1461,7 +1465,9 @@ class BaseAdapter(StrictAdapter):
             f"GROUP BY {key_list} HAVING COUNT(*) > 1"
             f") AS __duplicates"
         )
-        duplicate_row: tuple[Any, ...] = self.execute(connection, duplicate_count_sql).fetchone()
+        duplicate_row: tuple[Any, ...] = self.execute(
+            connection, sql=duplicate_count_sql
+        ).fetchone()
         if int(duplicate_row[0]) > 0:
             raise AdapterUserError(
                 f"row diff {relation_label} relation contains duplicate unique_key values"
@@ -1985,7 +1991,7 @@ class BaseAdapter(StrictAdapter):
 
         return ExpressionInferenceProfile(sql_analysis_dialect=self.sql_analysis_dialect())
 
-    def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
         """Render one generic cursor bound literal from a normalized string value."""
 
         if cursor_type == CursorKind.INTEGER:

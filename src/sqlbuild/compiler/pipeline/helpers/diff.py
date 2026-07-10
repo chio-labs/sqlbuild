@@ -160,7 +160,13 @@ def _resolve_selector_token(
                 f"no models found with tag '{core.removeprefix('tag:')}'",
                 code="S008",
             )
-        return _expand_keys(keys, upstream_requested, downstream_requested, upstream, downstream)
+        return _expand_keys(
+            keys,
+            upstream_requested=upstream_requested,
+            downstream_requested=downstream_requested,
+            upstream=upstream,
+            downstream=downstream,
+        )
     if core.startswith("path:") or "/" in core or "\\" in core:
         path_value: str = core.removeprefix("path:").replace("\\", "/").strip("/")
         if path_value == "models":
@@ -174,18 +180,29 @@ def _resolve_selector_token(
         )
         if not keys:
             raise PlannerInputError(f"no models found under path '{path_value}'", code="S009")
-        return _expand_keys(keys, upstream_requested, downstream_requested, upstream, downstream)
+        return _expand_keys(
+            keys,
+            upstream_requested=upstream_requested,
+            downstream_requested=downstream_requested,
+            upstream=upstream,
+            downstream=downstream,
+        )
 
     key: CompiledObjectKey | None = all_keys.get(core)
     if key is None:
         raise PlannerInputError(f"unknown selector name '{core}'", code="S007")
     return _expand_keys(
-        frozenset((key,)), upstream_requested, downstream_requested, upstream, downstream
+        frozenset((key,)),
+        upstream_requested=upstream_requested,
+        downstream_requested=downstream_requested,
+        upstream=upstream,
+        downstream=downstream,
     )
 
 
 def _expand_keys(
     keys: frozenset[CompiledObjectKey],
+    *,
     upstream_requested: bool,
     downstream_requested: bool,
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
@@ -195,14 +212,15 @@ def _expand_keys(
     key: CompiledObjectKey
     for key in keys:
         if upstream_requested:
-            expanded.update(_expand_graph(key, upstream))
+            expanded.update(_expand_graph(key, graph=upstream))
         if downstream_requested:
-            expanded.update(_expand_graph(key, downstream))
+            expanded.update(_expand_graph(key, graph=downstream))
     return frozenset(expanded)
 
 
 def _expand_graph(
     key: CompiledObjectKey,
+    *,
     graph: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     visited: set[CompiledObjectKey] = set()

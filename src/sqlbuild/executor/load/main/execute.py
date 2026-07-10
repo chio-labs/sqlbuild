@@ -200,7 +200,9 @@ def _apply_source_write_strategy(
         schema=source_entry.schema,
         name=target_name,
     )
-    staging_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, staging)
+    staging_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
+        connection, relation=staging
+    )
     if target_exists:
         validate_and_evolve_existing_target(
             adapter=adapter,

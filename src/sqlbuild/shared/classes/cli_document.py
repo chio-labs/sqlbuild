@@ -21,7 +21,7 @@ class CliDocument:
     def blank(self) -> None:
         self._lines.append("")
 
-    def field(self, label: str, value: str, *, value_padding: str = " ") -> None:
+    def field(self, label: str, *, value: str, value_padding: str = " ") -> None:
         self._lines.append(f"  {self._style.value(label)}:{value_padding}{value}")
 
     def fields(self, rows: tuple[tuple[str, str], ...], *, label_width: int | None = None) -> None:
@@ -42,7 +42,7 @@ class CliDocument:
         for value in values:
             self._lines.append(f"  {self._style.object_name(value)}")
 
-    def command_line(self, prefix: str, command: str, *, style_command: bool = True) -> None:
+    def command_line(self, prefix: str, *, command: str, style_command: bool = True) -> None:
         rendered_command: str = self._style.command(command) if style_command else command
         self._lines.append(f"{prefix}{rendered_command}")
 
@@ -51,7 +51,7 @@ class CliDocument:
     ) -> None:
         for index, command in enumerate(commands, start=1):
             prefix: str = f"  {index}. " if numbered else self._style.command("  ")
-            self.command_line(prefix, command, style_command=style_command)
+            self.command_line(prefix, command=command, style_command=style_command)
 
     def render(self, *, trailing_newline: bool = True) -> str:
         rendered: str = "\n".join(self._lines)

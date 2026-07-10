@@ -21,7 +21,7 @@ def load_staging_cursor_bounds(
     quoted_cursor_column: str = adapter.render_identifier(cursor_column)
     sql: str = f"SELECT MIN({quoted_cursor_column}), MAX({quoted_cursor_column}) FROM {staging}"
     statement_recorder.record(sql)
-    cursor: Any = adapter.execute(connection, sql)
+    cursor: Any = adapter.execute(connection, sql=sql)
     row: object | None = cursor.fetchone()
     if row is None:
         return (None, None)

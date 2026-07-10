@@ -11,6 +11,7 @@ from typing import Any
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.shared.types import ConnectionElapsedCallback
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.helpers.backend import build_state_backend
@@ -28,8 +29,8 @@ def run_state_lifecycle(
     auto_approve: bool = False,
     no_color: bool = False,
     on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    on_connection_complete: ConnectionElapsedCallback | None = None,
+    on_connection_error: ConnectionElapsedCallback | None = None,
 ) -> int:
     """Run a virtual state lifecycle command."""
 
@@ -50,10 +51,10 @@ def run_state_lifecycle(
         connection: Any = backend.connect(config.connection)
     except BaseException:
         if on_connection_error is not None:
-            on_connection_error(1, time.perf_counter() - started_at)
+            on_connection_error(1, elapsed_seconds=time.perf_counter() - started_at)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, time.perf_counter() - started_at)
+        on_connection_complete(1, elapsed_seconds=time.perf_counter() - started_at)
     try:
         return _execute_state_command(
             backend=backend,

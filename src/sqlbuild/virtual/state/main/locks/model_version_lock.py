@@ -12,8 +12,8 @@ from sqlbuild.virtual.state.models import StateLockLease
 
 def acquire_model_version_lease(
     backend: StateBackend,
-    connection: Any,
     *,
+    connection: Any,
     schema: str,
     model_name: str,
     version_hash: str,
@@ -25,7 +25,7 @@ def acquire_model_version_lease(
 
     return acquire_model_version_lock(
         backend,
-        connection,
+        connection=connection,
         schema=schema,
         model_name=model_name,
         version_hash=version_hash,

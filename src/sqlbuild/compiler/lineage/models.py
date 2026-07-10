@@ -154,6 +154,7 @@ class ProjectColumnLineage:
     def producing_edge(
         self,
         model_name: str,
+        *,
         column_name: str,
     ) -> ColumnLineageEdge | None:
         """Return the first edge that produces `model_name.column_name`."""
@@ -168,6 +169,7 @@ class ProjectColumnLineage:
     def column_consumers(
         self,
         resource_name: str,
+        *,
         column_name: str,
     ) -> tuple[ColumnLineageEdge, ...]:
         """Return direct downstream consumers of `resource_name.column_name`."""
@@ -181,6 +183,7 @@ class ProjectColumnLineage:
     def trace_column(
         self,
         model_name: str,
+        *,
         column_name: str,
     ) -> tuple[ColumnLineageEdge, ...]:
         """Trace a model column upstream through project lineage edges."""
@@ -204,6 +207,7 @@ class ProjectColumnLineage:
     def trace_column_downstream(
         self,
         resource_name: str,
+        *,
         column_name: str,
     ) -> tuple[ColumnLineageEdge, ...]:
         """Trace a resource column downstream through project lineage edges."""

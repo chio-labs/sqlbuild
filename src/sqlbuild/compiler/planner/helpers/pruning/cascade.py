@@ -63,9 +63,9 @@ def resolve_cascades(
         change: ChangeDetectionResult | None = changes.models.get(key.name)
         if model is None or change is None:
             continue
-        cursor_type: str | None = _get_config_str(model, "cursor_type")
+        cursor_type: str | None = _get_config_str(model, key="cursor_type")
         model_cursor_types[model.name] = cursor_type
-        local_policy: str | None = _get_config_str(model, "replay_on_change")
+        local_policy: str | None = _get_config_str(model, key="replay_on_change")
         cascade: CascadeResult | None = resolve_cascade(
             model_name=model.name,
             own_backfill=change.backfill,
@@ -131,7 +131,7 @@ def resolve_cascade(
         local_backfill=local_backfill,
         incoming_cascade=winning,
     )
-    if _backfills_match(resolved_backfill, own_backfill):
+    if _backfills_match(resolved_backfill, b=own_backfill):
         return None
 
     return CascadeResult(
@@ -239,7 +239,7 @@ def _pick_winner(
     candidate: CascadeCause
     for candidate in candidates:
         candidate_rank: tuple[int, int] = _backfill_rank(
-            candidate.effective_action, candidate.effective_duration
+            candidate.effective_action, duration=candidate.effective_duration
         )
         if best_rank is None or candidate_rank > best_rank:
             best = candidate
@@ -269,13 +269,13 @@ def _resolve_effective_backfill(
     )
 
 
-def _backfills_match(a: BackfillResult, b: BackfillResult) -> bool:
+def _backfills_match(a: BackfillResult, *, b: BackfillResult) -> bool:
     """Return True when two backfill results resolve identically."""
 
     return a.action == b.action and a.duration == b.duration
 
 
-def _backfill_rank(action: BackfillAction, duration: str | None) -> tuple[int, int]:
+def _backfill_rank(action: BackfillAction, *, duration: str | None) -> tuple[int, int]:
     """Produce a comparable rank tuple for a backfill action."""
 
     action_rank: int = _ACTION_RANK[action]
@@ -287,7 +287,7 @@ def _backfill_rank(action: BackfillAction, duration: str | None) -> tuple[int, i
     return (action_rank, duration_seconds)
 
 
-def _get_config_str(model: CompiledModel, key: str) -> str | None:
+def _get_config_str(model: CompiledModel, *, key: str) -> str | None:
     value: object | None = model.config.values.get(key)
     return value if isinstance(value, str) else None
 

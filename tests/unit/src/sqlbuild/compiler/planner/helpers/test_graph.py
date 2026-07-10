@@ -262,7 +262,9 @@ def test_given_audit_scope_deps_when_building_edge_origins_then_names_the_audit(
 def test_given_key_when_expanding_upstream_then_returns_expected_keys(
     test_case: ExpandUpstreamTestCase,
 ) -> None:
-    result: frozenset[CompiledObjectKey] = expand_upstream(test_case.key, test_case.upstream)
+    result: frozenset[CompiledObjectKey] = expand_upstream(
+        test_case.key, upstream=test_case.upstream
+    )
 
     assert result == test_case.expected_keys
 
@@ -295,7 +297,9 @@ def test_given_key_when_expanding_upstream_then_returns_expected_keys(
 def test_given_key_when_expanding_downstream_then_returns_expected_keys(
     test_case: ExpandDownstreamTestCase,
 ) -> None:
-    result: frozenset[CompiledObjectKey] = expand_downstream(test_case.key, test_case.downstream)
+    result: frozenset[CompiledObjectKey] = expand_downstream(
+        test_case.key, downstream=test_case.downstream
+    )
 
     assert result == test_case.expected_keys
 
@@ -331,7 +335,9 @@ def test_given_start_and_end_when_finding_path_keys_then_returns_expected(
     test_case: FindPathKeysTestCase,
 ) -> None:
     result: frozenset[CompiledObjectKey] = find_path_keys(
-        test_case.start, test_case.end, test_case.downstream
+        test_case.start,
+        end=test_case.end,
+        downstream=test_case.downstream,
     )
 
     assert result == test_case.expected_keys
@@ -358,7 +364,11 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
     test_case: FindPathKeysErrorTestCase,
 ) -> None:
     with pytest.raises(test_case.expected_error_type, match="not downstream"):
-        find_path_keys(test_case.start, test_case.end, test_case.downstream)
+        find_path_keys(
+            test_case.start,
+            end=test_case.end,
+            downstream=test_case.downstream,
+        )
 
 
 @pytest.mark.parametrize(

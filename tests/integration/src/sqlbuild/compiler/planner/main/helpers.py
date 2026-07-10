@@ -250,7 +250,7 @@ def write_standard_model_state(
 ) -> StandardModelVersionIdentities:
     """Create prior model relations and matching standard fingerprints."""
 
-    adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS staging")
+    adapter.execute(connection, sql="CREATE SCHEMA IF NOT EXISTS staging")
     identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=project.functions,
         seeds=project.seeds,
@@ -268,7 +268,7 @@ def write_standard_model_state(
         existing_relation_sql: str = "VIEW" if materialized == "view" else "TABLE"
         adapter.execute(
             connection,
-            f"CREATE OR REPLACE {existing_relation_sql} staging.{model.name} AS SELECT 1 AS id",
+            sql=f"CREATE OR REPLACE {existing_relation_sql} staging.{model.name} AS SELECT 1 AS id",
         )
         write_fingerprint(
             connection=connection,

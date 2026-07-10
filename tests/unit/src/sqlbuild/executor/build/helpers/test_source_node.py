@@ -71,7 +71,9 @@ def test_given_build_source_node_when_executing_then_runs_loader_runtime(
             ),
             callbacks=BuildCallbacks(
                 on_progress=progress_events.append,
-                on_node_start=lambda name, kind: start_events.append((name, kind)),
+                on_node_start=lambda name, *, resource_kind: start_events.append(
+                    (name, resource_kind)
+                ),
             ),
         )
         rows: tuple[tuple[object, ...], ...] = tuple(

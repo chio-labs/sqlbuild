@@ -44,7 +44,7 @@ def extract_top_level_ctes_with_sql_analysis(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "top-level CTE compact extraction failed; falling back",
+            message="top-level CTE compact extraction failed; falling back",
             sqlbuild_file=file_label,
             sqlbuild_error=str(error),
         )

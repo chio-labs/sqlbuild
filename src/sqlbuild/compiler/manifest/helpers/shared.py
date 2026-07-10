@@ -115,7 +115,7 @@ def build_depends_on(
     node_ids: list[str] = []
     dep: CompiledObjectKey
     for dep in deps:
-        dep_id: str = _key_to_unique_id(dep, project_name)
+        dep_id: str = _key_to_unique_id(dep, project_name=project_name)
         node_ids.append(dep_id)
     return {
         "macros": [],
@@ -123,7 +123,7 @@ def build_depends_on(
     }
 
 
-def _key_to_unique_id(key: CompiledObjectKey, project_name: str) -> str:
+def _key_to_unique_id(key: CompiledObjectKey, *, project_name: str) -> str:
     """Convert a CompiledObjectKey to a dbt-style unique_id."""
 
     resource_prefix: str = _RESOURCE_TYPE_PREFIX.get(str(key.resource_type), "model")

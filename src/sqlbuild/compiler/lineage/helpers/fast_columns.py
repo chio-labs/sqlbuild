@@ -145,7 +145,7 @@ def _build_polyglot_fast_model_column_lineage(
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "fast column lineage parse failed; falling back",
+            message="fast column lineage parse failed; falling back",
             sqlbuild_model=model.name,
             sqlbuild_error=str(error),
         )
@@ -447,7 +447,7 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "fast column lineage expression payload extraction failed; falling back",
+            message="fast column lineage expression payload extraction failed; falling back",
             sqlbuild_error=str(error),
         )
         return ()
@@ -494,7 +494,7 @@ def _polyglot_column_table_name(column: Any) -> str:
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "fast column lineage column table extraction failed; falling back",
+            message="fast column lineage column table extraction failed; falling back",
             sqlbuild_error=str(error),
         )
         return ""
@@ -565,7 +565,7 @@ def _polyglot_has_aggregation(expression: Any) -> bool:
     except Exception as error:
         log_debug_event(
             _DEBUG_LOGGER,
-            "fast column lineage aggregation detection failed; falling back",
+            message="fast column lineage aggregation detection failed; falling back",
             sqlbuild_error=str(error),
         )
         return False

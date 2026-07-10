@@ -404,7 +404,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.trace_column("c", "id")
+        for edge in result.trace_column("c", column_name="id")
     )
     consumers: tuple[str, ...] = tuple(
         edge_label(
@@ -413,7 +413,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.column_consumers("a", "id")
+        for edge in result.column_consumers("a", column_name="id")
     )
     downstream_trace: tuple[str, ...] = tuple(
         edge_label(
@@ -422,7 +422,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.trace_column_downstream("a", "id")
+        for edge in result.trace_column_downstream("a", column_name="id")
     )
     assert trace == test_case.expected_trace
     assert consumers == test_case.expected_consumers

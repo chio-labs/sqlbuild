@@ -24,7 +24,7 @@ def render_dependency_tree[Node: Hashable](
 
     return render_dependency_branch(
         focus,
-        deps,
+        deps=deps,
         prefix="",
         seen=seen,
         format_node=format_node,

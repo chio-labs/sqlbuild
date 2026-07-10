@@ -190,7 +190,7 @@ def _build_project_column_lineage_with_propagated_schema(
             if model_lineage.columns
         }
         next_models: tuple[CompiledModel, ...] = tuple(
-            _with_propagated_columns(model, inferred_by_model.get(model.name))
+            _with_propagated_columns(model, columns=inferred_by_model.get(model.name))
             for model in current_project.models
         )
         next_project: CompiledProject = CompiledProject(
@@ -212,7 +212,7 @@ def _build_project_column_lineage_with_propagated_schema(
 
 
 def _with_propagated_columns(
-    model: CompiledModel, columns: tuple[InferredColumn, ...] | None
+    model: CompiledModel, *, columns: tuple[InferredColumn, ...] | None
 ) -> CompiledModel:
     if columns is None or model.inferred_columns == columns:
         return model
@@ -643,7 +643,7 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
         replacements.update(
             _relation_replacements(
                 model.relation_name,
-                model.unique_id,
+                resource_name=model.unique_id,
                 kind="ref",
                 include_table_only=relation_table_counts[_relation_table_name(model.relation_name)]
                 == 1,
@@ -654,7 +654,7 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
         replacements.update(
             _relation_replacements(
                 source.relation_name,
-                source.unique_id,
+                resource_name=source.unique_id,
                 kind="source",
                 include_table_only=relation_table_counts[_relation_table_name(source.relation_name)]
                 == 1,
@@ -665,7 +665,7 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
         replacements.update(
             _relation_replacements(
                 seed.relation_name,
-                seed.unique_id,
+                resource_name=seed.unique_id,
                 kind="source",
                 include_table_only=relation_table_counts[_relation_table_name(seed.relation_name)]
                 == 1,
@@ -674,14 +674,16 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
     for relation_name, reference_call in sorted(
         replacements.items(), key=lambda item: len(item[0]), reverse=True
     ):
-        rewritten = _replace_relation_in_from_or_join(rewritten, relation_name, reference_call)
+        rewritten = _replace_relation_in_from_or_join(
+            rewritten, relation_name=relation_name, replacement=reference_call
+        )
     return rewritten
 
 
 def _relation_replacements(
     relation_name: str,
-    resource_name: str,
     *,
+    resource_name: str,
     kind: str,
     include_table_only: bool,
 ) -> dict[str, str]:
@@ -721,7 +723,7 @@ def _relation_table_name(relation_name: str) -> str:
     return stripped_parts[-1] if stripped_parts else relation_name
 
 
-def _replace_relation_in_from_or_join(sql: str, relation_name: str, replacement: str) -> str:
+def _replace_relation_in_from_or_join(sql: str, *, relation_name: str, replacement: str) -> str:
     escaped_relation: str = re.escape(relation_name)
     pattern: re.Pattern[str] = re.compile(
         rf"(?P<prefix>\b(?:from|join)\s+){escaped_relation}(?P<suffix>\b|\s|$)",
@@ -753,7 +755,10 @@ def _trace_column_with_depth(
         if max_depth is not None and current_depth >= max_depth:
             continue
         if direction == DbtLineageDirection.DOWNSTREAM:
-            for edge in column_lineage.column_consumers(current_resource, current_column):
+            for edge in column_lineage.column_consumers(
+                current_resource,
+                column_name=current_column,
+            ):
                 result.append(edge)
                 stack.append(
                     (edge.target.resource_name, edge.target.column_name, current_depth + 1)

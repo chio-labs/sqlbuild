@@ -24,7 +24,7 @@ from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import ExecutionResourceKind, PythonCheckSeverity
+from sqlbuild.shared.types import NodeStartCallback, PythonCheckSeverity
 
 
 @dataclass(frozen=True)
@@ -157,7 +157,7 @@ class IngressCallbacks:
     """Progress callbacks and display flags for Python ingress execution."""
 
     use_color: bool = False
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None
+    on_node_start: NodeStartCallback | None = None
     on_node_complete: Callable[[object], None] | None = None
     identity_recorder: PythonIdentityRecorder | None = None
 
@@ -190,11 +190,11 @@ class BasePythonNodeContext:
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(self.connection, sql=sql)
 
     def query(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)

@@ -51,17 +51,17 @@ def connection(
         conn: Any = adapter.connect(sqlserver_container_config)
     except Exception as exc:
         pytest.skip(f"SQL Server unavailable for integration tests: {exc}")
-    adapter.execute(conn, f"CREATE SCHEMA {adapter.render_identifier(sqlserver_schema)}")
+    adapter.execute(conn, sql=f"CREATE SCHEMA {adapter.render_identifier(sqlserver_schema)}")
     try:
         yield conn
     finally:
         adapter.execute(
             conn,
-            "DECLARE @sql NVARCHAR(MAX) = N''; "
+            sql="DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N';' "
             "FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id "
             f"WHERE s.name = '{sqlserver_schema}'; "
             "EXEC sp_executesql @sql;",
         )
-        adapter.execute(conn, f"DROP SCHEMA {adapter.render_identifier(sqlserver_schema)}")
+        adapter.execute(conn, sql=f"DROP SCHEMA {adapter.render_identifier(sqlserver_schema)}")
         adapter.close(conn)

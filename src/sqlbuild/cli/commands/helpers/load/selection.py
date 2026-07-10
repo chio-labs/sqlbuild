@@ -95,9 +95,12 @@ def select_load_entries(
         upstream_loaders=upstream_loaders,
     ):
         if loader_name not in selected_terminal_loaders:
-            entries.append(_loader_to_source_entry(loaders[loader_name], target_config))
+            entries.append(
+                _loader_to_source_entry(loaders[loader_name], target_config=target_config)
+            )
     entries.extend(
-        managed_sources[source_name] for source_name in sources_order(sources, selected_sources)
+        managed_sources[source_name]
+        for source_name in sources_order(sources, selected_sources=selected_sources)
     )
     return tuple(entries)
 
@@ -133,10 +136,10 @@ def select_load_reference_entries(
         dependency_name: str
         for dependency_name in upstream_loaders[source.loader]:
             reference_loader_names.update(
-                _upstream_loader_closure(dependency_name, upstream_loaders)
+                _upstream_loader_closure(dependency_name, upstream_loaders=upstream_loaders)
             )
     return tuple(
-        _loader_to_source_entry(loaders[loader_name], target_config)
+        _loader_to_source_entry(loaders[loader_name], target_config=target_config)
         for loader_name in _topological_loader_order(
             loader_names=reference_loader_names,
             upstream_loaders=upstream_loaders,
@@ -145,7 +148,9 @@ def select_load_reference_entries(
     )
 
 
-def sources_order(sources: tuple[SourceEntry, ...], selected_sources: set[str]) -> tuple[str, ...]:
+def sources_order(
+    sources: tuple[SourceEntry, ...], *, selected_sources: set[str]
+) -> tuple[str, ...]:
     return tuple(source.name for source in sources if source.name in selected_sources)
 
 
@@ -255,19 +260,25 @@ def _select_name(
         if loader_name is not None:
             selected_loaders.add(loader_name)
             if include_upstream:
-                selected_loaders.update(_upstream_loader_closure(loader_name, upstream_loaders))
+                selected_loaders.update(
+                    _upstream_loader_closure(loader_name, upstream_loaders=upstream_loaders)
+                )
         return
     if name in source_by_loader:
         selected_sources.update(source_by_loader[name])
         selected_loaders.add(name)
         if include_upstream:
-            selected_loaders.update(_upstream_loader_closure(name, upstream_loaders))
+            selected_loaders.update(
+                _upstream_loader_closure(name, upstream_loaders=upstream_loaders)
+            )
         return
     if name in loaders:
         selected_loaders.add(name)
         directly_selected_loaders.add(name)
         if include_upstream:
-            selected_loaders.update(_upstream_loader_closure(name, upstream_loaders))
+            selected_loaders.update(
+                _upstream_loader_closure(name, upstream_loaders=upstream_loaders)
+            )
         return
 
 
@@ -377,6 +388,7 @@ def _environment_sources(
 
 def _loader_to_source_entry(
     loader: DiscoveredLoaderFunction,
+    *,
     target_config: TargetConfig | None,
 ) -> SourceEntry:
     database: str | None = target_config.database if target_config is not None else None
@@ -432,6 +444,7 @@ def _validate_load_selector(
 
 def _upstream_loader_closure(
     loader_name: str | None,
+    *,
     upstream_loaders: dict[str, tuple[str, ...]],
 ) -> set[str]:
     if loader_name is None:
@@ -439,7 +452,7 @@ def _upstream_loader_closure(
     result: set[str] = {loader_name}
     dependency: str
     for dependency in upstream_loaders.get(loader_name, ()):
-        result.update(_upstream_loader_closure(dependency, upstream_loaders))
+        result.update(_upstream_loader_closure(dependency, upstream_loaders=upstream_loaders))
     return result
 
 

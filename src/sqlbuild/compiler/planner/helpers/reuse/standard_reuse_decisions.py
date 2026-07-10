@@ -161,7 +161,7 @@ def _decision_for_model(
                 and _reuse_origin_cursor_ahead(
                     reuse_origin_cursor_max=reuse_from_model.reuse_origin_cursor_max,
                     destination_cursor_max=destination_cursor_max,
-                    cursor_type=_get_config_str(model, "cursor_type"),
+                    cursor_type=_get_config_str(model, key="cursor_type"),
                 )
             ),
         )
@@ -203,7 +203,7 @@ def _reuse_origin_cursor_ahead(
     return reuse_origin_cursor_max > destination_cursor_max
 
 
-def _get_config_str(model: CompiledModel, key: str) -> str | None:
+def _get_config_str(model: CompiledModel, *, key: str) -> str | None:
     value: object | None = model.config.values.get(key)
     return value if isinstance(value, str) else None
 

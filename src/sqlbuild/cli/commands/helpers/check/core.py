@@ -180,7 +180,9 @@ def run_check_read_side_dependencies(
         ),
     )
     sql_refs: tuple[SqlResourceRef, ...] = tuple(
-        sorted(_read_side_sql_refs(read_side_names, python_graph), key=_sql_ref_sort_key)
+        sorted(
+            _read_side_sql_refs(read_side_names, python_graph=python_graph), key=_sql_ref_sort_key
+        )
     )
     relation_lookup: RelationLookup = build_relation_lookup(
         adapter=adapter,
@@ -368,7 +370,7 @@ def _load_result_to_python_result(
 
 
 def _read_side_sql_refs(
-    read_side_names: frozenset[str], python_graph: PythonNodeGraph
+    read_side_names: frozenset[str], *, python_graph: PythonNodeGraph
 ) -> frozenset[SqlResourceRef]:
     refs: set[SqlResourceRef] = set()
     node_name: str

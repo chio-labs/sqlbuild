@@ -382,7 +382,7 @@ class BigQueryAdapter(BaseAdapter):
             try:
                 cursor: _BigQueryCursor = self.execute(
                     connection,
-                    "SELECT table_schema, table_name, storage_last_modified_time "
+                    sql="SELECT table_schema, table_name, storage_last_modified_time "
                     f"FROM {information_schema} WHERE {clauses}",
                 )
                 rows: list[tuple[object, ...]] = cursor.fetchall()
@@ -445,7 +445,7 @@ class BigQueryAdapter(BaseAdapter):
             )
             cursor: _BigQueryCursor = self.execute(
                 connection,
-                "SELECT '"
+                sql="SELECT '"
                 + self._escape_sql_string(schema)
                 + "' AS table_schema, table_id AS table_name, "
                 f"TIMESTAMP_MILLIS(last_modified_time) AS storage_last_modified_time "
@@ -490,7 +490,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def create_table_as(
         self,
@@ -505,7 +505,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def create_view_as(
         self,
@@ -519,7 +519,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def create_function(
         self,
@@ -542,7 +542,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop(
         self,
@@ -556,7 +556,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop_view(
         self,
@@ -572,7 +572,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def rename(
         self,
@@ -601,7 +601,7 @@ class BigQueryAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, stmt)
+                self.execute(connection, sql=stmt)
 
     def clone(
         self,
@@ -622,7 +622,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def append(
         self,
@@ -639,7 +639,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def drop_columns(
         self,
@@ -676,7 +676,7 @@ class BigQueryAdapter(BaseAdapter):
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
         null_row: tuple[Any, ...] = cast(
-            tuple[Any, ...], self.execute(connection, null_count_sql).fetchone()
+            tuple[Any, ...], self.execute(connection, sql=null_count_sql).fetchone()
         )
         if int(null_row[0]) > 0:
             raise AdapterUserError(
@@ -691,7 +691,7 @@ class BigQueryAdapter(BaseAdapter):
             f") AS __duplicates"
         )
         duplicate_row: tuple[Any, ...] = cast(
-            tuple[Any, ...], self.execute(connection, duplicate_count_sql).fetchone()
+            tuple[Any, ...], self.execute(connection, sql=duplicate_count_sql).fetchone()
         )
         if int(duplicate_row[0]) > 0:
             raise AdapterUserError(
@@ -1343,7 +1343,7 @@ class BigQueryAdapter(BaseAdapter):
             location=self._location,
         )
 
-    def execute(self, connection: _BigQueryConnection, sql: str) -> _BigQueryCursor:
+    def execute(self, connection: _BigQueryConnection, *, sql: str) -> _BigQueryCursor:
         """Execute a SQL statement against BigQuery."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.bigquery"), sql=sql)
@@ -1375,7 +1375,7 @@ class BigQueryAdapter(BaseAdapter):
             message_parts.append(error_text)
         return "\n".join(message_parts)
 
-    def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
+    def query(self, connection: Any, *, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.bigquery"), sql=sql)
@@ -1533,7 +1533,7 @@ class BigQueryAdapter(BaseAdapter):
             },
         )
 
-    def render_cursor_bound_literal(self, value: str, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:
             return value
         if cursor_type == CursorKind.TIMESTAMP:
@@ -1785,8 +1785,8 @@ class BigQueryAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
-    def relation_names_match(self, left: str, right: str) -> bool:
-        return self._relation_names_match_impl(left, right)
+    def relation_names_match(self, left: str, *, right: str) -> bool:
+        return self._relation_names_match_impl(left, right=right)
 
     def durable_clone(
         self,
@@ -1803,7 +1803,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, stmt)
+            self.execute(connection, sql=stmt)
 
     def render_replace_table_from_relation(
         self, *, destination: str, origin: str
@@ -1935,7 +1935,7 @@ class BigQueryAdapter(BaseAdapter):
                 quoted_names: str = ", ".join(self._quote_sql_string(name) for name in names)
                 query += f" AND routine_name IN ({quoted_names})"
             try:
-                cursor: _BigQueryCursor = self.execute(connection, query)
+                cursor: _BigQueryCursor = self.execute(connection, sql=query)
                 row: tuple[Any, ...]
                 for row in cursor.fetchall():
                     functions.append(
@@ -1991,16 +1991,16 @@ class BigQueryAdapter(BaseAdapter):
         }
 
     def describe_relation(
-        self, connection: _BigQueryConnection, relation: str
+        self, connection: _BigQueryConnection, *, relation: str
     ) -> tuple[ColumnInfo, ...]:
         """Return BigQuery relation metadata using the tables API."""
 
         table: Any = connection.client.get_table(self._strip_identifier_quotes(relation))
         return tuple(self._column_info_from_schema_field(field) for field in table.schema)
 
-    def query_column_names(self, connection: Any, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
         cursor: Any = self.execute(
-            connection, f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0"
+            connection, sql=f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0"
         )
         description: Any | None = cursor.description
         if description is None:
@@ -2017,7 +2017,7 @@ class BigQueryAdapter(BaseAdapter):
         """Return the maximum cursor value currently present in a relation."""
 
         quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(connection, f"SELECT max({quoted_cursor}) FROM {relation}")
+        cursor: Any = self.execute(connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}")
         row: Any | None = cursor.fetchone()
         if row is None:
             return None
@@ -2100,7 +2100,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, statement)
+            self.execute(connection, sql=statement)
 
     def merge(
         self,
@@ -2112,14 +2112,14 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        source_columns: tuple[str, ...] = self.query_column_names(connection, sql)
+        source_columns: tuple[str, ...] = self.query_column_names(connection, sql=sql)
         statements: tuple[str, ...] = self.render_merge(
             destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, statement)
+            self.execute(connection, sql=statement)
 
     def delete_insert(
         self,
@@ -2133,7 +2133,7 @@ class BigQueryAdapter(BaseAdapter):
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         if columns is None:
-            columns = self.query_column_names(connection, sql)
+            columns = self.query_column_names(connection, sql=sql)
         statements: tuple[str, ...] = self.render_delete_insert(
             destination=destination,
             sql=sql,
@@ -2143,7 +2143,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, statement)
+            self.execute(connection, sql=statement)
 
     def delete_insert_cursor(
         self,
@@ -2158,7 +2158,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         if columns is None:
-            columns = self.query_column_names(connection, sql)
+            columns = self.query_column_names(connection, sql=sql)
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             destination=destination,
             sql=sql,
@@ -2170,7 +2170,7 @@ class BigQueryAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, statement)
+            self.execute(connection, sql=statement)
 
     def build_row_diff_equal_expression(
         self,
@@ -2218,8 +2218,8 @@ class BigQueryAdapter(BaseAdapter):
         left: str,
         right: str,
     ) -> SchemaDiffResult:
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
-        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, right)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
+        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=right)
         left_map: dict[str, str] = {col.name: col.type for col in left_columns}
         right_map: dict[str, str] = {col.name: col.type for col in right_columns}
 
@@ -2265,7 +2265,7 @@ class BigQueryAdapter(BaseAdapter):
         end_cursor: CursorValue | None = None,
     ) -> RowDiffResult:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2338,7 +2338,7 @@ class BigQueryAdapter(BaseAdapter):
             f"COUNT(CASE WHEN __left.{keys[0]} IS NULL THEN 1 END) AS right_only"
             f"{column_count_sql} FROM __left FULL OUTER JOIN __right ON {join_condition}"
         )
-        row: tuple[Any, ...] | None = self.execute(connection, diff_sql).fetchone()
+        row: tuple[Any, ...] | None = self.execute(connection, sql=diff_sql).fetchone()
         if row is None:
             raise AdapterUserError("BigQuery row diff query returned no result")
         column_results: tuple[RowDiffColumnResult, ...] = tuple(
@@ -2377,7 +2377,7 @@ class BigQueryAdapter(BaseAdapter):
         query: str = f"SELECT COUNT(*) FROM {relation}"
         if cursor_filter:
             query += f" WHERE {cursor_filter}"
-        result: tuple[Any, ...] | None = self.execute(connection, query).fetchone()
+        result: tuple[Any, ...] | None = self.execute(connection, sql=query).fetchone()
         if result is None:
             raise AdapterUserError("BigQuery count query returned no result")
         return self._to_int(result[0])
@@ -2397,7 +2397,7 @@ class BigQueryAdapter(BaseAdapter):
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2457,7 +2457,7 @@ class BigQueryAdapter(BaseAdapter):
             f"AND ({unequal_condition}) "
             f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
         samples: list[RowDiffSampleRow] = []
         row: tuple[Any, ...]
         for row in rows:
@@ -2538,7 +2538,7 @@ class BigQueryAdapter(BaseAdapter):
             f"WHERE {side_condition} "
             f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sample_sql).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
         return tuple(tuple((key, row[index]) for index, key in enumerate(keys)) for row in rows)
 
     def schema_exists(

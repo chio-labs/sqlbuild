@@ -40,7 +40,7 @@ _HOOK_CALL_NAMES: frozenset[str] = frozenset({"sql", "python"})
 _MODEL_HOOK_FIELD_NAMES: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 
 
-def parse_model_sql(contents: str, file_path: Path) -> tuple[dict[str, object], str]:
+def parse_model_sql(contents: str, *, file_path: Path) -> tuple[dict[str, object], str]:
     """Parse a raw SQL model file into header values and SQL body."""
 
     header_match: re.Match[str] | None = MODEL_HEADER_PATTERN.match(contents)
@@ -170,17 +170,17 @@ def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
             continue
         upper_character: str = character.upper()
         if select_list_start is None:
-            if upper_character == "S" and _keyword_at(sql, "SELECT", index):
+            if upper_character == "S" and _keyword_at(sql, keyword="SELECT", index=index):
                 select_list_start = index + len("SELECT")
                 index = select_list_start
                 continue
         else:
-            if upper_character == "U" and _keyword_at(sql, "UNION", index):
+            if upper_character == "U" and _keyword_at(sql, keyword="UNION", index=index):
                 return None
             if (
                 select_list_end is None
                 and upper_character == "F"
-                and _keyword_at(sql, "FROM", index)
+                and _keyword_at(sql, keyword="FROM", index=index)
             ):
                 select_list_end = index
                 if not has_union_candidate:
@@ -233,8 +233,8 @@ def _location_for_projection_range(
     item_start: int = projection_range[0]
     item_end: int = projection_range[1]
     sql: str = contents[sql_start:]
-    start_offset: int = _skip_local_whitespace(sql, item_start, item_end)
-    end_offset: int = _trim_local_whitespace(sql, start_offset, item_end)
+    start_offset: int = _skip_local_whitespace(sql, start=item_start, end=item_end)
+    end_offset: int = _trim_local_whitespace(sql, start=start_offset, end=item_end)
     if start_offset >= end_offset:
         return None
     return _location_for_absolute_span(
@@ -295,7 +295,7 @@ def _line_starts(contents: str) -> tuple[int, ...]:
     return tuple(starts)
 
 
-def _find_top_level_keyword(sql: str, keyword: str, *, start: int) -> int | None:
+def _find_top_level_keyword(sql: str, *, keyword: str, start: int) -> int | None:
     depth: int = 0
     index: int = start
     in_quote: str | None = None
@@ -321,7 +321,7 @@ def _find_top_level_keyword(sql: str, keyword: str, *, start: int) -> int | None
             depth = max(0, depth - 1)
             index += 1
             continue
-        if depth == 0 and _keyword_at(sql, keyword, index):
+        if depth == 0 and _keyword_at(sql, keyword=keyword, index=index):
             return index
         index += 1
     return None
@@ -385,19 +385,19 @@ def _select_item_output_name(item: str, *, extract_implicit_alias_columns: bool)
     return bare_match.group("name").strip('"')
 
 
-def _skip_local_whitespace(sql: str, start: int, end: int) -> int:
+def _skip_local_whitespace(sql: str, *, start: int, end: int) -> int:
     while start < end and sql[start].isspace():
         start += 1
     return start
 
 
-def _trim_local_whitespace(sql: str, start: int, end: int) -> int:
+def _trim_local_whitespace(sql: str, *, start: int, end: int) -> int:
     while end > start and sql[end - 1].isspace():
         end -= 1
     return end
 
 
-def _keyword_at(sql: str, keyword: str, index: int) -> bool:
+def _keyword_at(sql: str, *, keyword: str, index: int) -> bool:
     end: int = index + len(keyword)
     if sql[index:end].upper() != keyword:
         return False

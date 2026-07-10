@@ -48,6 +48,7 @@ _SEED_CSV_BOOL_SETTINGS: frozenset[str] = frozenset(
 
 def parse_schema_yml(
     contents: str,
+    *,
     file_path: Path,
 ) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
     """Parse one schema.yml file into raw model and seed metadata."""

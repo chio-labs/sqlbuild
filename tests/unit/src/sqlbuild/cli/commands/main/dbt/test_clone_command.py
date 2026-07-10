@@ -8,7 +8,12 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.commands import dbt_clone as dbt_clone_module
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
-from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.executor.clone.types import (
+    CloneAction,
+    CloneItemCallback,
+    CloneStartCallback,
+    CloneStatus,
+)
 from sqlbuild.integrations.dbt.models import DbtCloneRun
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtCloneCommandOutputTestCase,
@@ -46,14 +51,14 @@ def test_given_dbt_clone_when_streaming_then_renders_native_clone_output_shape(
         project_dir: Path,
         args: tuple[str, ...],
         on_progress: Callable[[str], None],
-        on_clone_start: Callable[[str, str, int], None],
-        on_item: Callable[[int, int, CloneItemResult], None],
+        on_clone_start: CloneStartCallback,
+        on_item: CloneItemCallback,
     ) -> DbtCloneRun:
         del project_dir, args
         on_progress("Connecting to snowflake...")
         on_progress("Connected to snowflake. (0.01s)")
         on_progress("Applying clone plan...")
-        on_clone_start("master", "dev", 1)
+        on_clone_start("master", destination_target_name="dev", total=1)
         item: CloneItemResult = CloneItemResult(
             name="race__stg_horse",
             action=CloneAction.CLONED,
@@ -62,7 +67,7 @@ def test_given_dbt_clone_when_streaming_then_renders_native_clone_output_shape(
             destination_relation="RACING.DEV.RACE__STG_HORSE",
             duration_seconds=0.92,
         )
-        on_item(1, 1, item)
+        on_item(1, total=1, item=item)
         on_progress("Applied clone plan. (0.02s)")
         return DbtCloneRun(
             result=CloneExecutionResult(item_results=(item,)),

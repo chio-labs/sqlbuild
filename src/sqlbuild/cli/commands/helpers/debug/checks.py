@@ -237,7 +237,7 @@ def _append_connection_checks(
         return
 
     try:
-        adapter.query(connection, "SELECT 1", limit=None)
+        adapter.query(connection, sql="SELECT 1", limit=None)
         connection_lines.append(
             DebugLine(
                 label="query test",

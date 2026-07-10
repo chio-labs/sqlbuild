@@ -78,10 +78,10 @@ def run_scenario_test_pipeline(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if hooks.on_connection_error is not None:
-            hooks.on_connection_error(1, time.monotonic() - start)
+            hooks.on_connection_error(1, elapsed_seconds=time.monotonic() - start)
         raise
     if hooks.on_connection_complete is not None:
-        hooks.on_connection_complete(1, time.monotonic() - start)
+        hooks.on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
     try:
         results: list[ScenarioRunResult] = []
         scenario: CompiledSqlScenario
@@ -201,10 +201,10 @@ def run_scenario_capture_pipeline(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if hooks.on_connection_error is not None:
-            hooks.on_connection_error(1, time.monotonic() - start)
+            hooks.on_connection_error(1, elapsed_seconds=time.monotonic() - start)
         raise
     if hooks.on_connection_complete is not None:
-        hooks.on_connection_complete(1, time.monotonic() - start)
+        hooks.on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
     try:
         results: list[ScenarioSnapshotCaptureRunResult] = []
         scenario: CompiledSqlScenario
@@ -282,7 +282,7 @@ def select_scenario_snapshot_capture_candidates(
         except Exception as error:
             log_debug_event(
                 _DEBUG_LOGGER,
-                "scenario snapshot state classification failed; skipping auto-capture",
+                message="scenario snapshot state classification failed; skipping auto-capture",
                 scenario=scenario.name,
                 sqlbuild_error=str(error),
             )

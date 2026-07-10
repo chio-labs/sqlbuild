@@ -58,9 +58,9 @@ def connection(
     postgres_schema: str,
 ) -> Iterator[Any]:
     conn: Any = adapter.connect(postgres_container_config)
-    adapter.execute(conn, f"CREATE SCHEMA IF NOT EXISTS {postgres_schema}")
+    adapter.execute(conn, sql=f"CREATE SCHEMA IF NOT EXISTS {postgres_schema}")
     try:
         yield conn
     finally:
-        adapter.execute(conn, f"DROP SCHEMA IF EXISTS {postgres_schema} CASCADE")
+        adapter.execute(conn, sql=f"DROP SCHEMA IF EXISTS {postgres_schema} CASCADE")
         adapter.close(conn)

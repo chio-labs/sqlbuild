@@ -203,7 +203,7 @@ def _trace_column_with_depth(
         if direction == "downstream":
             edges: tuple[ColumnLineageEdge, ...] = column_lineage.column_consumers(
                 current_resource,
-                current_column,
+                column_name=current_column,
             )
             for edge in edges:
                 result.append(edge)
@@ -279,7 +279,7 @@ def build_lineage_graph(
     """Build display nodes and selected edges."""
 
     nodes: tuple[LineageNode, ...] = tuple(
-        _build_node(project, key) for key in sorted(selected_keys, key=_sort_key)
+        _build_node(project, key=key) for key in sorted(selected_keys, key=_sort_key)
     )
     selected_edges: list[tuple[CompiledObjectKey, CompiledObjectKey]] = []
     for downstream_key in sorted(selected_keys, key=_sort_key):
@@ -319,9 +319,13 @@ def _resolve_selector_anchors(
             for part in parts:
                 parsed: ParsedLineageSelector | ParsedLineagePathSelector = _parse_selector(part)
                 if isinstance(parsed, ParsedLineagePathSelector):
-                    start_key: CompiledObjectKey = _lookup_name(parsed.start_name, all_keys)
-                    end_key: CompiledObjectKey = _lookup_name(parsed.end_name, all_keys)
-                    retained.update(_find_path_keys(start_key, end_key, downstream_deps))
+                    start_key: CompiledObjectKey = _lookup_name(
+                        parsed.start_name, all_keys=all_keys
+                    )
+                    end_key: CompiledObjectKey = _lookup_name(parsed.end_name, all_keys=all_keys)
+                    retained.update(
+                        _find_path_keys(start_key, end=end_key, downstream=downstream_deps)
+                    )
                     upstream_anchors.add(start_key)
                     downstream_anchors.add(end_key)
                     continue
@@ -335,11 +339,11 @@ def _resolve_selector_anchors(
                     if parsed.kind == "tag":
                         matched = tag_index.get(parsed.value, frozenset())
                     else:
-                        matched = _match_path(parsed.value, path_index)
+                        matched = _match_path(parsed.value, path_index=path_index)
                     upstream_anchors.update(matched)
                     downstream_anchors.update(matched)
                     continue
-                key: CompiledObjectKey = _lookup_parsed_selector(parsed, all_keys)
+                key: CompiledObjectKey = _lookup_parsed_selector(parsed, all_keys=all_keys)
                 if parsed.upstream:
                     upstream_anchors.add(key)
                 if parsed.downstream:
@@ -382,7 +386,7 @@ def _walk_bounded(
     if max_depth is None:
         result: set[CompiledObjectKey] = set()
         for anchor in anchors:
-            result.update(_walk_all(anchor, deps))
+            result.update(_walk_all(anchor, deps=deps))
         return frozenset(result)
     if max_depth == 0:
         return frozenset()
@@ -402,6 +406,7 @@ def _walk_bounded(
 
 def _walk_all(
     key: CompiledObjectKey,
+    *,
     deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     visited: set[CompiledObjectKey] = set()
@@ -416,7 +421,7 @@ def _walk_all(
     return frozenset(visited)
 
 
-def _lookup_name(name: str, all_keys: dict[str, CompiledObjectKey]) -> CompiledObjectKey:
+def _lookup_name(name: str, *, all_keys: dict[str, CompiledObjectKey]) -> CompiledObjectKey:
     key: CompiledObjectKey | None = all_keys.get(name)
     if key is None:
         raise CliUserError(f"unknown lineage target '{name}'", code="C305")
@@ -461,7 +466,7 @@ def _resolve_selectors(
             )
     scoped: set[CompiledObjectKey] = selected - excluded
     for key in tuple(scoped):
-        for upstream_key in _walk_all(key, upstream):
+        for upstream_key in _walk_all(key, deps=upstream):
             if upstream_key.resource_type in {
                 CompiledResourceType.UDF,
                 CompiledResourceType.TABLE_FN,
@@ -508,30 +513,39 @@ def _resolve_single(
 ) -> frozenset[CompiledObjectKey]:
     parsed: ParsedLineageSelector | ParsedLineagePathSelector = _parse_selector(raw)
     if isinstance(parsed, ParsedLineagePathSelector):
-        start_key: CompiledObjectKey = _lookup_name(parsed.start_name, all_keys)
-        end_key: CompiledObjectKey = _lookup_name(parsed.end_name, all_keys)
-        result: set[CompiledObjectKey] = set(_find_path_keys(start_key, end_key, downstream))
+        start_key: CompiledObjectKey = _lookup_name(parsed.start_name, all_keys=all_keys)
+        end_key: CompiledObjectKey = _lookup_name(parsed.end_name, all_keys=all_keys)
+        result: set[CompiledObjectKey] = set(
+            _find_path_keys(start_key, end=end_key, downstream=downstream)
+        )
         if parsed.upstream:
-            result.update(_walk_all(start_key, upstream))
+            result.update(_walk_all(start_key, deps=upstream))
         if parsed.downstream:
-            result.update(_walk_all(end_key, downstream))
+            result.update(_walk_all(end_key, deps=downstream))
         return frozenset(result)
     if parsed.kind == "tag":
         matched_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
         if not matched_keys:
             raise CliUserError(f"no models found with tag '{parsed.value}'", code="C310")
-        return _apply_selector_expansion(matched_keys, parsed, upstream, downstream)
+        return _apply_selector_expansion(
+            matched_keys, parsed=parsed, upstream=upstream, downstream=downstream
+        )
     if parsed.kind == "path":
-        matched_keys = _match_path(parsed.value, path_index)
+        matched_keys = _match_path(parsed.value, path_index=path_index)
         if not matched_keys:
             raise CliUserError(f"no models found under path '{parsed.value}'", code="C311")
-        return _apply_selector_expansion(matched_keys, parsed, upstream, downstream)
-    key: CompiledObjectKey = _lookup_parsed_selector(parsed, all_keys)
-    return _apply_selector_expansion(frozenset({key}), parsed, upstream, downstream)
+        return _apply_selector_expansion(
+            matched_keys, parsed=parsed, upstream=upstream, downstream=downstream
+        )
+    key: CompiledObjectKey = _lookup_parsed_selector(parsed, all_keys=all_keys)
+    return _apply_selector_expansion(
+        frozenset({key}), parsed=parsed, upstream=upstream, downstream=downstream
+    )
 
 
 def _apply_selector_expansion(
     matched_keys: frozenset[CompiledObjectKey],
+    *,
     parsed: ParsedLineageSelector,
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
@@ -539,9 +553,9 @@ def _apply_selector_expansion(
     result: set[CompiledObjectKey] = set(matched_keys)
     for key in matched_keys:
         if parsed.upstream:
-            result.update(_walk_all(key, upstream))
+            result.update(_walk_all(key, deps=upstream))
         if parsed.downstream:
-            result.update(_walk_all(key, downstream))
+            result.update(_walk_all(key, deps=downstream))
     return frozenset(result)
 
 
@@ -599,6 +613,7 @@ def _parse_selector(raw: str) -> ParsedLineageSelector | ParsedLineagePathSelect
 
 def _lookup_parsed_selector(
     parsed: ParsedLineageSelector,
+    *,
     all_keys: dict[str, CompiledObjectKey],
 ) -> CompiledObjectKey:
     key: CompiledObjectKey | None = all_keys.get(parsed.value)
@@ -613,10 +628,11 @@ def _lookup_parsed_selector(
 
 def _find_path_keys(
     start: CompiledObjectKey,
+    *,
     end: CompiledObjectKey,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
-    reachable_from_start: frozenset[CompiledObjectKey] = _walk_all(start, downstream)
+    reachable_from_start: frozenset[CompiledObjectKey] = _walk_all(start, deps=downstream)
     if end not in reachable_from_start:
         raise CliUserError(
             f"'{end.resource_type}:{end.name}' is not downstream of "
@@ -642,6 +658,7 @@ def _find_path_keys(
 
 def _match_path(
     folder: str,
+    *,
     path_index: dict[CompiledObjectKey, str],
 ) -> frozenset[CompiledObjectKey]:
     prefix: str = folder + "/"
@@ -652,7 +669,7 @@ def _match_path(
     )
 
 
-def _build_node(project: CompiledProject, key: CompiledObjectKey) -> LineageNode:
+def _build_node(project: CompiledProject, *, key: CompiledObjectKey) -> LineageNode:
     for model in project.models:
         if model.key == key:
             return LineageNode(

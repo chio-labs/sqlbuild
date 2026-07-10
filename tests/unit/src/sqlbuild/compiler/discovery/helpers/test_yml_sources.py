@@ -301,7 +301,7 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     test_case: ParseSourcesYamlTestCase,
 ) -> None:
     source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
-        test_case.contents, Path("sources/raw.yml")
+        test_case.contents, file_path=Path("sources/raw.yml")
     )
 
     assert tuple(entry.name for entry in source_entries) == test_case.expected_source_names
@@ -454,7 +454,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
 ) -> None:
     source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
         test_case.contents,
-        Path("sources/raw.yml"),
+        file_path=Path("sources/raw.yml"),
     )
 
     assert source_entries[0].loader == test_case.expected_loader
@@ -506,7 +506,7 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
 ) -> None:
     source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
         test_case.contents,
-        Path("sources/raw.yml"),
+        file_path=Path("sources/raw.yml"),
     )
 
     assert tuple(entry.name for entry in source_entries) == test_case.expected_source_names
@@ -1205,4 +1205,4 @@ def test_given_invalid_sources_yaml_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSourcesYamlErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        parse_sources_yml(test_case.contents, Path("sources/raw.yml"))
+        parse_sources_yml(test_case.contents, file_path=Path("sources/raw.yml"))

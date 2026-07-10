@@ -394,7 +394,7 @@ def _build_audit_entries(
     entries: list[AuditPlanEntry] = []
     audit: CompiledAudit
     for audit in project.audits:
-        if not scope_overlaps(audit.scope_deps, scope.selected_keys):
+        if not scope_overlaps(audit.scope_deps, selected_keys=scope.selected_keys):
             continue
         entries.append(
             plan_audit(
@@ -421,7 +421,7 @@ def _build_test_entries(
     warnings: list[PlanWarning] = []
     sql_test: CompiledSqlTest
     for sql_test in project.sql_tests:
-        if not scope_overlaps(sql_test.scope_deps, selected_keys):
+        if not scope_overlaps(sql_test.scope_deps, selected_keys=selected_keys):
             continue
         test_entry: SqlTestPlanEntry
         test_warnings: tuple[PlanWarning, ...]

@@ -49,16 +49,16 @@ def decode_watermark_payload(value: str, *, qualified_name: str) -> NodeSourceWa
             f"Invalid node source watermark payload in {qualified_name}: expected JSON object"
         )
     return NodeSourceWatermarkPayload(
-        version=_required_int(raw_payload, "version", qualified_name=qualified_name),
-        complete=_required_bool(raw_payload, "complete", qualified_name=qualified_name),
+        version=_required_int(raw_payload, key="version", qualified_name=qualified_name),
+        complete=_required_bool(raw_payload, key="complete", qualified_name=qualified_name),
         sources=tuple(
             _source_entry_from_json(item, qualified_name=qualified_name)
-            for item in _optional_list(raw_payload, "sources", qualified_name=qualified_name)
+            for item in _optional_list(raw_payload, key="sources", qualified_name=qualified_name)
         ),
         unknown_sources=tuple(
             _unknown_source_entry_from_json(item, qualified_name=qualified_name)
             for item in _optional_list(
-                raw_payload, "unknown_sources", qualified_name=qualified_name
+                raw_payload, key="unknown_sources", qualified_name=qualified_name
             )
         ),
     )
@@ -92,18 +92,22 @@ def _unknown_source_entry_to_json(entry: UnknownSourceWatermarkEntry) -> dict[st
 def _source_entry_from_json(value: object, *, qualified_name: str) -> SourceWatermarkEntry:
     raw_entry: dict[str, object] = _required_dict(value, qualified_name=qualified_name)
     return SourceWatermarkEntry(
-        source_name=_required_str(raw_entry, "source_name", qualified_name=qualified_name),
-        target_database=_optional_str(raw_entry, "target_database", qualified_name=qualified_name),
-        target_schema=_optional_str(raw_entry, "target_schema", qualified_name=qualified_name),
-        target_name=_optional_str(raw_entry, "target_name", qualified_name=qualified_name),
-        strategy=_required_str(raw_entry, "strategy", qualified_name=qualified_name),
-        value_kind=_required_str(raw_entry, "value_kind", qualified_name=qualified_name),
-        data_version=_optional_str(raw_entry, "data_version", qualified_name=qualified_name),
-        data_version_hash=_required_str(
-            raw_entry, "data_version_hash", qualified_name=qualified_name
+        source_name=_required_str(raw_entry, key="source_name", qualified_name=qualified_name),
+        target_database=_optional_str(
+            raw_entry, key="target_database", qualified_name=qualified_name
         ),
-        observed_at=_required_datetime(raw_entry, "observed_at", qualified_name=qualified_name),
-        watermark_kind=_required_str(raw_entry, "watermark_kind", qualified_name=qualified_name),
+        target_schema=_optional_str(raw_entry, key="target_schema", qualified_name=qualified_name),
+        target_name=_optional_str(raw_entry, key="target_name", qualified_name=qualified_name),
+        strategy=_required_str(raw_entry, key="strategy", qualified_name=qualified_name),
+        value_kind=_required_str(raw_entry, key="value_kind", qualified_name=qualified_name),
+        data_version=_optional_str(raw_entry, key="data_version", qualified_name=qualified_name),
+        data_version_hash=_required_str(
+            raw_entry, key="data_version_hash", qualified_name=qualified_name
+        ),
+        observed_at=_required_datetime(raw_entry, key="observed_at", qualified_name=qualified_name),
+        watermark_kind=_required_str(
+            raw_entry, key="watermark_kind", qualified_name=qualified_name
+        ),
     )
 
 
@@ -112,11 +116,13 @@ def _unknown_source_entry_from_json(
 ) -> UnknownSourceWatermarkEntry:
     raw_entry: dict[str, object] = _required_dict(value, qualified_name=qualified_name)
     return UnknownSourceWatermarkEntry(
-        source_name=_required_str(raw_entry, "source_name", qualified_name=qualified_name),
-        target_database=_optional_str(raw_entry, "target_database", qualified_name=qualified_name),
-        target_schema=_optional_str(raw_entry, "target_schema", qualified_name=qualified_name),
-        target_name=_optional_str(raw_entry, "target_name", qualified_name=qualified_name),
-        reason=_required_str(raw_entry, "reason", qualified_name=qualified_name),
+        source_name=_required_str(raw_entry, key="source_name", qualified_name=qualified_name),
+        target_database=_optional_str(
+            raw_entry, key="target_database", qualified_name=qualified_name
+        ),
+        target_schema=_optional_str(raw_entry, key="target_schema", qualified_name=qualified_name),
+        target_name=_optional_str(raw_entry, key="target_name", qualified_name=qualified_name),
+        reason=_required_str(raw_entry, key="reason", qualified_name=qualified_name),
     )
 
 
@@ -129,7 +135,7 @@ def _required_dict(value: object, *, qualified_name: str) -> dict[str, object]:
 
 
 def _optional_list(
-    raw_payload: dict[str, object], key: str, *, qualified_name: str
+    raw_payload: dict[str, object], *, key: str, qualified_name: str
 ) -> list[object]:
     value: object = raw_payload.get(key, [])
     if not isinstance(value, list):
@@ -139,7 +145,7 @@ def _optional_list(
     return cast(list[object], value)
 
 
-def _required_str(raw_entry: dict[str, object], key: str, *, qualified_name: str) -> str:
+def _required_str(raw_entry: dict[str, object], *, key: str, qualified_name: str) -> str:
     value: object = raw_entry.get(key)
     if not isinstance(value, str):
         raise NodeSourceWatermarkInputError(
@@ -148,7 +154,7 @@ def _required_str(raw_entry: dict[str, object], key: str, *, qualified_name: str
     return value
 
 
-def _optional_str(raw_entry: dict[str, object], key: str, *, qualified_name: str) -> str | None:
+def _optional_str(raw_entry: dict[str, object], *, key: str, qualified_name: str) -> str | None:
     value: object = raw_entry.get(key)
     if value is None:
         return None
@@ -159,7 +165,7 @@ def _optional_str(raw_entry: dict[str, object], key: str, *, qualified_name: str
     return value
 
 
-def _required_int(raw_entry: dict[str, object], key: str, *, qualified_name: str) -> int:
+def _required_int(raw_entry: dict[str, object], *, key: str, qualified_name: str) -> int:
     value: object = raw_entry.get(key)
     if not isinstance(value, int):
         raise NodeSourceWatermarkInputError(
@@ -168,7 +174,7 @@ def _required_int(raw_entry: dict[str, object], key: str, *, qualified_name: str
     return value
 
 
-def _required_bool(raw_entry: dict[str, object], key: str, *, qualified_name: str) -> bool:
+def _required_bool(raw_entry: dict[str, object], *, key: str, qualified_name: str) -> bool:
     value: object = raw_entry.get(key)
     if not isinstance(value, bool):
         raise NodeSourceWatermarkInputError(
@@ -177,8 +183,8 @@ def _required_bool(raw_entry: dict[str, object], key: str, *, qualified_name: st
     return value
 
 
-def _required_datetime(raw_entry: dict[str, object], key: str, *, qualified_name: str) -> datetime:
-    value: str = _required_str(raw_entry, key, qualified_name=qualified_name)
+def _required_datetime(raw_entry: dict[str, object], *, key: str, qualified_name: str) -> datetime:
+    value: str = _required_str(raw_entry, key=key, qualified_name=qualified_name)
     try:
         return datetime.fromisoformat(value)
     except ValueError as error:

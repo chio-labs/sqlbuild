@@ -253,7 +253,7 @@ def write_matching_reuse_origin_fingerprint(
 
     adapter.execute(
         connection,
-        build_create_table_sql(
+        sql=build_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,
@@ -262,7 +262,7 @@ def write_matching_reuse_origin_fingerprint(
     )
     adapter.execute(
         connection,
-        build_insert_sql(
+        sql=build_insert_sql(
             database=database,
             schema=schema,
             fingerprint=Fingerprint(

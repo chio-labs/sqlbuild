@@ -125,7 +125,7 @@ def run_virtual_reconcile(
                 )
             lease = acquire_virtual_environment_lease(
                 backend,
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=resolved_virtual_environment_name,
                 owner_id=f"reconcile:{uuid4()}",
@@ -197,7 +197,7 @@ def run_virtual_reconcile(
                 )
             lease = acquire_virtual_environment_lease(
                 backend,
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=resolved_virtual_environment_name,
                 owner_id=f"reconcile:{uuid4()}",
@@ -282,7 +282,7 @@ def run_virtual_reconcile(
         if lease is not None:
             release_state_lease(
                 backend,
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 lease=lease,
             )
@@ -507,7 +507,7 @@ def resolve_attach_relation(
         rendered: str = resolve_relation_location_qualified_name(
             adapter=adapter, location=fallback_target(candidate)
         )
-        if adapter.relation_names_match(rendered, physical_relation_name):
+        if adapter.relation_names_match(rendered, right=physical_relation_name):
             return candidate
     raise PlannerInputError(
         (

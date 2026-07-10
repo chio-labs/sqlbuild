@@ -27,12 +27,14 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
+from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.executor.shared.helpers.load_execution import (
     build_source_downstream_names,
     build_source_upstream_names,
     dependency_node_names,
 )
+from sqlbuild.shared.types import ConnectionElapsedCallback
 from sqlbuild.spec.models.source import SourceEntry
 
 
@@ -91,7 +93,7 @@ def run_external_source_loads(
     )
     preloaded_results: list[LoadExecutionResult] = []
     failed_or_hard_skipped: set[str] = set()
-    on_load_progress: Callable[[SourceEntry, str], None] | None = callbacks.on_load_progress
+    on_load_progress: LoadProgressCallback | None = callbacks.on_load_progress
     external_source: SourceEntry
     for external_source in external_sources:
         if callbacks.on_load_start is not None:
@@ -111,7 +113,9 @@ def run_external_source_loads(
             on_progress=(
                 None
                 if on_load_progress is None
-                else lambda message, source=external_source: on_load_progress(source, message)
+                else lambda message, source=external_source: on_load_progress(
+                    source, message=message
+                )
             ),
         )
         preloaded_results.append(result)
@@ -134,8 +138,8 @@ def open_load_connections(
     connection_config: dict[str, object],
     effective_concurrency: int,
     on_connection_start: Callable[[int], None] | None,
-    on_connection_complete: Callable[[int, float], None] | None,
-    on_connection_error: Callable[[int, float], None] | None,
+    on_connection_complete: ConnectionElapsedCallback | None,
+    on_connection_error: ConnectionElapsedCallback | None,
 ) -> tuple[Any, ...]:
     """Open one warehouse connection per worker with progress callbacks."""
 
@@ -148,13 +152,13 @@ def open_load_connections(
             connections.append(adapter.connect(connection_config))
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(effective_concurrency, time.monotonic() - start)
+            on_connection_error(effective_concurrency, elapsed_seconds=time.monotonic() - start)
         connection: Any
         for connection in connections:
             adapter.close(connection)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(effective_concurrency, time.monotonic() - start)
+        on_connection_complete(effective_concurrency, elapsed_seconds=time.monotonic() - start)
     return tuple(connections)
 
 

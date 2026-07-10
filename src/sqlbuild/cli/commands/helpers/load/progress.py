@@ -60,7 +60,7 @@ class LoadProgressReporter:
         self._write_spinner_line()
         self._start_spinner_loop()
 
-    def on_progress(self, source: SourceEntry, message: str) -> None:
+    def on_progress(self, source: SourceEntry, *, message: str) -> None:
         if not self._is_tty or self._current_source is None:
             return
         if source.name != self._current_source.name:

@@ -3,6 +3,24 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from sqlbuild.compiler.planner.models import GraphNodeKey
+
+
+class GraphIdentityComposer(Protocol):
+    def __call__(
+        self,
+        local_hash: str,
+        /,
+        *,
+        upstream_hashes: tuple[tuple[GraphNodeKey, str], ...],
+    ) -> str: ...
+
+
+class RelationMarkerTargetResolver(Protocol):
+    def __call__(self, function_name: str, /, *, referenced_name: str) -> str | None: ...
 
 
 class SelectorKind(StrEnum):

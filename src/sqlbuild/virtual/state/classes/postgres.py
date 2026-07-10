@@ -118,7 +118,7 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier(schema)}")
                 cursor.execute(
                     "CREATE TABLE IF NOT EXISTS "
-                    f"{self._qualified_name(schema, STATE_VERSION_TABLE)} ("
+                    f"{self._qualified_name(schema, table=STATE_VERSION_TABLE)} ("
                     "schema_version INTEGER NOT NULL, "
                     "sqlbuild_version TEXT NOT NULL, "
                     "updated_at TIMESTAMP NOT NULL"
@@ -126,7 +126,7 @@ class PostgresStateBackend(StateBackend):
                 )
                 cursor.execute(
                     "CREATE TABLE IF NOT EXISTS "
-                    f"{self._qualified_name(schema, STATE_MIGRATION_EVENTS_TABLE)} ("
+                    f"{self._qualified_name(schema, table=STATE_MIGRATION_EVENTS_TABLE)} ("
                     "event_id TEXT NOT NULL, "
                     "action TEXT NOT NULL, "
                     "backup_id TEXT, "
@@ -136,9 +136,11 @@ class PostgresStateBackend(StateBackend):
                     ")"
                 )
                 self._create_additional_state_tables(cursor, schema=schema)
-                cursor.execute(f"DELETE FROM {self._qualified_name(schema, STATE_VERSION_TABLE)}")
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, STATE_VERSION_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=STATE_VERSION_TABLE)}"
+                )
+                cursor.execute(
+                    f"INSERT INTO {self._qualified_name(schema, table=STATE_VERSION_TABLE)} "
                     "(schema_version, sqlbuild_version, updated_at) "
                     "VALUES (%s, %s, CURRENT_TIMESTAMP)",
                     [CURRENT_STATE_SCHEMA_VERSION, sqlbuild_version],
@@ -203,8 +205,8 @@ class PostgresStateBackend(StateBackend):
                 table_name: str
                 for table_name in STATE_TABLES:
                     cursor.execute(
-                        f"CREATE TABLE {self._qualified_name(backup_schema, table_name)} AS "
-                        f"SELECT * FROM {self._qualified_name(schema, table_name)}"
+                        f"CREATE TABLE {self._qualified_name(backup_schema, table=table_name)} AS "
+                        f"SELECT * FROM {self._qualified_name(schema, table=table_name)}"
                     )
                 self._record_event(
                     cursor,
@@ -234,13 +236,13 @@ class PostgresStateBackend(StateBackend):
                 table_name: str
                 for table_name in STATE_TABLES:
                     cursor.execute(
-                        f"DROP TABLE IF EXISTS {self._qualified_name(schema, table_name)}"
+                        f"DROP TABLE IF EXISTS {self._qualified_name(schema, table=table_name)}"
                     )
                 cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier(schema)}")
                 for table_name in STATE_TABLES:
                     cursor.execute(
-                        f"CREATE TABLE {self._qualified_name(schema, table_name)} AS "
-                        f"SELECT * FROM {self._qualified_name(backup_schema, table_name)}"
+                        f"CREATE TABLE {self._qualified_name(schema, table=table_name)} AS "
+                        f"SELECT * FROM {self._qualified_name(backup_schema, table=table_name)}"
                     )
                 self._create_state_indexes(cursor, schema=schema)
                 self._record_event(
@@ -264,7 +266,7 @@ class PostgresStateBackend(StateBackend):
                 table_name: str
                 for table_name in STATE_TABLES:
                     cursor.execute(
-                        f"DROP TABLE IF EXISTS {self._qualified_name(schema, table_name)}"
+                        f"DROP TABLE IF EXISTS {self._qualified_name(schema, table=table_name)}"
                     )
                 cursor.execute("COMMIT")
             except BaseException:
@@ -285,12 +287,12 @@ class PostgresStateBackend(StateBackend):
                     params=[record.model_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=MODEL_VERSION_TABLE)} "
                     "WHERE model_name = %s AND version_hash = %s",
                     [record.model_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+                    f"INSERT INTO {self._qualified_name(schema, table=MODEL_VERSION_TABLE)} "
                     "(model_name, version_hash, definition_identity_hash, "
                     "identity_metadata_hash, definition_text_b64, identity_metadata_json_b64, "
                     "compiled_sql_b64, status, "
@@ -322,7 +324,7 @@ class PostgresStateBackend(StateBackend):
                 "SELECT model_name, version_hash, definition_identity_hash, "
                 "identity_metadata_hash, definition_text_b64, identity_metadata_json_b64, "
                 "compiled_sql_b64, status "
-                f"FROM {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=MODEL_VERSION_TABLE)} "
                 "WHERE model_name = %s AND version_hash = %s",
                 [model_name, version_hash],
             )
@@ -354,12 +356,12 @@ class PostgresStateBackend(StateBackend):
                     params=[record.function_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=FUNCTION_VERSION_TABLE)} "
                     "WHERE function_name = %s AND version_hash = %s",
                     [record.function_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+                    f"INSERT INTO {self._qualified_name(schema, table=FUNCTION_VERSION_TABLE)} "
                     "(function_name, version_hash, language, returns, arguments_json_b64, "
                     "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
                     "body_sql_b64, definition_text_b64, status, created_at, updated_at) "
@@ -394,7 +396,7 @@ class PostgresStateBackend(StateBackend):
                 "SELECT function_name, version_hash, language, returns, arguments_json_b64, "
                 "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
                 "body_sql_b64, definition_text_b64, status "
-                f"FROM {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=FUNCTION_VERSION_TABLE)} "
                 "WHERE function_name = %s AND version_hash = %s",
                 [function_name, version_hash],
             )
@@ -430,12 +432,12 @@ class PostgresStateBackend(StateBackend):
                     params=[record.seed_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, SEED_VERSION_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=SEED_VERSION_TABLE)} "
                     "WHERE seed_name = %s AND version_hash = %s",
                     [record.seed_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, SEED_VERSION_TABLE)} "
+                    f"INSERT INTO {self._qualified_name(schema, table=SEED_VERSION_TABLE)} "
                     "(seed_name, version_hash, identity_metadata_hash, "
                     "identity_metadata_json_b64, status, created_at, updated_at) "
                     "VALUES (%s, %s, %s, %s, %s, "
@@ -461,7 +463,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT seed_name, version_hash, identity_metadata_hash, "
                 "identity_metadata_json_b64, status "
-                f"FROM {self._qualified_name(schema, SEED_VERSION_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=SEED_VERSION_TABLE)} "
                 "WHERE seed_name = %s AND version_hash = %s",
                 [seed_name, version_hash],
             )
@@ -490,12 +492,12 @@ class PostgresStateBackend(StateBackend):
                     params=[record.node_type, record.node_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=PYTHON_NODE_VERSION_TABLE)} "
                     "WHERE node_type = %s AND node_name = %s AND version_hash = %s",
                     [record.node_type, record.node_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                    f"INSERT INTO {self._qualified_name(schema, table=PYTHON_NODE_VERSION_TABLE)} "
                     "(node_type, node_name, version_hash, definition_hash, "
                     "identity_metadata_hash, definition_json_b64, identity_metadata_json_b64, "
                     "status, created_at, updated_at) "
@@ -531,7 +533,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT node_type, node_name, version_hash, definition_hash, "
                 "identity_metadata_hash, definition_json_b64, identity_metadata_json_b64, status "
-                f"FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=PYTHON_NODE_VERSION_TABLE)} "
                 "WHERE node_type = %s AND node_name = %s AND version_hash = %s",
                 [node_type, node_name, version_hash],
             )
@@ -559,7 +561,7 @@ class PostgresStateBackend(StateBackend):
     ) -> None:
         with connection.cursor() as cursor:
             cursor.execute(
-                f"INSERT INTO {self._qualified_name(schema, NODE_RESULTS_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema, table=NODE_RESULTS_TABLE)} "
                 "(virtual_environment_name, node_type, node_name, target_database, target_schema, "
                 "target_name, run_id, status, payload_json_b64, metadata_json_b64, error_message, "
                 "materialized, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
@@ -599,9 +601,13 @@ class PostgresStateBackend(StateBackend):
             "virtual_environment_name = %s",
             "node_type = %s",
             "node_name = %s",
-            self._optional_equality_sql("target_database", query.target_database, "%s"),
-            self._optional_equality_sql("target_schema", query.target_schema, "%s"),
-            self._optional_equality_sql("target_name", query.target_name, "%s"),
+            self._optional_equality_sql(
+                "target_database", value=query.target_database, placeholder="%s"
+            ),
+            self._optional_equality_sql(
+                "target_schema", value=query.target_schema, placeholder="%s"
+            ),
+            self._optional_equality_sql("target_name", value=query.target_name, placeholder="%s"),
         ]
         params: list[object] = [virtual_environment_name, query.node_type, query.node_name]
         for value in (query.target_database, query.target_schema, query.target_name):
@@ -619,7 +625,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT node_type, node_name, run_id, status, payload_json_b64, "
                 "metadata_json_b64, error_message, materialized, created_at "
-                f"FROM {self._qualified_name(schema, NODE_RESULTS_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=NODE_RESULTS_TABLE)} "
                 f"WHERE {' AND '.join(predicates)} "
                 "ORDER BY created_at DESC, run_id DESC LIMIT %s",
                 params,
@@ -641,12 +647,12 @@ class PostgresStateBackend(StateBackend):
                     params=[record.artifact_type.value, record.artifact_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=PHYSICAL_RELATION_TABLE)} "
                     "WHERE artifact_type = %s AND artifact_name = %s AND version_hash = %s",
                     [record.artifact_type.value, record.artifact_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                    f"INSERT INTO {self._qualified_name(schema, table=PHYSICAL_RELATION_TABLE)} "
                     "(artifact_type, artifact_name, version_hash, database_name, schema_name, "
                     "relation_name, relation_type, created_at, updated_at) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, "
@@ -680,7 +686,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT artifact_type, artifact_name, version_hash, database_name, schema_name, "
                 "relation_name, relation_type "
-                f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=PHYSICAL_RELATION_TABLE)} "
                 "WHERE artifact_type = %s AND artifact_name = %s AND version_hash = %s",
                 [artifact_type.value, artifact_name, version_hash],
             )
@@ -709,7 +715,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT artifact_type, artifact_name, version_hash, database_name, schema_name, "
                 "relation_name, relation_type "
-                f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=PHYSICAL_RELATION_TABLE)} "
                 "WHERE artifact_type = %s AND artifact_name = %s "
                 "ORDER BY updated_at DESC, version_hash DESC",
                 [artifact_type.value, artifact_name],
@@ -742,12 +748,14 @@ class PostgresStateBackend(StateBackend):
                     params=[record.model_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+                    "DELETE FROM "
+                    f"{self._qualified_name(schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
                     "WHERE model_name = %s AND version_hash = %s",
                     [record.model_name, record.version_hash],
                 )
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+                    "INSERT INTO "
+                    f"{self._qualified_name(schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
                     "(model_name, version_hash, parent_model_name, parent_version_hash, "
                     "seed_strategy, created_at, updated_at) "
                     "VALUES (%s, %s, %s, %s, %s, "
@@ -773,7 +781,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT model_name, version_hash, parent_model_name, parent_version_hash, "
                 "seed_strategy "
-                f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
                 "WHERE model_name = %s AND version_hash = %s",
                 [model_name, version_hash],
             )
@@ -807,7 +815,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT virtual_environment_name, status, baseline_virtual_environment_name, "
                 "finalized_at "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
                 "WHERE virtual_environment_name = %s",
                 [virtual_environment_name],
             )
@@ -827,7 +835,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT virtual_environment_name, status, updated_at "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
                 "ORDER BY updated_at DESC, virtual_environment_name DESC"
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
@@ -848,19 +856,19 @@ class PostgresStateBackend(StateBackend):
             try:
                 cursor.execute(
                     "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                    f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                     "WHERE virtual_environment_name = %s",
                     [virtual_environment_name],
                 )
                 cursor.execute(
                     "DELETE FROM "
-                    f"{self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                    f"{self._qualified_name(schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
                     "WHERE virtual_environment_name = %s",
                     [virtual_environment_name],
                 )
                 cursor.execute(
                     "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                    f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
                     "WHERE virtual_environment_name = %s",
                     [virtual_environment_name],
                 )
@@ -941,7 +949,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT virtual_environment_name, node_type, node_name, version_hash "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "WHERE virtual_environment_name = %s AND node_type = %s ORDER BY node_name",
                 [virtual_environment_name, node_type],
             )
@@ -966,7 +974,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
                 "VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP) "
                 "ON CONFLICT (virtual_environment_name, node_type, node_name) "
@@ -1141,7 +1149,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT virtual_environment_name, node_type, node_name, version_hash "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "WHERE virtual_environment_name = %s "
                 "AND node_type IN ('task', 'loader', 'asset', 'check', 'hook') "
                 "ORDER BY node_type, node_name",
@@ -1162,11 +1170,11 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT COUNT(*) "
-                f"FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} versions "
+                f"FROM {self._qualified_name(schema, table=PYTHON_NODE_VERSION_TABLE)} versions "
                 "WHERE NOT EXISTS ("
                 "SELECT 1 "
                 "FROM "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "refs "
                 "WHERE refs.node_type = versions.node_type "
                 "AND refs.node_name = versions.node_name "
@@ -1180,12 +1188,12 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "DELETE FROM "
-                f"{self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                f"{self._qualified_name(schema, table=PYTHON_NODE_VERSION_TABLE)} "
                 "AS versions "
                 "WHERE NOT EXISTS ("
                 "SELECT 1 "
                 "FROM "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "refs "
                 "WHERE refs.node_type = versions.node_type "
                 "AND refs.node_name = versions.node_name "
@@ -1210,7 +1218,7 @@ class PostgresStateBackend(StateBackend):
             try:
                 cursor.execute(
                     "DELETE FROM "
-                    f"{self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                    f"{self._qualified_name(schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
                     "WHERE virtual_environment_name = %s",
                     [virtual_environment_name],
                 )
@@ -1218,7 +1226,7 @@ class PostgresStateBackend(StateBackend):
                 for record in records:
                     cursor.execute(
                         "INSERT INTO "
-                        f"{self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                        f"{self._qualified_name(schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
                         "(virtual_environment_name, source_name, strategy, value_kind, "
                         "data_version, data_version_hash, observed_at, updated_at) "
                         "VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
@@ -1244,7 +1252,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT virtual_environment_name, source_name, strategy, value_kind, "
                 "data_version, data_version_hash, observed_at "
-                f"FROM {self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
                 "WHERE virtual_environment_name = %s ORDER BY source_name",
                 [virtual_environment_name],
             )
@@ -1277,15 +1285,15 @@ class PostgresStateBackend(StateBackend):
             try:
                 checkpoint_model_ref_table: str = self._qualified_name(
                     schema,
-                    VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
+                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
                 )
                 checkpoint_seed_ref_table: str = self._qualified_name(
                     schema,
-                    VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
+                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
                 )
                 cursor.execute(
                     "INSERT INTO "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                    f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
                     "(checkpoint_id, virtual_environment_name, created_at) "
                     "VALUES (%s, %s, CURRENT_TIMESTAMP)",
                     [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
@@ -1300,7 +1308,7 @@ class PostgresStateBackend(StateBackend):
                 for function_ref in function_refs:
                     checkpoint_function_ref_table: str = self._qualified_name(
                         schema,
-                        VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+                        table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
                     )
                     cursor.execute(
                         "INSERT INTO "
@@ -1330,7 +1338,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT checkpoint_id, virtual_environment_name, created_at "
-                f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
                 "WHERE virtual_environment_name = %s ORDER BY created_at DESC, checkpoint_id DESC",
                 [virtual_environment_name],
             )
@@ -1350,7 +1358,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             checkpoint_model_ref_table: str = self._qualified_name(
                 schema,
-                VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
             )
             cursor.execute(
                 f"SELECT checkpoint_id, model_name, version_hash "
@@ -1374,7 +1382,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             checkpoint_function_ref_table: str = self._qualified_name(
                 schema,
-                VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
             )
             cursor.execute(
                 f"SELECT checkpoint_id, function_name, version_hash "
@@ -1398,7 +1406,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             checkpoint_seed_ref_table: str = self._qualified_name(
                 schema,
-                VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
             )
             cursor.execute(
                 f"SELECT checkpoint_id, seed_name, version_hash "
@@ -1424,15 +1432,15 @@ class PostgresStateBackend(StateBackend):
             try:
                 checkpoint_function_ref_table: str = self._qualified_name(
                     schema,
-                    VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
                 )
                 checkpoint_model_ref_table: str = self._qualified_name(
                     schema,
-                    VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
+                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
                 )
                 checkpoint_seed_ref_table: str = self._qualified_name(
                     schema,
-                    VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
+                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
                 )
                 cursor.execute(
                     f"DELETE FROM {checkpoint_seed_ref_table} WHERE checkpoint_id = %s",
@@ -1448,7 +1456,7 @@ class PostgresStateBackend(StateBackend):
                 )
                 cursor.execute(
                     "DELETE FROM "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                    f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
                     "WHERE checkpoint_id = %s",
                     [checkpoint_id],
                 )
@@ -1471,12 +1479,12 @@ class PostgresStateBackend(StateBackend):
                     params=[record.operation_id],
                 )
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=STATE_OPERATION_TABLE)} "
                     "WHERE operation_id = %s",
                     [record.operation_id],
                 )
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+                    f"INSERT INTO {self._qualified_name(schema, table=STATE_OPERATION_TABLE)} "
                     "(operation_id, operation_type, status, virtual_environment_name, "
                     "created_at, updated_at) "
                     "VALUES (%s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
@@ -1499,7 +1507,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT operation_id, operation_type, status, virtual_environment_name "
-                f"FROM {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+                f"FROM {self._qualified_name(schema, table=STATE_OPERATION_TABLE)} "
                 "WHERE operation_id = %s",
                 [operation_id],
             )
@@ -1518,7 +1526,7 @@ class PostgresStateBackend(StateBackend):
     ) -> None:
         with connection.cursor() as cursor:
             cursor.execute(
-                f"INSERT INTO {self._qualified_name(schema, STATE_OPERATION_EVENT_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema, table=STATE_OPERATION_EVENT_TABLE)} "
                 "(event_id, operation_id, action, status, message, created_at) "
                 "VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
                 [
@@ -1535,7 +1543,7 @@ class PostgresStateBackend(StateBackend):
     ) -> None:
         with connection.cursor() as cursor:
             cursor.execute(
-                f"INSERT INTO {self._qualified_name(schema, RECONCILE_EVENT_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema, table=RECONCILE_EVENT_TABLE)} "
                 "(event_id, action, status, message, created_at) "
                 "VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)",
                 [record.event_id, record.action.value, record.status.value, record.message],
@@ -1554,12 +1562,12 @@ class PostgresStateBackend(StateBackend):
             cursor.execute("BEGIN")
             try:
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=LOCK_TABLE)} "
                     "WHERE lock_key = %s AND expires_at <= CURRENT_TIMESTAMP",
                     [lock_key],
                 )
                 cursor.execute(
-                    f"INSERT INTO {self._qualified_name(schema, LOCK_TABLE)} "
+                    f"INSERT INTO {self._qualified_name(schema, table=LOCK_TABLE)} "
                     "(lock_key, owner_id, expires_at, created_at, updated_at) "
                     "VALUES (%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                     [lock_key, owner_id, expires_at],
@@ -1569,7 +1577,7 @@ class PostgresStateBackend(StateBackend):
             except BaseException:
                 cursor.execute("ROLLBACK")
                 cursor.execute(
-                    f"SELECT owner_id FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                    f"SELECT owner_id FROM {self._qualified_name(schema, table=LOCK_TABLE)} "
                     "WHERE lock_key = %s AND expires_at > CURRENT_TIMESTAMP",
                     [lock_key],
                 )
@@ -1582,7 +1590,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute("BEGIN")
             try:
                 cursor.execute(
-                    f"SELECT owner_id FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                    f"SELECT owner_id FROM {self._qualified_name(schema, table=LOCK_TABLE)} "
                     "WHERE lock_key = %s AND owner_id = %s",
                     [lock_key, owner_id],
                 )
@@ -1590,7 +1598,7 @@ class PostgresStateBackend(StateBackend):
                     cursor.execute("COMMIT")
                     return False
                 cursor.execute(
-                    f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                    f"DELETE FROM {self._qualified_name(schema, table=LOCK_TABLE)} "
                     "WHERE lock_key = %s AND owner_id = %s",
                     [lock_key, owner_id],
                 )
@@ -1604,7 +1612,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT lock_key, owner_id, expires_at FROM "
-                f"{self._qualified_name(schema, LOCK_TABLE)} "
+                f"{self._qualified_name(schema, table=LOCK_TABLE)} "
                 "WHERE expires_at > CURRENT_TIMESTAMP ORDER BY lock_key"
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
@@ -1616,7 +1624,7 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT lock_key, owner_id, expires_at FROM "
-                f"{self._qualified_name(schema, LOCK_TABLE)} "
+                f"{self._qualified_name(schema, table=LOCK_TABLE)} "
                 "WHERE expires_at <= CURRENT_TIMESTAMP ORDER BY lock_key"
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
@@ -1627,7 +1635,7 @@ class PostgresStateBackend(StateBackend):
     def delete_lock(self, connection: Any, *, schema: str, lock_key: str) -> None:
         with connection.cursor() as cursor:
             cursor.execute(
-                f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} WHERE lock_key = %s",
+                f"DELETE FROM {self._qualified_name(schema, table=LOCK_TABLE)} WHERE lock_key = %s",
                 [lock_key],
             )
         connection.commit()
@@ -1638,7 +1646,7 @@ class PostgresStateBackend(StateBackend):
             cursor.execute(
                 "SELECT s.schema_name, e.backup_id, MAX(e.created_at) "
                 "FROM information_schema.schemata s "
-                f"LEFT JOIN {self._qualified_name(schema, STATE_MIGRATION_EVENTS_TABLE)} e "
+                f"LEFT JOIN {self._qualified_name(schema, table=STATE_MIGRATION_EVENTS_TABLE)} e "
                 "ON s.schema_name = %s || e.backup_id "
                 "WHERE s.schema_name LIKE %s "
                 "GROUP BY s.schema_name, e.backup_id ORDER BY s.schema_name DESC",
@@ -1693,7 +1701,7 @@ class PostgresStateBackend(StateBackend):
         message: str | None,
     ) -> None:
         cursor.execute(
-            f"INSERT INTO {self._qualified_name(schema, STATE_MIGRATION_EVENTS_TABLE)} "
+            f"INSERT INTO {self._qualified_name(schema, table=STATE_MIGRATION_EVENTS_TABLE)} "
             "(event_id, action, backup_id, status, message, created_at) "
             "VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
             [event_id(), action.value, backup_id_value, status.value, message],
@@ -1710,14 +1718,14 @@ class PostgresStateBackend(StateBackend):
                 for column_name, column_type in columns.items()
             )
             cursor.execute(
-                f"CREATE TABLE IF NOT EXISTS {self._qualified_name(schema, table_name)} "
+                f"CREATE TABLE IF NOT EXISTS {self._qualified_name(schema, table=table_name)} "
                 f"({column_sql})"
             )
             column_name: str
             column_type: StateColumnType
             for column_name, column_type in columns.items():
                 cursor.execute(
-                    f"ALTER TABLE {self._qualified_name(schema, table_name)} "
+                    f"ALTER TABLE {self._qualified_name(schema, table=table_name)} "
                     f"ADD COLUMN IF NOT EXISTS {self._quote_identifier(column_name)} "
                     f"{self._state_column_sql_type(column_type)}"
                 )
@@ -1733,7 +1741,7 @@ class PostgresStateBackend(StateBackend):
                 column_sql: str = ", ".join(self._quote_identifier(column) for column in columns)
                 cursor.execute(
                     f"CREATE UNIQUE INDEX IF NOT EXISTS {self._quote_identifier(index_name)} "
-                    f"ON {self._qualified_name(schema, table_name)} ({column_sql})"
+                    f"ON {self._qualified_name(schema, table=table_name)} ({column_sql})"
                 )
 
     def _created_at_for_key(
@@ -1746,7 +1754,8 @@ class PostgresStateBackend(StateBackend):
         params: list[object],
     ) -> datetime | None:
         cursor.execute(
-            f"SELECT created_at FROM {self._qualified_name(schema, table_name)} WHERE {where_sql}",
+            f"SELECT created_at FROM {self._qualified_name(schema, table=table_name)} "
+            f"WHERE {where_sql}",
             params,
         )
         row: tuple[Any, ...] | None = cursor.fetchone()
@@ -1786,7 +1795,7 @@ class PostgresStateBackend(StateBackend):
             ts=row[8],
         )
 
-    def _optional_equality_sql(self, column: str, value: object | None, placeholder: str) -> str:
+    def _optional_equality_sql(self, column: str, *, value: object | None, placeholder: str) -> str:
         if value is None:
             return f"{column} IS NULL"
         return f"{column} = {placeholder}"
@@ -1804,7 +1813,7 @@ class PostgresStateBackend(StateBackend):
     def _quote_identifier(self, identifier: str) -> str:
         return '"' + identifier.replace('"', '""') + '"'
 
-    def _qualified_name(self, schema: str, table: str) -> str:
+    def _qualified_name(self, schema: str, *, table: str) -> str:
         return f"{self._quote_identifier(schema)}.{self._quote_identifier(table)}"
 
     def _validate_source_freshness_records(
@@ -1861,12 +1870,12 @@ class PostgresStateBackend(StateBackend):
             params=[record.virtual_environment_name],
         )
         cursor.execute(
-            f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            f"DELETE FROM {self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
             "WHERE virtual_environment_name = %s",
             [record.virtual_environment_name],
         )
         cursor.execute(
-            f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            f"INSERT INTO {self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
             "(virtual_environment_name, status, baseline_virtual_environment_name, "
             "created_at, updated_at, finalized_at) "
             "VALUES (%s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, %s)",
@@ -1897,7 +1906,7 @@ class PostgresStateBackend(StateBackend):
             )
             cursor.execute(
                 "DELETE FROM "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "WHERE virtual_environment_name = %s AND node_type = %s",
                 [virtual_environment_name, node_type],
             )
@@ -1905,7 +1914,7 @@ class PostgresStateBackend(StateBackend):
             for ref in refs:
                 cursor.execute(
                     "INSERT INTO "
-                    f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                    f"{self._qualified_name(schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                     "(virtual_environment_name, node_type, node_name, version_hash, "
                     "updated_at) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP) "
                     "ON CONFLICT (virtual_environment_name, node_type, node_name) "
@@ -1922,7 +1931,7 @@ class PostgresStateBackend(StateBackend):
     def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
         return f"{schema}__backup_{backup_id_value}"
 
-    def _state_type_matches(self, actual_type: str, expected_type: StateColumnType) -> bool:
+    def _state_type_matches(self, actual_type: str, *, expected_type: StateColumnType) -> bool:
         actual: str = actual_type.lower()
         match expected_type:
             case StateColumnType.INTEGER:

@@ -360,7 +360,9 @@ def test_given_cursor_bounds_when_rendering_then_snowflake_returns_expected_lite
 ) -> None:
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
-    result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
+    result: str = adapter.render_cursor_bound_literal(
+        test_case.value, cursor_type=test_case.cursor_type
+    )
 
     assert result == test_case.expected_literal
 

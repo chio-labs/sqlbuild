@@ -50,32 +50,34 @@ def execute_janitor_plan(
             statement_recorder=recorder,
         )
     deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = apply_janitor_deletions(
-        plan.checkpoint_candidates, delete_checkpoint
+        plan.checkpoint_candidates, delete=delete_checkpoint
     )
     deleted_detached_virtual_environments: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...
     ] = apply_janitor_deletions(
-        plan.detached_virtual_environment_candidates, delete_detached_virtual_environment
+        plan.detached_virtual_environment_candidates,
+        delete=delete_detached_virtual_environment,
     )
     deleted_expired_virtual_environments: tuple[JanitorExpiredVirtualEnvironmentCandidate, ...] = (
         apply_janitor_deletions(
-            plan.expired_virtual_environment_candidates, delete_expired_virtual_environment
+            plan.expired_virtual_environment_candidates,
+            delete=delete_expired_virtual_environment,
         )
     )
     deleted_state_backups: tuple[JanitorStateBackupCandidate, ...] = apply_janitor_deletions(
-        plan.state_backup_candidates, delete_state_backup
+        plan.state_backup_candidates, delete=delete_state_backup
     )
     deleted_expired_locks: tuple[JanitorExpiredLockCandidate, ...] = apply_janitor_deletions(
-        plan.expired_lock_candidates, delete_expired_lock
+        plan.expired_lock_candidates, delete=delete_expired_lock
     )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = apply_janitor_deletions(
         plan.direct_state_prune_candidates,
-        lambda direct_state_candidate: adapter.execute(
-            connection, direct_state_candidate.prune_sql
+        delete=lambda direct_state_candidate: adapter.execute(
+            connection, sql=direct_state_candidate.prune_sql
         ),
     )
     pruned_virtual_state: tuple[JanitorVirtualStatePruneCandidate, ...] = apply_janitor_deletions(
-        plan.virtual_state_prune_candidates, prune_virtual_state
+        plan.virtual_state_prune_candidates, delete=prune_virtual_state
     )
     return JanitorExecutionResult(
         deleted=plan.candidates,

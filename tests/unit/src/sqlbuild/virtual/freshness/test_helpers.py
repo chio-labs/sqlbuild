@@ -120,7 +120,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
     try:
         statement: str
         for statement in test_case.setup_sql:
-            adapter.execute(connection, statement)
+            adapter.execute(connection, sql=statement)
         observation: SourceFreshnessObservation = observe_configured_source_freshness(
             adapter=adapter,
             connection=connection,
@@ -198,7 +198,7 @@ def test_given_invalid_source_freshness_result_when_observing_then_raises_clear_
     try:
         statement: str
         for statement in test_case.setup_sql:
-            adapter.execute(connection, statement)
+            adapter.execute(connection, sql=statement)
         source: SourceEntry = SourceEntry(
             name=test_case.source_name,
             table=test_case.table,
@@ -399,8 +399,8 @@ def test_given_unmanaged_sources_when_observing_runtime_freshness_then_applies_p
     adapter: FreshnessMetadataDuckDbAdapter = FreshnessMetadataDuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, "CREATE TABLE raw_orders (batch_id INTEGER)")
-        adapter.execute(connection, "INSERT INTO raw_orders VALUES (7)")
+        adapter.execute(connection, sql="CREATE TABLE raw_orders (batch_id INTEGER)")
+        adapter.execute(connection, sql="INSERT INTO raw_orders VALUES (7)")
 
         result: SourceFreshnessRuntimeResult = observe_virtual_environment_source_freshness(
             adapter=adapter,

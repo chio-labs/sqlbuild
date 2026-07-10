@@ -47,7 +47,7 @@ def test_given_clone_entries_when_executing_then_streams_each_item(
     )
     streamed: list[tuple[int, int, str | None, str]] = []
 
-    def _on_item(index: int, total: int, item: CloneItemResult) -> None:
+    def _on_item(index: int, *, total: int, item: CloneItemResult) -> None:
         streamed.append((index, total, item.destination_relation, item.status.value))
 
     result: CloneExecutionResult = execute_clone(

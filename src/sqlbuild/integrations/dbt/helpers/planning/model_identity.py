@@ -108,7 +108,7 @@ def build_dbt_write_identity_hashes(
 
 
 def compose_dbt_graph_version_hash(
-    own_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
+    own_hash: str, *, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
 ) -> str:
     return compose_dbt_version_hash(
         own_hash=own_hash,

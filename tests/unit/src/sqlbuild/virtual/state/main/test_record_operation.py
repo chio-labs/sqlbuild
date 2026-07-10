@@ -40,7 +40,7 @@ def test_given_existing_operation_when_recording_follow_up_event_then_transition
 
     record_state_operation(
         cast(StateBackend, backend),
-        None,
+        connection=None,
         schema="sqlbuild_state",
         operation_id=test_case.operation_id,
         operation_type=test_case.operation_type,
@@ -51,7 +51,7 @@ def test_given_existing_operation_when_recording_follow_up_event_then_transition
     )
     record_state_operation(
         cast(StateBackend, backend),
-        None,
+        connection=None,
         schema="sqlbuild_state",
         operation_id=test_case.operation_id,
         operation_type=None,

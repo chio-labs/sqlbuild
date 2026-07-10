@@ -155,7 +155,9 @@ def format_build_output(
 
     lines.append("")
     lines.append(
-        _format_completion_message(result.status, result.warning_count, use_color=use_color)
+        _format_completion_message(
+            result.status, warning_count=result.warning_count, use_color=use_color
+        )
     )
     lines.append(_format_summary_counts(result=result, elapsed_seconds=elapsed_seconds))
 
@@ -425,7 +427,7 @@ def _format_test_expectation_sub_line(
         else:
             detail = f"  {step_result.mismatched_row_count} mismatched"
     style: CliStyle = CliStyle(use_color=use_color)
-    colored_status: str = style.status(status, f"{status}{detail}")
+    colored_status: str = style.status(status, text=f"{status}{detail}")
     name: str = _format_test_expectation_name(step_result.model_name)
     return format_aligned_name_value(
         plain_name=name,
@@ -442,7 +444,7 @@ def _format_test_expectation_name(model_name: str) -> str:
     return f"expected {model_name}"
 
 
-def _format_completion_message(status: BuildStatus, warning_count: int, *, use_color: bool) -> str:
+def _format_completion_message(status: BuildStatus, *, warning_count: int, use_color: bool) -> str:
     if status == BuildStatus.FAILED:
         return CliStyle(use_color=use_color).error("Completed with errors.")
     if warning_count > 0:
