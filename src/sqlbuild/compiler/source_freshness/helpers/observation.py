@@ -11,7 +11,7 @@ from sqlbuild.adapter.shared.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
-from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig

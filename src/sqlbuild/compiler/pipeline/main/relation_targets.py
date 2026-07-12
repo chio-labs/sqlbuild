@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
+from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.shared.types import SqlResourceRefKind

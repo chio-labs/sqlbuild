@@ -13,7 +13,7 @@ from sqlbuild.executor.run.helpers.reuse.core import (
     create_relation_from_reuse_plan,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.shared.types import ExecutionResourceKind, NodeStartCallback
 

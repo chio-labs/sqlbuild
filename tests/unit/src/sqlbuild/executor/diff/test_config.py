@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.adapter.shared.models import RowDiffTolerance, RowDiffTolerances
 from sqlbuild.executor.diff.helpers.config import parse_row_diff_tolerances
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.exceptions import ExecutorInputError
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     ParseRowDiffTolerancesErrorTestCase,
     ParseRowDiffTolerancesTestCase,

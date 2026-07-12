@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_execution_upstream_deps,
@@ -57,7 +58,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import RelationMarkerTargetResolver, ScenarioArtifactKind
-from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.shared.constants import (
     SCENARIO_PLAN_INTERNAL,
     SCENARIO_PLAN_MISSING_FIXTURE_SQL,
@@ -66,7 +67,6 @@ from sqlbuild.shared.constants import (
     SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
     SCENARIO_PLAN_UNKNOWN_SEED,
 )
-from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
 from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql.reference_patterns import reference_call_prefix_pattern_text
 from sqlbuild.shared.types import SqlReferenceKind

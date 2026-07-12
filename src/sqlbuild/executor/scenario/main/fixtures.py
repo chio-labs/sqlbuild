@@ -7,10 +7,10 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
+from sqlbuild.diagnostics.helpers.logging import diagnostics_context
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_FIXTURE_FAILED
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
 from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 

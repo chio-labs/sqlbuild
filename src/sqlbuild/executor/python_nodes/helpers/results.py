@@ -8,6 +8,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeStatus,
     SkipMode,
 )
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckResult,
     PythonNodeExecutionResult,
@@ -15,7 +16,6 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeResult,
     PythonNodeSkipResult,
 )
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.types import PythonCheckSeverity
 
 

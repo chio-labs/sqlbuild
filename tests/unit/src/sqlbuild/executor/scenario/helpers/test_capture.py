@@ -10,7 +10,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
     ScenarioSnapshotCaptureRunResult,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ExecuteScenarioSnapshotCaptureStepsTestCase,
 )

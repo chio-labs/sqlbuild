@@ -11,6 +11,7 @@ from sqlbuild.cli.commands.main.commands.connection_progress import (
     build_connection_progress_reporter,
 )
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtInteropCompiledProject,
@@ -31,7 +32,6 @@ from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     attach_dbt_model_plan,
     attach_sqlbuild_plan_output,
 )
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 

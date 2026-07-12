@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
+from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.models import (
     DbtComparisonPreparation,
     DbtDiffOptions,
@@ -25,7 +26,6 @@ from sqlbuild.integrations.dbt.pipeline.helpers.interop_prologue import (
     prepare_dbt_comparison_manifests,
     resolve_selected_dbt_model_nodes,
 )
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 
 
 def run_dbt_diff_from_project(

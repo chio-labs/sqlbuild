@@ -16,6 +16,11 @@ from pydantic import ValidationError
 
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
+from sqlbuild.compiler.discovery.constants import (
+    SCHEMA_FILE_NAME,
+    SEED_FILE_SUFFIX,
+    YAML_FILE_SUFFIXES,
+)
 from sqlbuild.compiler.discovery.exceptions import (
     LoaderDiscoveryError,
     ProviderDiscoveryError,
@@ -55,11 +60,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
     DiscoveredTaskFunction,
-)
-from sqlbuild.compiler.shared.constants import (
-    SCHEMA_FILE_NAME,
-    SEED_FILE_SUFFIX,
-    YAML_FILE_SUFFIXES,
 )
 from sqlbuild.factories import get_factory_definition
 from sqlbuild.hooks import get_hook_definition

@@ -30,9 +30,9 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.cli.commands.shared.helpers._test_types import (
     AuditAggregationTestCase,

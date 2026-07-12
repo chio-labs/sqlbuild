@@ -22,7 +22,7 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 
 
 class ReadSidePythonExecutionTracker:

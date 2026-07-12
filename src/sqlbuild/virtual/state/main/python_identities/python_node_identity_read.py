@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.virtual.shared.helpers.encoding import decode_state_text
+from sqlbuild.virtual.helpers.encoding import decode_state_text
 from sqlbuild.virtual.state.models import (
     PythonNodeVersionRecord,
     VirtualEnvironmentPythonNodeRefRecord,

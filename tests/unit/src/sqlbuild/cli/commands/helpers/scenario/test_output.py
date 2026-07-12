@@ -15,7 +15,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureResult,
     ScenarioSnapshotCaptureRunResult,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands.helpers.scenario._test_types import (
     ScenarioCaptureOutputTestCase,
     ScenarioRunOutputTestCase,

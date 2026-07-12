@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild.compiler.planner.helpers.shared.version_staleness import (
+from sqlbuild.compiler.planner.helpers.pruning.version_staleness import (
     build_stale_model_names_from_version_identities,
 )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.constants import (
     COLUMN_ERROR_MESSAGE,
     COLUMN_MATERIALIZED,
@@ -21,7 +22,6 @@ from sqlbuild.executor.node_results.constants import (
     NODE_RESULTS_TABLE_NAME,
 )
 from sqlbuild.executor.node_results.models import NodeResultQuery, NodeResultRecord
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
 def build_qualified_table_name(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-LOGGER_ROOT_NAME: str = "sqlbuild"
 DEFAULT_MAX_DISPLAY_ENTRIES: int = 20
 SCENARIO_ARTIFACT_PREFIX: str = "__sqb_"
 SCENARIO_HASH_PREFIX_LENGTH: int = 12

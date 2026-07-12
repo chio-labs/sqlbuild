@@ -13,8 +13,8 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild.diagnostics.helpers.logging import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
 from sqlbuild.shared.helpers.sql.resolution import assert_no_unresolved_sql_markers
 from sqlbuild.spec.models.source import SourceEntry
 

@@ -7,7 +7,7 @@ from sqlbuild.compiler.planner.types import MaterializationType, PlanAction
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.helpers.execution.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario.main.execute import execute_scenario_model
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
     ExecuteScenarioModelsTestCase,
 )

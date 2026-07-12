@@ -16,11 +16,11 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeStatus,
     SkipMode,
 )
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.shared.models import SqlResourceRef

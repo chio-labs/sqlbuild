@@ -10,7 +10,7 @@ from sqlbuild.executor.scenario.main.expected_comparison_sql import (
     build_scenario_expected_comparison_sql,
 )
 from sqlbuild.executor.scenario.models import ScenarioExpectedExpectationExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.constants import (
     SCENARIO_EXEC_EXPECTED_ERRORED,
     SCENARIO_EXEC_EXPECTED_FAILED,

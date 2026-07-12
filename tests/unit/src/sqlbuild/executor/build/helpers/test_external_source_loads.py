@@ -20,7 +20,7 @@ from sqlbuild.executor.build.models import (
     ExternalSourceLoadResults,
 )
 from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.executor.build.helpers._test_types import (
     ExternalBuildSourceLoadTestCase,

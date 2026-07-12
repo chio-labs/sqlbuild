@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import os
 from collections.abc import Sequence
+from pathlib import Path
 
+from sqlbuild.cli.commands.helpers.entry.constants import SQLBUILD_CONCURRENCY_ENV_VAR
 from sqlbuild.cli.commands.helpers.entry.models import CliNamespace, ParsedCliInvocation
-from sqlbuild.cli.commands.shared.helpers.config.parsers import resolve_env_default_concurrency
-from sqlbuild.cli.commands.shared.types import CliCommand
+from sqlbuild.cli.commands.helpers.entry.types import CliCommand
 
 _DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
     {
@@ -22,6 +24,39 @@ _DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
         "clone",
     }
 )
+
+
+def resolve_env_default_concurrency(explicit_concurrency: int | None) -> int | None:
+    """Return CLI concurrency, falling back to SQLBUILD_CONCURRENCY when unset."""
+
+    if explicit_concurrency is not None:
+        return explicit_concurrency
+    raw_value: str | None = os.environ.get(SQLBUILD_CONCURRENCY_ENV_VAR)
+    if raw_value is None or raw_value == "":
+        return None
+    try:
+        concurrency: int = int(raw_value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"{SQLBUILD_CONCURRENCY_ENV_VAR} must be an integer"
+        ) from error
+    if concurrency < 1:
+        raise argparse.ArgumentTypeError(f"{SQLBUILD_CONCURRENCY_ENV_VAR} must be >= 1")
+    return concurrency
+
+
+def read_selector_files(paths: list[str]) -> tuple[str, ...]:
+    """Read newline-delimited selector files."""
+
+    selectors: list[str] = []
+    for raw_path in paths:
+        path: Path = Path(raw_path)
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped: str = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            selectors.append(stripped)
+    return tuple(selectors)
 
 
 def parse_cli_invocation(

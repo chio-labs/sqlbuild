@@ -22,6 +22,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.shared.constants import (
     POLYGLOT_AGGREGATE_KINDS as _POLYGLOT_AGGREGATE_KINDS,
 )
@@ -190,7 +191,6 @@ from sqlbuild.shared.constants import (
 from sqlbuild.shared.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
 )
-from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
 from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 from sqlbuild.shared.helpers.sql.reference_patterns import (
     quoted_reference_call_pattern,

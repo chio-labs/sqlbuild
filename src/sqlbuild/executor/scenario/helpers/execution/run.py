@@ -27,7 +27,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
     ScenarioStepResults,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
 
 

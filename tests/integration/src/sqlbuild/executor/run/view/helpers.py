@@ -30,7 +30,7 @@ from sqlbuild.executor.run.models import (
     ModelExecutionResult,
     ModelMaterializationContext,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.view._test_types import (
     ViewFailureTestCase,
     ViewSuccessTestCase,

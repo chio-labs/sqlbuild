@@ -112,6 +112,12 @@ _MAIN_PHASE_REMEDIATION_MESSAGE: str = (
     "the result it produces (e.g. 'resolve_planner_scopes', 'detect_staleness')."
 )
 _MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "helpers", "shared"})
+_TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
+    {("executor", "types.py")}
+)
+_TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
+    {("compiler", "helpers"), ("executor", "helpers"), ("virtual", "helpers")}
+)
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/client.py",
     "src/sqlbuild/adapters/shared/classes/*.py",
@@ -605,13 +611,18 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
         return []
 
     direct_child_name: str = relative_parts[3]
-    if len(relative_parts) == top_level_domain_child_part_count and direct_child_name in {
-        "models.py",
-        "types.py",
-        "constants.py",
-        "helpers.py",
-        "classes.py",
-    }:
+    if (
+        len(relative_parts) == top_level_domain_child_part_count
+        and direct_child_name
+        in {
+            "models.py",
+            "types.py",
+            "constants.py",
+            "helpers.py",
+            "classes.py",
+        }
+        and (relative_parts[2], direct_child_name) not in _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS
+    ):
         return [
             Violation(
                 code="SC017",
@@ -627,6 +638,7 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
     if (
         len(relative_parts) >= nested_domain_child_part_count
         and direct_child_name in {"helpers", "classes"}
+        and (relative_parts[2], direct_child_name) not in _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS
         and file_path.name == "__init__.py"
     ):
         return [
@@ -2446,6 +2458,9 @@ def check_cross_package_internal_imports(
     _PUBLIC_MODULES: frozenset[str] = frozenset(
         {"classes", "models", "types", "constants", "exceptions", "__init__", "main"}
     )
+    cross_package_helper_modules: frozenset[str] = frozenset(
+        {"sqlbuild.diagnostics.helpers.logging"}
+    )
 
     for node in ast.walk(module):
         if not isinstance(node, ast.ImportFrom) or node.module is None:
@@ -2458,6 +2473,8 @@ def check_cross_package_internal_imports(
             continue
 
         imported_domain: str = imported_parts[1]
+        if node.module in cross_package_helper_modules:
+            continue
         if imported_domain == current_domain:
             if len(imported_parts) < internal_module_import_part_count:
                 continue

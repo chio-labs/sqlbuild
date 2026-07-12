@@ -50,7 +50,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.constants import (
     SCENARIO_EXEC_ASSERTION_ERRORED,
     SCENARIO_EXEC_ASSERTION_FAILED,

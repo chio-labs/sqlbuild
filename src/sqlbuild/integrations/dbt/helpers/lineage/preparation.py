@@ -24,6 +24,8 @@ from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_manifest_path,
     resolve_dbt_plan_options,
 )
+from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -31,8 +33,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineageArgs,
     DbtLineagePreparation,
 )
-from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 

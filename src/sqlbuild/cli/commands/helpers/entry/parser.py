@@ -10,9 +10,7 @@ from sqlbuild.cli.commands.helpers.entry.errors import (
     SqlbuildArgumentParser,
     build_argument_parser_class,
 )
-from sqlbuild.cli.commands.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
-from sqlbuild.cli.commands.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
-from sqlbuild.cli.commands.shared.helpers.config.parsers import (
+from sqlbuild.cli.commands.helpers.entry.parser_arguments import (
     add_cursor_override_args,
     add_dbt_config_args,
     add_execution_args,
@@ -21,7 +19,9 @@ from sqlbuild.cli.commands.shared.helpers.config.parsers import (
     add_select_args,
     add_vars_args,
 )
-from sqlbuild.cli.commands.shared.types import CliCommand
+from sqlbuild.cli.commands.helpers.entry.types import CliCommand
+from sqlbuild.cli.commands.helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
+from sqlbuild.cli.commands.helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.virtual.state.types import StateCommand
 

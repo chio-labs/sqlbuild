@@ -24,7 +24,7 @@ from sqlbuild.compiler.planner.models import (
     StandardReuseFromTargetModelSnapshot,
     StandardReuseFromTargetSnapshot,
 )
-from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
 from sqlbuild.spec.models.targets import resolve_target_config

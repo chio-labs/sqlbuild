@@ -6,11 +6,11 @@ import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_replay_on_change
 from sqlbuild.compiler.planner.helpers.pruning.cascade import (
     build_self_cascade,
     resolve_cascade,
 )
-from sqlbuild.compiler.planner.helpers.shared.change_policy import resolve_replay_on_change
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeResult,

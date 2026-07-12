@@ -475,6 +475,17 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=("SC017",),
         ),
         CheckPathsTestCase(
+            description="allows the compiler top-level helpers package",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/compiler/helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/compiler/helpers/sources.py": (
+                    "def render_source() -> str:\n    return 'source'\n"
+                ),
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
             description="reports banned generic filename",
             repo_files=compliant_repo_files()
             | {
@@ -1455,6 +1466,23 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 + "\n",
             },
             expected_violation_codes=("SC033",),
+        ),
+        CheckPathsTestCase(
+            description="allows cross-domain diagnostics logging helper import",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/main/run.py": dedent(
+                    """
+                from sqlbuild.diagnostics.helpers.logging import log_debug_event
+
+
+                def run() -> None:
+                    log_debug_event
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
         ),
         CheckPathsTestCase(
             description="allows sibling helper subpackage import",

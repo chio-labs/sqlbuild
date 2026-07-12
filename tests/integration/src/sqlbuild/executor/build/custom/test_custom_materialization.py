@@ -21,7 +21,7 @@ from sqlbuild.executor.custom.models import (
     PrepareVersionContext,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     CleanupTestCase,

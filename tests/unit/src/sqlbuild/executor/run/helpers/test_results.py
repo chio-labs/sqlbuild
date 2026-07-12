@@ -6,10 +6,10 @@ import pytest
 
 from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
 from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.helpers.execution.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     BuildFailedResultTestCase,
 )

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.scenario.helpers.snapshots.core import (
     is_scenario_snapshot_fresh,
     read_scenario_snapshot_jsonl,
@@ -21,7 +22,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
 )
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import (
     SCENARIO_LOCAL_JSONL_INVALID,
     SCENARIO_LOCAL_LOAD_FAILED,

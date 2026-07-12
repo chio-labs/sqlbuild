@@ -11,6 +11,14 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.helpers.lineage_graph import (
+    build_lineage_downstream_deps,
+    build_lineage_upstream_deps,
+)
+from sqlbuild.compiler.helpers.selector_indexes import (
+    build_model_path_index,
+    build_model_tag_index,
+)
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
@@ -41,14 +49,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-)
-from sqlbuild.compiler.shared.helpers.lineage_graph import (
-    build_lineage_downstream_deps,
-    build_lineage_upstream_deps,
-)
-from sqlbuild.compiler.shared.helpers.selector_indexes import (
-    build_model_path_index,
-    build_model_tag_index,
 )
 from sqlbuild.spec.models.source import SourceEntry
 

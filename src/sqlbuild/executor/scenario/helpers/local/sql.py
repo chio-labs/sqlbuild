@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, NoReturn
 
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import SCENARIO_LOCAL_SQL_TRANSPILE_FAILED
 from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 

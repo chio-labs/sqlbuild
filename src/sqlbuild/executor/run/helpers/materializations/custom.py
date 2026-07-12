@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, SchemaFinding
 from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
+from sqlbuild.diagnostics.helpers.logging import diagnostics_context
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import (
@@ -37,13 +38,12 @@ from sqlbuild.executor.run.models import (
     ModelMaterializationContext,
 )
 from sqlbuild.executor.run.types import HookPhase
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import (
     ProviderContainer,
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
 from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.spec.models.source import SourceEntry
 

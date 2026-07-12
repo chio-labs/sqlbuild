@@ -13,7 +13,7 @@ from sqlbuild.cli.commands.helpers.build.models import (
     VirtualBuildPlanHookConfig,
 )
 from sqlbuild.cli.commands.helpers.build.plan_hook import VirtualBuildPlanHook
-from sqlbuild.cli.commands.shared.helpers.config.parsers import (
+from sqlbuild.cli.commands.helpers.input.parsing import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )

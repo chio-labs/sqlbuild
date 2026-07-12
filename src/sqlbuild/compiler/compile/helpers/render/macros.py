@@ -17,16 +17,16 @@ from sqlbuild.compiler.compile.models.core import (
     MacroContext,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
-from sqlbuild.compiler.shared.helpers.sql_scanning import (
+from sqlbuild.compiler.helpers.sql_scanning import (
     find_matching_paren,
     skip_block_comment,
     skip_line_comment,
     skip_quoted_text,
 )
-from sqlbuild.compiler.shared.helpers.sql_scanning import (
+from sqlbuild.compiler.helpers.sql_scanning import (
     is_identifier_character as _is_identifier_continue,
 )
-from sqlbuild.compiler.shared.helpers.sql_scanning import (
+from sqlbuild.compiler.helpers.sql_scanning import (
     is_identifier_start as _is_identifier_start,
 )
 

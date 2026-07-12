@@ -14,14 +14,14 @@ from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
 from sqlbuild.executor.build.models import FunctionExecutionResult
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.functions.constants import (
     FUNCTION_EXECUTION_FAILED_CODE,
     FUNCTION_PYTHON_UNSUPPORTED_CODE,
     FUNCTION_TABLE_UNSUPPORTED_CODE,
     FUNCTION_TARGET_INVALID_CODE,
 )
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 from sqlbuild.shared.main.error_code import error_code
 from sqlbuild.shared.main.error_help import error_help

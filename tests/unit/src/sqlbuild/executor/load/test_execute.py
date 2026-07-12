@@ -17,7 +17,7 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.spec.models.source import SourceEntry

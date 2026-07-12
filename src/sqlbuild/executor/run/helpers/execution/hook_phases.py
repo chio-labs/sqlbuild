@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.diagnostics.helpers.logging import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.execution.results import (
@@ -18,8 +19,7 @@ from sqlbuild.executor.run.models import (
     PostHookPhaseOutcome,
 )
 from sqlbuild.executor.run.types import HookPhase
-from sqlbuild.executor.shared.types import ExecutionPhase
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+from sqlbuild.executor.types import ExecutionPhase
 
 
 def run_pre_hook_phase(

@@ -7,7 +7,7 @@ from dataclasses import replace
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.shared.identity_hashing import (
+from sqlbuild.compiler.planner.helpers.identity.hashing import (
     compose_native_graph_identity,
     graph_key_for_compiled_resource,
 )

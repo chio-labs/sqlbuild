@@ -128,6 +128,7 @@ from sqlbuild.virtual.freshness.main.runtime_persistence import (
     persist_virtual_environment_source_freshness,
 )
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
+from sqlbuild.virtual.helpers.encoding import encode_state_text
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
 from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_python_identities
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
@@ -137,7 +138,6 @@ from sqlbuild.virtual.planner.main.semantics import (
     build_virtual_plan_semantics,
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
 from sqlbuild.virtual.state.main.checkpoints.checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )

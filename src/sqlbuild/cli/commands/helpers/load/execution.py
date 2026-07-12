@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import time
 
+from sqlbuild.cli.commands.helpers.input.parsing import (
+    parse_cursor_integer,
+    parse_cursor_timestamp,
+)
 from sqlbuild.cli.commands.helpers.load.models import (
     LoadCommandRequest,
     LoadExecutionPreparation,
@@ -11,10 +15,6 @@ from sqlbuild.cli.commands.helpers.load.models import (
     LoadRunOutcome,
 )
 from sqlbuild.cli.commands.helpers.load.progress import LoadProgressReporter
-from sqlbuild.cli.commands.shared.helpers.config.parsers import (
-    parse_cursor_integer,
-    parse_cursor_timestamp,
-)
 from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (

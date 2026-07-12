@@ -15,7 +15,7 @@ from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifac
 from sqlbuild.executor.build.models import FunctionExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

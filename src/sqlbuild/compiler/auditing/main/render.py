@@ -7,7 +7,7 @@ import re
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.shared.helpers.sources import render_source_relation
+from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.spec.models.source import SourceEntry
 
 

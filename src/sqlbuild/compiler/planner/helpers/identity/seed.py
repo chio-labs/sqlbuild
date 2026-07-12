@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.compile.models.core import CompiledSeed
-from sqlbuild.compiler.planner.helpers.shared.identity_hashing import stable_version_identity_hash
+from sqlbuild.compiler.planner.helpers.identity.hashing import stable_version_identity_hash
 from sqlbuild.spec.models.schema import SchemaColumn, SeedCsvSettings
 
 

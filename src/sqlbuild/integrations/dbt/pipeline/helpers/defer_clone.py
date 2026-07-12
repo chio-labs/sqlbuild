@@ -51,6 +51,7 @@ from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_expected_dbt_model_version_hashes,
 )
 from sqlbuild.integrations.dbt.helpers.reuse.production_ref import compile_production_ref_manifest
+from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
@@ -63,7 +64,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtProductionRefCompileResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import execute_dbt_clone
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtSupportedResourceType
 from sqlbuild.shared.helpers.graph.algorithms import (
     resolve_clone_boundary,

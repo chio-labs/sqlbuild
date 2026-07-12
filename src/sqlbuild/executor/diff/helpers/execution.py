@@ -14,7 +14,7 @@ from sqlbuild.executor.diff.helpers.selection import (
     qualified_name,
 )
 from sqlbuild.executor.diff.models import ModelDiffResult
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.exceptions import ExecutorInputError
 
 
 def execute_model_diff(

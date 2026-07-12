@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from typing import cast
 
 from sqlbuild.adapter.shared.models import RowDiffTolerance, RowDiffTolerances
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.exceptions import ExecutorInputError
 
 
 def parse_row_diff_tolerances(

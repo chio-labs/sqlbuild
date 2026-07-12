@@ -12,6 +12,9 @@ from sqlbuild.cli.commands.helpers.build.execution import (
     execute_build_plan,
     prepare_build_execution,
 )
+from sqlbuild.cli.commands.helpers.build.full_refresh import (
+    enforce_snapshot_full_refresh_policy,
+)
 from sqlbuild.cli.commands.helpers.build.invocation import resolve_build_invocation
 from sqlbuild.cli.commands.helpers.build.models import (
     BuildCommandRequest,
@@ -28,9 +31,6 @@ from sqlbuild.cli.commands.helpers.build.outputs import (
 )
 from sqlbuild.cli.commands.helpers.build.planning import compile_build_plan
 from sqlbuild.cli.commands.main.commands.virtual_build import run_virtual_build
-from sqlbuild.cli.commands.shared.helpers.snapshots.full_refresh import (
-    enforce_snapshot_full_refresh_policy,
-)
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult

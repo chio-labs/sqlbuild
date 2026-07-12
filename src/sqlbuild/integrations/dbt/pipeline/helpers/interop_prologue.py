@@ -19,7 +19,7 @@ from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInter
 from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args
 from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args
 from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner, resolve_dbt_executable
 from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.manifest.core import (
@@ -33,7 +33,9 @@ from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_plan_options,
     resolve_dbt_vars_mapping,
 )
+from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.helpers.reuse.production_ref import compile_production_ref_manifest
+from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -53,9 +55,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtProductionRefCompileResult,
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import dbt_failure_detail
-from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtSupportedResourceType
 from sqlbuild.spec.models.project import DbtProductionRefConfig, resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_effective_force

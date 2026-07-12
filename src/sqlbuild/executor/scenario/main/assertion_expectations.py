@@ -7,7 +7,7 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioAssertionExpectationPlan
 from sqlbuild.executor.scenario.models import ScenarioAssertionExpectationExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.constants import (
     SCENARIO_EXEC_ASSERTION_ERRORED,
     SCENARIO_EXEC_ASSERTION_FAILED,

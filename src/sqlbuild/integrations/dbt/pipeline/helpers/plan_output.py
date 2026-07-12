@@ -46,6 +46,8 @@ from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
 from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_dbt_model_planning_result,
 )
+from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_connection_config
+from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
     adapt_project_for_dbt_sql_tests,
 )
@@ -72,8 +74,6 @@ from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     build_dbt_pruned_test_unique_ids,
     build_unblocked_sqlbuild_model_names,
 )
-from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,

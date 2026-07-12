@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.shared.helpers.python_node_scheduler import (
+from sqlbuild.executor.helpers.python_node_scheduler import (
     build_python_node_in_degree,
     build_python_node_ready_queue,
 )

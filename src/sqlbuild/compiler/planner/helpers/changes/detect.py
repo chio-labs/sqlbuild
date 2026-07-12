@@ -16,15 +16,15 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.config import get_config_str
 from sqlbuild.compiler.planner.helpers.changes.metadata import version_identity_metadata_payload
+from sqlbuild.compiler.planner.helpers.changes.policy import (
+    pick_more_aggressive,
+    resolve_replay_on_change,
+)
 from sqlbuild.compiler.planner.helpers.changes.query import detect_query_change
 from sqlbuild.compiler.planner.helpers.changes.schema import detect_schema_changes
 from sqlbuild.compiler.planner.helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,
-)
-from sqlbuild.compiler.planner.helpers.shared.change_policy import (
-    pick_more_aggressive,
-    resolve_replay_on_change,
 )
 from sqlbuild.compiler.planner.main.planning.version_identity_function_hashes import (
     build_function_local_hashes,
@@ -42,7 +42,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
-from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event, log_sql
+from sqlbuild.diagnostics.helpers.logging import log_debug_event, log_sql
 from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 
 
