@@ -9,8 +9,8 @@ from sqlbuild.cli.commands.helpers.load.models import (
     LoadInvocation,
 )
 from sqlbuild.cli.commands.helpers.load.references import validate_reference_source_targets
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.helpers.runtime.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config

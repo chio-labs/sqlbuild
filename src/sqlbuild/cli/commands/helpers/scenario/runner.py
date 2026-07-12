@@ -8,6 +8,13 @@ from typing import TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.cli.commands.helpers.planning.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
+from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.helpers.runtime.connection import (
+    resolve_project_connection_config,
+)
 from sqlbuild.cli.commands.helpers.scenario.capture_run import build_scenario_capture_settings
 from sqlbuild.cli.commands.helpers.scenario.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
@@ -25,21 +32,14 @@ from sqlbuild.cli.commands.helpers.scenario.snapshot_limits import (
     scenario_snapshot_capture_warning,
 )
 from sqlbuild.cli.commands.helpers.scenario.warehouse_run import run_warehouse_scenarios
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.connection.core import (
-    resolve_project_connection_config,
-)
-from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
-    resolve_external_sql_reference_resolver,
-)
-from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
+from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.output.main.scenario_snapshot_execution_json import (
     format_scenario_snapshot_execution_json,
-    write_execution_json_output,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
-from sqlbuild.cli.commands.shared.helpers.progress.core import write_execution_header
-from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
+from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
+from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
+from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 
 
 def parse_diff_name_range(name_range: str | None) -> tuple[str, str]:

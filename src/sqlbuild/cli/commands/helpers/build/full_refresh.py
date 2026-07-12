@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TextIO
 
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (
     MaterializationType,

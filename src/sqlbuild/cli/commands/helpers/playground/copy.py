@@ -11,7 +11,7 @@ from sqlbuild.cli.commands.helpers.playground.dbt_scaffold import (
     scaffold_dbt_playground,
 )
 from sqlbuild.cli.commands.helpers.playground.types import PlaygroundTemplate
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 
 _TEMPLATE_PACKAGE: str = "sqlbuild.playground"
 _WAFFLE_SHOP_TEMPLATE: str = "templates/waffle_shop"

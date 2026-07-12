@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlbuild.adapter.models import QueryResult
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 
 
 def render_query_result(*, result: QueryResult, output_format: str, limit: int | None) -> str:

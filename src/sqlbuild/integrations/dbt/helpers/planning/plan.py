@@ -7,7 +7,7 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 
-from sqlbuild.cli.commands.main.commands.plan_format import format_plan
+from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.planner.main.planning.query_diff import format_query_diff
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import (

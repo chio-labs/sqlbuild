@@ -9,13 +9,13 @@ from sqlbuild.cli.commands.helpers.clone.virtual_output import (
     is_virtual_clone_success,
     render_virtual_clone_output,
 )
-from sqlbuild.cli.commands.shared.helpers.connection.core import (
-    resolve_target_connection_config,
-)
-from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
+from sqlbuild.cli.commands.helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.commands.helpers.runtime.connection import (
+    resolve_target_connection_config,
+)
+from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.virtual.executor.main.clone import run_virtual_clone
 from sqlbuild.virtual.executor.models import CloneOptions, VirtualCloneResult
 

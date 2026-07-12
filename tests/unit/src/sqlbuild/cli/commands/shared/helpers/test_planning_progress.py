@@ -6,7 +6,7 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.cli.commands.shared.helpers.progress.planning import (
+from sqlbuild.cli.progress.classes.planning_progress_reporter import (
     PlanningProgressReporter,
     _is_planning_completion_message,
 )

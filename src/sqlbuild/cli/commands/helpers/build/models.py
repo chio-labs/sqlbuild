@@ -9,18 +9,18 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.shared.helpers.progress.connection import (
+from sqlbuild.cli.commands.helpers.build.progress import BuildProgressCallbacks
+from sqlbuild.cli.commands.helpers.build.python_lifecycle_state import StandardPythonLifecycleState
+from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.core import BuildProgressCallbacks
-from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
-from sqlbuild.cli.commands.shared.models import StandardPythonLifecycleState
+from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.shared.types import ExternalSqlReferenceResolver, NodeStartCallback
 from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
 
 
@@ -57,6 +57,16 @@ class BuildCommandRequest:
     manifest: bool = False
     json_output: bool = False
     json_output_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class StandardLifecycleCallbacks:
+    """Node progress callbacks and output settings for standard Python lifecycle."""
+
+    on_node_complete: Callable[[object], None]
+    progress_stream: TextIO
+    use_color: bool
+    on_node_start: NodeStartCallback | None = None
 
 
 @dataclass(frozen=True)

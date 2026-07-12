@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest, AuditInvocation
-from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
-    format_audit_execution_json,
-    write_execution_json_output,
-)
+from sqlbuild.cli.output.main.audit_execution_json import format_audit_execution_json
+from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.shared.main.summary_footer import format_summary_footer

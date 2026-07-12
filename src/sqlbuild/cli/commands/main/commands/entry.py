@@ -18,7 +18,7 @@ from sqlbuild.cli.commands.helpers.entry.models import (
 )
 from sqlbuild.cli.commands.helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands.helpers.entry.parsing import parse_cli_invocation
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.shared.helpers.output.colors import supports_color

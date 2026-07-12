@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 
 _DEV_MODEL_EDITS: tuple[tuple[str, str], ...] = (
     (

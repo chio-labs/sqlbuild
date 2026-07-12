@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.adapter.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
+from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError

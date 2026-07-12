@@ -10,8 +10,8 @@ from sqlbuild.cli.commands.helpers.janitor.models import (
     JanitorCompileContext,
     JanitorInvocation,
 )
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.connection.core import resolve_connection_config
+from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.helpers.runtime.connection import resolve_connection_config
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter

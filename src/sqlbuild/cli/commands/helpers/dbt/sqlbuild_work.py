@@ -7,19 +7,21 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.build.progress import (
+    BuildProgressCallbacks,
+    format_build_footer,
+)
 from sqlbuild.cli.commands.helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands.helpers.test.sql_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
-from sqlbuild.cli.commands.shared.helpers.progress.core import (
-    BuildProgressCallbacks,
-    format_build_footer,
-    format_build_header,
+from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
+from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
+    NestedCommandProgressCallbacks,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.nested import NestedCommandProgressCallbacks
-from sqlbuild.cli.commands.shared.helpers.targets.runtime import write_runtime_target
+from sqlbuild.cli.progress.main.execution_header import format_execution_header
+from sqlbuild.cli.target_artifacts.main.write_runtime_target import write_runtime_target
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.planner.models import (
@@ -72,7 +74,7 @@ def execute_sqlbuild_build_work(
         if command == DbtInteropCommand.RUN
         else f"sqb {command.value}"
     )
-    header: str = format_build_header(
+    header: str = format_execution_header(
         command=display_command, target=None, concurrency=effective_concurrency
     )
     style: CliStyle = CliStyle(use_color=use_color)
@@ -179,7 +181,7 @@ def _execute_sqlbuild_tests(
     output_stream: TextIO,
     use_color: bool,
 ) -> int:
-    header: str = format_build_header(command="sqb test", target=None, concurrency=1)
+    header: str = format_execution_header(command="sqb test", target=None, concurrency=1)
     style: CliStyle = CliStyle(use_color=use_color)
     execution_label: str = style.object_name("SQLBuild execution")
     header_detail: str = style.muted(header)
@@ -258,7 +260,7 @@ def _execute_sqlbuild_audits(
     output_stream: TextIO,
     use_color: bool,
 ) -> int:
-    header: str = format_build_header(command="sqb audit", target=None, concurrency=1)
+    header: str = format_execution_header(command="sqb audit", target=None, concurrency=1)
     style: CliStyle = CliStyle(use_color=use_color)
     execution_label: str = style.object_name("SQLBuild execution")
     header_detail: str = style.muted(header)

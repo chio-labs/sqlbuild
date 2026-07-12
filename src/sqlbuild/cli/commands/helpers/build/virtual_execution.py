@@ -17,10 +17,10 @@ from sqlbuild.cli.commands.helpers.input.parsing import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.connection import (
+from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.planning import (
+from sqlbuild.cli.progress.classes.planning_progress_reporter import (
     PlanningProgressReporter,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

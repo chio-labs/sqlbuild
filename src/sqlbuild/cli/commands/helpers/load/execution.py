@@ -15,7 +15,7 @@ from sqlbuild.cli.commands.helpers.load.models import (
     LoadRunOutcome,
 )
 from sqlbuild.cli.commands.helpers.load.progress import LoadProgressReporter
-from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (
     LoadCallbacks,

@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest, SeedInvocation
-from sqlbuild.cli.commands.shared.helpers.config.adapter_context import (
+from sqlbuild.cli.commands.helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
-from sqlbuild.cli.commands.shared.models import AdapterConnectionContext
+from sqlbuild.cli.commands.helpers.runtime.models import AdapterConnectionContext
+from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest, SeedInvocation
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.output.colors import supports_color

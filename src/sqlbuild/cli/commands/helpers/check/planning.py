@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands.helpers.check.models import CheckCommandRequest, CheckInvocation
-from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
+from sqlbuild.cli.commands.helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline

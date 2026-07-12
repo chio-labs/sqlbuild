@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.cli.commands.helpers.build.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.spec.models.project import SnapshotsConfig
 from tests.unit.src.sqlbuild.cli.commands.helpers.build._test_types import (

@@ -26,10 +26,8 @@ from sqlbuild.cli.commands.main.commands.load import run_load
 from sqlbuild.cli.commands.main.commands.plan import run_plan
 from sqlbuild.cli.commands.main.commands.scenario import run_scenario
 from sqlbuild.cli.commands.main.commands.test import run_test
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
-    format_load_execution_json,
-)
+from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.output.main.load_execution_json import format_load_execution_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.planner.exceptions import PlannerInputError

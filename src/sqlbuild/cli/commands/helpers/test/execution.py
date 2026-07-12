@@ -12,10 +12,12 @@ from sqlbuild.cli.commands.helpers.test.sql_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.connection import (
+from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.nested import NestedCommandProgressCallbacks
+from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
+    NestedCommandProgressCallbacks,
+)
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.pipeline.main.run import run_test_pipeline

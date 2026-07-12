@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands.helpers.scenario.selection import select_scenarios
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledSqlScenario
 from tests.unit.src.sqlbuild.cli.commands.helpers.scenario._test_types import (
     SelectScenariosErrorTestCase,

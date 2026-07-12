@@ -17,7 +17,7 @@ from sqlbuild.cli.commands.helpers.audit.outputs import (
     write_audit_completion_output,
 )
 from sqlbuild.cli.commands.helpers.audit.planning import compile_audit_plan
-from sqlbuild.cli.commands.shared.helpers.progress.core import write_execution_header
+from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 
