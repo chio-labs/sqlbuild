@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
-from sqlbuild.adapter.shared.type_normalization import types_equal
+from sqlbuild.adapter.capabilities.type_normalization import types_equal
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.spec.models.source import SourceEntry
 

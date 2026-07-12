@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import (
     NormalizedDbtProfileConnection,

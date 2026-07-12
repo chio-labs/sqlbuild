@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.models import LifeCycleEvent
 from sqlbuild.compiler.planner.models import (
     CompiledRelationLocation,
     ScenarioExecutionPlan,

@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.models import (
     ColumnInfo,
     RowDiffColumnResult,
     RowDiffResult,

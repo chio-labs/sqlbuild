@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.promote.models import PromoteCommandRequest
 from sqlbuild.cli.commands.helpers.promote.output import format_promote_output
 from sqlbuild.cli.commands.shared.exceptions import CliUserError

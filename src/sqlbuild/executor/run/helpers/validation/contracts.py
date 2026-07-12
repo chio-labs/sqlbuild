@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.adapter.shared.type_normalization import types_equal
-from sqlbuild.adapter.shared.types import TypeDialect
+from sqlbuild.adapter.capabilities.type_normalization import types_equal
+from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.types import TypeDialect
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.constants import (

@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlbuild.adapter.base.base_adapter import (
+from sqlbuild.adapter.classes.base_adapter import (
     BaseAdapter,
     _build_names_filter,
     _build_schemas_filter,
@@ -20,8 +20,9 @@ from sqlbuild.adapter.base.base_adapter import (
     _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
 )
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.exceptions import AdapterUserError
+from sqlbuild.adapter.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
@@ -35,11 +36,10 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     SnapshotChangeTarget,
-    StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.types import (
+from sqlbuild.adapter.types import (
     BuiltinAdapter,
     CursorKind,
     FrameworkType,

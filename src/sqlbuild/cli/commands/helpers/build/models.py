@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.shared.helpers.progress.connection import (
     ConnectionProgressReporter,
 )

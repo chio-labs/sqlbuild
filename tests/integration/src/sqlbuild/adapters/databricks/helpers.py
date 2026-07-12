@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.databricks.client import DatabricksAdapter
 
 _ENV_KEYS: tuple[str, ...] = (

@@ -6,8 +6,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
-from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.models import ExpressionInferenceProfile
+from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.compiler.compile.helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
     infer_columns_with_sql_analysis,

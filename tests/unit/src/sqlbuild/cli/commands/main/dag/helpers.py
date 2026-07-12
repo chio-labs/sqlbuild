@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.models import QueryResult
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 
 

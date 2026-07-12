@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -418,7 +418,7 @@ def run_scheduler_build(
 ) -> tuple[Any, Any]:
     """Run a full build through the scheduler with custom materializations."""
 
-    from sqlbuild.adapter.shared.types import TablePromotionMode
+    from sqlbuild.adapter.types import TablePromotionMode
     from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
     from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline

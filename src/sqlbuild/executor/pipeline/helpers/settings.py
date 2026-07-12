@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.types import TablePromotionMode
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,

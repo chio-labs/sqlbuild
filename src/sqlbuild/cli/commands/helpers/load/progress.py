@@ -5,8 +5,8 @@ from __future__ import annotations
 import threading
 from typing import TextIO
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapter.models import LifeCycleEvent
+from sqlbuild.adapter.types import LifeCycleEventKind
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
 from sqlbuild.shared.main.summary_footer import format_summary_footer

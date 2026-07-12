@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.models import RelationInfo
 
 
 @dataclass(frozen=True)

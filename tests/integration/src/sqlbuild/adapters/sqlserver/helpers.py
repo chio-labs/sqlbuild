@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
 
 

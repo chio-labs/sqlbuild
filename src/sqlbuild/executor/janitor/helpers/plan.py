@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, datetime
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,

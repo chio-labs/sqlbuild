@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.exceptions import AdapterUserError
+from sqlbuild.adapter.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
@@ -18,7 +18,7 @@ from sqlbuild.adapter.shared.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter, _BigQueryConnection
 from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,

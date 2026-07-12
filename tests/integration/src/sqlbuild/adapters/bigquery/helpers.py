@@ -12,7 +12,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder, TableFreshnessMetadata
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import TableFreshnessMetadata
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 
 _ENV_KEYS: tuple[str, ...] = ("SQB_TEST_BIGQUERY_PROJECT",)

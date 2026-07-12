@@ -4,8 +4,8 @@ from typing import Any, ClassVar
 
 import pytest
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import RelationInfo
 
 _NO_PROGRESS_ENV_VAR: str = "SQLBUILD_NO_PROGRESS"
 

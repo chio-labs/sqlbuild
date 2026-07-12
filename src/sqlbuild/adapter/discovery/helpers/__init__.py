@@ -1,0 +1,1 @@
+"""Adapter discovery implementation helpers."""

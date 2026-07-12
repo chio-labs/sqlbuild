@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import CursorValue
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.models import CursorValue
+from sqlbuild.adapter.types import CursorKind
 from sqlbuild.executor.diff.helpers.bounds import resolve_bounded_cursors
 from sqlbuild.executor.exceptions import ExecutorInputError
 from tests.unit.src.sqlbuild.executor.diff._test_types import (

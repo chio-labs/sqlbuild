@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.adapter.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
 from sqlbuild.compiler.compile.models.core import CompiledProject

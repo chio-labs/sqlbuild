@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import quote, urlencode
 
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 
 

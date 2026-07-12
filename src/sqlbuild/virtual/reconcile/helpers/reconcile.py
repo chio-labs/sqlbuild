@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.helpers.relation_type import normalize_relation_type
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.adapter.shared.types import RelationType
+from sqlbuild.adapter.capabilities.relation_type import normalize_relation_type
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.types import RelationType
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph

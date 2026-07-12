@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
     QueryResult,
@@ -15,11 +16,10 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleCell,
     RowDiffSampleRow,
     SchemaDiffResult,
-    StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.types import FunctionNullabilityRule
+from sqlbuild.adapter.types import FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints

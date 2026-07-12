@@ -6,8 +6,9 @@ import time
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import FunctionInfo, StatementRecorder
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import FunctionInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationLocation,

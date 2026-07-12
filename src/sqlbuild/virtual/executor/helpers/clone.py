@@ -7,10 +7,10 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,

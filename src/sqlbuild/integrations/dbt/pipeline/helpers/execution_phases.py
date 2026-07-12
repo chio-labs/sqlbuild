@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.cli.commands.main.commands.connection_progress import (
     build_connection_progress_reporter,
 )

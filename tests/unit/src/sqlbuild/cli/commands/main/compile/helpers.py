@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent, QueryResult
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapter.models import LifeCycleEvent, QueryResult
+from sqlbuild.adapter.types import LifeCycleEventKind
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,

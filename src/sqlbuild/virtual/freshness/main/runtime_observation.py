@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.virtual.freshness.helpers.runtime import (
     observe_virtual_environment_source_freshness as _observe_virtual_environment_source_freshness,

@@ -5,9 +5,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import LifeCycleEvent
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import LifeCycleEvent
+from sqlbuild.adapter.types import LifeCycleEventKind
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, ScenarioExecutionPlan
 from sqlbuild.executor.scenario.main.expected_comparison_sql import (

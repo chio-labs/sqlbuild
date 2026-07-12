@@ -8,8 +8,8 @@ import time
 from dataclasses import dataclass
 from typing import TextIO
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapter.models import LifeCycleEvent
+from sqlbuild.adapter.types import LifeCycleEventKind
 from sqlbuild.cli.commands.helpers.test.sql_progress import (
     format_expectation_detail,
     format_expectation_name,

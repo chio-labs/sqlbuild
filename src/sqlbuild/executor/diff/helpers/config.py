@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import cast
 
-from sqlbuild.adapter.shared.models import RowDiffTolerance, RowDiffTolerances
+from sqlbuild.adapter.models import RowDiffTolerance, RowDiffTolerances
 from sqlbuild.executor.exceptions import ExecutorInputError
 
 

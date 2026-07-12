@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.executor.diff.helpers.execution import execute_model_diff
 from sqlbuild.executor.diff.helpers.selection import is_disabled
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult

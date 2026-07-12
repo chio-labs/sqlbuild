@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import LifeCycleEvent
+from sqlbuild.adapter.types import LifeCycleEventKind
 from tests.unit.src.sqlbuild.executor.shared.helpers._test_types import (
     StatementRecorderTestCase,
 )

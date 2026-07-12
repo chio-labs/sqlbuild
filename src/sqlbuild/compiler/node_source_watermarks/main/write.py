@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.shared.types import AdapterExecute
+from sqlbuild.adapter.types import AdapterExecute
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 
 

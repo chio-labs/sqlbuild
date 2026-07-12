@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.build.models import (
     BuildCommandRequest,
     BuildInvocation,

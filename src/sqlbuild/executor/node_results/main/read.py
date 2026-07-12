@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.shared.types import AdapterExecute
+from sqlbuild.adapter.types import AdapterExecute
 from sqlbuild.executor.node_results.constants import NODE_RESULTS_TABLE_NAME
 from sqlbuild.executor.node_results.helpers.serialization import decode_json_b64
 from sqlbuild.executor.node_results.helpers.sql import build_read_history_sql

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.models import QueryResult
 from sqlbuild.cli.commands.helpers.query.output import render_query_result
 from tests.unit.src.sqlbuild.cli.commands.helpers.query._test_types import (
     QueryOutputTestCase,

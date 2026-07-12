@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.rollback.models import RollbackCommandRequest
 from sqlbuild.cli.commands.helpers.rollback.output import format_rollback_output
 from sqlbuild.cli.commands.shared.exceptions import CliUserError

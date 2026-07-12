@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.shared.models import ConnectionHooks
 from sqlbuild.virtual.executor.helpers.rollback import publish_function_versions

@@ -7,7 +7,8 @@ from typing import Any
 import duckdb
 import pytest
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
@@ -17,9 +18,8 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerance,
     RowDiffTolerances,
     SchemaDiffResult,
-    StatementRecorder,
 )
-from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.models.schema import SeedCsvSettings

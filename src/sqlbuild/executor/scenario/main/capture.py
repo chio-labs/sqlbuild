@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import QueryResult
 from sqlbuild.executor.scenario.helpers.capture.columns import build_scenario_snapshot_columns
 from sqlbuild.executor.scenario.helpers.capture.safety import (
     capture_error_help,

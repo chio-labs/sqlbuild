@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.node_source_watermarks.constants import NODE_SOURCE_WATERMARK_TABLE_NAME
 from sqlbuild.compiler.node_source_watermarks.main.read import read_latest_node_source_watermarks
 from sqlbuild.compiler.node_source_watermarks.models import (

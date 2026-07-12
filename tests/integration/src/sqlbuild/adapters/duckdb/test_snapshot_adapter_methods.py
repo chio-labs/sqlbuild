@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import SnapshotChangeTarget
+from sqlbuild.adapter.models import SnapshotChangeTarget
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     SnapshotAdapterMethodsTestCase,

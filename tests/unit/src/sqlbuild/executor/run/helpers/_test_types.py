@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.adapter.models import ColumnInfo, LifeCycleEvent
 from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus
 from sqlbuild.executor.types import ExecutionPhase
 

@@ -4,7 +4,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
 from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandResult
 from sqlbuild.cli.commands.helpers.freshness.observe import (
     observe_source_freshness_for_command,

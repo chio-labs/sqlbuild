@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RowDiffResult, RowDiffTolerances, SchemaDiffResult
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import RowDiffResult, RowDiffTolerances, SchemaDiffResult
 from sqlbuild.executor.diff.helpers.bounds import resolve_bounded_cursors
 from sqlbuild.executor.diff.helpers.config import parse_row_diff_tolerances
 from sqlbuild.executor.diff.helpers.selection import (

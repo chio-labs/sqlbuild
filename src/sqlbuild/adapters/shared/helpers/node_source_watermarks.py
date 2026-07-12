@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.exceptions import AdapterUserError
+from sqlbuild.adapter.types import FrameworkType
 from sqlbuild.compiler.node_source_watermarks.constants import (
     COLUMN_CREATED_AT,
     COLUMN_NODE_NAME,

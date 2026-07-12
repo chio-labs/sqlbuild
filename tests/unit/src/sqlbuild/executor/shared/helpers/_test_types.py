@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.models import LifeCycleEvent
 
 
 @dataclass(frozen=True)

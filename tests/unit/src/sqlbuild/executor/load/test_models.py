@@ -6,7 +6,8 @@ import logging
 
 import pytest
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import LifeCycleEvent
 from sqlbuild.executor.load.models import LoaderContext, LoaderRelationRef
 from tests.unit.src.sqlbuild.executor.load._test_types import LoaderContextHelperTestCase
 from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter

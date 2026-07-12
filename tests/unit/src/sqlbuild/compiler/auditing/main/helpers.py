@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,

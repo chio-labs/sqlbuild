@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import TableFreshnessMetadata, TableFreshnessRequest
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.models import TableFreshnessMetadata, TableFreshnessRequest
+from sqlbuild.adapter.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
