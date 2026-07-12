@@ -407,7 +407,27 @@ def _resolve_test_model_sql(
 ) -> tuple[str, frozenset[str]]:
     """Replace refs and sources in model SQL and return it with reached mock names."""
 
-    reachable_mocks: set[str] = set()
+    reachable_mocks: set[str] = {
+        match.group(1)
+        for match in _REF_PATTERN.finditer(query_sql)
+        if match.group(1) in mock_refs and match.group(1) not in resolved_chain
+    }
+    reachable_mocks.update(
+        match.group(1)
+        for match in _SOURCE_PATTERN.finditer(query_sql)
+        if match.group(1) in mock_sources
+    )
+    reachable_mocks.update(
+        match.group(1)
+        for match in _SEED_PATTERN.finditer(query_sql)
+        if match.group(1) in mock_seeds
+    )
+    reachable_mocks.update(
+        name
+        for match in _DBT_REF_PATTERN.finditer(query_sql)
+        if (name := _dbt_ref_fixture_name(package_name=match.group(1), model_name=match.group(2)))
+        in mock_dbt_refs
+    )
     helper_with: str = _build_helper_with_clause(helper_ctes)
 
     def _replace_ref(match: re.Match[str]) -> str:
@@ -415,7 +435,6 @@ def _resolve_test_model_sql(
         if ref_name in resolved_chain:
             return resolved_chain[ref_name]
         if ref_name in mock_refs:
-            reachable_mocks.add(ref_name)
             mock_body: str = mock_refs[ref_name]
             return _wrap_mock_with_helpers(
                 mock_body=mock_body,
@@ -426,7 +445,6 @@ def _resolve_test_model_sql(
     def _replace_source(match: re.Match[str]) -> str:
         source_name: str = match.group(1)
         if source_name in mock_sources:
-            reachable_mocks.add(source_name)
             mock_body: str = mock_sources[source_name]
             return _wrap_mock_with_helpers(
                 mock_body=mock_body,
@@ -437,7 +455,6 @@ def _resolve_test_model_sql(
     def _replace_seed(match: re.Match[str]) -> str:
         seed_name: str = match.group(1)
         if seed_name in mock_seeds:
-            reachable_mocks.add(seed_name)
             mock_body: str = mock_seeds[seed_name]
             return _wrap_mock_with_helpers(
                 mock_body=mock_body,
@@ -450,7 +467,6 @@ def _resolve_test_model_sql(
             package_name=match.group(1), model_name=match.group(2)
         )
         if dbt_ref_name in mock_dbt_refs:
-            reachable_mocks.add(dbt_ref_name)
             mock_body: str = mock_dbt_refs[dbt_ref_name]
             return _wrap_mock_with_helpers(
                 mock_body=mock_body,
@@ -593,17 +609,17 @@ def _topo_sort_expected(
     ordered: list[str] = []
     visited: set[str] = set()
 
-    def _visit(node: str) -> None:
-        if node in visited:
-            return
-        visited.add(node)
+    def _visit(node: str, seen: set[str], result: list[str]) -> tuple[set[str], list[str]]:
+        if node in seen:
+            return seen, result
+        seen = seen | {node}
         dep: str
         for dep in sorted(deps.get(node, set())):
-            _visit(dep)
-        ordered.append(node)
+            seen, result = _visit(dep, seen, result)
+        return seen, [*result, node]
 
     for name in sorted(expected_names):
-        _visit(name)
+        visited, ordered = _visit(name, visited, ordered)
 
     return tuple(ordered)
 

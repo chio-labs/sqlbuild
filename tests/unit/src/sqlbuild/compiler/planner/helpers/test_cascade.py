@@ -262,7 +262,7 @@ def test_given_own_backfill_when_building_self_cascade_then_preserves_values(
     test_case: ResolveCascadeTestCase,
 ) -> None:
     result: CascadeResult = build_self_cascade(
-        BackfillResult(action=test_case.own_action, duration=test_case.own_duration)
+        backfill=BackfillResult(action=test_case.own_action, duration=test_case.own_duration)
     )
 
     assert result.effective_action == test_case.expected_action
@@ -293,7 +293,7 @@ def test_given_multihop_cascade_when_resolving_then_preserves_root_cause(
     upstream_keys: tuple[CompiledObjectKey, ...] = (hourly_key,)
     effective_cascades: dict[str, CascadeResult] = {
         "hourly_order_activity": build_self_cascade(
-            BackfillResult(action=BackfillAction.FULL),
+            backfill=BackfillResult(action=BackfillAction.FULL),
             root_cause="is_completed_order",
             root_reason=PlanReason.QUERY_CHANGED,
         )

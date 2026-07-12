@@ -129,7 +129,7 @@ def test_given_manifest_and_compiled_project_when_building_graph_then_returns_ex
     assert (
         graph_key_stable_ids(
             expand_combined_downstream(
-                graph_key_from_stable_id(test_case.expected_downstream_from),
+                key=graph_key_from_stable_id(test_case.expected_downstream_from),
                 downstream=graph.downstream_deps,
             )
         )
@@ -138,7 +138,7 @@ def test_given_manifest_and_compiled_project_when_building_graph_then_returns_ex
     assert (
         graph_key_stable_ids(
             expand_combined_upstream(
-                graph_key_from_stable_id(test_case.expected_upstream_from),
+                key=graph_key_from_stable_id(test_case.expected_upstream_from),
                 upstream=graph.upstream_deps,
             )
         )

@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 
 
-def build_unique_id(key: CompiledObjectKey, *, project_name: str, project: CompiledProject) -> str:
+def build_unique_id(*, key: CompiledObjectKey, project_name: str, project: CompiledProject) -> str:
     """Build a dbt-style unique_id from a CompiledObjectKey."""
 
     source_names: frozenset[str] = frozenset(s.name for s in project.sources)
@@ -33,9 +33,9 @@ def build_parent_map(
     key: CompiledObjectKey
     parents: tuple[CompiledObjectKey, ...]
     for key, parents in upstream_deps.items():
-        node_id: str = build_unique_id(key, project_name=project_name, project=project)
+        node_id: str = build_unique_id(key=key, project_name=project_name, project=project)
         result[node_id] = [
-            build_unique_id(parent, project_name=project_name, project=project)
+            build_unique_id(key=parent, project_name=project_name, project=project)
             for parent in parents
         ]
     return result
@@ -53,8 +53,9 @@ def build_child_map(
     key: CompiledObjectKey
     children: tuple[CompiledObjectKey, ...]
     for key, children in downstream_deps.items():
-        node_id: str = build_unique_id(key, project_name=project_name, project=project)
+        node_id: str = build_unique_id(key=key, project_name=project_name, project=project)
         result[node_id] = [
-            build_unique_id(child, project_name=project_name, project=project) for child in children
+            build_unique_id(key=child, project_name=project_name, project=project)
+            for child in children
         ]
     return result

@@ -391,7 +391,7 @@ def test_given_build_with_custom_materialization_when_scheduled_then_routes_corr
     def custom_fn(ctx: MaterializationContext) -> MaterializationResult:
         augmented_sql: str = f"SELECT *, 'via_custom_fn' AS custom_marker FROM ({ctx.sql}) sub"
         ctx.adapter.create_table_as(
-            ctx.connection,
+            connection=ctx.connection,
             destination=ctx.destination,
             sql=augmented_sql,
             statement_recorder=ctx.statement_recorder,

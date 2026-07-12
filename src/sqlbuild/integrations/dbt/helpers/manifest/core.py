@@ -201,8 +201,8 @@ def dbt_manifest_model_materialization(*, model: DbtManifestModel) -> str | None
 def _parse_model(
     *, unique_id: str, raw_node: dict[object, object], macro_index: _MacroIndex
 ) -> DbtManifestModel:
-    package_name: str = _required_str(raw_node.get("package_name"), field_name="package_name")
-    name: str = _required_str(raw_node.get("name"), field_name="name")
+    package_name: str = _required_str(value=raw_node.get("package_name"), field_name="package_name")
+    name: str = _required_str(value=raw_node.get("name"), field_name="name")
     database: str | None = _optional_str(raw_node.get("database"))
     schema: str | None = _optional_str(raw_node.get("schema"))
     alias: str | None = _optional_str(raw_node.get("alias"))
@@ -230,9 +230,9 @@ def _parse_model(
 
 
 def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManifestSource:
-    package_name: str = _required_str(raw_node.get("package_name"), field_name="package_name")
-    source_name: str = _required_str(raw_node.get("source_name"), field_name="source_name")
-    name: str = _required_str(raw_node.get("name"), field_name="name")
+    package_name: str = _required_str(value=raw_node.get("package_name"), field_name="package_name")
+    source_name: str = _required_str(value=raw_node.get("source_name"), field_name="source_name")
+    name: str = _required_str(value=raw_node.get("name"), field_name="name")
     database: str | None = _optional_str(raw_node.get("database"))
     schema: str | None = _optional_str(raw_node.get("schema"))
     identifier: str | None = _optional_str(raw_node.get("identifier"))
@@ -264,8 +264,8 @@ def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManif
 def _parse_seed(
     *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
 ) -> DbtManifestSeed:
-    package_name: str = _required_str(raw_node.get("package_name"), field_name="package_name")
-    name: str = _required_str(raw_node.get("name"), field_name="name")
+    package_name: str = _required_str(value=raw_node.get("package_name"), field_name="package_name")
+    name: str = _required_str(value=raw_node.get("name"), field_name="name")
     database: str | None = _optional_str(raw_node.get("database"))
     schema: str | None = _optional_str(raw_node.get("schema"))
     alias: str | None = _optional_str(raw_node.get("alias"))
@@ -295,10 +295,13 @@ def _seed_identity_hash(
     config_mapping: dict[str, object] = (
         cast(dict[str, object], config) if isinstance(config, dict) else {}
     )
+    content_hash, warnings = _seed_content_hash(
+        unique_id=unique_id, raw_node=raw_node, warnings=warnings
+    )
     identity: dict[str, object] = {
         "checksum": checksum,
         "config": _normalize_json_value(config_mapping),
-        "content": _seed_content_hash(unique_id=unique_id, raw_node=raw_node, warnings=warnings),
+        "content": content_hash,
     }
     payload: str = json.dumps(identity, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -306,13 +309,13 @@ def _seed_identity_hash(
 
 def _seed_content_hash(
     *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
-) -> str | None:
+) -> tuple[str | None, list[str]]:
     precomputed: str | None = _optional_str(raw_node.get(_SQLBUILD_SEED_CONTENT_HASH_KEY))
     if precomputed is not None:
-        return precomputed
+        return precomputed, warnings
     content_hash: str | None = _read_seed_content_hash(raw_node=raw_node)
     if content_hash is not None:
-        return content_hash
+        return content_hash, warnings
     root_path: str | None = _optional_str(raw_node.get("root_path"))
     relative_path: str | None = _optional_str(raw_node.get("original_file_path"))
     if root_path is None or relative_path is None:
@@ -320,7 +323,7 @@ def _seed_content_hash(
             f"seed '{unique_id}': missing manifest path; independent content change "
             "detection is inactive (relying on dbt checksum only)"
         )
-        return None
+        return None, warnings
     seed_file: Path = Path(root_path) / relative_path
     try:
         seed_file.read_text(encoding="utf-8-sig")
@@ -329,7 +332,7 @@ def _seed_content_hash(
             f"seed '{unique_id}': could not read seed file ({exc}); independent content "
             "change detection is inactive (relying on dbt checksum only)"
         )
-    return None
+    return None, warnings
 
 
 def _read_seed_content_hash(*, raw_node: dict[object, object]) -> str | None:
@@ -427,14 +430,14 @@ def _strip_config_block(raw_code: str) -> str:
     """Return raw_code with leading config blocks and snapshot wrappers removed."""
 
     body: str = raw_code
-    if _find_jinja_statement(body, keyword="snapshot") is not None:
-        body = _remove_jinja_statement(body, keyword="snapshot")
-        body = _remove_jinja_statement(body, keyword="endsnapshot")
+    if _find_jinja_statement(text=body, keyword="snapshot") is not None:
+        body = _remove_jinja_statement(text=body, keyword="snapshot")
+        body = _remove_jinja_statement(text=body, keyword="endsnapshot")
     body = _remove_config_call(body)
     return body.strip()
 
 
-def _find_jinja_statement(text: str, *, keyword: str) -> int | None:
+def _find_jinja_statement(*, text: str, keyword: str) -> int | None:
     marker: str = "{%"
     index: int = 0
     while True:
@@ -449,8 +452,8 @@ def _find_jinja_statement(text: str, *, keyword: str) -> int | None:
         index = end + 2
 
 
-def _remove_jinja_statement(text: str, *, keyword: str) -> str:
-    start: int | None = _find_jinja_statement(text, keyword=keyword)
+def _remove_jinja_statement(*, text: str, keyword: str) -> str:
+    start: int | None = _find_jinja_statement(text=text, keyword=keyword)
     if start is None:
         return text
     end: int = text.find("%}", start)
@@ -465,16 +468,16 @@ def _remove_config_call(text: str) -> str:
         if start == -1:
             return text
         inner_start: int = start + len(marker)
-        call_index: int = _skip_whitespace(text, index=inner_start)
+        call_index: int = _skip_whitespace(text=text, index=inner_start)
         if text[call_index:].startswith("config"):
-            close: int | None = _find_config_expression_close(text, config_index=call_index)
+            close: int | None = _find_config_expression_close(text=text, config_index=call_index)
             if close is None:
                 return text
             return text[:start] + text[close:]
         index = start + len(marker)
 
 
-def _find_config_expression_close(text: str, *, config_index: int) -> int | None:
+def _find_config_expression_close(*, text: str, config_index: int) -> int | None:
     """Return the index past the config block's closing braces, skipping nested braces."""
 
     paren_open: int = text.find("(", config_index)
@@ -495,7 +498,7 @@ def _find_config_expression_close(text: str, *, config_index: int) -> int | None
     return None
 
 
-def _skip_whitespace(text: str, *, index: int) -> int:
+def _skip_whitespace(*, text: str, index: int) -> int:
     while index < len(text) and text[index].isspace():
         index += 1
     return index
@@ -531,7 +534,7 @@ def _model_definition_fingerprint(
     return "\n".join((body, *config_parts, *macro_parts))
 
 
-def _required_str(value: object, *, field_name: str) -> str:
+def _required_str(*, value: object, field_name: str) -> str:
     if isinstance(value, str) and value:
         return value
     raise CompileInputError(f"Invalid dbt manifest: model {field_name} is required", code="C211")

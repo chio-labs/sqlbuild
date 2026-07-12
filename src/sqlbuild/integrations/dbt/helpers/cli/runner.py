@@ -24,7 +24,9 @@ def build_dbt_compile_argv(
 ) -> tuple[str, ...]:
     """Build argv for dbt compile."""
 
-    argv: tuple[str, ...] = _append_common_options((dbt_executable, "compile"), options=options)
+    argv: tuple[str, ...] = _append_common_options(
+        argv=(dbt_executable, "compile"), options=options
+    )
     if full_refresh:
         argv = (*argv, "--full-refresh")
     return argv
@@ -50,7 +52,7 @@ def build_dbt_debug_argv(
 ) -> tuple[str, ...]:
     """Build argv for dbt debug."""
 
-    return (*_append_common_options((dbt_executable, "debug"), options=options), *args)
+    return (*_append_common_options(argv=(dbt_executable, "debug"), options=options), *args)
 
 
 def build_dbt_command_argv(
@@ -62,7 +64,7 @@ def build_dbt_command_argv(
 ) -> tuple[str, ...]:
     """Build argv for an executable dbt command with resolved common options."""
 
-    return (*_append_common_options((dbt_executable, command), options=options), *args)
+    return (*_append_common_options(argv=(dbt_executable, command), options=options), *args)
 
 
 def build_dbt_ls_argv(
@@ -76,7 +78,7 @@ def build_dbt_ls_argv(
     """Build argv for dbt ls with JSON output."""
 
     argv: tuple[str, ...] = _append_common_options(
-        (dbt_executable, "ls", "--output", "json"), options=options
+        argv=(dbt_executable, "ls", "--output", "json"), options=options
     )
     value: str
     if select:
@@ -184,7 +186,7 @@ class DbtRunner:
 
     def _invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         invoker: DbtInvoker = self.invoker if self.invoker is not None else _subprocess_invoker
-        return cast(DbtCommandResult, invoker(argv, cwd=cwd))
+        return cast(DbtCommandResult, invoker(argv=argv, cwd=cwd))
 
     def invoke(self, *, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         """Run an explicit dbt argv."""
@@ -192,7 +194,7 @@ class DbtRunner:
         return self._invoke(argv=argv, cwd=cwd)
 
 
-def _append_common_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> tuple[str, ...]:
+def _append_common_options(*, argv: tuple[str, ...], options: DbtCliOptions) -> tuple[str, ...]:
     if options.project_dir is not None:
         argv = (*argv, "--project-dir", str(options.project_dir))
     if options.profiles_dir is not None:
@@ -210,7 +212,7 @@ def _append_common_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> 
     return argv
 
 
-def _subprocess_invoker(argv: tuple[str, ...], *, cwd: Path | None) -> DbtCommandResult:
+def _subprocess_invoker(*, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
     try:
         completed: subprocess.CompletedProcess[str] = subprocess.run(
             argv,

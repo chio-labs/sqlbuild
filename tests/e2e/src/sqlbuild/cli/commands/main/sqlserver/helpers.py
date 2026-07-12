@@ -246,7 +246,9 @@ def ensure_sqlserver_schema_ready(*, schema_name: str, config: dict[str, object]
     adapter: SqlServerAdapter = SqlServerAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, sql=f"CREATE SCHEMA {adapter.render_identifier(schema_name)}")
+        adapter.execute(
+            connection=connection, sql=f"CREATE SCHEMA {adapter.render_identifier(schema_name)}"
+        )
     finally:
         adapter.close(connection)
 
@@ -255,7 +257,7 @@ def execute_sqlserver_sql(*, sql: str, config: dict[str, object]) -> None:
     adapter: SqlServerAdapter = SqlServerAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, sql=sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 
@@ -266,7 +268,7 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
     escaped_schema_name: str = schema_name.replace("'", "''")
     try:
         adapter.execute(
-            connection,
+            connection=connection,
             sql="DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP FUNCTION ' + QUOTENAME(s.name) "
             "+ N'.' + QUOTENAME(o.name) + N';' "
@@ -275,7 +277,7 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
             "EXEC sp_executesql @sql;",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP VIEW ' + QUOTENAME(s.name) + N'.' + QUOTENAME(v.name) + N';' "
             "FROM sys.views v JOIN sys.schemas s ON v.schema_id = s.schema_id "
@@ -283,7 +285,7 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
             "EXEC sp_executesql @sql;",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N';' "
             "FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id "
@@ -291,7 +293,7 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
             "EXEC sp_executesql @sql;",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql=f"IF SCHEMA_ID(N'{escaped_schema_name}') IS NOT NULL "
             f"DROP SCHEMA {adapter.render_identifier(schema_name)}",
         )
@@ -303,7 +305,7 @@ def fetch_sqlserver_rows(*, sql: str, config: dict[str, object]) -> tuple[tuple[
     adapter: SqlServerAdapter = SqlServerAdapter()
     connection: Any = adapter.connect(config)
     try:
-        cursor: Any = adapter.execute(connection, sql=sql)
+        cursor: Any = adapter.execute(connection=connection, sql=sql)
         return tuple(tuple(row) for row in cursor.fetchall())
     finally:
         adapter.close(connection)

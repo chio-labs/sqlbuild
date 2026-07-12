@@ -150,13 +150,17 @@ def test_given_known_source_columns_when_building_relations_context_then_reuses_
         selected_keys=frozenset(),
         execution_order=(),
     )
+    known_source_columns_by_name: dict[str, tuple[ColumnInfo, ...]] = {}
+    source_name: str
+    column_names: tuple[str, ...]
+    for source_name, column_names in (test_case.known_source_columns or {}).items():
+        columns: list[ColumnInfo] = []
+        name: str
+        for name in column_names:
+            columns.append(ColumnInfo(name=name, type=""))
+        known_source_columns_by_name[source_name] = tuple(columns)
     known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = (
-        {
-            source_name: tuple(ColumnInfo(name=name, type="") for name in column_names)
-            for source_name, column_names in test_case.known_source_columns.items()
-        }
-        if test_case.known_source_columns is not None
-        else None
+        known_source_columns_by_name or None
     )
 
     context: PlannerRelationsContext = build_planner_relations_context(
@@ -168,10 +172,13 @@ def test_given_known_source_columns_when_building_relations_context_then_reuses_
     )
 
     assert len(adapter.queried_sql) == test_case.expected_queried_sql_count
-    assert {
-        source_name: tuple(column.name for column in columns)
-        for source_name, columns in context.source_warehouse_columns.items()
-    } == test_case.expected_source_column_names
+    actual_source_column_names: dict[str, tuple[str, ...]] = {}
+    for source_name, context_columns in context.source_warehouse_columns.items():
+        column_names: list[str] = []
+        for column in context_columns:
+            column_names.append(column.name)
+        actual_source_column_names[source_name] = tuple(column_names)
+    assert actual_source_column_names == test_case.expected_source_column_names
 
 
 @pytest.mark.parametrize(
@@ -273,10 +280,12 @@ def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> None:
     model: CompiledModel = build_source_cursor_input_model(test_case)
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {
-        source_name: tuple(ColumnInfo(name=name, type="") for name in column_names)
-        for source_name, column_names in test_case.source_columns.items()
-    }
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {}
+    for source_name, column_names in test_case.source_columns.items():
+        columns: list[ColumnInfo] = []
+        for name in column_names:
+            columns.append(ColumnInfo(name=name, type=""))
+        source_warehouse_columns[source_name] = tuple(columns)
 
     validate_source_cursor_input_columns(
         model=model,
@@ -348,10 +357,12 @@ def test_given_missing_cursor_input_source_column_when_validating_then_raises_cl
     test_case: SourceCursorInputColumnsTestCase,
 ) -> None:
     model: CompiledModel = build_source_cursor_input_model(test_case)
-    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {
-        source_name: tuple(ColumnInfo(name=name, type="") for name in column_names)
-        for source_name, column_names in test_case.source_columns.items()
-    }
+    source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {}
+    for source_name, column_names in test_case.source_columns.items():
+        columns: list[ColumnInfo] = []
+        for name in column_names:
+            columns.append(ColumnInfo(name=name, type=""))
+        source_warehouse_columns[source_name] = tuple(columns)
     assert test_case.expected_error_fragment is not None
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):

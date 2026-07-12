@@ -14,10 +14,10 @@ def parse_python_module(file_path: Path) -> ast.Module:
     return ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
 
 
-def check_module(file_path: Path, *, module: ast.Module) -> list[Violation]:
+def check_module(*, file_path: Path, module: ast.Module) -> list[Violation]:
     """Validate type annotation conventions for a parsed module."""
 
-    visitor = _TypeAnnotationVisitor(file_path)
+    visitor: _TypeAnnotationVisitor = _TypeAnnotationVisitor(file_path)
     visitor.visit(module)
     return visitor.violations
 
@@ -100,7 +100,7 @@ class _TypeAnnotationVisitor(ast.NodeVisitor):
             self._function_scopes.pop()
 
     def _check_function_signature(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        positional_args = [*node.args.posonlyargs, *node.args.args]
+        positional_args: list[ast.arg] = [*node.args.posonlyargs, *node.args.args]
         exempt_parameter_name: str | None = None
         if self._class_depth > 0 and positional_args and positional_args[0].arg in {"self", "cls"}:
             exempt_parameter_name = positional_args[0].arg

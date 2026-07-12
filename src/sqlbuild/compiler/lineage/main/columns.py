@@ -14,8 +14,8 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 def build_project_column_lineage(
-    project: CompiledProject,
     *,
+    project: CompiledProject,
     dialect: str | None = None,
     mode: ColumnLineageMode = ColumnLineageMode.RICH,
     model_names: frozenset[str] | None = None,
@@ -25,13 +25,13 @@ def build_project_column_lineage(
     match mode:
         case ColumnLineageMode.FAST:
             return build_fast_project_column_lineage(
-                project,
+                project=project,
                 dialect=dialect,
                 model_names=model_names,
             )
         case ColumnLineageMode.RICH:
             return build_rich_project_column_lineage(
-                project,
+                project=project,
                 dialect=dialect,
                 model_names=model_names,
             )

@@ -54,7 +54,7 @@ def test_given_seed_load_failure_when_executing_then_does_not_write_fingerprint(
     assert result.status == test_case.expected_status
     assert (
         adapter.relation_exists(
-            connection,
+            connection=connection,
             database=None,
             schema="main",
             name=FINGERPRINT_TABLE_NAME,

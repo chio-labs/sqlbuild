@@ -38,5 +38,5 @@ def fetch_rows(
 ) -> tuple[tuple[object, ...], ...]:
     """Fetch rows from MotherDuck using the configured test credentials."""
 
-    cursor: Any = adapter.execute(connection, sql=sql)
+    cursor: Any = adapter.execute(connection=connection, sql=sql)
     return tuple(tuple(row) for row in cursor.fetchall())

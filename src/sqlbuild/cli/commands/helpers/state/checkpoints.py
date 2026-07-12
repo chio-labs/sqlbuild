@@ -126,7 +126,7 @@ def _format_checkpoint_list(
     document: CliDocument = CliDocument(style)
     document.blank()
     document.header(
-        "Virtual environment checkpoints", suffix=style.object_name(virtual_environment_name)
+        text="Virtual environment checkpoints", suffix=style.object_name(virtual_environment_name)
     )
     document.blank()
     if not checkpoints:
@@ -152,7 +152,7 @@ def _format_checkpoint_show(
 ) -> str:
     document: CliDocument = CliDocument(style)
     document.blank()
-    document.header("Virtual environment checkpoint")
+    document.header(text="Virtual environment checkpoint")
     document.blank()
     document.line(f"  checkpoint           {style.accent(checkpoint_id)}")
     document.blank()
@@ -233,7 +233,8 @@ def _format_checkpoint_diff(
     document: CliDocument = CliDocument(style)
     document.blank()
     document.header(
-        "Virtual environment checkpoint diff", suffix=style.object_name(virtual_environment_name)
+        text="Virtual environment checkpoint diff",
+        suffix=style.object_name(virtual_environment_name),
     )
     document.blank()
     document.line(f"  {'checkpoint':<16} {style.accent(checkpoint_id)}")
@@ -246,7 +247,7 @@ def _format_checkpoint_diff(
         f"  {'checkpoint seeds':<16} {style.accent(f'{len(checkpoint_only_seed_refs):,}')}"
     )
     _append_ref_diff_lines(
-        document,
+        document=document,
         label="Changed refs",
         model_names=changed,
         current_ref_map=current_ref_map,
@@ -254,7 +255,7 @@ def _format_checkpoint_diff(
         style=style,
     )
     _append_ref_diff_lines(
-        document,
+        document=document,
         label="Current only",
         model_names=current_only,
         current_ref_map=current_ref_map,
@@ -262,7 +263,7 @@ def _format_checkpoint_diff(
         style=style,
     )
     _append_ref_diff_lines(
-        document,
+        document=document,
         label="Checkpoint only",
         model_names=checkpoint_only,
         current_ref_map=current_ref_map,
@@ -270,7 +271,7 @@ def _format_checkpoint_diff(
         style=style,
     )
     _append_ref_diff_lines(
-        document,
+        document=document,
         label="Changed seed refs",
         model_names=changed_seed_refs,
         current_ref_map=current_seed_ref_map,
@@ -278,7 +279,7 @@ def _format_checkpoint_diff(
         style=style,
     )
     _append_ref_diff_lines(
-        document,
+        document=document,
         label="Current only seed refs",
         model_names=current_only_seed_refs,
         current_ref_map=current_seed_ref_map,
@@ -286,7 +287,7 @@ def _format_checkpoint_diff(
         style=style,
     )
     _append_ref_diff_lines(
-        document,
+        document=document,
         label="Checkpoint only seed refs",
         model_names=checkpoint_only_seed_refs,
         current_ref_map=current_seed_ref_map,
@@ -298,8 +299,8 @@ def _format_checkpoint_diff(
 
 
 def _append_ref_diff_lines(
-    document: CliDocument,
     *,
+    document: CliDocument,
     label: str,
     model_names: tuple[str, ...],
     current_ref_map: dict[str, str],
@@ -335,10 +336,10 @@ def _read_checkpoint_refs(
     try:
         return (
             backend.get_virtual_environment_checkpoint_model_refs(
-                connection, schema=config.schema, checkpoint_id=checkpoint_id
+                connection=connection, schema=config.schema, checkpoint_id=checkpoint_id
             ),
             backend.get_virtual_environment_checkpoint_seed_refs(
-                connection, schema=config.schema, checkpoint_id=checkpoint_id
+                connection=connection, schema=config.schema, checkpoint_id=checkpoint_id
             ),
         )
     finally:
@@ -361,12 +362,12 @@ def _read_current_refs(
     try:
         return (
             backend.get_virtual_environment_model_refs(
-                connection,
+                connection=connection,
                 schema=config.schema,
                 virtual_environment_name=virtual_environment_name,
             ),
             backend.get_virtual_environment_seed_refs(
-                connection,
+                connection=connection,
                 schema=config.schema,
                 virtual_environment_name=virtual_environment_name,
             ),

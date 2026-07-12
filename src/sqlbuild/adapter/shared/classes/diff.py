@@ -20,8 +20,8 @@ class DiffMixin(ABC):
     @abstractmethod
     def diff_schema(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
     ) -> SchemaDiffResult:
@@ -31,8 +31,8 @@ class DiffMixin(ABC):
     @abstractmethod
     def diff_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -48,8 +48,8 @@ class DiffMixin(ABC):
     @abstractmethod
     def count_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation: str,
         cursor_column: str | None = None,
         start_cursor: CursorValue | None = None,
@@ -61,8 +61,8 @@ class DiffMixin(ABC):
     @abstractmethod
     def sample_unequal_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -79,8 +79,8 @@ class DiffMixin(ABC):
     @abstractmethod
     def sample_side_only_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],

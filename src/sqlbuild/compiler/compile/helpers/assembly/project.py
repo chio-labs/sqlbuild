@@ -80,8 +80,8 @@ class _ModelSqlAnalysis:
 
 
 def assemble_compiled_project(
-    inputs: CompileProjectInputs,
     *,
+    inputs: CompileProjectInputs,
     inference_profile: ExpressionInferenceProfile | None = None,
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
@@ -126,7 +126,7 @@ def assemble_compiled_project(
         ),
         models=tuple(
             _assemble_compiled_model(
-                model_input,
+                model_input=model_input,
                 sql_analysis_enabled=sql_analysis_enabled,
                 seed_names=seed_names,
                 column_nullability_by_table=column_nullability_by_table,
@@ -138,14 +138,14 @@ def assemble_compiled_project(
         ),
         sources=tuple(
             _assemble_compiled_source(
-                source_input,
+                source_input=source_input,
                 target_config=inputs.effective_target,
             )
             for source_input in inputs.source_inputs
         ),
         seeds=tuple(
             _assemble_compiled_seed(
-                seed_input,
+                seed_input=seed_input,
                 defaults=inputs.project_config.defaults,
                 target_config=inputs.effective_target,
                 effective_vars=inputs.effective_vars,
@@ -153,12 +153,14 @@ def assemble_compiled_project(
             for seed_input in inputs.seed_inputs
         ),
         functions=tuple(
-            _assemble_compiled_function(function_input, seed_names=seed_names)
+            _assemble_compiled_function(function_input=function_input, seed_names=seed_names)
             for function_input in inputs.sql_function_inputs
         ),
         audits=tuple(_assemble_compiled_audit(audit_input) for audit_input in inputs.audit_inputs),
         sql_tests=tuple(
-            _assemble_compiled_sql_test(test_input, model_inputs=inputs.model_inputs, inputs=inputs)
+            _assemble_compiled_sql_test(
+                test_input=test_input, model_inputs=inputs.model_inputs, inputs=inputs
+            )
             for test_input in inputs.test_inputs
         ),
         sql_scenarios=tuple(
@@ -188,8 +190,8 @@ def _connection_database_fallback(*, inputs: CompileProjectInputs) -> str | None
 
 
 def _assemble_compiled_model(
-    model_input: CompileModelInput,
     *,
+    model_input: CompileModelInput,
     sql_analysis_enabled: bool,
     seed_names: frozenset[str] = frozenset(),
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
@@ -277,7 +279,7 @@ def _analyze_model_sql_in_parallel(
     if len(model_inputs) < _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS:
         return {
             _model_name(model_input): _analyze_model_sql(
-                model_input,
+                model_input=model_input,
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=inference_profile,
                 allow_compact_analysis=allow_compact_analysis,
@@ -289,7 +291,7 @@ def _analyze_model_sql_in_parallel(
         analyses: tuple[_ModelSqlAnalysis, ...] = tuple(
             executor.map(
                 lambda model_input: _analyze_model_sql(
-                    model_input,
+                    model_input=model_input,
                     column_nullability_by_table=column_nullability_by_table,
                     inference_profile=inference_profile,
                     allow_compact_analysis=allow_compact_analysis,
@@ -304,8 +306,8 @@ def _analyze_model_sql_in_parallel(
 
 
 def _analyze_model_sql(
-    model_input: CompileModelInput,
     *,
+    model_input: CompileModelInput,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
@@ -362,7 +364,7 @@ def _schema_column_nullability(
     columns: tuple[SchemaColumn, ...],
 ) -> dict[str, InferredNullability]:
     return {
-        column.name: _declared_column_nullability(column.nullable, audits=column.audits)
+        column.name: _declared_column_nullability(nullable=column.nullable, audits=column.audits)
         for column in columns
     }
 
@@ -371,14 +373,14 @@ def _source_column_nullability(
     columns: tuple[SourceColumnEntry, ...],
 ) -> dict[str, InferredNullability]:
     return {
-        column.name: _declared_column_nullability(column.nullable, audits=column.audits)
+        column.name: _declared_column_nullability(nullable=column.nullable, audits=column.audits)
         for column in columns
     }
 
 
 def _declared_column_nullability(
-    nullable: bool | None,
     *,
+    nullable: bool | None,
     audits: tuple[SchemaAuditInstance, ...],
 ) -> InferredNullability:
     if nullable is False:
@@ -389,8 +391,8 @@ def _declared_column_nullability(
 
 
 def _assemble_compiled_source(
-    source_input: CompileSourceInput,
     *,
+    source_input: CompileSourceInput,
     target_config: TargetConfig | None,
 ) -> CompiledSource:
     source_entry: SourceEntry = _build_source_relation_entry(
@@ -423,8 +425,8 @@ def _build_source_relation_entry(
 
 
 def _assemble_compiled_seed(
-    seed_input: CompileSeedInput,
     *,
+    seed_input: CompileSeedInput,
     defaults: DefaultsConfig,
     target_config: TargetConfig | None,
     effective_vars: dict[str, object],
@@ -449,8 +451,8 @@ def _assemble_compiled_seed(
 
 
 def _assemble_compiled_function(
-    function_input: CompileSqlFunctionInput,
     *,
+    function_input: CompileSqlFunctionInput,
     seed_names: frozenset[str] = frozenset(),
 ) -> CompiledFunction:
     return CompiledFunction(
@@ -516,8 +518,8 @@ def _assemble_compiled_audit(audit_input: CompileAuditInput) -> CompiledAudit:
 
 
 def _assemble_compiled_sql_test(
-    test_input: CompileSqlTestInput,
     *,
+    test_input: CompileSqlTestInput,
     model_inputs: tuple[CompileModelInput, ...],
     inputs: CompileProjectInputs,
 ) -> CompiledSqlTest:
@@ -811,7 +813,7 @@ def _expand_seed_environment_value(
         return None
     return str(
         expand_template_data(
-            raw_value,
+            value=raw_value,
             variables=effective_vars,
             context_values={},
             context_label=context_label,
@@ -835,7 +837,7 @@ def _expand_seed_target_value(
         return None
     return str(
         expand_template_data(
-            raw_value,
+            value=raw_value,
             variables=effective_vars,
             context_values={
                 "model.name": seed_name,

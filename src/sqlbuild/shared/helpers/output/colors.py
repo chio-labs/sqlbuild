@@ -116,7 +116,7 @@ def supports_color() -> bool:
     return sys.stdout.isatty()
 
 
-def colorize_status(status: str, *, use_color: bool) -> str:
+def colorize_status(*, status: str, use_color: bool) -> str:
     """Apply color to a status word based on its value."""
 
     if not use_color:
@@ -132,7 +132,7 @@ def colorize_status(status: str, *, use_color: bool) -> str:
     return status
 
 
-def colorize_completion(message: str, *, use_color: bool) -> str:
+def colorize_completion(*, message: str, use_color: bool) -> str:
     """Apply color to the completion status message."""
 
     if not use_color:

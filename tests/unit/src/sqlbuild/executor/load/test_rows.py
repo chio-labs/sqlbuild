@@ -230,7 +230,7 @@ def test_given_loader_return_value_when_batching_then_yields_expected_batches(
     test_case: LoaderRowsBatchTestCase,
 ) -> None:
     assert (
-        tuple(iter_loader_row_batches(test_case.value, batch_size=test_case.batch_size))
+        tuple(iter_loader_row_batches(value=test_case.value, batch_size=test_case.batch_size))
         == test_case.expected_batches
     )
 

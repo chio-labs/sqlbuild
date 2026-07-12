@@ -77,9 +77,9 @@ def test_given_cli_style_when_rendering_semantic_roles_then_returns_expected_tex
     assert style.error_strong("Error strong") == test_case.expected_error_strong
     assert style.error_muted("error") == test_case.expected_error_muted
     assert style.log_label("log") == test_case.expected_log_label
-    assert style.status("OK") == test_case.expected_status_ok
-    assert style.status("ERROR") == test_case.expected_status_error
-    assert style.status("SKIP") == test_case.expected_status_skip
+    assert style.status(status="OK") == test_case.expected_status_ok
+    assert style.status(status="ERROR") == test_case.expected_status_error
+    assert style.status(status="SKIP") == test_case.expected_status_skip
     assert style.dbt_section("dbt") == test_case.expected_dbt_section
     assert style.dbt_object_name("analytics.orders") == test_case.expected_dbt_object_name
 
@@ -118,6 +118,6 @@ def test_given_cli_style_when_rendering_custom_status_text_then_styles_the_full_
 ) -> None:
     style: CliStyle = CliStyle(use_color=test_case.use_color)
 
-    assert style.status("OK", text="[OK found]") == test_case.expected_status_ok
-    assert style.status("ERROR", text="[ERROR failed]") == test_case.expected_status_error
-    assert style.status("SKIP", text="[SKIP blocked]") == test_case.expected_status_skip
+    assert style.status(status="OK", text="[OK found]") == test_case.expected_status_ok
+    assert style.status(status="ERROR", text="[ERROR failed]") == test_case.expected_status_error
+    assert style.status(status="SKIP", text="[SKIP blocked]") == test_case.expected_status_skip

@@ -83,6 +83,13 @@ def format_build_execution_json(
         if result.status == BuildStatus.FAILED or python_fail_count or python_check_fail_count
         else result.status
     )
+    checks: list[dict[str, object]] = []
+    checks.extend(_format_sql_test_checks(result.test_results))
+    checks.extend(_format_audit_checks(result.source_audit_results))
+    checks.extend(_format_audit_checks(result.end_audit_results))
+    for model_result in result.model_results:
+        checks.extend(_format_audit_checks(model_result.audit_results))
+    checks.extend(_format_python_check_results(results=python_check_results))
     return _format_execution_json(
         command=command,
         status=status.value,
@@ -93,17 +100,7 @@ def format_build_execution_json(
             *_format_load_assets(results=result.load_results),
             *_format_python_node_assets(results=python_node_results),
         ),
-        checks=(
-            *_format_sql_test_checks(result.test_results),
-            *_format_audit_checks(result.source_audit_results),
-            *_format_audit_checks(result.end_audit_results),
-            *(
-                check
-                for model_result in result.model_results
-                for check in _format_audit_checks(model_result.audit_results)
-            ),
-            *_format_python_check_results(results=python_check_results),
-        ),
+        checks=tuple(checks),
         summary={
             "success_count": result.success_count + python_success_count,
             "failure_count": result.failure_count + python_fail_count + python_check_fail_count,
@@ -244,19 +241,18 @@ def format_scenario_execution_json(
     """Format scenario test command execution results as JSON."""
 
     fail_count: int = sum(1 for result in results if _scenario_failed(result=result, local=local))
+    assets: list[dict[str, object]] = []
+    checks: list[dict[str, object]] = []
+    for result in results:
+        assets.extend(_format_seed_assets(results=result.seed_results, plan=None))
+        assets.extend(_format_function_assets(results=result.function_results, plan=None))
+        assets.extend(_format_model_assets(results=result.model_results, plan=None))
+        checks.extend(_format_scenario_checks(result))
     return _format_execution_json(
         command="scenario test",
         status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
-        assets=tuple(
-            asset
-            for result in results
-            for asset in (
-                *_format_seed_assets(results=result.seed_results, plan=None),
-                *_format_function_assets(results=result.function_results, plan=None),
-                *_format_model_assets(results=result.model_results, plan=None),
-            )
-        ),
-        checks=tuple(check for result in results for check in _format_scenario_checks(result)),
+        assets=tuple(assets),
+        checks=tuple(checks),
         scenarios=tuple(_format_scenario_result(result) for result in results),
         summary={
             "pass_count": len(results) - fail_count,
@@ -503,23 +499,28 @@ def _format_function_assets(
 def _format_sql_test_checks(
     results: tuple[SqlTestExecutionResult, ...],
 ) -> tuple[dict[str, object], ...]:
-    return tuple(
-        _drop_none(
-            {
-                "kind": "sql_test",
-                "name": result.test_name,
-                "check_id": f"sql_test:{result.test_name}",
-                "passed": result.outcome == SqlTestOutcome.PASS,
-                "status": result.outcome.value,
-                "asset_name": _sql_test_asset_name(result),
-                "error_code": result.error_code,
-                "error_help": result.error_help,
-                "error_message": result.error_message,
-                "steps": tuple(_format_sql_test_step(step) for step in result.step_results),
-            }
+    checks: list[dict[str, object]] = []
+    for result in results:
+        steps: list[dict[str, object]] = []
+        for step in result.step_results:
+            steps.append(_format_sql_test_step(step))
+        checks.append(
+            _drop_none(
+                {
+                    "kind": "sql_test",
+                    "name": result.test_name,
+                    "check_id": f"sql_test:{result.test_name}",
+                    "passed": result.outcome == SqlTestOutcome.PASS,
+                    "status": result.outcome.value,
+                    "asset_name": _sql_test_asset_name(result),
+                    "error_code": result.error_code,
+                    "error_help": result.error_help,
+                    "error_message": result.error_message,
+                    "steps": tuple(steps),
+                }
+            )
         )
-        for result in results
-    )
+    return tuple(checks)
 
 
 def _format_python_check_results(

@@ -12,5 +12,5 @@ type ExecutablePythonNode = DiscoveredTaskFunction | DiscoveredAssetFunction
 
 class PythonIdentityRecorder(Protocol):
     def __call__(
-        self, identity: PythonNodeIdentity | None, *, _target_name: str | None
+        self, *, identity: PythonNodeIdentity | None, _target_name: str | None
     ) -> None: ...

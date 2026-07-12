@@ -91,24 +91,24 @@ class SqlServerAdapter(BaseAdapter):
 
     def get_table_freshness_metadata(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
         raise AdapterUserError(
-            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+            message=f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )
 
     def get_tables_freshness_metadata(
         self,
-        connection: Any,
         *,
+        connection: Any,
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         raise AdapterUserError(
-            f"adapter '{self.adapter_name}' does not support table freshness metadata"
+            message=f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )
 
     def _distinct_condition(self, *, left: str, right: str) -> str:
@@ -319,7 +319,7 @@ class SqlServerAdapter(BaseAdapter):
             import pymssql
         except ImportError as error:
             raise AdapterUserError(
-                "SQL Server adapter requires optional dependency pymssql. "
+                message="SQL Server adapter requires optional dependency pymssql. "
                 "Install with: pip install sqlbuild[sqlserver]",
                 code="A401",
             ) from error
@@ -334,7 +334,7 @@ class SqlServerAdapter(BaseAdapter):
         )
         return _SqlServerConnection(raw_connection)
 
-    def execute(self, connection: _SqlServerConnection, *, sql: str) -> Any:
+    def execute(self, *, connection: _SqlServerConnection, sql: str) -> Any:
         log_sql(logger=logging.getLogger("sqlbuild.adapter.sqlserver"), sql=sql)
         return connection.execute(sql)
 
@@ -342,13 +342,13 @@ class SqlServerAdapter(BaseAdapter):
         connection.close()
 
     def begin(self, connection: Any) -> None:
-        self.execute(connection, sql="BEGIN TRANSACTION")
+        self.execute(connection=connection, sql="BEGIN TRANSACTION")
 
     def commit(self, connection: Any) -> None:
-        self.execute(connection, sql="COMMIT TRANSACTION")
+        self.execute(connection=connection, sql="COMMIT TRANSACTION")
 
     def rollback(self, connection: Any) -> None:
-        self.execute(connection, sql="ROLLBACK TRANSACTION")
+        self.execute(connection=connection, sql="ROLLBACK TRANSACTION")
 
     def default_schema(self) -> str:
         return "dbo"
@@ -356,10 +356,10 @@ class SqlServerAdapter(BaseAdapter):
     def default_database(self) -> str | None:
         return None
 
-    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:
         try:
             cursor: Any = self.execute(
-                connection, sql=f"SELECT TOP 0 * FROM ({sql}) AS __describe_source"
+                connection=connection, sql=f"SELECT TOP 0 * FROM ({sql}) AS __describe_source"
             )
             description: Any | None = getattr(cursor, "description", None)
             if description is not None:
@@ -368,7 +368,7 @@ class SqlServerAdapter(BaseAdapter):
             pass
         escaped_sql: str = sql.replace("'", "''")
         cursor = self.execute(
-            connection,
+            connection=connection,
             sql="EXEC sys.sp_describe_first_result_set "
             f"@tsql = N'{escaped_sql}', @params = NULL, @browse_information_mode = 0",
         )
@@ -376,27 +376,29 @@ class SqlServerAdapter(BaseAdapter):
 
     def get_relation_max_cursor(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation: str,
         cursor_column: str,
     ) -> object | None:
         """Return the maximum cursor value currently present in a relation."""
 
         quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}")
+        cursor: Any = self.execute(
+            connection=connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}"
+        )
         row: Any | None = cursor.fetchone()
         if row is None:
             return None
         return row[0]
 
-    def query(self, connection: Any, *, sql: str, limit: int | None) -> QueryResult:
+    def query(self, *, connection: Any, sql: str, limit: int | None) -> QueryResult:
         if limit is not None:
-            column_names: tuple[str, ...] = self.query_column_names(connection, sql=sql)
+            column_names: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
             if column_names:
                 select_list: str = ", ".join(self.render_identifier(name) for name in column_names)
                 sql = f"SELECT TOP {limit + 1} {select_list} FROM ({sql}) AS __query_source"
-        cursor: Any = self.execute(connection, sql=sql)
+        cursor: Any = self.execute(connection=connection, sql=sql)
         description: Any | None = getattr(cursor, "description", None)
         if description is None:
             return QueryResult()
@@ -805,7 +807,9 @@ class SqlServerAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         del return_columns, runtime_version, entry_point, packages
         if language != FunctionLanguage.SQL:
-            raise AdapterUserError("Python functions require an engine-specific implementation")
+            raise AdapterUserError(
+                message="Python functions require an engine-specific implementation"
+            )
         arg_sql: str = ", ".join(f"@{arg.name} {arg.type}" for arg in arguments)
         body_expression: str = body_sql.strip().removeprefix("SELECT").strip().rstrip(";")
         for arg in arguments:
@@ -853,15 +857,15 @@ class SqlServerAdapter(BaseAdapter):
 
     def merge(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        source_columns: tuple[str, ...] = self.query_column_names(connection, sql=sql)
+        source_columns: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
         non_key_columns: tuple[str, ...] = tuple(col for col in source_columns if col not in keys)
         key_match_sql: str = " AND ".join(
             f"__target.{self.render_identifier(key)} = __source.{self.render_identifier(key)}"
@@ -877,7 +881,7 @@ class SqlServerAdapter(BaseAdapter):
                 f"JOIN ({sql}) AS __source ON {key_match_sql}"
             )
             statement_recorder.record(update_sql)
-            self.execute(connection, sql=update_sql)
+            self.execute(connection=connection, sql=update_sql)
         col_list: str = ", ".join(self.render_identifier(column) for column in source_columns)
         insert_sql: str = (
             f"INSERT INTO {destination} ({col_list}) "
@@ -885,7 +889,7 @@ class SqlServerAdapter(BaseAdapter):
             f"WHERE NOT EXISTS (SELECT 1 FROM {destination} AS __target WHERE {key_match_sql})"
         )
         statement_recorder.record(insert_sql)
-        self.execute(connection, sql=insert_sql)
+        self.execute(connection=connection, sql=insert_sql)
 
     def render_identifier(self, name: str) -> str:
         return "[" + name.replace("]", "]]") + "]"
@@ -932,15 +936,16 @@ class SqlServerAdapter(BaseAdapter):
     def _quote_sql_string(self, value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 
-    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:
             return value
         return f"'{value}'"
 
-    def describe_relation(self, connection: Any, *, relation: str) -> tuple[ColumnInfo, ...]:
+    def describe_relation(self, *, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         parts: list[str] = [part.strip("[]") for part in relation.split(".")]
         name: str = parts[-1]
-        schema: str | None = parts[-2] if len(parts) >= 2 else None
+        schema_and_relation_part_count: int = 2
+        schema: str | None = parts[-2] if len(parts) >= schema_and_relation_part_count else None
         cursor: Any = connection.execute(
             "SELECT column_name, data_type FROM information_schema.columns "
             f"WHERE table_name = {_quote_sql_string(name)}"
@@ -951,28 +956,30 @@ class SqlServerAdapter(BaseAdapter):
 
     def add_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise AdapterUserError("add_columns requires an engine-specific implementation")
+        raise AdapterUserError(message="add_columns requires an engine-specific implementation")
 
     def alter_column_types(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise AdapterUserError("alter_column_types requires an engine-specific implementation")
+        raise AdapterUserError(
+            message="alter_column_types requires an engine-specific implementation"
+        )
 
     def append(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
@@ -984,7 +991,7 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def build_cursor_filter(
         self,
@@ -1037,8 +1044,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def clone(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         hard_copy: bool = False,
@@ -1054,12 +1061,12 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def durable_clone(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         origin_is_transient: bool = False,
@@ -1071,12 +1078,12 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def count_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation: str,
         cursor_column: str | None = None,
         start_cursor: CursorValue | None = None,
@@ -1093,8 +1100,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def create_function(
         self,
-        connection: Any,
         *,
+        connection: Any,
         definition: FunctionDefinition,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -1112,12 +1119,12 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def create_table_as(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
@@ -1127,12 +1134,12 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def create_view_as(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
@@ -1141,7 +1148,7 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def default_promotion_strategy(self) -> PromotionStrategy:
         """Return atomic swap as the generic staged promotion strategy."""
@@ -1153,8 +1160,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def delete_insert(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
@@ -1169,12 +1176,12 @@ class SqlServerAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, sql=stmt)
+                self.execute(connection=connection, sql=stmt)
 
     def delete_insert_cursor(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         cursor_column: str,
@@ -1195,12 +1202,12 @@ class SqlServerAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, sql=stmt)
+                self.execute(connection=connection, sql=stmt)
 
     def diff_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -1210,21 +1217,21 @@ class SqlServerAdapter(BaseAdapter):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
     ) -> RowDiffResult:
-        raise AdapterUserError("diff_rows requires an engine-specific implementation")
+        raise AdapterUserError(message="diff_rows requires an engine-specific implementation")
 
     def diff_schema(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
     ) -> SchemaDiffResult:
-        raise AdapterUserError("diff_schema requires an engine-specific implementation")
+        raise AdapterUserError(message="diff_schema requires an engine-specific implementation")
 
     def drop(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
@@ -1233,22 +1240,22 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def drop_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise AdapterUserError("drop_columns requires an engine-specific implementation")
+        raise AdapterUserError(message="drop_columns requires an engine-specific implementation")
 
     def drop_view(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
@@ -1259,12 +1266,12 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def ensure_schema(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         statement_recorder: StatementRecorder,
@@ -1278,7 +1285,7 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def expression_inference_profile(self) -> ExpressionInferenceProfile:
         """Return portable static expression inference behavior by default."""
@@ -1290,8 +1297,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def get_all_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -1299,8 +1306,8 @@ class SqlServerAdapter(BaseAdapter):
         query: str = (
             "SELECT table_name, column_name, data_type "
             "FROM information_schema.columns WHERE 1=1"
-            + _build_schemas_filter(schemas)
-            + _build_names_filter(names)
+            + _build_schemas_filter(schemas=schemas)
+            + _build_names_filter(names=names)
             + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
             + " ORDER BY table_name, ordinal_position"
         )
@@ -1316,8 +1323,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def get_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         name: str,
@@ -1334,8 +1341,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def list_functions(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -1343,8 +1350,8 @@ class SqlServerAdapter(BaseAdapter):
         query: str = (
             "SELECT routine_name, routine_schema, routine_type "
             "FROM information_schema.routines WHERE 1=1"
-            + _build_schemas_filter(schemas, column_name="routine_schema")
-            + _build_names_filter(names, column_name="routine_name")
+            + _build_schemas_filter(schemas=schemas, column_name="routine_schema")
+            + _build_names_filter(names=names, column_name="routine_name")
             + (f" AND routine_catalog = {_quote_sql_string(database)}" if database else "")
         )
         cursor: Any = connection.execute(query)
@@ -1360,8 +1367,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def list_relations(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -1369,8 +1376,8 @@ class SqlServerAdapter(BaseAdapter):
         query: str = (
             "SELECT table_name, table_schema, table_type "
             "FROM information_schema.tables WHERE 1=1"
-            + _build_schemas_filter(schemas)
-            + _build_names_filter(names)
+            + _build_schemas_filter(schemas=schemas)
+            + _build_names_filter(names=names)
             + (f" AND table_catalog = {_quote_sql_string(database)}" if database else "")
         )
         cursor: Any = connection.execute(query)
@@ -1412,8 +1419,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def relation_exists(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         name: str,
@@ -1428,8 +1435,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def rename(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         statement_recorder: StatementRecorder,
@@ -1833,8 +1840,8 @@ class SqlServerAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
-    def relation_names_match(self, left: str, *, right: str) -> bool:
-        return self._relation_names_match_impl(left, right=right)
+    def relation_names_match(self, *, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left=left, right=right)
 
     def render_create_initial_historical_check_snapshot_destination(
         self,
@@ -2048,18 +2055,18 @@ class SqlServerAdapter(BaseAdapter):
                 for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
-        values_sql: str = ", ".join(
-            "("
-            + ", ".join(
-                self.render_loader_value_literal(
-                    value=row.get(column_name),
-                    logical_type=inferred_types.get(column_name),
+        value_rows: list[str] = []
+        for row in rows:
+            row_values: list[str] = []
+            for column_name in column_names:
+                row_values.append(
+                    self.render_loader_value_literal(
+                        value=row.get(column_name),
+                        logical_type=inferred_types.get(column_name),
+                    )
                 )
-                for column_name in column_names
-            )
-            + ")"
-            for row in rows
-        )
+            value_rows.append(f"({', '.join(row_values)})")
+        values_sql: str = ", ".join(value_rows)
         column_sql: str = ", ".join(
             self.render_identifier(column_name) for column_name in column_names
         )
@@ -2227,7 +2234,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def _sp_rename_relation_name(self, relation: str) -> str:
         parts: list[str] = relation.split(".")
-        if len(parts) >= 2:
+        schema_and_relation_part_count: int = 2
+        if len(parts) >= schema_and_relation_part_count:
             return ".".join(parts[-2:])
         return relation
 
@@ -2242,8 +2250,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def replace_table_from_relation(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         origin: str,
         statement_recorder: StatementRecorder,
@@ -2255,12 +2263,12 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def move_or_copy_relation(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         remove_origin: bool,
@@ -2269,10 +2277,11 @@ class SqlServerAdapter(BaseAdapter):
     ) -> None:
         origin_parts: list[str] = origin.split(".")
         destination_parts: list[str] = destination.split(".")
+        schema_and_relation_part_count: int = 2
         if (
             remove_origin
-            and len(origin_parts) >= 2
-            and len(destination_parts) >= 2
+            and len(origin_parts) >= schema_and_relation_part_count
+            and len(destination_parts) >= schema_and_relation_part_count
             and origin_parts[:-2] == destination_parts[:-2]
         ):
             origin_parent: str = ".".join(origin_parts[:-1])
@@ -2296,10 +2305,10 @@ class SqlServerAdapter(BaseAdapter):
             statement_recorder.record_many(statements)
             stmt: str
             for stmt in statements:
-                self.execute(connection, sql=stmt)
+                self.execute(connection=connection, sql=stmt)
             return
         if not allow_copy_fallback:
-            raise AdapterUserError("SQL Server relation move/copy requires --allow-copy")
+            raise AdapterUserError(message="SQL Server relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
             destination=destination,
             origin=origin,
@@ -2309,7 +2318,7 @@ class SqlServerAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def resolve_row_diff_tolerance(
         self,
@@ -2324,7 +2333,7 @@ class SqlServerAdapter(BaseAdapter):
         if column_tolerance is not None:
             if self.normalize_row_diff_numeric_type(column_type) is None:
                 raise AdapterUserError(
-                    f"row diff tolerance for non-numeric column '{column}' is invalid"
+                    message=f"row diff tolerance for non-numeric column '{column}' is invalid"
                 )
             self.validate_row_diff_tolerance(
                 column=column,
@@ -2344,8 +2353,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def sample_side_only_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -2355,12 +2364,14 @@ class SqlServerAdapter(BaseAdapter):
         end_cursor: CursorValue | None = None,
         limit: int = 20,
     ) -> tuple[tuple[tuple[str, object], ...], ...]:
-        raise AdapterUserError("sample_side_only_rows requires an engine-specific implementation")
+        raise AdapterUserError(
+            message="sample_side_only_rows requires an engine-specific implementation"
+        )
 
     def sample_unequal_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -2371,12 +2382,14 @@ class SqlServerAdapter(BaseAdapter):
         end_cursor: CursorValue | None = None,
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
-        raise AdapterUserError("sample_unequal_rows requires an engine-specific implementation")
+        raise AdapterUserError(
+            message="sample_unequal_rows requires an engine-specific implementation"
+        )
 
     def schema_exists(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str,
     ) -> bool:
@@ -2388,7 +2401,7 @@ class SqlServerAdapter(BaseAdapter):
         )
         if database is not None:
             query += f" AND catalog_name = {_quote_sql_string(database)}"
-        cursor: Any = self.execute(connection, sql=query)
+        cursor: Any = self.execute(connection=connection, sql=query)
         return cursor.fetchone() is not None
 
     def sql_analysis_dialect(self) -> str | None:
@@ -2420,8 +2433,8 @@ class SqlServerAdapter(BaseAdapter):
 
     def swap(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         statement_recorder: StatementRecorder,
@@ -2431,26 +2444,28 @@ class SqlServerAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, sql=stmt)
+                self.execute(connection=connection, sql=stmt)
 
     def validate_row_diff_keys(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation_sql: str,
         relation_label: str,
         keys: tuple[str, ...],
     ) -> None:
         if not keys:
-            raise AdapterUserError("row diff requires at least one unique_key column")
+            raise AdapterUserError(message="row diff requires at least one unique_key column")
         null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
-        null_row: tuple[Any, ...] = self.execute(connection, sql=null_count_sql).fetchone()
+        null_row: tuple[Any, ...] = self.execute(
+            connection=connection, sql=null_count_sql
+        ).fetchone()
         if int(null_row[0]) > 0:
             raise AdapterUserError(
-                f"row diff {relation_label} relation contains null unique_key values"
+                message=f"row diff {relation_label} relation contains null unique_key values"
             )
 
         key_list: str = ", ".join(keys)
@@ -2461,23 +2476,23 @@ class SqlServerAdapter(BaseAdapter):
             f") AS __duplicates"
         )
         duplicate_row: tuple[Any, ...] = self.execute(
-            connection, sql=duplicate_count_sql
+            connection=connection, sql=duplicate_count_sql
         ).fetchone()
         if int(duplicate_row[0]) > 0:
             raise AdapterUserError(
-                f"row diff {relation_label} relation contains duplicate unique_key values"
+                message=f"row diff {relation_label} relation contains duplicate unique_key values"
             )
 
     def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
         if tolerance.absolute is None and tolerance.relative is None:
             raise AdapterUserError(
-                f"row diff tolerance for column '{column}' must define absolute or relative"
+                message=f"row diff tolerance for column '{column}' must define absolute or relative"
             )
 
     def load_seed(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
@@ -2491,7 +2506,7 @@ class SqlServerAdapter(BaseAdapter):
 
         if replace:
             self.drop(
-                connection,
+                connection=connection,
                 destination=destination,
                 if_exists=True,
                 statement_recorder=statement_recorder,
@@ -2501,7 +2516,7 @@ class SqlServerAdapter(BaseAdapter):
         )
         create_sql: str = f"CREATE TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
-        self.execute(connection, sql=create_sql)
+        self.execute(connection=connection, sql=create_sql)
 
         column_names: tuple[str, ...] = tuple(col.name for col in columns)
         placeholders: str = ", ".join(["%s"] * len(column_names))

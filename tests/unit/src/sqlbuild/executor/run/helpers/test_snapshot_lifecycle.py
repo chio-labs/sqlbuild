@@ -119,7 +119,7 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
     )
     assert (
         adapter.relation_exists(
-            connection,
+            connection=connection,
             database=None,
             schema="main",
             name="customer_snapshot__snapshot_delta",
@@ -319,7 +319,7 @@ def test_given_snapshot_contract_violation_when_executing_then_fails_before_targ
     assert test_case.expected_error_fragment in (result.error_message or "")
     assert (
         adapter.relation_exists(
-            connection,
+            connection=connection,
             database=None,
             schema="main",
             name="customer_snapshot",

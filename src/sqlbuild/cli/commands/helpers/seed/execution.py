@@ -51,8 +51,16 @@ def execute_seed_plan(
         query_change_tracking=preparation.pipeline_result.project.settings.query_change_tracking,
         on_seed_complete=on_complete,
         on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=execution_connection_progress.on_connection_complete,
-        on_connection_error=execution_connection_progress.on_connection_error,
+        on_connection_complete=lambda connection_count, elapsed_seconds: (
+            execution_connection_progress.on_connection_complete(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
+        on_connection_error=lambda connection_count, elapsed_seconds: (
+            execution_connection_progress.on_connection_error(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
     )
     return SeedRunOutcome(results=results, elapsed=time.monotonic() - start)
 
@@ -63,7 +71,7 @@ def _build_on_complete(
     def _on_complete(result: SeedExecutionResult) -> None:
         status_text: str = "OK" if result.status == ExecutionStatus.SUCCESS else "FAIL"
         style: CliStyle = CliStyle(use_color=use_color)
-        status: str = style.status(status_text)
+        status: str = style.status(status=status_text)
         duration: str = ""
         if result.duration_ms is not None:
             seconds: float = result.duration_ms / 1000.0

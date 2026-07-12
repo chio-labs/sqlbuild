@@ -54,8 +54,8 @@ from sqlbuild.spec.models.targets import (
 
 
 def build_compile_inputs(
-    discovered_inputs: DiscoveredProjectInputs,
     *,
+    discovered_inputs: DiscoveredProjectInputs,
     selected_target: str | None = None,
     cli_vars: dict[str, object] | None = None,
     run_id: str | None = None,
@@ -102,7 +102,7 @@ def build_compile_inputs(
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         context=ModelInputBuildContext(
             effective_vars=effective_vars,
             effective_settings=effective_settings,
@@ -118,7 +118,7 @@ def build_compile_inputs(
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = build_sql_function_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         effective_vars=effective_vars,
         effective_settings=effective_settings,
         target_config=effective_target,
@@ -129,7 +129,7 @@ def build_compile_inputs(
         python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
     )
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         effective_vars=effective_vars,
         effective_settings=effective_settings,
         macro_context=macro_context,
@@ -137,14 +137,14 @@ def build_compile_inputs(
         no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
@@ -159,7 +159,7 @@ def build_compile_inputs(
         project_audit_definitions
     )
     audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         effective_settings=effective_settings,
         model_inputs=model_inputs,
         source_inputs=source_inputs,

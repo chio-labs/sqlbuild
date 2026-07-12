@@ -124,7 +124,7 @@ def test_given_template_expressions_when_expanding_then_returns_expected_value(
     monkeypatch.delenv("CUSTOM_SCHEMA", raising=False)
 
     result: object = expand_template_data(
-        test_case.value,
+        value=test_case.value,
         variables=test_case.variables,
         context_values=test_case.context_values,
         context_label=test_case.context_label,
@@ -208,7 +208,7 @@ def test_given_invalid_template_expressions_when_expanding_then_raises_clear_err
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
         expand_template_data(
-            test_case.value,
+            value=test_case.value,
             variables=test_case.variables,
             context_values=test_case.context_values,
             context_label=test_case.context_label,

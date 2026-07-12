@@ -251,7 +251,7 @@ def test_given_python_hook_returns_skip_when_executing_then_records_skipped_hook
     hook_results: list[HookExecutionResult] = []
 
     def maybe_skip(ctx: HookContext) -> object:
-        return ctx.skip(test_case.expected_skip_reason, mode=test_case.expected_skip_mode)
+        return ctx.skip(reason=test_case.expected_skip_reason, mode=test_case.expected_skip_mode)
 
     skipped: bool = execute_hooks(
         connection=connection,
@@ -315,7 +315,7 @@ def test_given_python_hook_returns_skip_when_executing_phase_then_later_hooks_do
 
     def maybe_skip(ctx: HookContext) -> object:
         events.append("skip")
-        return ctx.skip(test_case.expected_skip_reason)
+        return ctx.skip(reason=test_case.expected_skip_reason)
 
     def should_not_run(ctx: HookContext) -> None:
         events.append("later")
@@ -376,7 +376,7 @@ def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_sk
     connection: Any = adapter.connect({"database": ":memory:"})
 
     def maybe_skip(ctx: HookContext) -> object:
-        return ctx.skip(test_case.expected_skip_reason)
+        return ctx.skip(reason=test_case.expected_skip_reason)
 
     entry: ModelPlanEntry = replace(
         build_result_model_plan_entry(),
@@ -411,7 +411,7 @@ def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_sk
     assert result.hook_results[0].skip_reason == test_case.expected_skip_reason
     assert result.skip_reason == test_case.expected_skip_reason
     assert not adapter.relation_exists(
-        connection,
+        connection=connection,
         database=entry.destination.database,
         schema=entry.destination.schema,
         name=entry.destination.name,

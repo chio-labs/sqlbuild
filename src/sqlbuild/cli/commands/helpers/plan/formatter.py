@@ -72,8 +72,8 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
 
 
 def format_plan(
-    plan: PlanOutput,
     *,
+    plan: PlanOutput,
     full_refresh: bool = False,
     use_color: bool = True,
     include_header: bool = True,
@@ -90,22 +90,22 @@ def format_plan(
     resolved_section_header_style: Callable[[str], str] = section_header_style or style.plan_section
 
     if full_refresh:
-        _format_full_refresh(
-            lines,
+        lines = _format_full_refresh(
+            lines=lines,
             plan=plan,
             include_header=include_header,
             display_options=resolved_display_options,
             section_header_style=resolved_section_header_style,
             python_plan_entries=python_plan_entries,
         )
-        _format_warnings(lines, plan=plan)
+        lines = _format_warnings(lines=lines, plan=plan)
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
     selected_count: int = _selected_count(plan)
     name_column_width: int = _resolve_name_column_width(
-        plan, python_plan_entries=python_plan_entries
+        plan=plan, python_plan_entries=python_plan_entries
     )
 
     if include_header:
@@ -117,42 +117,42 @@ def format_plan(
         )
         lines.append(style.success_strong(header))
 
-    _format_virtual_metadata(
-        lines,
+    lines = _format_virtual_metadata(
+        lines=lines,
         plan=plan,
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
-    _format_standard_source_freshness_metadata(
-        lines,
+    lines = _format_standard_source_freshness_metadata(
+        lines=lines,
         plan=plan,
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
-    _format_standard_remaining_stale_metadata(
-        lines,
+    lines = _format_standard_remaining_stale_metadata(
+        lines=lines,
         plan=plan,
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
-    _format_provider_usages(
-        lines,
+    lines = _format_provider_usages(
+        lines=lines,
         plan=plan,
         python_plan_entries=python_plan_entries,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
-    _format_standard_pruned_metadata(
-        lines,
+    lines = _format_standard_pruned_metadata(
+        lines=lines,
         plan=plan,
         display_options=resolved_display_options,
         skipped_header_style=style.muted,
     )
 
-    _format_python_plan_entries(
-        lines,
+    lines = _format_python_plan_entries(
+        lines=lines,
         entries=_python_plan_entries_for_phase(
-            python_plan_entries, phase=PythonRunPhase.PRE_SQL_INGRESS
+            entries=python_plan_entries, phase=PythonRunPhase.PRE_SQL_INGRESS
         ),
         label="Python ingress",
         name_column_width=name_column_width,
@@ -161,7 +161,7 @@ def format_plan(
     )
 
     _format_source_loads(
-        lines,
+        lines=lines,
         plan=plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
@@ -169,14 +169,14 @@ def format_plan(
     )
 
     _format_dependency_baseline_entries(
-        lines,
+        lines=lines,
         entries=plan.dependency_baseline_entries,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
-    _format_existing_destination_input_entries(
-        lines,
+    lines = _format_existing_destination_input_entries(
+        lines=lines,
         entries=plan.existing_destination_input_entries,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
@@ -186,11 +186,11 @@ def format_plan(
     normal: list[ModelPlanEntry] = _collect_normal(active)
     cascade: list[ModelPlanEntry] = _collect_upstream_changed(active)
     groups: dict[PlanReason, list[ModelPlanEntry]] = _group_by_reason(
-        active, cascade_entries=cascade
+        entries=active, cascade_entries=cascade
     )
 
-    _format_changed_functions(
-        lines,
+    lines = _format_changed_functions(
+        lines=lines,
         plan=plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
@@ -207,14 +207,14 @@ def format_plan(
         lines.append(resolved_section_header_style(f"{label} ({len(entries)})"))
         entry: ModelPlanEntry
         visible: Sequence[ModelPlanEntry] = visible_entries(
-            entries, options=resolved_display_options
+            entries=entries, options=resolved_display_options
         )
         for entry in visible:
-            _format_detail_entry(
-                lines, entry=entry, reason=reason, name_column_width=name_column_width
+            lines = _format_detail_entry(
+                lines=lines, entry=entry, reason=reason, name_column_width=name_column_width
             )
-        append_overflow_line(
-            lines,
+        lines = append_overflow_line(
+            lines=lines,
             total_count=len(entries),
             visible_count=len(visible),
             indent="  ",
@@ -226,14 +226,14 @@ def format_plan(
         lines.append(resolved_section_header_style(f"Upstream changed ({len(cascade)})"))
         entry_c: ModelPlanEntry
         visible_cascade: Sequence[ModelPlanEntry] = visible_entries(
-            cascade, options=resolved_display_options
+            entries=cascade, options=resolved_display_options
         )
         for entry_c in visible_cascade:
-            _format_upstream_changed_entry(
-                lines, entry=entry_c, name_column_width=name_column_width
+            lines = _format_upstream_changed_entry(
+                lines=lines, entry=entry_c, name_column_width=name_column_width
             )
-        append_overflow_line(
-            lines,
+        lines = append_overflow_line(
+            lines=lines,
             total_count=len(cascade),
             visible_count=len(visible_cascade),
             indent="  ",
@@ -242,58 +242,60 @@ def format_plan(
 
     if normal:
         lines.append("")
-        _format_routine_models_section(
-            lines,
+        lines = _format_routine_models_section(
+            lines=lines,
             entries=normal,
             name_column_width=name_column_width,
             display_options=resolved_display_options,
             section_header_style=resolved_section_header_style,
         )
 
-    _format_routine_functions(
-        lines,
+    lines = _format_routine_functions(
+        lines=lines,
         plan=plan,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
 
-    _format_seeds(
-        lines,
+    lines = _format_seeds(
+        lines=lines,
         plan=plan,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
 
-    _format_python_plan_entries(
-        lines,
-        entries=_python_plan_entries_for_phase(python_plan_entries, phase=PythonRunPhase.READ_SIDE),
+    lines = _format_python_plan_entries(
+        lines=lines,
+        entries=_python_plan_entries_for_phase(
+            entries=python_plan_entries, phase=PythonRunPhase.READ_SIDE
+        ),
         label="Python read-side",
         name_column_width=name_column_width,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
-    _format_warnings(lines, plan=plan)
+    lines = _format_warnings(lines=lines, plan=plan)
 
     output: str = "\n".join(lines)
     return output if use_color else _strip_ansi(output)
 
 
 def _format_full_refresh(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     include_header: bool,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
     python_plan_entries: tuple[PythonPlanEntry, ...],
-) -> None:
+) -> list[str]:
     """Format the full refresh variant of plan output."""
 
     selected_count: int = _selected_count(plan)
     active: list[ModelPlanEntry] = [e for e in plan.model_entries if e.action != PlanAction.SKIP]
     name_column_width: int = _resolve_name_column_width(
-        plan, python_plan_entries=python_plan_entries
+        plan=plan, python_plan_entries=python_plan_entries
     )
 
     if include_header:
@@ -308,18 +310,18 @@ def _format_full_refresh(
             )
         )
 
-    _format_provider_usages(
-        lines,
+    lines = _format_provider_usages(
+        lines=lines,
         plan=plan,
         python_plan_entries=python_plan_entries,
         display_options=display_options,
         section_header_style=section_header_style,
     )
 
-    _format_python_plan_entries(
-        lines,
+    lines = _format_python_plan_entries(
+        lines=lines,
         entries=_python_plan_entries_for_phase(
-            python_plan_entries, phase=PythonRunPhase.PRE_SQL_INGRESS
+            entries=python_plan_entries, phase=PythonRunPhase.PRE_SQL_INGRESS
         ),
         label="Python ingress",
         name_column_width=name_column_width,
@@ -328,7 +330,7 @@ def _format_full_refresh(
     )
 
     _format_source_loads(
-        lines,
+        lines=lines,
         plan=plan,
         name_column_width=name_column_width,
         display_options=display_options,
@@ -336,7 +338,7 @@ def _format_full_refresh(
     )
 
     _format_functions(
-        lines,
+        lines=lines,
         plan=plan,
         name_column_width=name_column_width,
         display_options=display_options,
@@ -357,21 +359,24 @@ def _format_full_refresh(
     for count_label, count_value in counts.most_common():
         lines.append(f"  {count_value:>3} {count_label}")
 
-    _format_seeds(
-        lines,
+    lines = _format_seeds(
+        lines=lines,
         plan=plan,
         display_options=display_options,
         section_header_style=section_header_style,
     )
 
-    _format_python_plan_entries(
-        lines,
-        entries=_python_plan_entries_for_phase(python_plan_entries, phase=PythonRunPhase.READ_SIDE),
+    lines = _format_python_plan_entries(
+        lines=lines,
+        entries=_python_plan_entries_for_phase(
+            entries=python_plan_entries, phase=PythonRunPhase.READ_SIDE
+        ),
         label="Python read-side",
         name_column_width=name_column_width,
         display_options=display_options,
         section_header_style=section_header_style,
     )
+    return lines
 
 
 def _selected_count(plan: PlanOutput) -> int:
@@ -381,8 +386,8 @@ def _selected_count(plan: PlanOutput) -> int:
 
 
 def _format_dependency_baseline_entries(
-    lines: list[str],
     *,
+    lines: list[str],
     entries: tuple[DependencyBaselinePlanEntry, ...],
     name_column_width: int,
     display_options: DisplayOptions,
@@ -390,8 +395,8 @@ def _format_dependency_baseline_entries(
 ) -> None:
     if not entries:
         return
-    _format_reuse_input_entries(
-        lines,
+    lines = _format_reuse_input_entries(
+        lines=lines,
         entries=entries,
         label="Reused inputs",
         name_column_width=name_column_width,
@@ -401,38 +406,39 @@ def _format_dependency_baseline_entries(
 
 
 def _format_reuse_input_entries(
-    lines: list[str],
     *,
+    lines: list[str],
     entries: tuple[DependencyBaselinePlanEntry, ...],
     label: str,
     name_column_width: int,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     if not entries:
-        return
+        return lines
     lines.append("")
     lines.append(section_header_style(f"{label} ({len(entries)})"))
     visible: Sequence[DependencyBaselinePlanEntry] = visible_entries(
-        entries, options=display_options
+        entries=entries, options=display_options
     )
     entry: DependencyBaselinePlanEntry
     for entry in visible:
         lines.append(
             "  "
             + _format_name_value_line(
-                entry.name,
+                name=entry.name,
                 value=_reuse_input_detail(entry),
                 name_column_width=name_column_width,
             )
         )
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(entries),
         visible_count=len(visible),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _reuse_input_detail(entry: DependencyBaselinePlanEntry) -> str:
@@ -441,37 +447,38 @@ def _reuse_input_detail(entry: DependencyBaselinePlanEntry) -> str:
 
 
 def _format_existing_destination_input_entries(
-    lines: list[str],
     *,
+    lines: list[str],
     entries: tuple[ExistingDestinationInputPlanEntry, ...],
     name_column_width: int,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     if not entries:
-        return
+        return lines
     lines.append("")
     lines.append(section_header_style(f"Existing destination inputs ({len(entries)})"))
     visible: Sequence[ExistingDestinationInputPlanEntry] = visible_entries(
-        entries, options=display_options
+        entries=entries, options=display_options
     )
     entry: ExistingDestinationInputPlanEntry
     for entry in visible:
         lines.append(
             "  "
             + _format_name_value_line(
-                entry.name,
+                name=entry.name,
                 value=_existing_destination_input_detail(entry),
                 name_column_width=name_column_width,
             )
         )
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(entries),
         visible_count=len(visible),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _existing_destination_input_detail(entry: ExistingDestinationInputPlanEntry) -> str:
@@ -503,25 +510,25 @@ def _plan_ready_header(
 
 
 def _python_plan_entries_for_phase(
-    entries: tuple[PythonPlanEntry, ...], *, phase: PythonRunPhase
+    *, entries: tuple[PythonPlanEntry, ...], phase: PythonRunPhase
 ) -> tuple[PythonPlanEntry, ...]:
     return tuple(entry for entry in entries if entry.phase == phase)
 
 
 def _format_provider_usages(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     python_plan_entries: tuple[PythonPlanEntry, ...],
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     usages: tuple[PlanProviderUsage, ...] = _all_provider_usages(
         plan=plan,
         python_plan_entries=python_plan_entries,
     )
     if not usages:
-        return
+        return lines
     usage_by_provider: dict[str, list[PlanProviderUsage]] = {}
     usage: PlanProviderUsage
     for usage in usages:
@@ -541,7 +548,7 @@ def _format_provider_usages(
                 f"  {style.object_name(provider_name)}{padding}  "
                 f"{style.muted(f'used by {count} selected Python {surface_word}')}"
             )
-        return
+        return lines
     for provider_name in provider_names:
         lines.append(f"  {style.object_name(provider_name)}")
         provider_usages: list[PlanProviderUsage] = sorted(
@@ -549,7 +556,7 @@ def _format_provider_usages(
             key=lambda item: (item.consumer_kind, item.consumer_name, item.parameter_name),
         )
         visible: Sequence[PlanProviderUsage] = visible_entries(
-            provider_usages,
+            entries=provider_usages,
             options=display_options,
         )
         for usage in visible:
@@ -562,13 +569,14 @@ def _format_provider_usages(
                 f"    {style.muted(usage.consumer_kind)} "
                 f"{style.object_name(usage.consumer_name)}{annotation}"
             )
-        append_overflow_line(
-            lines,
+        lines = append_overflow_line(
+            lines=lines,
             total_count=len(provider_usages),
             visible_count=len(visible),
             indent="    ",
             options=display_options,
         )
+    return lines
 
 
 def _all_provider_usages(
@@ -592,79 +600,83 @@ def _all_provider_usages(
 
 
 def _format_standard_pruned_metadata(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     display_options: DisplayOptions,
     skipped_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     raw_names: object = plan.metadata.get("standard_pruned_model_names")
     if not isinstance(raw_names, tuple):
-        return
+        return lines
     names: tuple[str, ...] = tuple(name for name in raw_names if isinstance(name, str))
     if not names:
-        return
+        return lines
     lines.append("")
     lines.append(skipped_header_style(f"Skipped current models ({len(names)} already up to date)"))
     if display_options.max_entries_per_section is not None:
-        return
-    visible_names: Sequence[str] = visible_entries(names, options=display_options)
+        return lines
+    visible_names: Sequence[str] = visible_entries(entries=names, options=display_options)
     name: str
-    name_column_width: int = resolve_name_column_width(names)
+    name_column_width: int = resolve_name_column_width(names=names)
     for name in visible_names:
         lines.append(
-            _format_name_value_line(name, value="up to date", name_column_width=name_column_width)
+            _format_name_value_line(
+                name=name, value="up to date", name_column_width=name_column_width
+            )
         )
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(names),
         visible_count=len(visible_names),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _format_python_plan_entries(
-    lines: list[str],
     *,
+    lines: list[str],
     entries: tuple[PythonPlanEntry, ...],
     label: str,
     name_column_width: int,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     if not entries:
-        return
+        return lines
     lines.append("")
     lines.append(section_header_style(f"{label} ({len(entries)})"))
-    visible: Sequence[PythonPlanEntry] = visible_entries(entries, options=display_options)
+    visible: Sequence[PythonPlanEntry] = visible_entries(entries=entries, options=display_options)
     entry: PythonPlanEntry
     for entry in visible:
         lines.append(
             _format_name_value_line(
-                entry.name,
+                name=entry.name,
                 value=f"{entry.kind.value} ({entry.identity_status.value})",
                 name_column_width=name_column_width,
             )
         )
-        _append_python_identity_diff(lines, entry=entry)
-    append_overflow_line(
-        lines,
+        lines = _append_python_identity_diff(lines=lines, entry=entry)
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(entries),
         visible_count=len(visible),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
-def _append_python_identity_diff(lines: list[str], *, entry: PythonPlanEntry) -> None:
+def _append_python_identity_diff(*, lines: list[str], entry: PythonPlanEntry) -> list[str]:
     if entry.identity_status != PythonIdentityStatus.CHANGED:
-        return
+        return lines
 
     source_diff: list[str] = _format_python_source_diff(entry)
     dependency_diff: list[str] = _format_python_dependency_diff(entry)
     if not source_diff and not dependency_diff:
-        return
+        return lines
 
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    python diff:"))
@@ -674,6 +686,7 @@ def _append_python_identity_diff(lines: list[str], *, entry: PythonPlanEntry) ->
     if dependency_diff:
         lines.append(style.label("      dependency diff:"))
         lines.extend(dependency_diff)
+    return lines
 
 
 def _format_python_source_diff(entry: PythonPlanEntry) -> list[str]:
@@ -681,7 +694,9 @@ def _format_python_source_diff(entry: PythonPlanEntry) -> list[str]:
     current: str | None = _python_definition_source_text(entry.current_definition_json)
     if previous is None or current is None or previous == current:
         return []
-    return _indent_diff(format_query_diff(previous, current=current), extra_indent="  ")
+    return _indent_diff(
+        lines=format_query_diff(previous=previous, current=current), extra_indent="  "
+    )
 
 
 def _format_python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
@@ -690,7 +705,7 @@ def _format_python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
     if previous is None or current is None or previous == current:
         return []
     return _dim_python_dependency_headers(
-        _indent_diff(format_query_diff(previous, current=current), extra_indent="  ")
+        _indent_diff(lines=format_query_diff(previous=previous, current=current), extra_indent="  ")
     )
 
 
@@ -770,13 +785,13 @@ def _json_object(raw_json: str | None) -> dict[str, object] | None:
     return cast(dict[str, object], payload) if isinstance(payload, dict) else None
 
 
-def _indent_diff(lines: list[str], *, extra_indent: str) -> list[str]:
+def _indent_diff(*, lines: list[str], extra_indent: str) -> list[str]:
     return [f"{extra_indent}{line}" for line in lines]
 
 
 def _format_source_loads(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     name_column_width: int,
     display_options: DisplayOptions,
@@ -796,7 +811,7 @@ def _format_source_loads(
         for entry in plan.source_load_entries
         if entry.resource_kind == ExecutionResourceKind.SOURCE
     )
-    _format_load_entry_group(
+    lines = _format_load_entry_group(
         lines=lines,
         entries=loader_entries,
         label="Loaders",
@@ -804,7 +819,7 @@ def _format_source_loads(
         display_options=display_options,
         section_header_style=section_header_style,
     )
-    _format_load_entry_group(
+    lines = _format_load_entry_group(
         lines=lines,
         entries=source_entries,
         label="Sources",
@@ -822,29 +837,32 @@ def _format_load_entry_group(
     name_column_width: int,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     if not entries:
-        return
+        return lines
     action: str = "reload" if any(entry.is_reload for entry in entries) else "load"
     lines.append("")
     lines.append(section_header_style(f"{label} to {action} ({len(entries)})"))
-    visible: Sequence[SourceLoadPlanEntry] = visible_entries(entries, options=display_options)
+    visible: Sequence[SourceLoadPlanEntry] = visible_entries(
+        entries=entries, options=display_options
+    )
     source_load_entry: SourceLoadPlanEntry
     for source_load_entry in visible:
         lines.append(
             _format_name_value_line(
-                source_load_entry.name,
+                name=source_load_entry.name,
                 value=_source_load_label(source_load_entry),
                 name_column_width=name_column_width,
             )
         )
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(entries),
         visible_count=len(visible),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _source_load_label(entry: SourceLoadPlanEntry) -> str:
@@ -895,8 +913,8 @@ def _collect_upstream_changed(entries: list[ModelPlanEntry]) -> list[ModelPlanEn
 
 
 def _group_by_reason(
-    entries: list[ModelPlanEntry],
     *,
+    entries: list[ModelPlanEntry],
     cascade_entries: list[ModelPlanEntry],
 ) -> dict[PlanReason, list[ModelPlanEntry]]:
     """Group entries by reason, excluding normal/no-change and cascade entries."""
@@ -914,92 +932,99 @@ def _group_by_reason(
 
 
 def _format_routine_models_section(
-    lines: list[str],
     *,
+    lines: list[str],
     entries: list[ModelPlanEntry],
     name_column_width: int,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     """Format routine model work by resource name."""
 
     lines.append(section_header_style(f"Models ({len(entries)} standard run)"))
-    visible: Sequence[ModelPlanEntry] = visible_entries(entries, options=display_options)
+    visible: Sequence[ModelPlanEntry] = visible_entries(entries=entries, options=display_options)
     entry: ModelPlanEntry
     for entry in visible:
         lines.append(
             _format_name_value_line(
-                entry.name,
+                name=entry.name,
                 value=model_materialization_label(entry),
                 name_column_width=name_column_width,
             )
         )
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(entries),
         visible_count=len(visible),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _format_detail_entry(
-    lines: list[str],
     *,
+    lines: list[str],
     entry: ModelPlanEntry,
     reason: PlanReason,
     name_column_width: int,
-) -> None:
+) -> list[str]:
     """Format a per-model entry with action text and detail lines."""
 
     if reason == PlanReason.FIRST_RUN:
         mat_label: str = model_materialization_label(entry)
         lines.append(
             _format_name_value_line(
-                entry.name, value=mat_label, name_column_width=name_column_width
+                name=entry.name, value=mat_label, name_column_width=name_column_width
             )
         )
-        return
+        return lines
 
     action_text: str = _action_text(entry)
     lines.append(
-        _format_name_value_line(entry.name, value=action_text, name_column_width=name_column_width)
+        _format_name_value_line(
+            name=entry.name, value=action_text, name_column_width=name_column_width
+        )
     )
-    _append_cursor_detail(
-        lines,
+    lines = _append_cursor_detail(
+        lines=lines,
         entry=entry,
         show_range=entry.backfill.action != BackfillAction.FULL,
     )
-    _append_policy_line(lines, entry=entry)
-    _append_run_despite_unchanged_detail(lines, entry=entry)
-    _append_schema_diff(lines, entry=entry)
-    _append_config_diff(lines, entry=entry)
-    _append_query_diff(lines, entry=entry)
+    lines = _append_policy_line(lines=lines, entry=entry)
+    lines = _append_run_despite_unchanged_detail(lines=lines, entry=entry)
+    lines = _append_schema_diff(lines=lines, entry=entry)
+    lines = _append_config_diff(lines=lines, entry=entry)
+    lines = _append_query_diff(lines=lines, entry=entry)
+    return lines
 
 
 def _format_upstream_changed_entry(
-    lines: list[str], *, entry: ModelPlanEntry, name_column_width: int
-) -> None:
+    *, lines: list[str], entry: ModelPlanEntry, name_column_width: int
+) -> list[str]:
     """Format a per-model entry in the Upstream changed group."""
 
     cascade: CascadeResult | None = entry.cascade
     action_text: str = _cascade_action_text(cascade)
     lines.append(
-        _format_name_value_line(entry.name, value=action_text, name_column_width=name_column_width)
+        _format_name_value_line(
+            name=entry.name, value=action_text, name_column_width=name_column_width
+        )
     )
-    _append_cursor_detail(
-        lines,
+    lines = _append_cursor_detail(
+        lines=lines,
         entry=entry,
         show_range=cascade is None or cascade.effective_action != BackfillAction.FULL,
     )
     if cascade is not None and cascade.root_cause is not None:
         cause_desc: str = _cascade_cause_description(cascade)
         lines.append(f"    cause: {cause_desc}")
+    return lines
 
 
 def _append_cursor_detail(
-    lines: list[str], *, entry: ModelPlanEntry, show_range: bool = True
-) -> None:
+    *, lines: list[str], entry: ModelPlanEntry, show_range: bool = True
+) -> list[str]:
     """Append cursor column, mode, and range detail lines."""
 
     if entry.cursor_column is not None:
@@ -1008,55 +1033,62 @@ def _append_cursor_detail(
         lines.append(f"    mode: {IncrementalMode.MICROBATCH.value}")
     if show_range and entry.cursor_bounds is not None:
         lines.append(f"    range: {entry.cursor_bounds.start} \u2192 {entry.cursor_bounds.end}")
+    return lines
 
 
-def _append_policy_line(lines: list[str], *, entry: ModelPlanEntry) -> None:
+def _append_policy_line(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
     """Append the policy line if a backfill policy triggered."""
 
     if entry.backfill.action == BackfillAction.FORWARD_ONLY:
-        return
+        return lines
     duration: str = entry.backfill.duration or "full"
-    policy_value: str = _backfill_value(entry.backfill.action, duration=duration)
+    policy_value: str = _backfill_value(action=entry.backfill.action, duration=duration)
     if entry.reason in (PlanReason.QUERY_CHANGED, PlanReason.SCHEMA_CHANGED):
         lines.append(f"    policy: replay_on_change={policy_value}")
+    return lines
 
 
-def _append_schema_diff(lines: list[str], *, entry: ModelPlanEntry) -> None:
+def _append_schema_diff(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
     """Append schema diff lines if findings exist."""
 
     if not entry.schema_findings:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    schema diff:"))
     lines.extend(_format_schema_findings(entry.schema_findings))
+    return lines
 
 
-def _append_query_diff(lines: list[str], *, entry: ModelPlanEntry) -> None:
+def _append_query_diff(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
     """Append query diff lines if previous SQL is available."""
 
     if entry.previous_query_sql is None:
-        return
+        return lines
     if entry.reason != PlanReason.QUERY_CHANGED:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    query diff:"))
-    lines.extend(format_query_diff(entry.previous_query_sql, current=entry.fingerprint_query_sql))
+    lines.extend(
+        format_query_diff(previous=entry.previous_query_sql, current=entry.fingerprint_query_sql)
+    )
+    return lines
 
 
-def _append_config_diff(lines: list[str], *, entry: ModelPlanEntry) -> None:
+def _append_config_diff(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
     """Append version-identity config diff lines if metadata changed."""
 
     if entry.reason != PlanReason.CONFIG_CHANGED:
-        return
+        return lines
     if entry.previous_metadata_json is None or entry.fingerprint_metadata_json is None:
-        return
+        return lines
     previous_config: str = _format_config_json(entry.previous_metadata_json)
     current_config: str = _format_config_json(entry.fingerprint_metadata_json)
     if previous_config == current_config:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    config diff:"))
-    lines.extend(format_query_diff(previous_config, current=current_config))
+    lines.extend(format_query_diff(previous=previous_config, current=current_config))
+    return lines
 
 
 def _format_config_json(metadata_json: str) -> str:
@@ -1136,10 +1168,10 @@ def _plan_reason_text(reason: PlanReason) -> str:
     return ""
 
 
-def _append_run_despite_unchanged_detail(lines: list[str], *, entry: ModelPlanEntry) -> None:
+def _append_run_despite_unchanged_detail(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
     decision: RunDespiteUnchangedDecision | None = entry.run_despite_unchanged
     if decision is None:
-        return
+        return lines
     detail: str = decision.duration or decision.mode.value
     lines.append(f"    run_despite_unchanged: {detail}")
     if decision.newest_source_data_age_seconds is not None:
@@ -1147,6 +1179,7 @@ def _append_run_despite_unchanged_detail(lines: list[str], *, entry: ModelPlanEn
             "    newest source data age: "
             f"{_format_age_seconds(decision.newest_source_data_age_seconds)}"
         )
+    return lines
 
 
 def _format_age_seconds(age_seconds: int) -> str:
@@ -1175,7 +1208,7 @@ def _schema_change_suffix(entry: ModelPlanEntry) -> str:
     return ", ".join(parts)
 
 
-def _backfill_value(action: BackfillAction, *, duration: str) -> str:
+def _backfill_value(*, action: BackfillAction, duration: str) -> str:
     """Format a backfill action as a policy value string."""
 
     if action == BackfillAction.BOUNDED:
@@ -1184,32 +1217,33 @@ def _backfill_value(action: BackfillAction, *, duration: str) -> str:
 
 
 def _format_seeds(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     """Append the seeds section."""
 
     if not plan.seed_entries:
-        return
+        return lines
     lines.append("")
     lines.append(section_header_style(f"Seeds ({len(plan.seed_entries)})"))
     seed_entry: object
-    visible: Sequence[object] = visible_entries(plan.seed_entries, options=display_options)
+    visible: Sequence[object] = visible_entries(entries=plan.seed_entries, options=display_options)
     for seed_entry in visible:
         reason: object | None = getattr(seed_entry, "reason", None)
         reason_label: str = _seed_reason_label(reason)
         suffix: str = f"  ({reason_label})" if reason_label else ""
         lines.append(f"  {getattr(seed_entry, 'name', str(seed_entry))}{suffix}")
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(plan.seed_entries),
         visible_count=len(visible),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _seed_reason_label(reason: object | None) -> str:
@@ -1223,8 +1257,8 @@ def _seed_reason_label(reason: object | None) -> str:
 
 
 def _format_functions(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     name_column_width: int,
     display_options: DisplayOptions,
@@ -1232,15 +1266,15 @@ def _format_functions(
 ) -> None:
     """Append the functions section."""
 
-    _format_changed_functions(
-        lines,
+    lines = _format_changed_functions(
+        lines=lines,
         plan=plan,
         name_column_width=name_column_width,
         display_options=display_options,
         section_header_style=section_header_style,
     )
-    _format_routine_functions(
-        lines,
+    lines = _format_routine_functions(
+        lines=lines,
         plan=plan,
         name_column_width=name_column_width,
         display_options=display_options,
@@ -1249,89 +1283,91 @@ def _format_functions(
 
 
 def _format_changed_functions(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     name_column_width: int,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     """Append changed functions with details."""
 
     if not plan.function_entries:
-        return
+        return lines
     changed_entries: list[FunctionPlanEntry] = [
         entry for entry in plan.function_entries if entry.reason != PlanReason.NO_CHANGE
     ]
     if not changed_entries:
-        return
+        return lines
     lines.append("")
     lines.append(section_header_style(f"Changed functions ({len(changed_entries)})"))
     function_entry: FunctionPlanEntry
     visible_changed: Sequence[FunctionPlanEntry] = visible_entries(
-        changed_entries, options=display_options
+        entries=changed_entries, options=display_options
     )
     for function_entry in visible_changed:
-        _format_function_entry(
-            lines,
+        lines = _format_function_entry(
+            lines=lines,
             function_entry=function_entry,
             show_details=True,
             name_column_width=name_column_width,
         )
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(changed_entries),
         visible_count=len(visible_changed),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _format_routine_functions(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     name_column_width: int,
     display_options: DisplayOptions,
     section_header_style: Callable[[str], str],
-) -> None:
+) -> list[str]:
     """Append routine functions by resource name."""
 
     if not plan.function_entries:
-        return
+        return lines
     unchanged_entries: list[FunctionPlanEntry] = [
         entry for entry in plan.function_entries if entry.reason == PlanReason.NO_CHANGE
     ]
     if not unchanged_entries:
-        return
+        return lines
     lines.append("")
     lines.append(section_header_style(f"Functions ({len(unchanged_entries)} standard run)"))
     visible_unchanged: Sequence[FunctionPlanEntry] = visible_entries(
-        unchanged_entries, options=display_options
+        entries=unchanged_entries, options=display_options
     )
     for function_entry in visible_unchanged:
-        _format_function_entry(
-            lines,
+        lines = _format_function_entry(
+            lines=lines,
             function_entry=function_entry,
             show_details=False,
             name_column_width=name_column_width,
         )
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(unchanged_entries),
         visible_count=len(visible_unchanged),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _format_function_entry(
-    lines: list[str],
     *,
+    lines: list[str],
     function_entry: FunctionPlanEntry,
     show_details: bool,
     name_column_width: int,
-) -> None:
+) -> list[str]:
     """Append one function line and optional change details."""
 
     function_kind: str = (
@@ -1341,13 +1377,13 @@ def _format_function_entry(
     )
     lines.append(
         _format_name_value_line(
-            function_entry.name,
+            name=function_entry.name,
             value=function_kind,
             name_column_width=name_column_width,
         )
     )
     if not show_details:
-        return
+        return lines
     if function_entry.reason == PlanReason.FIRST_RUN:
         lines.append("    reason: first run")
     elif function_entry.reason == PlanReason.FULL_REFRESH:
@@ -1355,27 +1391,30 @@ def _format_function_entry(
     elif function_entry.reason == PlanReason.QUERY_CHANGED:
         if function_entry.backfill.action != BackfillAction.FORWARD_ONLY:
             duration: str = function_entry.backfill.duration or "full"
-            policy_value: str = _backfill_value(function_entry.backfill.action, duration=duration)
+            policy_value: str = _backfill_value(
+                action=function_entry.backfill.action, duration=duration
+            )
             lines.append(f"    policy: replay_on_change={policy_value}")
         if function_entry.previous_query_sql is not None:
             style: CliStyle = CliStyle(use_color=True)
             lines.append(style.label("    query diff:"))
             lines.extend(
                 format_query_diff(
-                    function_entry.previous_query_sql,
+                    previous=function_entry.previous_query_sql,
                     current=function_entry.fingerprint_query_sql,
                 )
             )
+    return lines
 
 
-def _format_warnings(lines: list[str], *, plan: PlanOutput) -> None:
+def _format_warnings(*, lines: list[str], plan: PlanOutput) -> list[str]:
     """Append the warnings section."""
 
     warning_entries: list[PlanWarning] = [
         w for w in plan.warnings if w.severity != WarningSeverity.INFO
     ]
     if not warning_entries:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(style.warning_strong(f"Warnings ({len(warning_entries)})"))
@@ -1388,20 +1427,21 @@ def _format_warnings(lines: list[str], *, plan: PlanOutput) -> None:
         continuation: str
         for continuation in message_lines[1:]:
             lines.append(f"    {style.warning(continuation)}")
+    return lines
 
 
 def _format_virtual_metadata(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     section_header_style: Callable[[str], str],
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     """Append a virtual planner metadata section when present."""
 
     virtual_environment_name: object | None = plan.metadata.get("virtual_environment_name")
     if not isinstance(virtual_environment_name, str):
-        return
+        return lines
     virtual_environment_status: str = str(
         plan.metadata.get("virtual_environment_status", "unknown")
     )
@@ -1465,62 +1505,63 @@ def _format_virtual_metadata(
         lines.append(f"  source freshness observed: {len(observed_source_names)}")
         if observed_source_names:
             observed_source_set: str = _format_capped_name_list(
-                observed_source_names,
+                names=observed_source_names,
                 display_options=display_options,
             )
             lines.append(f"  source freshness observed set: {observed_source_set}")
         lines.append(f"  source freshness unchanged: {len(unchanged_source_names)}")
         if unchanged_source_names:
             unchanged_source_set: str = _format_capped_name_list(
-                unchanged_source_names,
+                names=unchanged_source_names,
                 display_options=display_options,
             )
             lines.append(f"  source freshness unchanged set: {unchanged_source_set}")
         lines.append(f"  source freshness incomplete: {len(incomplete_source_names)}")
         if incomplete_source_names:
             incomplete_source_set: str = _format_capped_name_list(
-                incomplete_source_names,
+                names=incomplete_source_names,
                 display_options=display_options,
             )
             lines.append(f"  source freshness incomplete set: {incomplete_source_set}")
         if incomplete_model_names:
             incomplete_model_set: str = _format_capped_name_list(
-                incomplete_model_names,
+                names=incomplete_model_names,
                 display_options=display_options,
             )
             lines.append(f"  source freshness incomplete models: {incomplete_model_set}")
     lines.append(f"  stale roots: {len(stale_root_names)}")
     if stale_root_names:
         stale_root_set: str = _format_capped_name_list(
-            stale_root_names,
+            names=stale_root_names,
             display_options=display_options,
         )
         lines.append(f"  stale root set: {stale_root_set}")
     lines.append(f"  stale models: {len(stale_model_names)}")
     if stale_model_names:
         stale_model_set: str = _format_capped_name_list(
-            stale_model_names,
+            names=stale_model_names,
             display_options=display_options,
         )
         lines.append(f"  stale model set: {stale_model_set}")
     if remaining_stale_model_names:
         remaining_stale_set: str = _format_capped_name_list(
-            remaining_stale_model_names,
+            names=remaining_stale_model_names,
             display_options=display_options,
         )
         lines.append(f"  remaining stale after selection: {remaining_stale_set}")
+    return lines
 
 
 def _format_standard_source_freshness_metadata(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     section_header_style: Callable[[str], str],
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     raw_metadata: object | None = plan.metadata.get("standard_source_freshness")
     if not isinstance(raw_metadata, dict):
-        return
+        return lines
     source_freshness_metadata: dict[str, object] = cast(dict[str, object], raw_metadata)
     observed_source_names: tuple[str, ...] = _metadata_string_tuple(
         source_freshness_metadata.get("observed_source_names")
@@ -1547,15 +1588,17 @@ def _format_standard_source_freshness_metadata(
         source_freshness_metadata.get("blocked_model_names")
     )
     if not observed_source_names and not unknown_source_names:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(section_header_style("Source freshness"))
-    lines.append(_source_freshness_count_line(style, label="observed", names=observed_source_names))
+    lines.append(
+        _source_freshness_count_line(style=style, label="observed", names=observed_source_names)
+    )
     if observed_source_names:
         lines.append(
             _source_freshness_set_line(
-                style,
+                style=style,
                 label="observed set",
                 names=observed_source_names,
                 display_options=display_options,
@@ -1563,13 +1606,13 @@ def _format_standard_source_freshness_metadata(
         )
     lines.append(
         _source_freshness_count_line(
-            style, label="changed", names=changed_source_names, warn_nonzero=True
+            style=style, label="changed", names=changed_source_names, warn_nonzero=True
         )
     )
     if changed_source_names:
         lines.append(
             _source_freshness_set_line(
-                style,
+                style=style,
                 label="changed set",
                 names=changed_source_names,
                 display_options=display_options,
@@ -1577,12 +1620,12 @@ def _format_standard_source_freshness_metadata(
             )
         )
     lines.append(
-        _source_freshness_count_line(style, label="unchanged", names=unchanged_source_names)
+        _source_freshness_count_line(style=style, label="unchanged", names=unchanged_source_names)
     )
     if unchanged_source_names:
         lines.append(
             _source_freshness_set_line(
-                style,
+                style=style,
                 label="unchanged set",
                 names=unchanged_source_names,
                 display_options=display_options,
@@ -1590,13 +1633,13 @@ def _format_standard_source_freshness_metadata(
         )
     lines.append(
         _source_freshness_count_line(
-            style, label="unknown", names=unknown_source_names, warn_nonzero=True
+            style=style, label="unknown", names=unknown_source_names, warn_nonzero=True
         )
     )
     if unknown_source_names:
         lines.append(
             _source_freshness_set_line(
-                style,
+                style=style,
                 label="unknown set",
                 names=unknown_source_names,
                 display_options=display_options,
@@ -1606,7 +1649,7 @@ def _format_standard_source_freshness_metadata(
     if age_warning_source_names:
         lines.append(
             _source_freshness_set_line(
-                style,
+                style=style,
                 label="age warnings",
                 names=age_warning_source_names,
                 display_options=display_options,
@@ -1616,7 +1659,7 @@ def _format_standard_source_freshness_metadata(
     if age_error_source_names:
         lines.append(
             _source_freshness_set_line(
-                style,
+                style=style,
                 label="age errors",
                 names=age_error_source_names,
                 display_options=display_options,
@@ -1626,7 +1669,7 @@ def _format_standard_source_freshness_metadata(
     if stale_model_names:
         lines.append(
             _source_freshness_set_line(
-                style,
+                style=style,
                 label="source-stale models",
                 names=stale_model_names,
                 display_options=display_options,
@@ -1636,27 +1679,28 @@ def _format_standard_source_freshness_metadata(
     if blocked_model_names:
         lines.append(
             _source_freshness_set_line(
-                style,
+                style=style,
                 label="source-blocked models",
                 names=blocked_model_names,
                 display_options=display_options,
                 warn=True,
             )
         )
+    return lines
 
 
 def _format_standard_remaining_stale_metadata(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: PlanOutput,
     section_header_style: Callable[[str], str],
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     remaining_stale_model_names: tuple[str, ...] = _metadata_string_tuple(
         plan.metadata.get("standard_remaining_stale_model_names")
     )
     if not remaining_stale_model_names:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(section_header_style("Remaining stale"))
@@ -1665,12 +1709,13 @@ def _format_standard_remaining_stale_metadata(
         style.muted(
             "  model set: "
             + _format_capped_name_list(
-                remaining_stale_model_names,
+                names=remaining_stale_model_names,
                 display_options=display_options,
                 name_style=style.muted,
             )
         )
     )
+    return lines
 
 
 def _metadata_string_tuple(raw_value: object | None) -> tuple[str, ...]:
@@ -1678,8 +1723,8 @@ def _metadata_string_tuple(raw_value: object | None) -> tuple[str, ...]:
 
 
 def _source_freshness_count_line(
-    style: CliStyle,
     *,
+    style: CliStyle,
     label: str,
     names: tuple[str, ...],
     warn_nonzero: bool = False,
@@ -1696,15 +1741,15 @@ def _source_freshness_count_line(
 
 
 def _source_freshness_set_line(
-    style: CliStyle,
     *,
+    style: CliStyle,
     label: str,
     names: tuple[str, ...],
     display_options: DisplayOptions,
     warn: bool = False,
 ) -> str:
     formatted_names: str = _format_capped_name_list(
-        names,
+        names=names,
         display_options=display_options,
         name_style=style.warning if warn else style.object_name,
     )
@@ -1712,8 +1757,8 @@ def _source_freshness_set_line(
 
 
 def _format_capped_name_list(
-    names: tuple[str, ...],
     *,
+    names: tuple[str, ...],
     display_options: DisplayOptions,
     name_style: Callable[[str], str] | None = None,
 ) -> str:
@@ -1732,17 +1777,17 @@ def _format_capped_name_list(
 
 
 def _resolve_name_column_width(
-    plan: PlanOutput, *, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+    *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
 ) -> int:
     names: list[str] = [
         entry.name for entry in (*plan.dependency_baseline_entries, *plan.model_entries)
     ]
     names.extend(entry.name for entry in plan.function_entries)
     names.extend(entry.name for entry in python_plan_entries)
-    return resolve_name_column_width(names)
+    return resolve_name_column_width(names=names)
 
 
-def _format_name_value_line(name: str, *, value: str, name_column_width: int) -> str:
+def _format_name_value_line(*, name: str, value: str, name_column_width: int) -> str:
     style: CliStyle = CliStyle(use_color=True)
     return format_aligned_name_value(
         plain_name=name,

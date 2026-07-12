@@ -50,6 +50,9 @@ from tests.unit.src.sqlbuild.executor.build.helpers.helpers import (
     build_model_plan_entry,
     build_source_freshness_record,
     fetch_rows_or_empty,
+    node_source_hashes_by_name,
+    node_source_kinds_by_name,
+    node_source_unknown_reasons_by_name,
     read_node_source_watermark_records,
 )
 
@@ -194,7 +197,7 @@ def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_
         hook_actions: dict[bool, Callable[[], object]] = {
             True: lambda: (_ for _ in ()).throw(RuntimeError("hook failed")),
             False: lambda: adapter.execute(
-                connection, sql="CREATE TABLE hook_seed AS SELECT 1 AS id"
+                connection=connection, sql="CREATE TABLE hook_seed AS SELECT 1 AS id"
             ),
         }
         hook_actions[test_case.hook_raises]()
@@ -367,14 +370,14 @@ def test_given_upstream_table_runs_before_downstream_when_build_succeeds_then_in
         adapter.close(connection)
 
     assert result.status == BuildStatus.SUCCESS
-    assert {
-        name: tuple(entry.data_version_hash for entry in records[name].payload.sources)
-        for name in test_case.expected_source_hashes_by_node
-    } == test_case.expected_source_hashes_by_node
-    assert {
-        name: tuple(entry.watermark_kind for entry in records[name].payload.sources)
-        for name in test_case.expected_source_kinds_by_node
-    } == test_case.expected_source_kinds_by_node
+    assert (
+        node_source_hashes_by_name(records, test_case.expected_source_hashes_by_node)
+        == test_case.expected_source_hashes_by_node
+    )
+    assert (
+        node_source_kinds_by_name(records, test_case.expected_source_kinds_by_node)
+        == test_case.expected_source_kinds_by_node
+    )
 
 
 @pytest.mark.parametrize(
@@ -446,14 +449,14 @@ def test_given_downstream_depends_on_view_over_source_when_built_then_records_di
 
     assert result.status == BuildStatus.SUCCESS
     assert "v" not in records
-    assert {
-        name: tuple(entry.data_version_hash for entry in records[name].payload.sources)
-        for name in test_case.expected_source_hashes_by_node
-    } == test_case.expected_source_hashes_by_node
-    assert {
-        name: tuple(entry.watermark_kind for entry in records[name].payload.sources)
-        for name in test_case.expected_source_kinds_by_node
-    } == test_case.expected_source_kinds_by_node
+    assert (
+        node_source_hashes_by_name(records, test_case.expected_source_hashes_by_node)
+        == test_case.expected_source_hashes_by_node
+    )
+    assert (
+        node_source_kinds_by_name(records, test_case.expected_source_kinds_by_node)
+        == test_case.expected_source_kinds_by_node
+    )
 
 
 @pytest.mark.parametrize(
@@ -561,14 +564,14 @@ def test_given_downstream_depends_on_view_over_table_when_built_then_inherits_ta
     assert b_result.status == BuildStatus.SUCCESS
     assert a_result.status == BuildStatus.SUCCESS
     assert "v" not in records
-    assert {
-        name: tuple(entry.data_version_hash for entry in records[name].payload.sources)
-        for name in test_case.expected_source_hashes_by_node
-    } == test_case.expected_source_hashes_by_node
-    assert {
-        name: tuple(entry.watermark_kind for entry in records[name].payload.sources)
-        for name in test_case.expected_source_kinds_by_node
-    } == test_case.expected_source_kinds_by_node
+    assert (
+        node_source_hashes_by_name(records, test_case.expected_source_hashes_by_node)
+        == test_case.expected_source_hashes_by_node
+    )
+    assert (
+        node_source_kinds_by_name(records, test_case.expected_source_kinds_by_node)
+        == test_case.expected_source_kinds_by_node
+    )
 
 
 @pytest.mark.parametrize(
@@ -668,14 +671,14 @@ def test_given_only_downstream_runs_when_upstream_watermark_exists_then_inherits
 
     assert first_result.status == BuildStatus.SUCCESS
     assert second_result.status == BuildStatus.SUCCESS
-    assert {
-        name: tuple(entry.data_version_hash for entry in records[name].payload.sources)
-        for name in test_case.expected_source_hashes_by_node
-    } == test_case.expected_source_hashes_by_node
-    assert {
-        name: tuple(entry.watermark_kind for entry in records[name].payload.sources)
-        for name in test_case.expected_source_kinds_by_node
-    } == test_case.expected_source_kinds_by_node
+    assert (
+        node_source_hashes_by_name(records, test_case.expected_source_hashes_by_node)
+        == test_case.expected_source_hashes_by_node
+    )
+    assert (
+        node_source_kinds_by_name(records, test_case.expected_source_kinds_by_node)
+        == test_case.expected_source_kinds_by_node
+    )
 
 
 @pytest.mark.parametrize(
@@ -722,7 +725,7 @@ def test_given_upstream_table_without_watermark_when_downstream_runs_then_record
     )
 
     try:
-        adapter.execute(connection, sql="CREATE TABLE b AS SELECT 1 AS id")
+        adapter.execute(connection=connection, sql="CREATE TABLE b AS SELECT 1 AS id")
         result: BuildExecutionResult = execute_build_plan(
             plan=plan,
             adapter=adapter,
@@ -744,18 +747,18 @@ def test_given_upstream_table_without_watermark_when_downstream_runs_then_record
         adapter.close(connection)
 
     assert result.status == BuildStatus.SUCCESS
-    assert {
-        name: tuple(entry.data_version_hash for entry in records[name].payload.sources)
-        for name in test_case.expected_source_hashes_by_node
-    } == test_case.expected_source_hashes_by_node
-    assert {
-        name: tuple(entry.watermark_kind for entry in records[name].payload.sources)
-        for name in test_case.expected_source_kinds_by_node
-    } == test_case.expected_source_kinds_by_node
-    assert {
-        name: tuple(entry.reason for entry in records[name].payload.unknown_sources)
-        for name in test_case.expected_unknown_reasons_by_node
-    } == test_case.expected_unknown_reasons_by_node
+    assert (
+        node_source_hashes_by_name(records, test_case.expected_source_hashes_by_node)
+        == test_case.expected_source_hashes_by_node
+    )
+    assert (
+        node_source_kinds_by_name(records, test_case.expected_source_kinds_by_node)
+        == test_case.expected_source_kinds_by_node
+    )
+    assert (
+        node_source_unknown_reasons_by_name(records, test_case.expected_unknown_reasons_by_node)
+        == test_case.expected_unknown_reasons_by_node
+    )
 
 
 @pytest.mark.parametrize(
@@ -911,14 +914,14 @@ def test_given_downstream_depends_on_two_frontier_tables_when_built_then_merges_
     assert b_result.status == BuildStatus.SUCCESS
     assert c_result.status == BuildStatus.SUCCESS
     assert a_result.status == BuildStatus.SUCCESS
-    assert {
-        name: tuple(entry.data_version_hash for entry in records[name].payload.sources)
-        for name in test_case.expected_source_hashes_by_node
-    } == test_case.expected_source_hashes_by_node
-    assert {
-        name: tuple(entry.watermark_kind for entry in records[name].payload.sources)
-        for name in test_case.expected_source_kinds_by_node
-    } == test_case.expected_source_kinds_by_node
+    assert (
+        node_source_hashes_by_name(records, test_case.expected_source_hashes_by_node)
+        == test_case.expected_source_hashes_by_node
+    )
+    assert (
+        node_source_kinds_by_name(records, test_case.expected_source_kinds_by_node)
+        == test_case.expected_source_kinds_by_node
+    )
 
 
 @pytest.mark.parametrize(
@@ -947,7 +950,7 @@ def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_ski
     node_starts: list[str] = []
 
     def maybe_skip(ctx: HookContext) -> object:
-        return ctx.skip("upstream disabled")
+        return ctx.skip(reason="upstream disabled")
 
     plan: PlanOutput = PlanOutput(
         execution_order=(upstream_key, downstream_key),

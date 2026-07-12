@@ -21,7 +21,7 @@ def normalize_loader_rows(value: object) -> tuple[dict[str, object], ...]:
 
 
 def iter_loader_row_batches(
-    value: object, *, batch_size: int
+    *, value: object, batch_size: int
 ) -> Iterator[tuple[dict[str, object], ...]]:
     """Yield normalized loader rows in fixed-size batches."""
 

@@ -260,8 +260,8 @@ def _read_reuse_origin_cursor_max(
     reuse_origin: CompiledRelationLocation,
     reuse_origin_lookup: RelationLookup,
 ) -> str | None:
-    cursor_column: str | None = _get_config_str(model, key="cursor")
-    materialized: str | None = _get_config_str(model, key="materialized")
+    cursor_column: str | None = _get_config_str(model=model, key="cursor")
+    materialized: str | None = _get_config_str(model=model, key="materialized")
     if (
         cursor_column is None
         or materialized != "incremental"
@@ -277,10 +277,10 @@ def _read_reuse_origin_cursor_max(
         f"SELECT CAST(MAX({rendered_cursor_column}) AS VARCHAR) FROM {reuse_origin.qualified_name}"
     )
     try:
-        result: Any = adapter.execute(connection, sql=sql)
+        result: Any = adapter.execute(connection=connection, sql=sql)
     except Exception as exc:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message=(
                 "reuse_from cursor high-water read failed; "
                 "treating reuse origin cursor as unavailable"
@@ -296,7 +296,7 @@ def _read_reuse_origin_cursor_max(
     return str(row[0])
 
 
-def _get_config_str(model: CompiledModel, *, key: str) -> str | None:
+def _get_config_str(*, model: CompiledModel, key: str) -> str | None:
     value: object | None = model.config.values.get(key)
     return value if isinstance(value, str) else None
 

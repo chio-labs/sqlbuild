@@ -337,7 +337,7 @@ def test_given_plan_output_when_formatting_json_then_produces_valid_json(
     test_case: JsonOutputTestCase,
 ) -> None:
     result: str = format_plan_json(
-        test_case.plan_output,
+        plan=test_case.plan_output,
         python_plan_entries=test_case.python_plan_entries,
     )
     parsed: dict[str, object] = json.loads(result)

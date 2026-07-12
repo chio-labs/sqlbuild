@@ -74,8 +74,8 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 
 
 def build_audit_inputs(
-    discovered_inputs: DiscoveredProjectInputs,
     *,
+    discovered_inputs: DiscoveredProjectInputs,
     effective_settings: SettingsConfig,
     model_inputs: tuple[CompileModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
@@ -127,11 +127,15 @@ def build_audit_inputs(
                 known_seed_names=known_seed_names,
                 known_source_names=known_source_names,
             )
-            header_severity: str | None = _str_from_dict(audit_block.header_values, key="severity")
-            header_run_scope: str | None = _str_from_dict(
-                audit_block.header_values, key="run_scope"
+            header_severity: str | None = _str_from_dict(
+                values=audit_block.header_values, key="severity"
             )
-            header_always_run: bool = _bool_from_dict(audit_block.header_values, key="always_run")
+            header_run_scope: str | None = _str_from_dict(
+                values=audit_block.header_values, key="run_scope"
+            )
+            header_always_run: bool = _bool_from_dict(
+                values=audit_block.header_values, key="always_run"
+            )
             resolved_severity: str = resolve_audit_severity(
                 instance_severity=header_severity,
                 default_severity=default_audit_severity,
@@ -591,14 +595,14 @@ def validate_model_attached_audit_references(
         )
 
 
-def _str_from_dict(values: dict[str, object], *, key: str) -> str | None:
+def _str_from_dict(*, values: dict[str, object], key: str) -> str | None:
     """Extract a string value from a dict."""
 
     raw: object | None = values.get(key)
     return raw if isinstance(raw, str) else None
 
 
-def _bool_from_dict(values: dict[str, object], *, key: str) -> bool:
+def _bool_from_dict(*, values: dict[str, object], key: str) -> bool:
     """Extract a bool value from a dict."""
 
     raw: object | None = values.get(key)

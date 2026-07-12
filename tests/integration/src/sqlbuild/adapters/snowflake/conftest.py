@@ -46,9 +46,9 @@ def connection(
     config: dict[str, object] = build_snowflake_connection_config(schema=snowflake_schema)
     schema_target: str = f"{snowflake_database}.{snowflake_schema}"
     conn: Any = adapter.connect(config)
-    adapter.execute(conn, sql=f"CREATE SCHEMA IF NOT EXISTS {schema_target}")
+    adapter.execute(connection=conn, sql=f"CREATE SCHEMA IF NOT EXISTS {schema_target}")
     try:
         yield conn
     finally:
-        adapter.execute(conn, sql=f"DROP SCHEMA IF EXISTS {schema_target} CASCADE")
+        adapter.execute(connection=conn, sql=f"DROP SCHEMA IF EXISTS {schema_target} CASCADE")
         adapter.close(conn)

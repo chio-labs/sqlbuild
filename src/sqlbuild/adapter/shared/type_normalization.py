@@ -62,7 +62,7 @@ def _normalize_with_polyglot(
         parsed: Any = polyglot_module.parse_data_type(type_sql, dialect=dialect or "generic")
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="type normalization polyglot parse failed; falling back",
             type_sql=type_sql,
             dialect=str(dialect),
@@ -80,6 +80,7 @@ def _normalized_from_parsed_type(
     args: dict[str, Any] = dict(getattr(parsed, "args", {}) or {})
     dtype_name: str = _polyglot_type_name(args=args)
     params: list[int] = _polyglot_type_params(args=args)
+    precision_and_scale_count: int = 2
 
     if normalized_dialect == TypeDialect.BIGQUERY and dtype_name in {"INT", "BIGINT"}:
         normalized_name = "INT64"
@@ -94,7 +95,7 @@ def _normalized_from_parsed_type(
             decimal_name: str = raw_name.replace("NUMBER", "DECIMAL", 1)
             base_type, params = _split_type_and_params(decimal_name)
             precision: int | None = params[0] if len(params) >= 1 else None
-            scale: int | None = params[1] if len(params) >= 2 else None
+            scale: int | None = params[1] if len(params) >= precision_and_scale_count else None
             return NormalizedType(
                 normalized_name=base_type if not params else decimal_name,
                 family=TypeFamily.DECIMAL,
@@ -106,7 +107,7 @@ def _normalized_from_parsed_type(
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.INTEGER)
     if dtype_name in DECIMAL_TYPE_NAMES:
         precision: int | None = params[0] if len(params) >= 1 else None
-        scale: int | None = params[1] if len(params) >= 2 else None
+        scale: int | None = params[1] if len(params) >= precision_and_scale_count else None
         return NormalizedType(
             normalized_name=normalized_name,
             family=TypeFamily.DECIMAL,
@@ -142,6 +143,7 @@ def _normalize_with_fallback(*, type_sql: str, dialect: TypeDialect | str | None
     normalized: str = type_sql.upper().strip()
     normalized = re.sub(r"\s+", "", normalized)
     base_type, params = _split_type_and_params(normalized)
+    precision_and_scale_count: int = 2
 
     if base_type in INTEGER_TYPE_NAMES:
         normalized_name: str = _fallback_integer_normalized_name(
@@ -151,7 +153,7 @@ def _normalize_with_fallback(*, type_sql: str, dialect: TypeDialect | str | None
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.INTEGER)
     if base_type in DECIMAL_TYPE_NAMES:
         precision: int | None = params[0] if len(params) >= 1 else None
-        scale: int | None = params[1] if len(params) >= 2 else None
+        scale: int | None = params[1] if len(params) >= precision_and_scale_count else None
         normalized_name = _fallback_decimal_normalized_name(
             base_type=base_type,
             dialect=normalized_dialect,

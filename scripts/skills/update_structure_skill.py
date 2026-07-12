@@ -9,23 +9,23 @@ from pathlib import Path
 
 from scripts.skills.models import RuleReference
 
-generated_marker = "<!-- generated-by: make skills -->"
-else_branch_key = "__else__"
-skill_name = "sqlbuild-structure"
-skill_description = (
+generated_marker: str = "<!-- generated-by: make skills -->"
+else_branch_key: str = "__else__"
+skill_name: str = "sqlbuild-structure"
+skill_description: str = (
     "Use when modifying SQLBuild Python package structure, imports, boundaries, main/ "
     "entry modules, helpers/, shared/, classes/, models.py, types.py, constants.py, "
     "exceptions.py, adapter/integration modules, or fixing make check structure convention "
     "violations SC001-SC068."
 )
-default_source_path = Path("scripts/structure/structure_conventions/rules.py")
-default_output_path = Path.home() / ".config/opencode/skills/sqlbuild-structure/SKILL.md"
+default_source_path: Path = Path("scripts/structure/structure_conventions/rules.py")
+default_output_path: Path = Path.home() / ".config/opencode/skills/sqlbuild-structure/SKILL.md"
 
 
 def main(argv: list[str] | None = None) -> int:
     """Generate and write the SQLBuild structure skill."""
 
-    args = _parse_args(argv)
+    args: argparse.Namespace = _parse_args(argv)
     skill_markdown: str = build_skill_markdown(
         repo_root=args.repo_root,
         source_path=args.source,
@@ -145,7 +145,7 @@ def _extract_function_rule_references(function_node: ast.FunctionDef) -> tuple[R
     expression_names: dict[str, tuple[str, ...]] = {}
     conditional_expression_names: dict[str, dict[str, str]] = {}
     for node in ast.walk(function_node):
-        _capture_string_assignment(
+        expression_names, conditional_expression_names = _capture_string_assignment(
             node=node,
             expression_names=expression_names,
             conditional_expression_names=conditional_expression_names,
@@ -183,7 +183,7 @@ def _capture_string_assignment(
     node: ast.AST,
     expression_names: dict[str, tuple[str, ...]],
     conditional_expression_names: dict[str, dict[str, str]],
-) -> None:
+) -> tuple[dict[str, tuple[str, ...]], dict[str, dict[str, str]]]:
     target_name: str | None = None
     value: ast.expr | None = None
     if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
@@ -198,7 +198,7 @@ def _capture_string_assignment(
         value = node.value
 
     if target_name is None or value is None:
-        return
+        return expression_names, conditional_expression_names
 
     expression_options: tuple[str, ...] = _string_expression_options(value)
     if expression_options:
@@ -206,6 +206,7 @@ def _capture_string_assignment(
     conditional_options: dict[str, str] = _conditional_string_expression_options(value)
     if conditional_options:
         conditional_expression_names[target_name] = conditional_options
+    return expression_names, conditional_expression_names
 
 
 def _conditional_keyword_messages_by_code(
@@ -307,7 +308,9 @@ def _normalize_blank_lines(contents: str) -> str:
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate the SQLBuild structure skill.")
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
+        description="Generate the SQLBuild structure skill."
+    )
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--source", type=Path, default=default_source_path)
     parser.add_argument("--output", type=Path, default=default_output_path)

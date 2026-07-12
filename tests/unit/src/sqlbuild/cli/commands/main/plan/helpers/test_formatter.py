@@ -1106,7 +1106,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
     test_case: FormatPlanTestCase,
 ) -> None:
     result: str = format_plan(
-        test_case.plan_output,
+        plan=test_case.plan_output,
         full_refresh=test_case.full_refresh,
         use_color=False,
         display_options=test_case.display_options,
@@ -1262,7 +1262,7 @@ def test_given_plan_output_when_formatting_with_color_then_styles_semantic_parts
     test_case: FormatPlanColorTestCase,
 ) -> None:
     result: str = format_plan(
-        test_case.plan_output,
+        plan=test_case.plan_output,
         use_color=True,
         python_plan_entries=test_case.python_plan_entries,
     )

@@ -213,7 +213,7 @@ def _classify_type_with_polyglot(warehouse_type: str) -> CursorType | None:
         parsed: Any = polyglot_module.parse_data_type(warehouse_type, dialect="generic")
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="cursor type classification parse failed; falling back",
             sqlbuild_warehouse_type=warehouse_type,
             sqlbuild_error=str(error),

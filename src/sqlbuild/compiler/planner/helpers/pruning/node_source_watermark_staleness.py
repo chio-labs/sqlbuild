@@ -64,7 +64,7 @@ def build_node_source_watermark_staleness_warnings(
     report: NodeSourceWatermarkStalenessReport = build_node_source_watermark_staleness_report(
         classifications=classifications
     )
-    message: str = format_node_source_watermark_staleness_report(report)
+    message: str = format_node_source_watermark_staleness_report(report=report)
     if not message:
         return ()
     return (

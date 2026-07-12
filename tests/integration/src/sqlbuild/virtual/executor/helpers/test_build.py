@@ -70,7 +70,7 @@ def test_given_virtual_build_when_pipeline_starts_then_physical_schema_is_prepar
         connection: Any = adapter.connect(connection_config)
         try:
             assert adapter.schema_exists(
-                connection,
+                connection=connection,
                 database=None,
                 schema=test_case.expected_schema,
             )

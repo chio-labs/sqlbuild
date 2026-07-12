@@ -38,7 +38,7 @@ def execute_model_diff(
     if _model_has_unique_key(right_model):
         unique_key = get_unique_key(right_model)
     schema_result: SchemaDiffResult = adapter.diff_schema(
-        connection,
+        connection=connection,
         left=left_relation,
         right=right_relation,
     )
@@ -124,11 +124,11 @@ def _execute_model_row_diff(
         bounded=bounded,
     )
     tolerances: RowDiffTolerances = parse_row_diff_tolerances(
-        right_model.config.values.get("row_diff_tolerances"),
+        raw=right_model.config.values.get("row_diff_tolerances"),
         label=f"model '{name}' row_diff_tolerances",
     )
     row_result: RowDiffResult = adapter.diff_rows(
-        connection,
+        connection=connection,
         left=left_relation,
         right=right_relation,
         unique_key=resolved_unique_key,
@@ -143,7 +143,7 @@ def _execute_model_row_diff(
     right_only_key_samples: tuple[tuple[tuple[str, object], ...], ...] = ()
     if collect_samples and row_result.unequal_count > 0:
         unequal_row_samples = adapter.sample_unequal_rows(
-            connection,
+            connection=connection,
             left=left_relation,
             right=right_relation,
             unique_key=resolved_unique_key,
@@ -156,7 +156,7 @@ def _execute_model_row_diff(
         )
     if collect_samples and row_result.left_only_count > 0:
         left_only_key_samples = adapter.sample_side_only_rows(
-            connection,
+            connection=connection,
             left=left_relation,
             right=right_relation,
             unique_key=resolved_unique_key,
@@ -168,7 +168,7 @@ def _execute_model_row_diff(
         )
     if collect_samples and row_result.right_only_count > 0:
         right_only_key_samples = adapter.sample_side_only_rows(
-            connection,
+            connection=connection,
             left=left_relation,
             right=right_relation,
             unique_key=resolved_unique_key,

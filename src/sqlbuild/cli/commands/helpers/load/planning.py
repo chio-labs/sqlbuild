@@ -30,7 +30,7 @@ def prepare_load_execution(
         local_config=invocation.discovered_inputs.local_config,
     )
     adapter: BaseAdapter = resolve_adapter(
-        adapter_name,
+        adapter_name=adapter_name,
         project_dir=invocation.effective_project_dir,
     )
     connection_config: dict[str, object] = resolve_project_connection_config(
@@ -70,5 +70,7 @@ def prepare_load_execution(
         run_id=run_id,
         effective_cursor_overrides=request.cursor_overrides or CursorOverrides(),
         effective_concurrency=effective_concurrency,
-        provider_session=build_provider_session(invocation.discovered_inputs.providers),
+        provider_session=build_provider_session(
+            discovered_providers=invocation.discovered_inputs.providers
+        ),
     )

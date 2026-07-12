@@ -73,8 +73,16 @@ def execute_audit_plan(
         connection_config=invocation.connection_config,
         adapter=invocation.adapter,
         on_connection_start=preparation.execution_connection_progress.on_connection_start,
-        on_connection_complete=preparation.execution_connection_progress.on_connection_complete,
-        on_connection_error=preparation.execution_connection_progress.on_connection_error,
+        on_connection_complete=lambda connection_count, elapsed_seconds: (
+            preparation.execution_connection_progress.on_connection_complete(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
+        on_connection_error=lambda connection_count, elapsed_seconds: (
+            preparation.execution_connection_progress.on_connection_error(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
         on_audit_start=lambda entry: preparation.progress.on_item_start(
             group_name=entry.attached_target_name or "(unattached)",
             item_name=_audit_display_name_from_entry(entry),

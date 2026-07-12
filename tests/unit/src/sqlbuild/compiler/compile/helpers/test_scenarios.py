@@ -305,7 +305,7 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
     )
 
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         effective_vars=test_case.effective_vars,
         macro_context=MacroContext(
             adapter_name="duckdb", sql_analysis_enabled=True, target_name=None
@@ -378,7 +378,7 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         build_scenario_inputs(
-            discovered_inputs,
+            discovered_inputs=discovered_inputs,
             effective_vars={},
             macro_context=MacroContext(
                 adapter_name="duckdb", sql_analysis_enabled=True, target_name=None

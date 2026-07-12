@@ -20,7 +20,7 @@ def qualified_name(*, schema: str, name: str) -> str:
 def fetch_rows(
     *, adapter: SqlServerAdapter, connection: Any, sql: str
 ) -> tuple[tuple[object, ...], ...]:
-    cursor: Any = adapter.execute(connection, sql=sql)
+    cursor: Any = adapter.execute(connection=connection, sql=sql)
     return tuple(tuple(row) for row in cursor.fetchall())
 
 

@@ -86,7 +86,7 @@ def build_node_source_watermark_payload(
             and required_identity not in unknown_by_identity
         ):
             unknown_by_identity[required_identity] = _unknown_entry(
-                required_identity,
+                identity=required_identity,
                 reason=_UNKNOWN_MISSING_UPSTREAM_WATERMARK,
             )
 
@@ -197,30 +197,32 @@ def _merged_known_entry(
 ) -> SourceWatermarkEntry | UnknownSourceWatermarkEntry:
     if existing_entry is None:
         return entry
-    merged_entry: SourceWatermarkEntry | None = _merge_source_entries(existing_entry, right=entry)
+    merged_entry: SourceWatermarkEntry | None = _merge_source_entries(
+        left=existing_entry, right=entry
+    )
     if merged_entry is None:
         return _unknown_entry(
-            identity,
+            identity=identity,
             reason=_UNKNOWN_MIXED_NON_ORDERABLE_WATERMARK,
         )
     return merged_entry
 
 
 def _merge_source_entries(
-    left: SourceWatermarkEntry,
     *,
+    left: SourceWatermarkEntry,
     right: SourceWatermarkEntry,
 ) -> SourceWatermarkEntry | None:
     if left.data_version_hash == right.data_version_hash:
-        return _older_observation(left, right=right)
+        return _older_observation(left=left, right=right)
     left_value_kind: SourceFreshnessValueKind | None = _value_kind(left.value_kind)
     right_value_kind: SourceFreshnessValueKind | None = _value_kind(right.value_kind)
     if left_value_kind != right_value_kind:
         return None
     if left_value_kind is SourceFreshnessValueKind.TIMESTAMP:
-        return _older_timestamp_version(left, right=right)
+        return _older_timestamp_version(left=left, right=right)
     if left_value_kind is SourceFreshnessValueKind.INTEGER:
-        return _older_integer_version(left, right=right)
+        return _older_integer_version(left=left, right=right)
     return None
 
 
@@ -232,8 +234,8 @@ def _value_kind(value: str) -> SourceFreshnessValueKind | None:
 
 
 def _older_timestamp_version(
-    left: SourceWatermarkEntry,
     *,
+    left: SourceWatermarkEntry,
     right: SourceWatermarkEntry,
 ) -> SourceWatermarkEntry | None:
     if left.data_version is None or right.data_version is None:
@@ -244,8 +246,8 @@ def _older_timestamp_version(
 
 
 def _older_integer_version(
-    left: SourceWatermarkEntry,
     *,
+    left: SourceWatermarkEntry,
     right: SourceWatermarkEntry,
 ) -> SourceWatermarkEntry | None:
     if left.data_version is None or right.data_version is None:
@@ -254,8 +256,8 @@ def _older_integer_version(
 
 
 def _older_observation(
-    left: SourceWatermarkEntry,
     *,
+    left: SourceWatermarkEntry,
     right: SourceWatermarkEntry,
 ) -> SourceWatermarkEntry:
     return left if left.observed_at <= right.observed_at else right
@@ -295,8 +297,8 @@ def _identity_from_unknown_entry(entry: UnknownSourceWatermarkEntry) -> SourceFr
 
 
 def _unknown_entry(
-    identity: SourceFreshnessIdentity,
     *,
+    identity: SourceFreshnessIdentity,
     reason: str,
 ) -> UnknownSourceWatermarkEntry:
     return UnknownSourceWatermarkEntry(

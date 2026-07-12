@@ -54,14 +54,14 @@ def read_previous_function_query_sqls(
     function_refs: dict[str, str] = {
         ref.function_name: ref.version_hash
         for ref in backend.get_virtual_environment_function_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
         )
     }
     function_versions: dict[str, FunctionVersionRecord | None] = {
         function.name: backend.get_function_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             function_name=function.name,
             version_hash=function_refs[function.name],

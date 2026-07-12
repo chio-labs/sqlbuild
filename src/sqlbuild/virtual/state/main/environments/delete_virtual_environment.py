@@ -24,7 +24,7 @@ def delete_virtual_environment(
     connection: Any = backend.connect(config.connection)
     try:
         backend.delete_virtual_environment(
-            connection,
+            connection=connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
         )

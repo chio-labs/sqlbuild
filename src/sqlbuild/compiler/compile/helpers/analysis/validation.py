@@ -56,9 +56,11 @@ def validate_sql_syntax(
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders=placeholders)
+        cleaned_sql = substitute_placeholder_defaults(
+            query_sql=cleaned_sql, placeholders=placeholders
+        )
 
-    error_message: str | None = _validate_sql_with_polyglot(cleaned_sql, dialect=dialect)
+    error_message: str | None = _validate_sql_with_polyglot(sql=cleaned_sql, dialect=dialect)
     if error_message is None:
         return
     raise CompileInputError(
@@ -71,7 +73,7 @@ def validate_sql_syntax(
     ) from None
 
 
-def _validate_sql_with_polyglot(sql: str, *, dialect: str | None) -> str | None:
+def _validate_sql_with_polyglot(*, sql: str, dialect: str | None) -> str | None:
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
         return "Polyglot SQL is not installed"
@@ -164,7 +166,9 @@ def validate_source_expression_syntax(
     from sqlbuild.compiler.shared.helpers.sources import render_source_relation
     from sqlbuild.spec.models.source import SourceEntry
 
-    rendered: str = render_source_relation(SourceEntry(name=source_name, expression=expression))
+    rendered: str = render_source_relation(
+        entry=SourceEntry(name=source_name, expression=expression)
+    )
     _validate_sql_syntax_with_message(
         query_sql=f"SELECT * FROM {rendered}",
         error_prefix=f"SQL syntax error in source expression '{source_name}' ({file_path})",
@@ -182,7 +186,9 @@ def _validate_sql_syntax_with_message(
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(cleaned_sql, placeholders=placeholders)
+        cleaned_sql = substitute_placeholder_defaults(
+            query_sql=cleaned_sql, placeholders=placeholders
+        )
 
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:

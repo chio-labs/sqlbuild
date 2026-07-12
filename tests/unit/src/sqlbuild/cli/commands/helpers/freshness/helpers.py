@@ -28,12 +28,13 @@ class FreshnessRecordingAdapter:
 
     def get_table_freshness_metadata(
         self,
-        _connection: object,
         *,
+        connection: object,
         database: str | None,
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
+        del connection
         self.metadata_requests.append((database, schema, name))
         return TableFreshnessMetadata(
             data_version=datetime(2026, 1, 2, 3, 4, 5),
@@ -43,13 +44,13 @@ class FreshnessRecordingAdapter:
 
     def get_tables_freshness_metadata(
         self,
-        connection: object,
         *,
+        connection: object,
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         return {
             request: self.get_table_freshness_metadata(
-                connection,
+                connection=connection,
                 database=request.database,
                 schema=request.schema,
                 name=request.name,
@@ -57,8 +58,8 @@ class FreshnessRecordingAdapter:
             for request in requests
         }
 
-    def query(self, _connection: object, sql: str, *, limit: int | None = None) -> QueryResult:
-        del limit
+    def query(self, *, connection: object, sql: str, limit: int | None = None) -> QueryResult:
+        del connection, limit
         self.queries.append(sql)
         if "raw_error" in sql:
             return QueryResult(columns=("left", "right"), rows=((1, 2),))

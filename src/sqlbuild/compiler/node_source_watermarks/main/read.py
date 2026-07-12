@@ -44,7 +44,7 @@ def read_latest_node_source_watermarks(
     )
     try:
         result: Any = execute(
-            connection,
+            connection=connection,
             sql=render_read_latest_sql(database=database, schema=schema),
         )
     except Exception as error:
@@ -56,7 +56,7 @@ def read_latest_node_source_watermarks(
     records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord] = {}
     row: tuple[Any, ...]
     for row in rows:
-        record: NodeSourceWatermarkRecord = _row_to_record(row, qualified_name=qualified_name)
+        record: NodeSourceWatermarkRecord = _row_to_record(row=row, qualified_name=qualified_name)
         records[record.identity] = record
     return NodeSourceWatermarkSet(schema=schema, records=records)
 
@@ -77,7 +77,7 @@ def _qualified_table_name(
     return qualified_name
 
 
-def _row_to_record(row: tuple[Any, ...], *, qualified_name: str) -> NodeSourceWatermarkRecord:
+def _row_to_record(*, row: tuple[Any, ...], qualified_name: str) -> NodeSourceWatermarkRecord:
     raw_target_database: Any = row[2]
     raw_target_schema: Any = row[3]
     raw_target_name: Any = row[4]
@@ -95,6 +95,6 @@ def _row_to_record(row: tuple[Any, ...], *, qualified_name: str) -> NodeSourceWa
         target_name=str(raw_target_name) if raw_target_name is not None else None,
         run_id=str(row[5]),
         node_version_hash=str(row[6]),
-        payload=decode_watermark_payload(str(row[7]), qualified_name=qualified_name),
+        payload=decode_watermark_payload(value=str(row[7]), qualified_name=qualified_name),
         created_at=created_at,
     )

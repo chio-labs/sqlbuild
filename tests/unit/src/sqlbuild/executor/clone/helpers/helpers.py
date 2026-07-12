@@ -63,17 +63,19 @@ class FakeCloneAdapter(BaseAdapter):
         del connection, database, names
         if schemas is None:
             return ()
-        return tuple(
-            RelationInfo(
-                database=None,
-                schema=schema,
-                name=origin_name,
-                relation_type="base table",
-                is_transient=self._origin_is_transient,
-            )
-            for schema in schemas
-            for origin_name in self._origin_names
-        )
+        relations: list[RelationInfo] = []
+        for schema in schemas:
+            for origin_name in self._origin_names:
+                relations.append(
+                    RelationInfo(
+                        database=None,
+                        schema=schema,
+                        name=origin_name,
+                        relation_type="base table",
+                        is_transient=self._origin_is_transient,
+                    )
+                )
+        return tuple(relations)
 
     def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
         exists_clause: str = " IF EXISTS" if if_exists else ""

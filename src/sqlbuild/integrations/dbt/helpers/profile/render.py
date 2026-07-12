@@ -36,7 +36,7 @@ def render_selected_dbt_profile_output(
     """Render the selected dbt profile output using a controlled Jinja context."""
 
     rendered: object = _render_value(
-        selected.output,
+        value=selected.output,
         field_path=selected.target_name,
         target=_TargetContext(name=selected.target_name),
         cli_vars={} if cli_vars is None else cli_vars,
@@ -55,18 +55,18 @@ def render_selected_dbt_profile_output(
 
 
 def _render_value(
-    value: object,
     *,
+    value: object,
     field_path: str,
     target: _TargetContext,
     cli_vars: Mapping[str, object],
 ) -> object:
     if isinstance(value, str):
-        return _render_string(value, field_path=field_path, target=target, cli_vars=cli_vars)
+        return _render_string(value=value, field_path=field_path, target=target, cli_vars=cli_vars)
     if isinstance(value, list):
         return [
             _render_value(
-                item,
+                value=item,
                 field_path=f"{field_path}[{index}]",
                 target=target,
                 cli_vars=cli_vars,
@@ -81,7 +81,7 @@ def _render_value(
             if not isinstance(key, str):
                 raise DbtProfileError(f"dbt profile field '{field_path}' contains a non-string key")
             rendered_dict[key] = _render_value(
-                item_value,
+                value=item_value,
                 field_path=f"{field_path}.{key}",
                 target=target,
                 cli_vars=cli_vars,
@@ -91,8 +91,8 @@ def _render_value(
 
 
 def _render_string(
-    value: str,
     *,
+    value: str,
     field_path: str,
     target: _TargetContext,
     cli_vars: Mapping[str, object],

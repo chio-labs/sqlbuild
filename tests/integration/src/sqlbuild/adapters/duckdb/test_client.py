@@ -82,7 +82,7 @@ def test_given_expression_rule_when_querying_then_duckdb_matches_nullability_exp
     assert rule is not None
 
     result: QueryResult = adapter.query(
-        connection,
+        connection=connection,
         sql=f"SELECT {test_case.sql_expression} IS NULL AS is_null",
         limit=None,
     )
@@ -166,7 +166,9 @@ def test_given_sql_when_querying_then_returns_normalized_query_result(
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=test_case.limit)
+    result: QueryResult = adapter.query(
+        connection=connection, sql=test_case.sql, limit=test_case.limit
+    )
 
     assert result == test_case.expected_result
 
@@ -203,7 +205,7 @@ def test_given_relation_state_when_checking_exists_then_returns_expected(
         connection.execute(statement)
 
     result: bool = adapter.relation_exists(
-        connection,
+        connection=connection,
         database=test_case.database,
         schema=test_case.schema,
         name=test_case.name,
@@ -268,7 +270,7 @@ def test_given_schema_with_relations_when_listing_then_returns_expected_names(
         connection.execute(statement)
 
     relations: tuple[Any, ...] = adapter.list_relations(
-        connection,
+        connection=connection,
         database=test_case.database,
         schemas=test_case.schemas,
         names=test_case.names,
@@ -306,7 +308,7 @@ def test_given_table_when_getting_columns_then_returns_typed_column_info(
         connection.execute(statement)
 
     columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-        connection,
+        connection=connection,
         database=test_case.database,
         schema=test_case.schema,
         name=test_case.name,
@@ -358,7 +360,7 @@ def test_given_schema_with_tables_when_getting_all_columns_then_returns_grouped(
         connection.execute(statement)
 
     all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-        connection,
+        connection=connection,
         database=test_case.database,
         schemas=test_case.schemas,
         names=test_case.names,
@@ -388,13 +390,13 @@ def test_given_sql_when_creating_table_as_then_table_is_writable(
     connection: Any,
 ) -> None:
     adapter.create_table_as(
-        connection,
+        connection=connection,
         destination="result",
         sql="SELECT * FROM (VALUES (1), (2), (3)) AS t(id)",
         statement_recorder=StatementRecorder(),
     )
     connection.execute("INSERT INTO result VALUES (4)")
-    count: int = adapter.count_rows(connection, relation="result")
+    count: int = adapter.count_rows(connection=connection, relation="result")
 
     assert count == test_case.expected_row_count
 
@@ -428,7 +430,7 @@ def test_given_statement_recorder_when_creating_table_then_records_expected_sql(
     recorder: StatementRecorder = StatementRecorder()
 
     adapter.create_table_as(
-        connection,
+        connection=connection,
         destination=test_case.target,
         sql=test_case.sql,
         statement_recorder=recorder,
@@ -474,7 +476,7 @@ def test_given_statement_recorder_when_delete_inserting_then_records_expected_sq
     recorder: StatementRecorder = StatementRecorder()
 
     adapter.delete_insert(
-        connection,
+        connection=connection,
         destination=test_case.target,
         sql=test_case.sql,
         unique_key=test_case.unique_key or "id",
@@ -508,12 +510,12 @@ def test_given_source_table_when_creating_view_then_view_reflects_source(
     for statement in test_case.setup_sql:
         connection.execute(statement)
     adapter.create_view_as(
-        connection,
+        connection=connection,
         destination="result_view",
         sql="SELECT id FROM source",
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection, relation="result_view")
+    count: int = adapter.count_rows(connection=connection, relation="result_view")
 
     assert count == test_case.expected_row_count
 
@@ -538,10 +540,12 @@ def test_given_existing_table_when_dropping_then_table_no_longer_exists(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.drop(connection, destination=test_case.target, statement_recorder=StatementRecorder())
+    adapter.drop(
+        connection=connection, destination=test_case.target, statement_recorder=StatementRecorder()
+    )
 
     result: bool = adapter.relation_exists(
-        connection, database=None, schema=None, name=test_case.target
+        connection=connection, database=None, schema=None, name=test_case.target
     )
     assert result == test_case.expected_exists
 
@@ -572,17 +576,17 @@ def test_given_existing_table_when_renaming_then_new_name_exists(
     for statement in test_case.setup_sql:
         connection.execute(statement)
     adapter.rename(
-        connection,
+        connection=connection,
         origin=test_case.source,
         destination=test_case.target,
         statement_recorder=StatementRecorder(),
     )
 
     source_exists: bool = adapter.relation_exists(
-        connection, database=None, schema=None, name=test_case.source
+        connection=connection, database=None, schema=None, name=test_case.source
     )
     target_exists: bool = adapter.relation_exists(
-        connection, database=None, schema=None, name=test_case.target
+        connection=connection, database=None, schema=None, name=test_case.target
     )
     assert source_exists == test_case.expected_source_exists
     assert target_exists == test_case.expected_target_exists
@@ -616,7 +620,7 @@ def test_given_same_schema_table_when_moving_without_copy_then_native_rename_is_
         connection.execute(statement)
 
     adapter.move_or_copy_relation(
-        connection,
+        connection=connection,
         origin=test_case.source,
         destination=test_case.target,
         remove_origin=True,
@@ -625,10 +629,10 @@ def test_given_same_schema_table_when_moving_without_copy_then_native_rename_is_
     )
 
     source_exists: bool = adapter.relation_exists(
-        connection, database=None, schema="move_native", name="original"
+        connection=connection, database=None, schema="move_native", name="original"
     )
     target_exists: bool = adapter.relation_exists(
-        connection, database=None, schema="move_native", name="renamed"
+        connection=connection, database=None, schema="move_native", name="renamed"
     )
     assert source_exists == test_case.expected_source_exists
     assert target_exists == test_case.expected_target_exists
@@ -659,7 +663,12 @@ def test_given_two_tables_when_swapping_then_contents_are_exchanged(
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    adapter.swap(connection, left="left_t", right="right_t", statement_recorder=StatementRecorder())
+    adapter.swap(
+        connection=connection,
+        left="left_t",
+        right="right_t",
+        statement_recorder=StatementRecorder(),
+    )
     left_val: Any = connection.execute("SELECT val FROM left_t").fetchone()
     right_val: Any = connection.execute("SELECT val FROM right_t").fetchone()
 
@@ -690,12 +699,12 @@ def test_given_source_table_when_cloning_then_target_has_same_rows(
     for statement in test_case.setup_sql:
         connection.execute(statement)
     adapter.clone(
-        connection,
+        connection=connection,
         origin="source_t",
         destination="cloned_t",
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection, relation="cloned_t")
+    count: int = adapter.count_rows(connection=connection, relation="cloned_t")
 
     assert count == test_case.expected_row_count
 
@@ -723,12 +732,12 @@ def test_given_existing_table_when_appending_then_row_count_increases(
     for statement in test_case.setup_sql:
         connection.execute(statement)
     adapter.append(
-        connection,
+        connection=connection,
         destination="append_t",
         sql="SELECT * FROM (VALUES (2), (3)) AS t(id)",
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection, relation="append_t")
+    count: int = adapter.count_rows(connection=connection, relation="append_t")
 
     assert count == test_case.expected_row_count
 
@@ -770,13 +779,13 @@ def test_given_target_when_delete_inserting_then_matching_rows_replaced(
     for statement in test_case.setup_sql:
         connection.execute(statement)
     adapter.delete_insert(
-        connection,
+        connection=connection,
         destination="di_target",
         sql=test_case.sql,
         unique_key=test_case.unique_key,
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection, relation="di_target")
+    count: int = adapter.count_rows(connection=connection, relation="di_target")
     updated_val: Any = connection.execute("SELECT val FROM di_target WHERE id = 1").fetchone()
 
     assert count == test_case.expected_row_count
@@ -820,13 +829,13 @@ def test_given_target_and_source_when_merging_then_upserts_correctly(
     for statement in test_case.setup_sql:
         connection.execute(statement)
     adapter.merge(
-        connection,
+        connection=connection,
         destination="merge_target",
         sql=test_case.source_sql,
         unique_key=test_case.unique_key,
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection, relation="merge_target")
+    count: int = adapter.count_rows(connection=connection, relation="merge_target")
     rows: list[tuple[Any, ...]] = connection.execute(
         "SELECT id, name FROM merge_target ORDER BY id, name"
     ).fetchall()
@@ -883,7 +892,7 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
     csv_path.write_text(test_case.csv_content, encoding="utf-8")
     first_recorder: StatementRecorder = StatementRecorder()
     adapter.load_seed(
-        connection,
+        connection=connection,
         destination="seed_table",
         file_path=csv_path,
         columns=test_case.columns,
@@ -892,7 +901,7 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
         statement_recorder=first_recorder,
     )
     adapter.load_seed(
-        connection,
+        connection=connection,
         destination="seed_table",
         file_path=csv_path,
         columns=test_case.columns,
@@ -901,7 +910,7 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
         infer_types=test_case.infer_types,
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection, relation="seed_table")
+    count: int = adapter.count_rows(connection=connection, relation="seed_table")
     first_row: tuple[Any, ...] = connection.execute(
         "SELECT * FROM seed_table ORDER BY id LIMIT 1"
     ).fetchone()
@@ -966,7 +975,9 @@ def test_given_two_tables_when_diffing_schema_then_returns_expected_differences(
     connection.execute(test_case.left_sql)
     connection.execute(test_case.right_sql)
 
-    result: SchemaDiffResult = adapter.diff_schema(connection, left="left_t", right="right_t")
+    result: SchemaDiffResult = adapter.diff_schema(
+        connection=connection, left="left_t", right="right_t"
+    )
 
     assert result == test_case.expected_result
 
@@ -1178,7 +1189,7 @@ def test_given_two_tables_when_diffing_rows_then_returns_expected_counts(
     connection.execute(test_case.right_sql)
 
     result: RowDiffResult = adapter.diff_rows(
-        connection,
+        connection=connection,
         left="left_t",
         right="right_t",
         unique_key=test_case.unique_key,
@@ -1271,7 +1282,7 @@ def test_given_invalid_tolerance_when_diffing_rows_then_raises_clear_error(
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         adapter.diff_rows(
-            connection,
+            connection=connection,
             left="left_t",
             right="right_t",
             unique_key=test_case.unique_key,
@@ -1316,7 +1327,7 @@ def test_given_table_when_counting_rows_then_returns_expected_count(
         connection.execute(statement)
 
     count: int = adapter.count_rows(
-        connection,
+        connection=connection,
         relation=test_case.relation,
         cursor_column=test_case.cursor_column,
         start_cursor=test_case.start_cursor,
@@ -1355,7 +1366,7 @@ def test_given_failing_insert_when_delete_inserting_then_original_rows_preserved
 
     with pytest.raises(duckdb.ConstraintException):
         adapter.delete_insert(
-            connection,
+            connection=connection,
             destination=test_case.target,
             sql=test_case.source_sql,
             unique_key=test_case.unique_key,
@@ -1399,7 +1410,7 @@ def test_given_failing_insert_when_delete_insert_cursor_then_original_rows_prese
 
     with pytest.raises(duckdb.ConstraintException):
         adapter.delete_insert_cursor(
-            connection,
+            connection=connection,
             destination=test_case.target,
             sql=test_case.source_sql,
             cursor_column="cursor_ts",
@@ -1443,7 +1454,7 @@ def test_given_missing_right_table_when_swapping_then_left_table_preserved(
 
     with pytest.raises(duckdb.CatalogException):
         adapter.swap(
-            connection,
+            connection=connection,
             left="swap_left",
             right="swap_nonexistent",
             statement_recorder=StatementRecorder(),

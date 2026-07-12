@@ -82,23 +82,23 @@ def validate_incremental_config(
 ) -> None:
     """Validate incremental model config rules after layering."""
 
-    materialized: str | None = _str(config, key="materialized")
+    materialized: str | None = _str(config=config, key="materialized")
     if materialized != MaterializationType.INCREMENTAL:
         return
 
-    strategy: str | None = _str(config, key="incremental_strategy")
-    cursor: str | None = _str(config, key="cursor")
-    cursor_type: str | None = _str(config, key="cursor_type")
+    strategy: str | None = _str(config=config, key="incremental_strategy")
+    cursor: str | None = _str(config=config, key="cursor")
+    cursor_type: str | None = _str(config=config, key="cursor_type")
     cursor_start: object | None = config.values.get("cursor_start")
     append_cursor_inclusive: object | None = config.values.get("append_cursor_inclusive")
     unique_key: object | None = config.values.get("unique_key")
     has_unique_key: bool = unique_key is not None and unique_key != () and unique_key != []
-    lookback: str | None = _str(config, key="lookback")
-    incremental_mode: str | None = _str(config, key="incremental_mode")
+    lookback: str | None = _str(config=config, key="lookback")
+    incremental_mode: str | None = _str(config=config, key="incremental_mode")
     batch_size: object | None = config.values.get("batch_size")
     batch_concurrency: object | None = config.values.get("batch_concurrency")
     cursor_inputs: object | None = config.values.get("cursor_inputs")
-    cursor_grain: str | None = _str(config, key="cursor_grain")
+    cursor_grain: str | None = _str(config=config, key="cursor_grain")
     replay_on_change: object | None = config.values.get("replay_on_change")
     if replay_on_change is not None and not isinstance(replay_on_change, str):
         raise CompileInputError(f"model '{model_name}': replay_on_change must be a string")
@@ -262,7 +262,7 @@ def validate_non_incremental_config(
 ) -> None:
     """Reject incremental-only config keys on non-incremental models."""
 
-    materialized: str | None = _str(config, key="materialized")
+    materialized: str | None = _str(config=config, key="materialized")
     if materialized == MaterializationType.INCREMENTAL:
         return
 
@@ -281,22 +281,22 @@ def validate_snapshot_config(
 ) -> None:
     """Validate snapshot model config combinations after layering."""
 
-    materialized: str | None = _str(config, key="materialized")
+    materialized: str | None = _str(config=config, key="materialized")
     if materialized != MaterializationType.SNAPSHOT:
         return
 
-    strategy: str | None = _str(config, key="snapshot_strategy")
-    updated_at: str | None = _str(config, key="updated_at")
-    observed_at: str | None = _str(config, key="observed_at")
-    historical_input: str | None = _str(config, key="historical_input")
-    initial_valid_from: str | None = _str(config, key="initial_valid_from")
-    snapshot_full_refresh: str | None = _str(config, key="snapshot_full_refresh")
-    snapshot_schema_change: str | None = _str(config, key="snapshot_schema_change")
+    strategy: str | None = _str(config=config, key="snapshot_strategy")
+    updated_at: str | None = _str(config=config, key="updated_at")
+    observed_at: str | None = _str(config=config, key="observed_at")
+    historical_input: str | None = _str(config=config, key="historical_input")
+    initial_valid_from: str | None = _str(config=config, key="initial_valid_from")
+    snapshot_full_refresh: str | None = _str(config=config, key="snapshot_full_refresh")
+    snapshot_schema_change: str | None = _str(config=config, key="snapshot_schema_change")
     unique_key: object | None = config.values.get("unique_key")
     check_columns: object | None = config.values.get("check_columns")
     invalidate_hard_deletes: object | None = config.values.get("invalidate_hard_deletes")
-    valid_from_column: str | None = _str(config, key="valid_from_column")
-    valid_to_column: str | None = _str(config, key="valid_to_column")
+    valid_from_column: str | None = _str(config=config, key="valid_from_column")
+    valid_to_column: str | None = _str(config=config, key="valid_to_column")
 
     key: str
     for key in _SNAPSHOT_DISALLOWED_KEYS:
@@ -451,7 +451,7 @@ def validate_custom_materialization_config(
 ) -> None:
     """Validate config for custom materialization models."""
 
-    materialized: str | None = _str(config, key="materialized")
+    materialized: str | None = _str(config=config, key="materialized")
     if materialized is None or materialized in _BUILTIN_MATERIALIZATION_TYPES:
         return
 
@@ -480,7 +480,7 @@ def validate_placeholder_config(
 
     import re
 
-    materialized: str | None = _str(config, key="materialized")
+    materialized: str | None = _str(config=config, key="materialized")
     is_custom: bool = materialized is not None and materialized in custom_materialization_names
     placeholders_config: object | None = config.values.get("placeholders")
     sql_placeholders: frozenset[str] = frozenset(re.findall(r"@@@(\w+)", query_sql))
@@ -517,7 +517,7 @@ def validate_placeholder_config(
         )
 
 
-def _str(config: CompileModelConfig, *, key: str) -> str | None:
+def _str(*, config: CompileModelConfig, key: str) -> str | None:
     """Extract a string value from config."""
 
     raw: object | None = config.values.get(key)

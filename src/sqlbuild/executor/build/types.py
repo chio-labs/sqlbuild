@@ -13,7 +13,7 @@ from sqlbuild.shared.types import ExecutionResourceKind as ExecutionResourceKind
 
 
 class BeforeModelMaterializeCallback(Protocol):
-    def __call__(self, entry: ModelPlanEntry, *, connection: Any) -> None: ...
+    def __call__(self, *, entry: ModelPlanEntry, connection: Any) -> None: ...
 
 
 class BuildStatus(StrEnum):

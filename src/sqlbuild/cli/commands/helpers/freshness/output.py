@@ -33,12 +33,12 @@ def format_freshness_text(result: FreshnessCommandResult) -> str:
     tolerated: tuple[FreshnessSourceResult, ...] = tuple(
         source for source in result.sources if source.status == FreshnessSourceStatus.TOLERATED
     )
-    _append_group(lines, title="Observed", sources=observed)
-    _append_group(lines, title="Changed", sources=changed)
-    _append_group(lines, title="Unchanged", sources=unchanged)
-    _append_group(lines, title="Tolerated", sources=tolerated)
-    _append_group(lines, title="Unknown", sources=unknown)
-    _append_group(lines, title="Errors", sources=errors)
+    lines = _append_group(lines=lines, title="Observed", sources=observed)
+    lines = _append_group(lines=lines, title="Changed", sources=changed)
+    lines = _append_group(lines=lines, title="Unchanged", sources=unchanged)
+    lines = _append_group(lines=lines, title="Tolerated", sources=tolerated)
+    lines = _append_group(lines=lines, title="Unknown", sources=unknown)
+    lines = _append_group(lines=lines, title="Errors", sources=errors)
     lines.append(
         f"Summary: observed={result.observed_count} "
         f"changed={result.changed_count} unchanged={result.unchanged_count} "
@@ -77,15 +77,16 @@ def format_freshness_json(result: FreshnessCommandResult) -> str:
 
 
 def _append_group(
-    lines: list[str], *, title: str, sources: tuple[FreshnessSourceResult, ...]
-) -> None:
+    *, lines: list[str], title: str, sources: tuple[FreshnessSourceResult, ...]
+) -> list[str]:
     if not sources:
-        return
+        return lines
     lines.append(f"{title} ({len(sources)})")
     source: FreshnessSourceResult
     for source in sources:
         lines.append("  " + _format_source_line(source))
     lines.append("")
+    return lines
 
 
 def _format_source_line(source: FreshnessSourceResult) -> str:

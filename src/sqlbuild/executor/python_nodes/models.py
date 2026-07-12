@@ -190,11 +190,11 @@ class BasePythonNodeContext:
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql=sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql=sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
@@ -202,8 +202,8 @@ class BasePythonNodeContext:
 
     def qualify_name(
         self,
-        name: str,
         *,
+        name: str,
         database: str | None = None,
         schema: str | None = None,
     ) -> str:
@@ -232,8 +232,8 @@ class BasePythonNodeContext:
 
     def skip(
         self,
-        reason: str,
         *,
+        reason: str,
         mode: SkipMode | str = SkipMode.SOFT,
         metadata: dict[str, object] | None = None,
     ) -> PythonNodeSkipResult:
@@ -247,8 +247,8 @@ class BasePythonNodeContext:
 
     def result_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         run_id: str | None = None,
         default: object = MISSING_DEFAULT,
     ) -> NodeResultEnvelope | object:
@@ -268,8 +268,8 @@ class BasePythonNodeContext:
 
     def results_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         limit: int,
     ) -> tuple[NodeResultEnvelope, ...]:
         """Return persisted successful upstream result history, newest first."""
@@ -308,8 +308,8 @@ class TaskContext(BasePythonNodeContext):
 
     def result(
         self,
-        payload: object | None = None,
         *,
+        payload: object | None = None,
         metadata: dict[str, object] | None = None,
     ) -> PythonNodeResult:
         """Return a successful task result."""
@@ -326,8 +326,8 @@ class AssetContext(BasePythonNodeContext):
 
     def result(
         self,
-        payload: object | None = None,
         *,
+        payload: object | None = None,
         metadata: dict[str, object] | None = None,
         materialized: bool | None = None,
     ) -> PythonNodeResult:
@@ -346,8 +346,8 @@ class CheckContext(BasePythonNodeContext):
 
     def pass_(
         self,
-        message: str | None = None,
         *,
+        message: str | None = None,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a passing check result."""
@@ -360,8 +360,8 @@ class CheckContext(BasePythonNodeContext):
 
     def fail(
         self,
-        message: str,
         *,
+        message: str,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a failing check result using the check's configured severity."""
@@ -374,8 +374,8 @@ class CheckContext(BasePythonNodeContext):
 
     def warn(
         self,
-        message: str,
         *,
+        message: str,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a warning check result regardless of decorator severity."""

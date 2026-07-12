@@ -37,15 +37,16 @@ def dbt_graph_node_upstream_deps(
 ) -> dict[GraphNodeKey, tuple[GraphNodeKey, ...]]:
     """Project dbt-owned combined graph edges to neutral graph node edges."""
 
-    return {
-        dbt_graph_node_key(key.name): tuple(
-            dbt_graph_node_key(upstream_key.name)
-            for upstream_key in upstream_keys
-            if upstream_key.owner == DbtCombinedGraphOwner.DBT
-        )
-        for key, upstream_keys in graph.upstream_deps.items()
-        if key.owner == DbtCombinedGraphOwner.DBT
-    }
+    projected: dict[GraphNodeKey, tuple[GraphNodeKey, ...]] = {}
+    for key, upstream_keys in graph.upstream_deps.items():
+        if key.owner != DbtCombinedGraphOwner.DBT:
+            continue
+        dbt_upstreams: list[GraphNodeKey] = []
+        for upstream_key in upstream_keys:
+            if upstream_key.owner == DbtCombinedGraphOwner.DBT:
+                dbt_upstreams.append(dbt_graph_node_key(upstream_key.name))
+        projected[dbt_graph_node_key(key.name)] = tuple(dbt_upstreams)
+    return projected
 
 
 def dbt_selection_staleness_upstream_deps(

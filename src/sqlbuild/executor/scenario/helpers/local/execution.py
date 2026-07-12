@@ -159,7 +159,7 @@ def execute_local_scenario_load_only_run(
             local_status=ScenarioLocalRunStatus.ERROR,
             retained=True,
             local_duckdb_path=duckdb_path,
-            error_code=error_code(exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
+            error_code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
             error_help=error_help(exc),
             error_message=error_message(exc),
         )

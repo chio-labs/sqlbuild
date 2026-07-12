@@ -287,27 +287,29 @@ class DatabricksAdapter(BaseAdapter):
 
     def get_table_freshness_metadata(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         name: str,
     ) -> TableFreshnessMetadata:
         if database is None or schema is None:
             raise AdapterUserError(
-                "Databricks table freshness metadata requires catalog and schema"
+                message="Databricks table freshness metadata requires catalog and schema"
             )
         request: TableFreshnessRequest = TableFreshnessRequest(
             database=database,
             schema=schema,
             name=name,
         )
-        return self.get_tables_freshness_metadata(connection, requests=(request,))[request]
+        return self.get_tables_freshness_metadata(connection=connection, requests=(request,))[
+            request
+        ]
 
     def get_tables_freshness_metadata(
         self,
-        connection: Any,
         *,
+        connection: Any,
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         if not requests:
@@ -316,7 +318,7 @@ class DatabricksAdapter(BaseAdapter):
         for request in requests:
             if request.database is None or request.schema is None:
                 raise AdapterUserError(
-                    "Databricks table freshness metadata requires catalog and schema"
+                    message="Databricks table freshness metadata requires catalog and schema"
                 )
         try:
             return self._get_delta_history_freshness_metadata(
@@ -376,12 +378,12 @@ class DatabricksAdapter(BaseAdapter):
             table_type: str = str(row[3])
             if self._normalize_relation_type(table_type) != "table":
                 raise AdapterUserError(
-                    "Databricks table freshness metadata only supports Delta tables; "
+                    message="Databricks table freshness metadata only supports Delta tables; "
                     f"found {table_type}"
                 )
             if row[4] is None:
                 raise AdapterUserError(
-                    "Databricks table freshness metadata is missing LAST_ALTERED "
+                    message="Databricks table freshness metadata is missing LAST_ALTERED "
                     f"for {matched_request.name}"
                 )
             results[matched_request] = TableFreshnessMetadata(
@@ -395,7 +397,7 @@ class DatabricksAdapter(BaseAdapter):
         if missing_requests:
             missing_names: str = ", ".join(request.name for request in missing_requests)
             raise AdapterUserError(
-                f"Databricks table freshness metadata not found for {missing_names}"
+                message=f"Databricks table freshness metadata not found for {missing_names}"
             )
         return results
 
@@ -415,7 +417,7 @@ class DatabricksAdapter(BaseAdapter):
             )
             if target is None:
                 raise AdapterUserError(
-                    "Databricks table freshness metadata requires catalog and schema"
+                    message="Databricks table freshness metadata requires catalog and schema"
                 )
             selects.append(
                 "SELECT "
@@ -433,7 +435,7 @@ class DatabricksAdapter(BaseAdapter):
             rows: list[tuple[Any, ...]] = list(cursor.fetchall())
         except Exception as error:
             raise AdapterUserError(
-                "Databricks table freshness metadata requires Unity Catalog table metadata "
+                message="Databricks table freshness metadata requires Unity Catalog table metadata "
                 "or Delta history"
             ) from error
         finally:
@@ -453,7 +455,7 @@ class DatabricksAdapter(BaseAdapter):
                 continue
             if row[3] is None:
                 raise AdapterUserError(
-                    f"Databricks Delta history not found for {matched_request.name}"
+                    message=f"Databricks Delta history not found for {matched_request.name}"
                 )
             results[matched_request] = TableFreshnessMetadata(
                 data_version=row[3],
@@ -465,13 +467,15 @@ class DatabricksAdapter(BaseAdapter):
         ]
         if missing_requests:
             missing_names: str = ", ".join(request.name for request in missing_requests)
-            raise AdapterUserError(f"Databricks Delta history not found for {missing_names}")
+            raise AdapterUserError(
+                message=f"Databricks Delta history not found for {missing_names}"
+            )
         return results
 
     def _get_table_type(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str,
         schema: str,
         name: str,
@@ -489,7 +493,9 @@ class DatabricksAdapter(BaseAdapter):
             cursor.close()
         if row is None:
             raise AdapterUserError(
-                f"Databricks table freshness metadata not found for {database}.{schema}.{name}"
+                message=(
+                    f"Databricks table freshness metadata not found for {database}.{schema}.{name}"
+                )
             )
         return str(row[0])
 
@@ -513,8 +519,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def drop_view(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
@@ -525,12 +531,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def create_function(
         self,
-        connection: Any,
         *,
+        connection: Any,
         definition: FunctionDefinition,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -548,7 +554,7 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def render_current_timestamp(self) -> str:
         return "CURRENT_TIMESTAMP"
@@ -610,18 +616,18 @@ class DatabricksAdapter(BaseAdapter):
                 for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
-        values_sql: str = ", ".join(
-            "("
-            + ", ".join(
-                self.render_loader_value_literal(
-                    value=row.get(column_name),
-                    logical_type=inferred_types.get(column_name),
+        value_rows: list[str] = []
+        for row in rows:
+            row_values: list[str] = []
+            for column_name in column_names:
+                row_values.append(
+                    self.render_loader_value_literal(
+                        value=row.get(column_name),
+                        logical_type=inferred_types.get(column_name),
+                    )
                 )
-                for column_name in column_names
-            )
-            + ")"
-            for row in rows
-        )
+            value_rows.append("(" + ", ".join(row_values) + ")")
+        values_sql: str = ", ".join(value_rows)
         column_sql: str = ", ".join(
             self.render_identifier(column_name) for column_name in column_names
         )
@@ -1085,19 +1091,21 @@ class DatabricksAdapter(BaseAdapter):
         catalog: object | None = config.get("catalog")
         if not isinstance(server_hostname, str) or not server_hostname.strip():
             raise AdapterUserError(
-                "Databricks connection requires non-empty 'server_hostname'",
+                message="Databricks connection requires non-empty 'server_hostname'",
                 code="A201",
             )
         if not isinstance(http_path, str) or not http_path.strip():
             raise AdapterUserError(
-                "Databricks connection requires non-empty 'http_path'",
+                message="Databricks connection requires non-empty 'http_path'",
                 code="A202",
             )
         if not isinstance(token, str) or not token.strip():
-            raise AdapterUserError("Databricks connection requires non-empty 'token'", code="A203")
+            raise AdapterUserError(
+                message="Databricks connection requires non-empty 'token'", code="A203"
+            )
         if not isinstance(catalog, str) or not catalog.strip():
             raise AdapterUserError(
-                "Databricks connection requires non-empty 'catalog'",
+                message="Databricks connection requires non-empty 'catalog'",
                 code="A204",
             )
 
@@ -1105,7 +1113,7 @@ class DatabricksAdapter(BaseAdapter):
             from databricks import sql
         except ImportError as error:
             raise AdapterUserError(
-                "Databricks adapter requires optional dependency databricks-sql-connector. "
+                message="Databricks adapter requires optional dependency databricks-sql-connector. "
                 "Install with: sqlbuild[databricks]",
                 code="A205",
             ) from error
@@ -1123,16 +1131,16 @@ class DatabricksAdapter(BaseAdapter):
         )
         return connection
 
-    def execute(self, connection: _DatabricksConnection, *, sql: str) -> Any:
+    def execute(self, *, connection: _DatabricksConnection, sql: str) -> Any:
         """Execute a SQL statement against a Databricks connection."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.databricks"), sql=sql)
         return connection.execute(sql)
 
-    def query(self, connection: Any, *, sql: str, limit: int | None) -> QueryResult:
+    def query(self, *, connection: Any, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""
 
-        cursor: Any = self.execute(connection, sql=sql)
+        cursor: Any = self.execute(connection=connection, sql=sql)
         try:
             description: Any | None = getattr(cursor, "description", None)
             if description is None:
@@ -1174,8 +1182,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def relation_exists(
         self,
-        connection: _DatabricksConnection,
         *,
+        connection: _DatabricksConnection,
         database: str | None,
         schema: str | None,
         name: str,
@@ -1196,8 +1204,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def list_relations(
         self,
-        connection: _DatabricksConnection,
         *,
+        connection: _DatabricksConnection,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -1230,8 +1238,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def list_functions(
         self,
-        connection: _DatabricksConnection,
         *,
+        connection: _DatabricksConnection,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -1264,8 +1272,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def get_columns(
         self,
-        connection: _DatabricksConnection,
         *,
+        connection: _DatabricksConnection,
         database: str | None,
         schema: str | None,
         name: str,
@@ -1289,21 +1297,21 @@ class DatabricksAdapter(BaseAdapter):
 
     def get_all_columns(
         self,
-        connection: _DatabricksConnection,
         *,
+        connection: _DatabricksConnection,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         relations: tuple[RelationInfo, ...] = self.list_relations(
-            connection,
+            connection=connection,
             database=database,
             schemas=schemas,
             names=names,
         )
         return {
             relation.name: self.get_columns(
-                connection,
+                connection=connection,
                 database=database,
                 schema=relation.schema,
                 name=relation.name,
@@ -1440,8 +1448,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def ensure_schema(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         statement_recorder: StatementRecorder,
@@ -1452,7 +1460,7 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TABLE {destination} AS {sql}",)
@@ -1484,7 +1492,7 @@ class DatabricksAdapter(BaseAdapter):
     ) -> tuple[str, ...]:
         if language == FunctionLanguage.PYTHON:
             if return_columns:
-                raise AdapterUserError("Databricks table functions must use SQL language")
+                raise AdapterUserError(message="Databricks table functions must use SQL language")
             del runtime_version
             return self._render_create_python_function(
                 destination=destination,
@@ -1604,7 +1612,7 @@ class DatabricksAdapter(BaseAdapter):
         )
         return (delete_sql, *insert_statements)
 
-    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:
             return value
         if cursor_type == CursorKind.TIMESTAMP:
@@ -1643,7 +1651,7 @@ class DatabricksAdapter(BaseAdapter):
         return (f"ALTER TABLE {origin} RENAME TO {destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
-        raise AdapterUserError("Databricks does not support atomic table swap")
+        raise AdapterUserError(message="Databricks does not support atomic table swap")
 
     def render_clone(
         self,
@@ -1711,8 +1719,8 @@ class DatabricksAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
-    def relation_names_match(self, left: str, *, right: str) -> bool:
-        return self._relation_names_match_impl(left, right=right)
+    def relation_names_match(self, *, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left=left, right=right)
 
     def render_replace_table_from_relation(
         self, *, destination: str, origin: str
@@ -1785,8 +1793,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def create_table_as(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
@@ -1797,12 +1805,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def create_view_as(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
@@ -1811,12 +1819,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def drop(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
@@ -1825,12 +1833,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def rename(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         statement_recorder: StatementRecorder,
@@ -1839,12 +1847,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def swap(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         statement_recorder: StatementRecorder,
@@ -1853,12 +1861,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def clone(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         hard_copy: bool = False,
@@ -1874,12 +1882,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def durable_clone(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         origin_is_transient: bool = False,
@@ -1891,12 +1899,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def replace_table_from_relation(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         origin: str,
         statement_recorder: StatementRecorder,
@@ -1908,12 +1916,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def move_or_copy_relation(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         remove_origin: bool,
@@ -1921,7 +1929,7 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         if not allow_copy_fallback:
-            raise AdapterUserError("Databricks relation move/copy requires --allow-copy")
+            raise AdapterUserError(message="Databricks relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
             destination=destination,
             origin=origin,
@@ -1931,12 +1939,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def append(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
@@ -1948,12 +1956,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def delete_insert(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
@@ -1970,12 +1978,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def delete_insert_cursor(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         cursor_column: str,
@@ -1995,12 +2003,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def load_seed(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
@@ -2012,7 +2020,7 @@ class DatabricksAdapter(BaseAdapter):
         del infer_types
         if replace:
             self.drop(
-                connection,
+                connection=connection,
                 destination=destination,
                 if_exists=True,
                 statement_recorder=statement_recorder,
@@ -2022,7 +2030,7 @@ class DatabricksAdapter(BaseAdapter):
         )
         create_sql: str = f"CREATE TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
-        self.execute(connection, sql=create_sql)
+        self.execute(connection=connection, sql=create_sql)
 
         column_names: tuple[str, ...] = tuple(column.name for column in columns)
         placeholders: str = ", ".join(["?"] * len(column_names))
@@ -2050,7 +2058,9 @@ class DatabricksAdapter(BaseAdapter):
                 rows.append(
                     tuple(
                         self._normalize_seed_csv_value(
-                            row.get(column_name), column_name=column_name, csv_settings=csv_settings
+                            value=row.get(column_name),
+                            column_name=column_name,
+                            csv_settings=csv_settings,
                         )
                         for column_name in column_names
                     )
@@ -2066,24 +2076,24 @@ class DatabricksAdapter(BaseAdapter):
 
     def merge(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        source_columns: tuple[str, ...] = self.query_column_names(connection, sql=sql)
+        source_columns: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
         statements: tuple[str, ...] = self.render_merge(
             destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
-    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:
         cursor: Any = connection.cursor()
         try:
             cursor.execute(f"SELECT * FROM ({sql}) AS __describe_source LIMIT 0")
@@ -2096,8 +2106,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def get_relation_max_cursor(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation: str,
         cursor_column: str,
     ) -> object | None:
@@ -2116,8 +2126,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def add_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
@@ -2128,12 +2138,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def drop_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -2144,12 +2154,12 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def alter_column_types(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
@@ -2160,17 +2170,21 @@ class DatabricksAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def diff_schema(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
     ) -> SchemaDiffResult:
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
-        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=right)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
+        )
+        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=right
+        )
         left_map: dict[str, str] = {col.name: col.type for col in left_columns}
         right_map: dict[str, str] = {col.name: col.type for col in right_columns}
 
@@ -2204,8 +2218,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def diff_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -2216,7 +2230,9 @@ class DatabricksAdapter(BaseAdapter):
         end_cursor: CursorValue | None = None,
     ) -> RowDiffResult:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
+        )
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2234,13 +2250,13 @@ class DatabricksAdapter(BaseAdapter):
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=right_cte,
             relation_label="right",
             keys=keys,
@@ -2289,9 +2305,9 @@ class DatabricksAdapter(BaseAdapter):
             f"COUNT(CASE WHEN __left.{keys[0]} IS NULL THEN 1 END) AS right_only"
             f"{column_count_sql} FROM __left FULL OUTER JOIN __right ON {join_condition}"
         )
-        row: tuple[Any, ...] | None = self.execute(connection, sql=diff_sql).fetchone()
+        row: tuple[Any, ...] | None = self.execute(connection=connection, sql=diff_sql).fetchone()
         if row is None:
-            raise AdapterUserError("Databricks row diff query returned no result")
+            raise AdapterUserError(message="Databricks row diff query returned no result")
         column_results: tuple[RowDiffColumnResult, ...] = tuple(
             RowDiffColumnResult(
                 name=col,
@@ -2313,8 +2329,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def count_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation: str,
         cursor_column: str | None = None,
         start_cursor: CursorValue | None = None,
@@ -2328,15 +2344,15 @@ class DatabricksAdapter(BaseAdapter):
         query: str = f"SELECT COUNT(*) FROM {relation}"
         if cursor_filter:
             query += f" WHERE {cursor_filter}"
-        result: tuple[Any, ...] | None = self.execute(connection, sql=query).fetchone()
+        result: tuple[Any, ...] | None = self.execute(connection=connection, sql=query).fetchone()
         if result is None:
-            raise AdapterUserError("Databricks count query returned no result")
+            raise AdapterUserError(message="Databricks count query returned no result")
         return self._to_int(result[0])
 
     def sample_unequal_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -2348,7 +2364,9 @@ class DatabricksAdapter(BaseAdapter):
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
+        )
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2366,13 +2384,13 @@ class DatabricksAdapter(BaseAdapter):
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=right_cte,
             relation_label="right",
             keys=keys,
@@ -2408,7 +2426,7 @@ class DatabricksAdapter(BaseAdapter):
             f"AND ({unequal_condition}) "
             f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection=connection, sql=sample_sql).fetchall()
         samples: list[RowDiffSampleRow] = []
         row: tuple[Any, ...]
         for row in rows:
@@ -2438,8 +2456,8 @@ class DatabricksAdapter(BaseAdapter):
 
     def sample_side_only_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -2461,13 +2479,13 @@ class DatabricksAdapter(BaseAdapter):
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=right_cte,
             relation_label="right",
             keys=keys,
@@ -2481,7 +2499,7 @@ class DatabricksAdapter(BaseAdapter):
         elif side == "right":
             side_condition = f"__right.{keys[0]} IS NOT NULL AND __left.{keys[0]} IS NULL"
         else:
-            raise AdapterUserError("sample_side_only_rows side must be 'left' or 'right'")
+            raise AdapterUserError(message="sample_side_only_rows side must be 'left' or 'right'")
         sample_sql: str = (
             f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
             f"SELECT {key_select_sql} "
@@ -2489,12 +2507,19 @@ class DatabricksAdapter(BaseAdapter):
             f"WHERE {side_condition} "
             f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
-        return tuple(tuple((key, row[index]) for index, key in enumerate(keys)) for row in rows)
+        rows: list[tuple[Any, ...]] = self.execute(connection=connection, sql=sample_sql).fetchall()
+        samples: list[tuple[tuple[str, Any], ...]] = []
+        for row in rows:
+            sample: list[tuple[str, Any]] = []
+            for index, key in enumerate(keys):
+                sample.append((key, row[index]))
+            samples.append(tuple(sample))
+        return tuple(samples)
 
-    def describe_relation(self, connection: Any, *, relation: str) -> tuple[ColumnInfo, ...]:
+    def describe_relation(self, *, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         """Return Databricks relation metadata using DESCRIBE TABLE."""
 
+        selectable_row_column_count: int = 2
         cursor: Any = connection.cursor()
         try:
             cursor.execute(f"DESCRIBE TABLE {relation}")
@@ -2504,7 +2529,9 @@ class DatabricksAdapter(BaseAdapter):
         return tuple(
             ColumnInfo(name=str(row[0]).lower(), type=str(row[1]).upper())
             for row in rows
-            if len(row) >= 2 and str(row[0]).strip() and not str(row[0]).startswith("#")
+            if len(row) >= selectable_row_column_count
+            and str(row[0]).strip()
+            and not str(row[0]).startswith("#")
         )
 
     def build_cursor_filter(
@@ -2564,22 +2591,24 @@ class DatabricksAdapter(BaseAdapter):
 
     def validate_row_diff_keys(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation_sql: str,
         relation_label: str,
         keys: tuple[str, ...],
     ) -> None:
         if not keys:
-            raise AdapterUserError("row diff requires at least one unique_key column")
+            raise AdapterUserError(message="row diff requires at least one unique_key column")
         null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
-        null_row: tuple[Any, ...] = self.execute(connection, sql=null_count_sql).fetchone()
+        null_row: tuple[Any, ...] = self.execute(
+            connection=connection, sql=null_count_sql
+        ).fetchone()
         if int(null_row[0]) > 0:
             raise AdapterUserError(
-                f"row diff {relation_label} relation contains null unique_key values"
+                message=f"row diff {relation_label} relation contains null unique_key values"
             )
 
         key_list: str = ", ".join(keys)
@@ -2590,11 +2619,11 @@ class DatabricksAdapter(BaseAdapter):
             f") AS __duplicates"
         )
         duplicate_row: tuple[Any, ...] = self.execute(
-            connection, sql=duplicate_count_sql
+            connection=connection, sql=duplicate_count_sql
         ).fetchone()
         if int(duplicate_row[0]) > 0:
             raise AdapterUserError(
-                f"row diff {relation_label} relation contains duplicate unique_key values"
+                message=f"row diff {relation_label} relation contains duplicate unique_key values"
             )
 
     def resolve_row_diff_tolerance(
@@ -2622,21 +2651,21 @@ class DatabricksAdapter(BaseAdapter):
     def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
         if tolerance.absolute is None and tolerance.relative is None:
             raise AdapterUserError(
-                f"row diff tolerance for column '{column}' must set absolute or relative"
+                message=f"row diff tolerance for column '{column}' must set absolute or relative"
             )
         if tolerance.absolute is not None and tolerance.absolute < Decimal("0"):
             raise AdapterUserError(
-                f"row diff absolute tolerance for column '{column}' must be >= 0"
+                message=f"row diff absolute tolerance for column '{column}' must be >= 0"
             )
         if tolerance.relative is not None and tolerance.relative < Decimal("0"):
             raise AdapterUserError(
-                f"row diff relative tolerance for column '{column}' must be >= 0"
+                message=f"row diff relative tolerance for column '{column}' must be >= 0"
             )
 
     def schema_exists(
         self,
-        connection: _DatabricksConnection,
         *,
+        connection: _DatabricksConnection,
         database: str | None,
         schema: str,
     ) -> bool:
@@ -2677,7 +2706,7 @@ class DatabricksAdapter(BaseAdapter):
             statements.append(f"USE SCHEMA `{normalized_schema}`")
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     @staticmethod
     def _normalize_session_value(value: object | None) -> str | None:
@@ -2735,7 +2764,7 @@ class DatabricksAdapter(BaseAdapter):
         return int(str(value))
 
     def _normalize_seed_csv_value(
-        self, value: str | None, *, column_name: str, csv_settings: SeedCsvSettings
+        self, *, value: str | None, column_name: str, csv_settings: SeedCsvSettings
     ) -> str | None:
         if value is None:
             return None

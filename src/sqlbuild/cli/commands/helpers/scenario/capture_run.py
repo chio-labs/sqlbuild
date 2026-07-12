@@ -47,7 +47,7 @@ def run_scenario_capture_run(
     settings: ScenarioCaptureSettings,
     output_context: ScenarioRunOutputContext,
     capture_results_out: list[ScenarioSnapshotCaptureRunResult] | None = None,
-) -> int:
+) -> tuple[int, list[ScenarioSnapshotCaptureRunResult] | None]:
     """Capture selected scenarios to durable snapshots and render results."""
 
     progress_stream: TextIO = output_context.progress_stream
@@ -80,8 +80,16 @@ def run_scenario_capture_run(
         settings=settings,
         connection_hooks=ConnectionHooks(
             on_connection_start=execution_connection_progress.on_connection_start,
-            on_connection_complete=execution_connection_progress.on_connection_complete,
-            on_connection_error=execution_connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
         on_scenario_start=lambda _scenario: (
             scenario_status.start("Capturing scenarios...") if status_is_tty else None
@@ -114,7 +122,7 @@ def run_scenario_capture_run(
         + "\n"
     )
     progress_stream.flush()
-    return 0 if fail_count == 0 else 1
+    return (0 if fail_count == 0 else 1), capture_results_out
 
 
 def _complete_capture_run(
@@ -148,7 +156,7 @@ def _write_capture_result(
 ) -> None:
     status_text: str = "PASS" if result.status == SUCCESS_STATUS else "FAIL"
     style: CliStyle = CliStyle(use_color=use_color)
-    status: str = style.status(status_text)
+    status: str = style.status(status=status_text)
     detail: str = _capture_detail(result)
     stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}{detail}\n")
     if result.error_message:
@@ -194,7 +202,7 @@ def _write_capture_relation_rows(
     for relation_result in capture_result.relation_results:
         status_text: str = "PASS" if relation_result.status == SUCCESS_STATUS else "FAIL"
         style: CliStyle = CliStyle(use_color=use_color)
-        status: str = style.status(status_text)
+        status: str = style.status(status=status_text)
         row_label: str = "row" if relation_result.row_count == 1 else "rows"
         detail: str = (
             f"  {relation_result.row_count} {row_label}, "
@@ -208,10 +216,11 @@ def _write_capture_relation_rows(
 
 
 def _format_snapshot_size(byte_count: int) -> str:
-    if byte_count < 1024:
+    binary_unit_size: int = 1024
+    if byte_count < binary_unit_size:
         return f"{byte_count} B"
     kibibytes: float = byte_count / 1024
-    if kibibytes < 1024:
+    if kibibytes < binary_unit_size:
         return f"{kibibytes:.1f} KB"
     mebibytes: float = kibibytes / 1024
     return f"{mebibytes:.1f} MB"

@@ -54,7 +54,7 @@ class VirtualNodeResultStore:
             ts=record.ts,
         )
         self.backend.insert_node_result(
-            self.state_connection,
+            connection=self.state_connection,
             schema=self.state_schema,
             virtual_environment_name=self.virtual_environment_name,
             record=scoped_record,
@@ -95,7 +95,7 @@ class VirtualNodeResultStore:
         if len(cached_results) >= limit:
             return cached_results
         return self.backend.read_node_results(
-            self.state_connection,
+            connection=self.state_connection,
             schema=self.state_schema,
             virtual_environment_name=self.virtual_environment_name,
             query=NodeResultQuery(
@@ -118,7 +118,7 @@ class VirtualNodeResultStore:
         run_id: str | None,
     ) -> NodeResultEnvelope | None:
         results: tuple[NodeResultEnvelope, ...] = self.backend.read_node_results(
-            self.state_connection,
+            connection=self.state_connection,
             schema=self.state_schema,
             virtual_environment_name=self.virtual_environment_name,
             query=NodeResultQuery(

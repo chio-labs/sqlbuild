@@ -67,7 +67,7 @@ def test_given_watermark_payload_when_encoded_and_decoded_then_preserves_structu
     )
 
     result: NodeSourceWatermarkPayload = decode_watermark_payload(
-        encode_watermark_payload(payload), qualified_name="analytics._watermarks"
+        value=encode_watermark_payload(payload), qualified_name="analytics._watermarks"
     )
 
     assert result.version == 1
@@ -91,6 +91,8 @@ def test_given_invalid_watermark_payload_when_decoding_then_raises_input_error(
     test_case: InvalidWatermarkPayloadTestCase,
 ) -> None:
     with pytest.raises(NodeSourceWatermarkInputError) as exc_info:
-        decode_watermark_payload(test_case.raw_payload, qualified_name="analytics._watermarks")
+        decode_watermark_payload(
+            value=test_case.raw_payload, qualified_name="analytics._watermarks"
+        )
 
     assert test_case.expected_error_fragment in str(exc_info.value)

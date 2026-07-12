@@ -121,7 +121,7 @@ def plan_dbt_interop_from_project(
         on_progress=on_progress,
     )
     report_progress(
-        on_progress,
+        on_progress=on_progress,
         message=f"Generated dbt interop plan. ({time.monotonic() - generation_start:.2f}s)",
     )
     return plan

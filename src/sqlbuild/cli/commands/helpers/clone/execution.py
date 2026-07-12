@@ -60,7 +60,7 @@ def execute_clone_plan(
 
 
 def _build_on_clone_item(*, stream: TextIO, use_color: bool) -> CloneItemCallback:
-    def _on_clone_item(index: int, *, total: int, item: CloneItemResult) -> None:
+    def _on_clone_item(*, index: int, total: int, item: CloneItemResult) -> None:
         stream.write(
             render_clone_item_line(index=index, total=total, item=item, use_color=use_color) + "\n"
         )

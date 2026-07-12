@@ -35,7 +35,7 @@ def format_virtual_diff_header(
     else:
         working_value = working_label
     doc: CliDocument = CliDocument(style)
-    doc.header("Virtual diff", suffix=f"{from_label} -> {to_label}")
+    doc.header(text="Virtual diff", suffix=f"{from_label} -> {to_label}")
     doc.line(f"  selected models         {selected_count}")
     doc.line(f"  compared models         {compared_count}")
     doc.line(f"  unchanged refs skipped  {skipped_count}")

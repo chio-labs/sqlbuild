@@ -29,11 +29,11 @@ def connect_janitor_warehouse(
         connection: object = compile_context.adapter.connect(compile_context.connection_config)
     except BaseException:
         connection_progress.on_connection_error(
-            1, elapsed_seconds=time.perf_counter() - connection_start
+            connection_count=1, elapsed_seconds=time.perf_counter() - connection_start
         )
         raise
     connection_progress.on_connection_complete(
-        1, elapsed_seconds=time.perf_counter() - connection_start
+        connection_count=1, elapsed_seconds=time.perf_counter() - connection_start
     )
     return JanitorConnectionContext(connection=connection)
 

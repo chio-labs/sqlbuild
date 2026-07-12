@@ -77,7 +77,7 @@ def read_virtual_freshness_state_for_command(
             return {}
         records: tuple[VirtualSourceFreshnessRecord, ...] = (
             backend.get_virtual_environment_source_freshness(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=target_name,
             )

@@ -21,8 +21,8 @@ from sqlbuild.virtual.reconcile.main.reconcile import run_virtual_reconcile
 
 
 def run_reconcile(
-    project_dir: Path | None,
     *,
+    project_dir: Path | None,
     no_color: bool,
     virtual_environment: str | None,
     reconcile_command: str | None,
@@ -44,7 +44,9 @@ def run_reconcile(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    adapter: BaseAdapter = resolve_adapter(
+        adapter_name=adapter_name, project_dir=effective_project_dir
+    )
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
@@ -74,7 +76,7 @@ def run_reconcile(
             seed_name=seed_name,
             physical_relation_name=physical_relation_name,
         )
-        status.complete("Reconciled virtual environment.")
+        status.complete(message="Reconciled virtual environment.")
     except BaseException:
         status.error("Reconcile failed.")
         raise

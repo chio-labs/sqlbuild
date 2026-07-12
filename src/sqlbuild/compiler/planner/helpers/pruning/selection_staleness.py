@@ -99,10 +99,13 @@ def build_stale_out_of_selection_warnings(
 def _neutral_upstream_deps(
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]]:
-    return {
-        _neutral_key(key): tuple(_neutral_key(upstream_key) for upstream_key in upstream_keys)
-        for key, upstream_keys in upstream_deps.items()
-    }
+    neutral_deps: dict[SelectionStalenessNodeKey, tuple[SelectionStalenessNodeKey, ...]] = {}
+    for key, upstream_keys in upstream_deps.items():
+        neutral_upstreams: list[SelectionStalenessNodeKey] = []
+        for upstream_key in upstream_keys:
+            neutral_upstreams.append(_neutral_key(upstream_key))
+        neutral_deps[_neutral_key(key)] = tuple(neutral_upstreams)
+    return neutral_deps
 
 
 def _neutral_key(key: CompiledObjectKey) -> SelectionStalenessNodeKey:

@@ -46,7 +46,7 @@ def run_check(request: CheckCommandRequest) -> int:
         pipeline_result=pipeline_result,
     )
     provider_session: ProviderSession = build_provider_session(
-        invocation.discovered_inputs.providers
+        discovered_providers=invocation.discovered_inputs.providers
     )
     try:
         results: tuple[PythonCheckExecutionResult, ...] = execute_check_plan(

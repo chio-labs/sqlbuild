@@ -80,11 +80,11 @@ def _execute_write_statements(
     index_sqls: tuple[str, ...],
     insert_sql: str,
 ) -> None:
-    _ = execute(connection, sql=create_sql)
+    _ = execute(connection=connection, sql=create_sql)
     index_sql: str
     for index_sql in index_sqls:
-        _ = execute(connection, sql=index_sql)
-    _ = execute(connection, sql=insert_sql)
+        _ = execute(connection=connection, sql=index_sql)
+    _ = execute(connection=connection, sql=insert_sql)
 
 
 def _log_write_retry(*, fingerprint: Fingerprint, attempt: int, error: Exception) -> None:

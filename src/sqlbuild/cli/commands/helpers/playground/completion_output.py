@@ -22,15 +22,15 @@ def render_playground_completion_text(
     display_path: str = str(request.target_path)
     style: CliStyle = CliStyle(use_color=supports_color())
     doc: CliDocument = CliDocument(style)
-    doc.header("SQLBuild playground created")
+    doc.header(text="SQLBuild playground created")
     doc.blank()
-    doc.field("Project", value=display_path)
-    doc.field("Adapter", value="DuckDB")
-    doc.field("Example", value=_example_name(target.template))
+    doc.field(label="Project", value=display_path)
+    doc.field(label="Adapter", value="DuckDB")
+    doc.field(label="Example", value=_example_name(template=target.template))
     doc.blank()
     doc.title_section("Try")
     doc.commands(
-        _suggested_commands(template=target.template, display_path=display_path),
+        commands=_suggested_commands(template=target.template, display_path=display_path),
         style_command=False,
     )
     return doc.render()

@@ -50,7 +50,7 @@ def prepare_standard_diff(
         local_config=invocation.discovered_inputs.local_config,
     )
     adapter: BaseAdapter = resolve_adapter(
-        effective_adapter_name, project_dir=invocation.effective_project_dir
+        adapter_name=effective_adapter_name, project_dir=invocation.effective_project_dir
     )
     left_project: Any
     right_project: Any
@@ -129,7 +129,7 @@ def prepare_virtual_diff(
         from_virtual_environment=request.from_name,
         to_virtual_environment=request.to_name,
         adapter=resolve_adapter(
-            effective_adapter_name,
+            adapter_name=effective_adapter_name,
             project_dir=invocation.effective_project_dir,
         ),
         connection_config=resolve_project_connection_config(
@@ -198,8 +198,16 @@ def execute_virtual_diff(
         hooks=ConnectionHooks(
             on_progress=planning_progress.on_progress,
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     return VirtualDiffRunOutcome(

@@ -40,7 +40,7 @@ _HOOK_CALL_NAMES: frozenset[str] = frozenset({"sql", "python"})
 _MODEL_HOOK_FIELD_NAMES: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 
 
-def parse_model_sql(contents: str, *, file_path: Path) -> tuple[dict[str, object], str]:
+def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
     """Parse a raw SQL model file into header values and SQL body."""
 
     header_match: re.Match[str] | None = MODEL_HEADER_PATTERN.match(contents)
@@ -132,7 +132,7 @@ def _top_level_select_projection_ranges(sql: str) -> tuple[tuple[int, int], ...]
     if bounds is None:
         return None
     select_list_start, select_list_end = bounds
-    return _split_top_level_select_items(sql, start=select_list_start, end=select_list_end)
+    return _split_top_level_select_items(sql=sql, start=select_list_start, end=select_list_end)
 
 
 def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
@@ -170,17 +170,17 @@ def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
             continue
         upper_character: str = character.upper()
         if select_list_start is None:
-            if upper_character == "S" and _keyword_at(sql, keyword="SELECT", index=index):
+            if upper_character == "S" and _keyword_at(sql=sql, keyword="SELECT", index=index):
                 select_list_start = index + len("SELECT")
                 index = select_list_start
                 continue
         else:
-            if upper_character == "U" and _keyword_at(sql, keyword="UNION", index=index):
+            if upper_character == "U" and _keyword_at(sql=sql, keyword="UNION", index=index):
                 return None
             if (
                 select_list_end is None
                 and upper_character == "F"
-                and _keyword_at(sql, keyword="FROM", index=index)
+                and _keyword_at(sql=sql, keyword="FROM", index=index)
             ):
                 select_list_end = index
                 if not has_union_candidate:
@@ -205,7 +205,7 @@ def _scanner_output_column_locations(
     item_end: int
     for item_start, item_end in projection_ranges:
         output_name: str | None = _select_item_output_name(
-            contents[sql_start + item_start : sql_start + item_end],
+            item=contents[sql_start + item_start : sql_start + item_end],
             extract_implicit_alias_columns=extract_implicit_alias_columns,
         )
         if output_name is None:
@@ -233,8 +233,8 @@ def _location_for_projection_range(
     item_start: int = projection_range[0]
     item_end: int = projection_range[1]
     sql: str = contents[sql_start:]
-    start_offset: int = _skip_local_whitespace(sql, start=item_start, end=item_end)
-    end_offset: int = _trim_local_whitespace(sql, start=start_offset, end=item_end)
+    start_offset: int = _skip_local_whitespace(sql=sql, start=item_start, end=item_end)
+    end_offset: int = _trim_local_whitespace(sql=sql, start=start_offset, end=item_end)
     if start_offset >= end_offset:
         return None
     return _location_for_absolute_span(
@@ -295,7 +295,7 @@ def _line_starts(contents: str) -> tuple[int, ...]:
     return tuple(starts)
 
 
-def _find_top_level_keyword(sql: str, *, keyword: str, start: int) -> int | None:
+def _find_top_level_keyword(*, sql: str, keyword: str, start: int) -> int | None:
     depth: int = 0
     index: int = start
     in_quote: str | None = None
@@ -321,13 +321,13 @@ def _find_top_level_keyword(sql: str, *, keyword: str, start: int) -> int | None
             depth = max(0, depth - 1)
             index += 1
             continue
-        if depth == 0 and _keyword_at(sql, keyword=keyword, index=index):
+        if depth == 0 and _keyword_at(sql=sql, keyword=keyword, index=index):
             return index
         index += 1
     return None
 
 
-def _split_top_level_select_items(sql: str, *, start: int, end: int) -> tuple[tuple[int, int], ...]:
+def _split_top_level_select_items(*, sql: str, start: int, end: int) -> tuple[tuple[int, int], ...]:
     items: list[tuple[int, int]] = []
     depth: int = 0
     item_start: int = start
@@ -359,7 +359,7 @@ def _split_top_level_select_items(sql: str, *, start: int, end: int) -> tuple[tu
     return tuple(items)
 
 
-def _select_item_output_name(item: str, *, extract_implicit_alias_columns: bool) -> str | None:
+def _select_item_output_name(*, item: str, extract_implicit_alias_columns: bool) -> str | None:
     as_match: re.Match[str] | None = re.search(
         r"\s+AS\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*|\"[^\"]+\")\s*\Z",
         item,
@@ -385,19 +385,19 @@ def _select_item_output_name(item: str, *, extract_implicit_alias_columns: bool)
     return bare_match.group("name").strip('"')
 
 
-def _skip_local_whitespace(sql: str, *, start: int, end: int) -> int:
+def _skip_local_whitespace(*, sql: str, start: int, end: int) -> int:
     while start < end and sql[start].isspace():
         start += 1
     return start
 
 
-def _trim_local_whitespace(sql: str, *, start: int, end: int) -> int:
+def _trim_local_whitespace(*, sql: str, start: int, end: int) -> int:
     while end > start and sql[end - 1].isspace():
         end -= 1
     return end
 
 
-def _keyword_at(sql: str, *, keyword: str, index: int) -> bool:
+def _keyword_at(*, sql: str, keyword: str, index: int) -> bool:
     end: int = index + len(keyword)
     if sql[index:end].upper() != keyword:
         return False

@@ -91,17 +91,19 @@ def resolve_expected_dbt_argvs(
 ) -> tuple[tuple[str, ...], ...]:
     """Replace path placeholders in expected dbt argv tuples."""
 
-    return tuple(
-        tuple(
-            value.format(
-                dbt_project_dir=dbt_project_dir,
-                dbt_profiles_dir=dbt_profiles_dir,
-                dbt_target_path=dbt_target_path,
+    resolved_argvs: list[tuple[str, ...]] = []
+    for argv in argvs:
+        resolved_argv: list[str] = []
+        for value in argv:
+            resolved_argv.append(
+                value.format(
+                    dbt_project_dir=dbt_project_dir,
+                    dbt_profiles_dir=dbt_profiles_dir,
+                    dbt_target_path=dbt_target_path,
+                )
             )
-            for value in argv
-        )
-        for argv in argvs
-    )
+        resolved_argvs.append(tuple(resolved_argv))
+    return tuple(resolved_argvs)
 
 
 def run_git_command(*, repo_dir: Path, args: tuple[str, ...]) -> None:

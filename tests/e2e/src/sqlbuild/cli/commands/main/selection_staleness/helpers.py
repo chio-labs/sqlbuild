@@ -39,6 +39,16 @@ def assert_selection_staleness_case(
     _assert_selection_staleness_case(tmp_path=tmp_path, test_case=test_case)
 
 
+def expand_selection_staleness_engines(
+    scenarios: tuple[SelectionStalenessE2ETestCase, ...],
+) -> list[tuple[SelectionStalenessE2ETestCase, SelectionStalenessEngine]]:
+    cases: list[tuple[SelectionStalenessE2ETestCase, SelectionStalenessEngine]] = []
+    for scenario in scenarios:
+        for engine in scenario.engines:
+            cases.append((scenario, engine))
+    return cases
+
+
 def _assert_selection_staleness_case(
     *, tmp_path: Path, test_case: SelectionStalenessEngineE2ETestCase
 ) -> None:

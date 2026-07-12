@@ -18,7 +18,7 @@ def resolve_test_name_width(test_entries: tuple[SqlTestPlanEntry, ...]) -> int:
         names.append(entry.name)
         names.extend(f"expected {step.model_name}" for step in entry.chain if step.expected_cte_sql)
         names.extend(f"assertion {assertion.name}" for assertion in entry.assertions)
-    return resolve_name_column_width(names, min_width=50)
+    return resolve_name_column_width(names=names, min_width=50)
 
 
 def build_test_expectation_rows(

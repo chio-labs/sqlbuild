@@ -274,10 +274,13 @@ def node_source_watermark_versions_by_node(
     payloads: dict[str, dict[str, Any]],
     test_case: NodeSourceWatermarkBuildE2ETestCase,
 ) -> dict[str, tuple[str, ...]]:
-    return {
-        name: tuple(str(entry["data_version"]) for entry in payloads[name]["sources"])
-        for name in test_case.expected_source_versions_by_node
-    }
+    versions_by_node: dict[str, tuple[str, ...]] = {}
+    for name in test_case.expected_source_versions_by_node:
+        versions: list[str] = []
+        for entry in payloads[name]["sources"]:
+            versions.append(str(entry["data_version"]))
+        versions_by_node[name] = tuple(versions)
+    return versions_by_node
 
 
 def node_source_watermark_kinds_by_node(
@@ -285,10 +288,13 @@ def node_source_watermark_kinds_by_node(
     payloads: dict[str, dict[str, Any]],
     test_case: NodeSourceWatermarkBuildE2ETestCase,
 ) -> dict[str, tuple[str, ...]]:
-    return {
-        name: tuple(str(entry["watermark_kind"]) for entry in payloads[name]["sources"])
-        for name in test_case.expected_source_kinds_by_node
-    }
+    kinds_by_node: dict[str, tuple[str, ...]] = {}
+    for name in test_case.expected_source_kinds_by_node:
+        kinds: list[str] = []
+        for entry in payloads[name]["sources"]:
+            kinds.append(str(entry["watermark_kind"]))
+        kinds_by_node[name] = tuple(kinds)
+    return kinds_by_node
 
 
 def node_source_watermark_unknown_reasons_by_node(
@@ -296,10 +302,13 @@ def node_source_watermark_unknown_reasons_by_node(
     payloads: dict[str, dict[str, Any]],
     test_case: NodeSourceWatermarkBuildE2ETestCase,
 ) -> dict[str, tuple[str, ...]]:
-    return {
-        name: tuple(str(entry["reason"]) for entry in payloads[name]["unknown_sources"])
-        for name in test_case.expected_unknown_reasons_by_node
-    }
+    reasons_by_node: dict[str, tuple[str, ...]] = {}
+    for name in test_case.expected_unknown_reasons_by_node:
+        reasons: list[str] = []
+        for entry in payloads[name]["unknown_sources"]:
+            reasons.append(str(entry["reason"]))
+        reasons_by_node[name] = tuple(reasons)
+    return reasons_by_node
 
 
 def assert_dependency_baseline_build_case(

@@ -51,31 +51,62 @@ def run_seed_pipeline(
     if on_connection_complete is not None:
         on_connection_complete(effective_concurrency, elapsed_seconds=time.monotonic() - start)
 
-    results: list[SeedExecutionResult | None] = [None] * len(seed_entries)
     try:
-
-        def run_worker(worker_index: int) -> None:
-            seed_index: int
-            entry: SeedPlanEntry
-            for seed_index, entry in enumerate(seed_entries):
-                if seed_index % effective_concurrency != worker_index:
-                    continue
-                result: SeedExecutionResult = execute_seed(
-                    seed_entry=entry,
-                    adapter=adapter,
-                    connection=connections[worker_index],
-                    statement_recorder=StatementRecorder(),
-                    run_id=run_id,
-                    query_change_tracking=query_change_tracking,
-                )
-                results[seed_index] = result
-                if on_seed_complete is not None:
-                    on_seed_complete(result)
-
         with ThreadPoolExecutor(max_workers=effective_concurrency) as pool:
-            list(pool.map(run_worker, range(effective_concurrency)))
-        return tuple(result for result in results if result is not None)
+            worker_results: tuple[tuple[tuple[int, SeedExecutionResult], ...], ...] = tuple(
+                pool.map(
+                    lambda worker_index: _run_seed_worker(
+                        worker_index=worker_index,
+                        effective_concurrency=effective_concurrency,
+                        seed_entries=seed_entries,
+                        adapter=adapter,
+                        connection=connections[worker_index],
+                        run_id=run_id,
+                        query_change_tracking=query_change_tracking,
+                        on_seed_complete=on_seed_complete,
+                    ),
+                    range(effective_concurrency),
+                )
+            )
+        indexed_results: list[tuple[int, SeedExecutionResult]] = []
+        for worker_result in worker_results:
+            indexed_results.extend(worker_result)
+        ordered_results: list[SeedExecutionResult] = []
+        for _, result in sorted(indexed_results, key=lambda item: item[0]):
+            ordered_results.append(result)
+        return tuple(ordered_results)
     finally:
         connection = None
         for connection in connections:
             adapter.close(connection)
+
+
+def _run_seed_worker(
+    *,
+    worker_index: int,
+    effective_concurrency: int,
+    seed_entries: tuple[SeedPlanEntry, ...],
+    adapter: BaseAdapter,
+    connection: Any,
+    run_id: str,
+    query_change_tracking: bool,
+    on_seed_complete: Callable[[SeedExecutionResult], None] | None,
+) -> tuple[tuple[int, SeedExecutionResult], ...]:
+    indexed_results: list[tuple[int, SeedExecutionResult]] = []
+    seed_index: int
+    entry: SeedPlanEntry
+    for seed_index, entry in enumerate(seed_entries):
+        if seed_index % effective_concurrency != worker_index:
+            continue
+        result: SeedExecutionResult = execute_seed(
+            seed_entry=entry,
+            adapter=adapter,
+            connection=connection,
+            statement_recorder=StatementRecorder(),
+            run_id=run_id,
+            query_change_tracking=query_change_tracking,
+        )
+        indexed_results.append((seed_index, result))
+        if on_seed_complete is not None:
+            on_seed_complete(result)
+    return tuple(indexed_results)

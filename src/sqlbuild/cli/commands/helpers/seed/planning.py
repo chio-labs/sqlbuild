@@ -47,8 +47,16 @@ def prepare_seed_execution(
         ),
         hooks=ConnectionHooks(
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     effective_concurrency: int = max(

@@ -44,50 +44,54 @@ _TEMPLATE_SYMBOLS: frozenset[str] = frozenset({"(", ")", ","})
 _TEMPLATE_QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
 
 
+class _EffectiveVarsResolver:
+    def __init__(self, raw_values: dict[str, object]) -> None:
+        self.raw_values = raw_values
+        self.resolved_values: dict[str, object] = {}
+        self.resolving_keys: tuple[str, ...] = ()
+
+    def resolve(self, key: str) -> object:
+        if key not in self.raw_values:
+            raise CompileInputError(f"effective vars references unknown variable '{key}'")
+        if key in self.resolved_values:
+            return self.resolved_values[key]
+        if key in self.resolving_keys:
+            cycle: str = " -> ".join((*self.resolving_keys, key))
+            raise CompileInputError(f"effective vars contain a cyclic reference: {cycle}")
+        self.resolving_keys = (*self.resolving_keys, key)
+        raw_value: object = self.raw_values[key]
+        resolved_value: object = (
+            expand_template_string(
+                value=raw_value,
+                variables=self.raw_values,
+                resolve_variable=self.resolve,
+                context_values={},
+                context_label="effective vars",
+                allow_context=False,
+                preserve_context_tokens=False,
+                preserve_unknown_context=False,
+            )
+            if isinstance(raw_value, str)
+            else raw_value
+        )
+        self.resolving_keys = self.resolving_keys[:-1]
+        self.resolved_values[key] = resolved_value
+        return resolved_value
+
+
 def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     """Resolve merged effective vars with recursive `${name}` expansion."""
 
-    resolved_values: dict[str, object] = {}
-    resolving_keys: list[str] = []
-
-    def resolve_key(key: str) -> object:
-        if key not in raw_values:
-            raise CompileInputError(f"effective vars references unknown variable '{key}'")
-        if key in resolved_values:
-            return resolved_values[key]
-        if key in resolving_keys:
-            cycle: str = " -> ".join((*resolving_keys, key))
-            raise CompileInputError(f"effective vars contain a cyclic reference: {cycle}")
-
-        resolving_keys.append(key)
-        raw_value: object = raw_values[key]
-        if not isinstance(raw_value, str):
-            resolving_keys.pop()
-            resolved_values[key] = raw_value
-            return raw_value
-        resolved_value: str = expand_template_string(
-            raw_value,
-            variables=raw_values,
-            resolve_variable=resolve_key,
-            context_values={},
-            context_label="effective vars",
-            allow_context=False,
-            preserve_context_tokens=False,
-            preserve_unknown_context=False,
-        )
-        resolving_keys.pop()
-        resolved_values[key] = resolved_value
-        return resolved_value
-
+    resolver: _EffectiveVarsResolver = _EffectiveVarsResolver(raw_values)
     key: str
     for key in raw_values:
-        resolve_key(key)
-    return resolved_values
+        resolver.resolve(key)
+    return resolver.resolved_values
 
 
 def expand_template_data(
-    value: object,
     *,
+    value: object,
     variables: dict[str, object],
     context_values: dict[str, str | None],
     context_label: str,
@@ -118,7 +122,7 @@ def expand_template_data(
     if isinstance(value, dict):
         return {
             key: expand_template_data(
-                item_value,
+                value=item_value,
                 variables=variables,
                 context_values=context_values,
                 context_label=context_label,
@@ -131,7 +135,7 @@ def expand_template_data(
     if isinstance(value, list):
         return [
             expand_template_data(
-                item,
+                value=item,
                 variables=variables,
                 context_values=context_values,
                 context_label=context_label,
@@ -144,7 +148,7 @@ def expand_template_data(
     if isinstance(value, tuple):
         return tuple(
             expand_template_data(
-                item,
+                value=item,
                 variables=variables,
                 context_values=context_values,
                 context_label=context_label,
@@ -158,8 +162,8 @@ def expand_template_data(
 
 
 def expand_template_string(
-    value: str,
     *,
+    value: str,
     variables: dict[str, object],
     resolve_variable: Callable[[str], object],
     context_values: dict[str, str | None],
@@ -258,15 +262,17 @@ class _TemplateResolver:
 
     def _evaluate_function(self, expression: _TemplateFunctionExpr) -> object:
         function_name: str = expression.name
+        conditional_argument_count: int = 3
+        comparison_argument_count: int = 2
         if function_name == "if":
-            if len(expression.arguments) != 3:
+            if len(expression.arguments) != conditional_argument_count:
                 raise CompileInputError(f"{self.context_label} if(...) expects 3 arguments")
             condition_value: object = self._evaluate_expression(expression.arguments[0])
             if _is_truthy_template_value(condition_value):
                 return self._evaluate_expression(expression.arguments[1])
             return self._evaluate_expression(expression.arguments[2])
         if function_name == "eq":
-            if len(expression.arguments) != 2:
+            if len(expression.arguments) != comparison_argument_count:
                 raise CompileInputError(f"{self.context_label} eq(...) expects 2 arguments")
             left: object = self._evaluate_expression(expression.arguments[0])
             right: object = self._evaluate_expression(expression.arguments[1])
@@ -274,7 +280,7 @@ class _TemplateResolver:
                 left
             ) == _normalize_template_comparison_value(right)
         if function_name == "ne":
-            if len(expression.arguments) != 2:
+            if len(expression.arguments) != comparison_argument_count:
                 raise CompileInputError(f"{self.context_label} ne(...) expects 2 arguments")
             left = self._evaluate_expression(expression.arguments[0])
             right = self._evaluate_expression(expression.arguments[1])

@@ -45,7 +45,7 @@ def build_audit_test_nodes(
     test_metadata["kwargs"] = kwargs
 
     depends_on_nodes: list[str] = [
-        _key_to_unique_id(dep, project_name=project_name) for dep in audit_entry.scope_deps
+        _key_to_unique_id(key=dep, project_name=project_name) for dep in audit_entry.scope_deps
     ]
 
     node: dict[str, object] = {
@@ -100,7 +100,7 @@ def build_sql_test_nodes(
     compiled_code: str = "\n\n".join(compiled_parts)
 
     depends_on_nodes: list[str] = [
-        _key_to_unique_id(dep, project_name=project_name) for dep in test_entry.scope_deps
+        _key_to_unique_id(key=dep, project_name=project_name) for dep in test_entry.scope_deps
     ]
 
     node: dict[str, object] = {

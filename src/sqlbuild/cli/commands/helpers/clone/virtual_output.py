@@ -17,18 +17,18 @@ def render_virtual_clone_output(
     origin: str = style.object_name(result.origin_environment)
     destination: str = style.object_name(result.destination_environment)
     doc.blank()
-    doc.header("Virtual clone", suffix=f"{origin} -> {destination}")
+    doc.header(text="Virtual clone", suffix=f"{origin} -> {destination}")
     doc.line(f"  mode                    {result.mode}")
     if result.destination_virtual_environment is not None:
         doc.line(f"  destination VDE         {result.destination_virtual_environment}")
     doc.line("  origin state            not used")
     doc.line("  destination refs        unchanged")
-    doc.line(f"  selected artifacts   {_count(result.selected_count, style=style)}")
-    doc.line(f"  found in origin      {_count(result.found_count, style=style)}")
-    doc.line(f"  hydrated             {_count(result.hydrated_count, style=style)}")
-    doc.line(f"  already present      {_count(result.reused_count, style=style)}")
-    missing: str = _warn_count(result.missing_count, style=style)
-    skipped: str = _warn_count(result.skipped_locked_count, style=style)
+    doc.line(f"  selected artifacts   {_count(count=result.selected_count, style=style)}")
+    doc.line(f"  found in origin      {_count(count=result.found_count, style=style)}")
+    doc.line(f"  hydrated             {_count(count=result.hydrated_count, style=style)}")
+    doc.line(f"  already present      {_count(count=result.reused_count, style=style)}")
+    missing: str = _warn_count(count=result.missing_count, style=style)
+    skipped: str = _warn_count(count=result.skipped_locked_count, style=style)
     doc.line(f"  missing in origin    {missing}")
     doc.line(f"  skipped locked       {skipped}")
     _append_set(
@@ -49,12 +49,12 @@ def is_virtual_clone_success(result: VirtualCloneResult) -> bool:
     return result.missing_count == 0
 
 
-def _count(count: int, *, style: CliStyle) -> str:
+def _count(*, count: int, style: CliStyle) -> str:
     value: str = f"{count:,}"
     return style.value(value)
 
 
-def _warn_count(count: int, *, style: CliStyle) -> str:
+def _warn_count(*, count: int, style: CliStyle) -> str:
     value: str = f"{count:,}"
     return style.warning_strong(value) if count else value
 

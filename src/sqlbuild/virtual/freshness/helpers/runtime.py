@@ -92,7 +92,7 @@ def observe_virtual_environment_source_freshness(
             unknown_source_names.append(source.name)
             continue
         current_record: SourceFreshnessRecord = source_freshness_record_from_observation(
-            observation,
+            observation=observation,
             virtual_environment_name=virtual_environment_name,
         )
         records.append(
@@ -122,7 +122,7 @@ def persist_virtual_environment_source_freshness(
     """Persist the latest observed freshness records for a virtual environment."""
 
     backend.replace_virtual_environment_source_freshness(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         virtual_environment_name=virtual_environment_name,
         records=result.records,
@@ -285,7 +285,7 @@ def _managed_loader_freshness_record(
         except AdapterUserError:
             return None
         return source_freshness_record_from_observation(
-            observation,
+            observation=observation,
             virtual_environment_name=virtual_environment_name,
         )
     if run_id is None:

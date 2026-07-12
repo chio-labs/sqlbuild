@@ -340,7 +340,7 @@ def seed_matching_virtual_refs(
         model_name: str
         for model_name in model_names:
             backend.upsert_model_version(
-                connection,
+                connection=connection,
                 schema=config.schema,
                 record=ModelVersionRecord(
                     model_name=model_name,
@@ -353,7 +353,7 @@ def seed_matching_virtual_refs(
                 ),
             )
         backend.upsert_virtual_environment(
-            connection,
+            connection=connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
                 virtual_environment_name="dev",
@@ -361,7 +361,7 @@ def seed_matching_virtual_refs(
             ),
         )
         backend.replace_virtual_environment_model_refs(
-            connection,
+            connection=connection,
             schema=config.schema,
             virtual_environment_name="dev",
             refs=tuple(

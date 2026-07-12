@@ -777,7 +777,11 @@ def _validate_dbt_production_ref_macro_path(*, value: str, file_path: Path) -> N
             f"{file_path} dbt.production_ref.generate_schema_name_override must be a relative "
             "path under dbt/macros/"
         )
-    if len(macro_path.parts) < 3 or macro_path.parts[:2] != ("dbt", "macros"):
+    dbt_macro_path_part_count: int = 3
+    if len(macro_path.parts) < dbt_macro_path_part_count or macro_path.parts[:2] != (
+        "dbt",
+        "macros",
+    ):
         raise ProjectConfigError(
             f"{file_path} dbt.production_ref.generate_schema_name_override must be under "
             "dbt/macros/"

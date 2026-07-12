@@ -127,7 +127,7 @@ def _watermark_table_name(
         name=NODE_SOURCE_WATERMARK_TABLE_NAME,
     )
     if table_name is None:
-        raise AdapterUserError("node source watermark table requires a target schema")
+        raise AdapterUserError(message="node source watermark table requires a target schema")
     return table_name
 
 

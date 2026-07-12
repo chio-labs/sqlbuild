@@ -67,13 +67,13 @@ def refresh_logical_vde_views(
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=virtual_target.database,
                 schema=virtual_target.schema,
                 statement_recorder=recorder,
             )
             adapter.create_view_as(
-                connection,
+                connection=connection,
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
@@ -101,13 +101,13 @@ def refresh_logical_vde_views(
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=virtual_target.database,
                 schema=virtual_target.schema,
                 statement_recorder=recorder,
             )
             adapter.create_view_as(
-                connection,
+                connection=connection,
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),

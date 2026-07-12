@@ -53,7 +53,9 @@ def run_promote(request: PromoteCommandRequest) -> int:
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    adapter: BaseAdapter = resolve_adapter(
+        adapter_name=adapter_name, project_dir=effective_project_dir
+    )
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
@@ -91,8 +93,16 @@ def run_promote(request: PromoteCommandRequest) -> int:
         hooks=ConnectionHooks(
             on_progress=planning_progress.on_progress,
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     print(

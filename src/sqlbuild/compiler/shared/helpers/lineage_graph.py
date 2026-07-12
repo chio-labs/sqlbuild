@@ -56,8 +56,13 @@ def _filter_lineage_deps(
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
     """Remove virtual execution-order nodes that are not lineage dependencies."""
 
-    return {
-        key: tuple(dep for dep in deps if dep.resource_type != CompiledResourceType.SQL_TEST)
-        for key, deps in upstream_deps.items()
-        if key.resource_type != CompiledResourceType.SQL_TEST
-    }
+    filtered: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
+    for key, deps in upstream_deps.items():
+        if key.resource_type == CompiledResourceType.SQL_TEST:
+            continue
+        lineage_deps: list[CompiledObjectKey] = []
+        for dep in deps:
+            if dep.resource_type != CompiledResourceType.SQL_TEST:
+                lineage_deps.append(dep)
+        filtered[key] = tuple(lineage_deps)
+    return filtered

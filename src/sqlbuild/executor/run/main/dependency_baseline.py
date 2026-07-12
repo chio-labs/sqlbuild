@@ -32,7 +32,7 @@ def execute_dependency_baseline_entries(
     entry: DependencyBaselinePlanEntry
     for entry in entries:
         if on_node_start is not None:
-            on_node_start(entry.name, resource_kind=ExecutionResourceKind.TABLE)
+            on_node_start(name=entry.name, resource_kind=ExecutionResourceKind.TABLE)
         result: ModelExecutionResult = _execute_dependency_baseline_entry(
             entry=entry,
             adapter=adapter,
@@ -63,13 +63,13 @@ def _execute_dependency_baseline_entry(
         )
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=entry.destination.database,
             schema=entry.destination.schema,
             statement_recorder=statement_recorder,
         )
         adapter.drop(
-            connection,
+            connection=connection,
             destination=destination,
             if_exists=True,
             statement_recorder=statement_recorder,

@@ -95,7 +95,7 @@ def _drop_logical_vde_views(
             unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         )
         compile_context.adapter.drop_view(
-            connection_context.connection,
+            connection=connection_context.connection,
             destination=resolve_relation_location_qualified_name(
                 adapter=compile_context.adapter,
                 location=virtual_target,

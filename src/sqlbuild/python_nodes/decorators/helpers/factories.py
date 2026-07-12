@@ -8,7 +8,9 @@ from typing import Any, cast
 from sqlbuild.shared.models import FactoryDefinition
 
 
-def factory(function: Callable[..., object], /) -> Callable[..., object]:
+def factory(
+    function: Callable[..., object],
+) -> Callable[..., object]:
     """Mark a Python function as a SQLBuild Python-node factory."""
 
     factory_function: Any = cast(Any, function)

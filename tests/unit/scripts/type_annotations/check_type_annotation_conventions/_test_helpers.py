@@ -96,6 +96,6 @@ def collect_violation_codes(repo_root: Path) -> tuple[str, ...]:
     """Run the type checker and collect violation codes."""
 
     violations: list[Violation] = check_paths(
-        [repo_root / "src", repo_root / "tests"], repo_root=repo_root
+        paths=[repo_root / "src", repo_root / "tests"], repo_root=repo_root
     )
     return tuple(violation.code for violation in violations)

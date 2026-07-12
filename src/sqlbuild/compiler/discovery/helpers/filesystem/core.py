@@ -123,7 +123,7 @@ def discover_model_files(
         relative_path: Path = file_path.relative_to(project_dir)
         header_values: dict[str, object]
         query_sql: str
-        header_values, query_sql = parse_model_sql(contents, file_path=file_path)
+        header_values, query_sql = parse_model_sql(contents=contents, file_path=file_path)
         discovered_model_files.append(
             DiscoveredSqlModelFile(
                 file_path=file_path,
@@ -158,7 +158,7 @@ def discover_sql_function_files(*, project_dir: Path) -> tuple[DiscoveredSqlFunc
         contents: str = file_path.read_text(encoding="utf-8")
         header_values: dict[str, object]
         body_sql: str
-        header_values, body_sql = parse_function_sql(contents, file_path=file_path)
+        header_values, body_sql = parse_function_sql(contents=contents, file_path=file_path)
         discovered_function_files.append(
             DiscoveredSqlFunctionFile(
                 file_path=file_path,
@@ -188,7 +188,7 @@ def discover_python_function_files(
         entry_point: str
         body_python: str
         header_values, entry_point, body_python = parse_python_function(
-            contents, file_path=file_path
+            contents=contents, file_path=file_path
         )
         discovered_function_files.append(
             DiscoveredPythonFunctionFile(
@@ -228,7 +228,7 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
         contents: str = file_path.read_text(encoding="utf-8")
         model_entries: tuple[SchemaModelEntry, ...]
         seed_entries: tuple[SchemaSeedEntry, ...]
-        model_entries, seed_entries = parse_schema_yml(contents, file_path=file_path)
+        model_entries, seed_entries = parse_schema_yml(contents=contents, file_path=file_path)
         discovered_schema_files.append(
             DiscoveredSchemaFile(
                 file_path=file_path,
@@ -255,7 +255,9 @@ def discover_source_files(*, project_dir: Path) -> tuple[DiscoveredSourceFile, .
     file_path: Path
     for file_path in yaml_paths:
         contents: str = file_path.read_text(encoding="utf-8")
-        source_entries: tuple[SourceEntry, ...] = parse_sources_yml(contents, file_path=file_path)
+        source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
+            contents=contents, file_path=file_path
+        )
         discovered_source_files.append(
             DiscoveredSourceFile(
                 file_path=file_path,
@@ -300,7 +302,7 @@ def discover_test_files(*, project_dir: Path) -> tuple[DiscoveredSqlTestFile, ..
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),
                 contents=contents,
-                blocks=parse_sql_test_file(contents, file_path=file_path),
+                blocks=parse_sql_test_file(contents=contents, file_path=file_path),
             )
         )
     return tuple(discovered_test_files)
@@ -343,7 +345,7 @@ def discover_audit_files(*, project_dir: Path) -> tuple[DiscoveredAuditFile, ...
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),
                 contents=contents,
-                blocks=parse_sql_audit_file(contents, file_path=file_path),
+                blocks=parse_sql_audit_file(contents=contents, file_path=file_path),
             )
         )
     return tuple(discovered_audit_files)
@@ -1069,7 +1071,7 @@ def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None:
     )
 
 
-def _is_relative_to(path: Path, *, parent: Path) -> bool:
+def _is_relative_to(*, path: Path, parent: Path) -> bool:
     try:
         path.relative_to(parent)
     except ValueError:

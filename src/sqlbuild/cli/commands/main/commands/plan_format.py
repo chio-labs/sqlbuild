@@ -10,8 +10,8 @@ from sqlbuild.shared.helpers.output.display import DisplayOptions
 
 
 def format_plan(
-    plan: PlanOutput,
     *,
+    plan: PlanOutput,
     use_color: bool = True,
     include_header: bool = True,
     display_options: DisplayOptions | None = None,
@@ -20,7 +20,7 @@ def format_plan(
     """Format a SQLBuild plan."""
 
     return _format_plan(
-        plan,
+        plan=plan,
         use_color=use_color,
         include_header=include_header,
         display_options=display_options,

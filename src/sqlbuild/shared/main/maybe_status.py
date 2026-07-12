@@ -11,7 +11,7 @@ from sqlbuild.shared.main.progress_spinners_disabled import progress_spinners_di
 
 
 @contextmanager
-def maybe_status(message: str, *, enabled: bool) -> Iterator[None]:
+def maybe_status(*, message: str, enabled: bool) -> Iterator[None]:
     """Render a stderr spinner for long-running interactive operations."""
 
     if not enabled or progress_spinners_disabled() or not sys.stderr.isatty():

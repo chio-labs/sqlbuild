@@ -112,7 +112,7 @@ class TextStyle:
     prefix: str
     suffix: str = "\033[0m"
 
-    def apply(self, text: str, *, use_color: bool) -> str:
+    def apply(self, *, text: str, use_color: bool) -> str:
         """Apply this style when color is enabled."""
 
         if not use_color or not self.prefix:

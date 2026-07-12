@@ -197,7 +197,7 @@ def _build_supplemental_dbt_argvs(
     if not selector_terms:
         return ()
     dbt_command: str = "ls" if command == DbtInteropCommand.PLAN else command.value
-    argv: tuple[str, ...] = _append_dbt_options((dbt_executable, dbt_command), options=options)
+    argv: tuple[str, ...] = _append_dbt_options(argv=(dbt_executable, dbt_command), options=options)
     return ((*argv, "--select", *selector_terms),)
 
 
@@ -266,7 +266,7 @@ def resolve_sqlbuild_test_actions(
     return (DbtInteropSqlbuildTestAction.TEST, DbtInteropSqlbuildTestAction.AUDIT)
 
 
-def _append_dbt_options(argv: tuple[str, ...], *, options: DbtCliOptions) -> tuple[str, ...]:
+def _append_dbt_options(*, argv: tuple[str, ...], options: DbtCliOptions) -> tuple[str, ...]:
     if options.project_dir is not None:
         argv = (*argv, "--project-dir", str(options.project_dir))
     if options.profiles_dir is not None:

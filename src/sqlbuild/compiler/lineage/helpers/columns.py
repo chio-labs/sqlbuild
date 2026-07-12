@@ -30,8 +30,6 @@ class _PhysicalResource:
 
 
 def _normalize_sqlbuild_refs(sql: str) -> tuple[str, tuple[_PhysicalResource, ...]]:
-    resources: list[_PhysicalResource] = []
-
     def replace(match: re.Match[str]) -> str:
         kind: str = match.group("kind")
         name: str = match.group("name")
@@ -40,25 +38,32 @@ def _normalize_sqlbuild_refs(sql: str) -> tuple[str, tuple[_PhysicalResource, ..
             "source": CompiledResourceType.SOURCE,
             "seed": CompiledResourceType.SEED,
         }[kind]
-        physical_name: str = _physical_resource_name(resource_type, resource_name=name)
-        resources.append(
-            _PhysicalResource(
-                resource_type=resource_type,
-                resource_name=name,
-                physical_name=physical_name,
-            )
+        physical_name: str = _physical_resource_name(
+            resource_type=resource_type, resource_name=name
         )
         return physical_name
 
+    resources: tuple[_PhysicalResource, ...] = tuple(
+        _PhysicalResource(
+            resource_type={
+                "ref": CompiledResourceType.MODEL,
+                "source": CompiledResourceType.SOURCE,
+                "seed": CompiledResourceType.SEED,
+            }[match.group("kind")],
+            resource_name=match.group("name"),
+            physical_name=replace(match),
+        )
+        for match in _SQLBUILD_REF_PATTERN.finditer(sql)
+    )
     normalized_sql: str = _SQLBUILD_REF_PATTERN.sub(replace, sql)
     normalized_sql = _SQLBUILD_UDF_PATTERN.sub(
         lambda match: f"{_physical_function_name(match.group('name'))}(",
         normalized_sql,
     )
-    return normalized_sql, tuple(resources)
+    return normalized_sql, resources
 
 
-def _physical_resource_name(resource_type: CompiledResourceType, *, resource_name: str) -> str:
+def _physical_resource_name(*, resource_type: CompiledResourceType, resource_name: str) -> str:
     safe_name: str = re.sub(r"[^a-zA-Z0-9_]", "__", resource_name)
     return f"__sqlbuild_{resource_type.value}__{safe_name}"
 
@@ -77,7 +82,9 @@ def _build_schema_mapping(project: CompiledProject) -> dict[str, dict[str, str]]
             columns.setdefault(column.name, column.type or "UNKNOWN")
         if columns:
             schema[
-                _physical_resource_name(CompiledResourceType.MODEL, resource_name=model.name)
+                _physical_resource_name(
+                    resource_type=CompiledResourceType.MODEL, resource_name=model.name
+                )
             ] = columns
     for source in project.sources:
         columns: dict[str, str] = {
@@ -85,16 +92,20 @@ def _build_schema_mapping(project: CompiledProject) -> dict[str, dict[str, str]]
         }
         if columns:
             schema[
-                _physical_resource_name(CompiledResourceType.SOURCE, resource_name=source.name)
+                _physical_resource_name(
+                    resource_type=CompiledResourceType.SOURCE, resource_name=source.name
+                )
             ] = columns
     for seed in project.seeds:
         columns: dict[str, str] = {
             column.name: column.type or "UNKNOWN" for column in seed.schema_entry.columns
         }
         if columns:
-            schema[_physical_resource_name(CompiledResourceType.SEED, resource_name=seed.name)] = (
-                columns
-            )
+            schema[
+                _physical_resource_name(
+                    resource_type=CompiledResourceType.SEED, resource_name=seed.name
+                )
+            ] = columns
     return schema
 
 

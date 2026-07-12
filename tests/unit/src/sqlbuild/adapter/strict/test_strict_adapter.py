@@ -81,7 +81,7 @@ def test_given_unsupported_adapter_when_getting_table_freshness_metadata_then_ra
     assert adapter.supports_table_freshness_metadata() is test_case.expected_supports_metadata
     with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment):
         adapter.get_table_freshness_metadata(
-            None,
+            connection=None,
             database=None,
             schema="main",
             name="raw_orders",

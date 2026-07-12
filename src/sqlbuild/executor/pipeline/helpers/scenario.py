@@ -108,7 +108,7 @@ def run_scenario_test_pipeline(
                     scenario_name=scenario.name,
                     status=ExecutionStatus.FAILED,
                     retained=retain,
-                    error_code=error_code(exc, fallback_code=SCENARIO_EXEC_INTERNAL),
+                    error_code=error_code(error=exc, fallback_code=SCENARIO_EXEC_INTERNAL),
                     error_help=_scenario_failure_help(exc),
                     error_message=error_message(exc),
                 )
@@ -165,7 +165,7 @@ def run_scenario_local_test_pipeline(
                 status=ExecutionStatus.FAILED,
                 local_status=ScenarioLocalRunStatus.ERROR,
                 retained=False,
-                error_code=error_code(exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
+                error_code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
                 error_help=_scenario_failure_help(exc),
                 error_message=error_message(exc),
             )
@@ -235,7 +235,7 @@ def run_scenario_capture_pipeline(
                     scenario_name=scenario.name,
                     status=ExecutionStatus.FAILED,
                     retained=settings.retain,
-                    error_code=error_code(exc, fallback_code=SCENARIO_EXEC_INTERNAL),
+                    error_code=error_code(error=exc, fallback_code=SCENARIO_EXEC_INTERNAL),
                     error_help=_scenario_failure_help(exc),
                     error_message=error_message(exc),
                 )
@@ -281,7 +281,7 @@ def select_scenario_snapshot_capture_candidates(
             )
         except Exception as error:
             log_debug_event(
-                _DEBUG_LOGGER,
+                logger=_DEBUG_LOGGER,
                 message="scenario snapshot state classification failed; skipping auto-capture",
                 scenario=scenario.name,
                 sqlbuild_error=str(error),

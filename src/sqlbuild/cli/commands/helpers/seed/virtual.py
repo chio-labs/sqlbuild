@@ -16,7 +16,7 @@ def execute_virtual_seed(*, request: SeedCommandRequest, invocation: SeedInvocat
     """Delegate seed-only virtual mode execution to virtual build."""
 
     provider_session: ProviderSession = build_provider_session(
-        invocation.discovered_inputs.providers
+        discovered_providers=invocation.discovered_inputs.providers
     )
     try:
         return run_virtual_build(

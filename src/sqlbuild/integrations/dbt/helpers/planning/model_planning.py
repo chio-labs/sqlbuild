@@ -280,7 +280,7 @@ def _expand_candidate_unique_ids(
     unique_id: str
     for unique_id in candidate_unique_ids:
         upstream: frozenset[DbtCombinedGraphKey] = expand_combined_upstream(
-            dbt_model_graph_key(unique_id), upstream=graph.upstream_deps
+            key=dbt_model_graph_key(unique_id), upstream=graph.upstream_deps
         )
         key: DbtCombinedGraphKey
         for key in upstream:
@@ -532,7 +532,7 @@ def _downstream_sqlbuild_model_names(
     unique_id: str
     for unique_id in dbt_unique_ids:
         downstream: frozenset[DbtCombinedGraphKey] = expand_combined_downstream(
-            dbt_model_graph_key(unique_id), downstream=graph.downstream_deps
+            key=dbt_model_graph_key(unique_id), downstream=graph.downstream_deps
         )
         key: DbtCombinedGraphKey
         for key in downstream:
@@ -656,11 +656,11 @@ def _build_relation_lookup(
     state_database: str | None,
     state_schemas: tuple[str, ...],
 ) -> RelationLookup:
-    state_locations: tuple[tuple[str | None, str | None, str], ...] = tuple(
-        (state_database, state_schema, state_table_name)
-        for state_schema in state_schemas
-        for state_table_name in (FINGERPRINT_TABLE_NAME, SOURCE_FRESHNESS_TABLE_NAME)
-    )
+    state_location_items: list[tuple[str | None, str | None, str]] = []
+    for state_schema in state_schemas:
+        for state_table_name in (FINGERPRINT_TABLE_NAME, SOURCE_FRESHNESS_TABLE_NAME):
+            state_location_items.append((state_database, state_schema, state_table_name))
+    state_locations: tuple[tuple[str | None, str | None, str], ...] = tuple(state_location_items)
     locations: tuple[tuple[str | None, str | None, str], ...] = (
         *((model.database, model.schema, model.alias or model.name) for model in models),
         *((seed.database, seed.schema, seed.alias or seed.name) for seed in seeds),

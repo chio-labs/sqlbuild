@@ -27,7 +27,7 @@ def test_given_json_value_when_encoding_result_storage_then_returns_base64_json(
     test_case: NodeResultSerializationTestCase,
 ) -> None:
     encoded: str = encode_json_b64(
-        test_case.value,
+        value=test_case.value,
         label="payload",
         node_name="produce_result",
     )
@@ -51,7 +51,7 @@ def test_given_non_json_value_when_encoding_result_storage_then_raises_input_err
 ) -> None:
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
         encode_json_b64(
-            test_case.value,
+            value=test_case.value,
             label="payload",
             node_name="produce_result",
         )

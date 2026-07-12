@@ -32,7 +32,7 @@ def test_given_edges_when_inverting_then_returns_expected_edges(
     test_case: InvertEdgesTestCase,
 ) -> None:
     result: dict[str, tuple[str, ...]] = invert_edges(
-        test_case.edges,
+        edges=test_case.edges,
         sort_key=lambda value: value,
     )
 

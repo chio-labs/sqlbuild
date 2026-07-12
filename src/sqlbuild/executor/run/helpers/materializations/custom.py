@@ -27,7 +27,7 @@ from sqlbuild.executor.run.helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
-from sqlbuild.executor.run.helpers.reuse.core import validate_reuse_origin_fingerprint
+from sqlbuild.executor.run.helpers.reuse.core import read_current_reuse_origin_fingerprint
 from sqlbuild.executor.run.helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.models import (
     FinalAuditRun,
@@ -86,7 +86,7 @@ def execute_custom_entry(
     statement_recorder: StatementRecorder = StatementRecorder()
 
     adapter.ensure_schema(
-        connection,
+        connection=connection,
         database=destination_database,
         schema=destination_schema,
         statement_recorder=statement_recorder,
@@ -153,7 +153,7 @@ def execute_custom_entry(
                 hook_results=hook_results,
             )
         try:
-            validate_reuse_origin_fingerprint(
+            read_current_reuse_origin_fingerprint(
                 adapter=adapter,
                 connection=connection,
                 model_name=entry.name,
@@ -438,7 +438,7 @@ def _cleanup_relations(
     for relation in relations:
         try:
             adapter.drop(
-                connection,
+                connection=connection,
                 destination=relation,
                 if_exists=True,
                 statement_recorder=statement_recorder,

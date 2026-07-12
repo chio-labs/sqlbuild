@@ -95,9 +95,9 @@ def test_given_lineage_graph_when_formatting_human_output_then_includes_expected
     graph: DbtLineageGraph = build_lineage_graph_for_output_test()
 
     output: str = (
-        format_dbt_lineage_list(graph, use_color=False)
+        format_dbt_lineage_list(graph=graph, use_color=False)
         if test_case.output_format == DbtLineageOutputFormat.LIST
-        else format_dbt_lineage_tree(graph, use_color=False)
+        else format_dbt_lineage_tree(graph=graph, use_color=False)
     )
 
     expected_fragment: str
@@ -127,9 +127,9 @@ def test_given_single_node_lineage_graph_when_formatting_human_output_then_inclu
     graph: DbtLineageGraph = build_depth_zero_lineage_graph_for_output_test()
 
     output: str = (
-        format_dbt_lineage_list(graph, use_color=False)
+        format_dbt_lineage_list(graph=graph, use_color=False)
         if test_case.output_format == DbtLineageOutputFormat.LIST
-        else format_dbt_lineage_tree(graph, use_color=False)
+        else format_dbt_lineage_tree(graph=graph, use_color=False)
     )
 
     expected_fragment: str
@@ -154,7 +154,7 @@ def test_given_lineage_graph_without_focus_when_formatting_tree_then_outputs_sum
     graph: DbtLineageGraph = build_depth_zero_lineage_graph_for_output_test()
     summary_graph: DbtLineageGraph = DbtLineageGraph(nodes=graph.nodes, edges=graph.edges)
 
-    output: str = format_dbt_lineage_tree(summary_graph, use_color=False)
+    output: str = format_dbt_lineage_tree(graph=summary_graph, use_color=False)
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:

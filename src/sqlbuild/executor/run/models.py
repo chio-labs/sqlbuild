@@ -55,17 +55,17 @@ class HookContext:
 
     def execute_sql(self, sql: str) -> None:
         self.statement_recorder.record(sql)
-        self.adapter.execute(self.connection, sql=sql)
+        self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> list[tuple[object, ...]]:
         self.statement_recorder.record(sql)
-        result: QueryResult = self.adapter.query(self.connection, sql=sql, limit=None)
+        result: QueryResult = self.adapter.query(connection=self.connection, sql=sql, limit=None)
         return list(result.rows)
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
 
-    def skip(self, reason: str, *, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
+    def skip(self, *, reason: str, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
         """Return a skip signal for the current hook."""
 
         return HookSkipResult(reason=reason, mode=SkipMode(mode))

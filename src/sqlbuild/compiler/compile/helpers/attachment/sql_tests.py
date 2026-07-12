@@ -58,8 +58,8 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 
 
 def build_test_inputs(
-    discovered_inputs: DiscoveredProjectInputs,
     *,
+    discovered_inputs: DiscoveredProjectInputs,
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
@@ -320,8 +320,8 @@ def _infer_tested_table_function_names(
 
 
 def build_scenario_inputs(
-    discovered_inputs: DiscoveredProjectInputs,
     *,
+    discovered_inputs: DiscoveredProjectInputs,
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],

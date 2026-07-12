@@ -24,7 +24,7 @@ def promote_relation_to_destination(
     """Promote an already-created relation into its final destination."""
 
     existing: bool = adapter.relation_exists(
-        connection,
+        connection=connection,
         database=destination_database,
         schema=destination_schema,
         name=destination_name,
@@ -32,13 +32,13 @@ def promote_relation_to_destination(
     promotion_strategy: PromotionStrategy = adapter.default_promotion_strategy()
     if existing and promotion_strategy == PromotionStrategy.ATOMIC_SWAP:
         adapter.swap(
-            connection,
+            connection=connection,
             left=destination_relation,
             right=origin_relation,
             statement_recorder=statement_recorder,
         )
         adapter.drop(
-            connection,
+            connection=connection,
             destination=origin_relation,
             if_exists=True,
             statement_recorder=statement_recorder,
@@ -46,13 +46,13 @@ def promote_relation_to_destination(
         return
     if existing and promotion_strategy == PromotionStrategy.ATOMIC_REPLACE:
         adapter.replace_table_from_relation(
-            connection,
+            connection=connection,
             destination=destination_relation,
             origin=origin_relation,
             statement_recorder=statement_recorder,
         )
         adapter.drop(
-            connection,
+            connection=connection,
             destination=origin_relation,
             if_exists=True,
             statement_recorder=statement_recorder,
@@ -61,7 +61,7 @@ def promote_relation_to_destination(
     if existing:
         raise ExecutorInputError(f"Unsupported promotion strategy: {promotion_strategy}")
     adapter.rename(
-        connection,
+        connection=connection,
         origin=origin_relation,
         destination=destination_relation,
         statement_recorder=statement_recorder,

@@ -61,7 +61,9 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    adapter: BaseAdapter = resolve_adapter(
+        adapter_name=adapter_name, project_dir=effective_project_dir
+    )
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,

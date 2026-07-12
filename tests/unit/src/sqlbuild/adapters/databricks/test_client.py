@@ -219,7 +219,7 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_databricks_u
     connection: FakeDatabricksMetadataConnection = FakeDatabricksMetadataConnection((cursor,))
 
     metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
-        adapter.get_tables_freshness_metadata(connection, requests=requests)
+        adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
     )
 
     assert (
@@ -273,7 +273,7 @@ def test_given_delta_history_unavailable_when_getting_metadata_then_databricks_u
     )
 
     metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
-        adapter.get_tables_freshness_metadata(connection, requests=requests)
+        adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
     )
 
     assert (

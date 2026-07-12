@@ -20,13 +20,13 @@ def build_compile_lineage(
             return None
         case CompileLineageMode.FAST:
             return build_project_column_lineage(
-                graph.project,
+                project=graph.project,
                 dialect=dialect,
                 mode=ColumnLineageMode.FAST,
             )
         case CompileLineageMode.RICH:
             return build_project_column_lineage(
-                graph.project,
+                project=graph.project,
                 dialect=dialect,
                 mode=ColumnLineageMode.RICH,
             )

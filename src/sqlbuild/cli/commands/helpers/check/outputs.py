@@ -35,7 +35,7 @@ def write_check_completion_output(
         + format_summary_footer(
             counts=(
                 ("PASS", _pass_count(results)),
-                ("WARN", _warn_count(results)),
+                ("WARN", _warn_count(results=results)),
                 ("FAIL", _fail_count(results)),
                 ("TOTAL", len(results)),
             ),

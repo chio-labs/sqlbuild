@@ -47,79 +47,79 @@ class CliStyle:
         self.theme: CliTheme = theme
 
     def title(self, text: str) -> str:
-        return self.theme.title.apply(text, use_color=self.use_color)
+        return self.theme.title.apply(text=text, use_color=self.use_color)
 
     def section(self, text: str) -> str:
-        return self.theme.section.apply(text, use_color=self.use_color)
+        return self.theme.section.apply(text=text, use_color=self.use_color)
 
     def label(self, text: str) -> str:
-        return self.theme.label.apply(text, use_color=self.use_color)
+        return self.theme.label.apply(text=text, use_color=self.use_color)
 
     def value(self, text: str) -> str:
-        return self.theme.value.apply(text, use_color=self.use_color)
+        return self.theme.value.apply(text=text, use_color=self.use_color)
 
     def accent(self, text: str) -> str:
-        return self.theme.accent.apply(text, use_color=self.use_color)
+        return self.theme.accent.apply(text=text, use_color=self.use_color)
 
     def plan_section(self, text: str) -> str:
-        return self.theme.plan_section.apply(text, use_color=self.use_color)
+        return self.theme.plan_section.apply(text=text, use_color=self.use_color)
 
     def object_name(self, text: str) -> str:
-        return self.theme.object_name.apply(text, use_color=self.use_color)
+        return self.theme.object_name.apply(text=text, use_color=self.use_color)
 
     def command(self, text: str) -> str:
-        return self.theme.command.apply(text, use_color=self.use_color)
+        return self.theme.command.apply(text=text, use_color=self.use_color)
 
     def muted(self, text: str) -> str:
-        return self.theme.muted.apply(text, use_color=self.use_color)
+        return self.theme.muted.apply(text=text, use_color=self.use_color)
 
     def success(self, text: str) -> str:
-        return self.theme.success.apply(text, use_color=self.use_color)
+        return self.theme.success.apply(text=text, use_color=self.use_color)
 
     def success_strong(self, text: str) -> str:
-        return self.theme.success_strong.apply(text, use_color=self.use_color)
+        return self.theme.success_strong.apply(text=text, use_color=self.use_color)
 
     def warning(self, text: str) -> str:
-        return self.theme.warning.apply(text, use_color=self.use_color)
+        return self.theme.warning.apply(text=text, use_color=self.use_color)
 
     def warning_strong(self, text: str) -> str:
-        return self.theme.warning_strong.apply(text, use_color=self.use_color)
+        return self.theme.warning_strong.apply(text=text, use_color=self.use_color)
 
     def error(self, text: str) -> str:
-        return self.theme.error.apply(text, use_color=self.use_color)
+        return self.theme.error.apply(text=text, use_color=self.use_color)
 
     def error_strong(self, text: str) -> str:
-        return self.theme.error_strong.apply(text, use_color=self.use_color)
+        return self.theme.error_strong.apply(text=text, use_color=self.use_color)
 
     def error_muted(self, text: str) -> str:
-        return self.theme.error_muted.apply(text, use_color=self.use_color)
+        return self.theme.error_muted.apply(text=text, use_color=self.use_color)
 
     def log_label(self, text: str) -> str:
-        return self.theme.log_label.apply(text, use_color=self.use_color)
+        return self.theme.log_label.apply(text=text, use_color=self.use_color)
 
     def dbt_section(self, text: str) -> str:
-        return self.theme.dbt_section.apply(text, use_color=self.use_color)
+        return self.theme.dbt_section.apply(text=text, use_color=self.use_color)
 
     def dbt_label(self, text: str) -> str:
-        return self.theme.dbt_label.apply(text, use_color=self.use_color)
+        return self.theme.dbt_label.apply(text=text, use_color=self.use_color)
 
     def dbt_object_name(self, text: str) -> str:
-        return self.theme.dbt_object_name.apply(text, use_color=self.use_color)
+        return self.theme.dbt_object_name.apply(text=text, use_color=self.use_color)
 
     def dbt_execution_label(self, text: str) -> str:
-        return self.theme.dbt_execution_label.apply(text, use_color=self.use_color)
+        return self.theme.dbt_execution_label.apply(text=text, use_color=self.use_color)
 
-    def status(self, status: str, *, text: str | None = None) -> str:
+    def status(self, *, status: str, text: str | None = None) -> str:
         """Style status text according to the status word."""
 
         rendered: str = status if text is None else text
         normalized: str = status.upper()
         if normalized in {"OK", "PASS", "SUCCESS"}:
-            return self.theme.success.apply(rendered, use_color=self.use_color)
+            return self.theme.success.apply(text=rendered, use_color=self.use_color)
         if normalized in {"WARN", "WARNING"}:
-            return self.theme.warning.apply(rendered, use_color=self.use_color)
+            return self.theme.warning.apply(text=rendered, use_color=self.use_color)
         if normalized in {"FAIL", "FAILED", "ERROR"}:
-            return self.theme.error.apply(rendered, use_color=self.use_color)
+            return self.theme.error.apply(text=rendered, use_color=self.use_color)
         if normalized in {"SKIP", "SKIPPED"}:
-            return self.theme.skipped.apply(rendered, use_color=self.use_color)
+            return self.theme.skipped.apply(text=rendered, use_color=self.use_color)
         return rendered

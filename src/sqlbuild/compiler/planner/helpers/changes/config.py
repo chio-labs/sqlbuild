@@ -5,14 +5,14 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models.core import CompiledModel
 
 
-def get_config_str(model: CompiledModel, *, key: str) -> str | None:
+def get_config_str(*, model: CompiledModel, key: str) -> str | None:
     """Extract a string config value from model config."""
 
     raw: object | None = model.config.values.get(key)
     return raw if isinstance(raw, str) else None
 
 
-def get_config_dict(model: CompiledModel, *, key: str) -> dict[str, str]:
+def get_config_dict(*, model: CompiledModel, key: str) -> dict[str, str]:
     """Extract a dict config value from model config."""
 
     raw: object | None = model.config.values.get(key)

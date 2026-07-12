@@ -94,13 +94,13 @@ def _add_compile_and_dag_parsers(
         help="Diagnostic: skip writing target/compiled artifacts",
     )
     _ = add_vars_args(compile_parser)
-    _ = add_dbt_config_args(compile_parser)
+    _ = add_dbt_config_args(parser=compile_parser)
 
     dag_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DAG)
     dag_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     dag_parser.add_argument("--json", action="store_true", default=False)
     _ = add_vars_args(dag_parser)
-    _ = add_dbt_config_args(dag_parser)
+    _ = add_dbt_config_args(parser=dag_parser)
 
 
 def _add_plan_and_build_parsers(
@@ -131,7 +131,7 @@ def _add_plan_and_build_parsers(
     _ = add_cursor_override_args(plan_parser)
     _ = add_select_args(plan_parser)
     _ = add_vars_args(plan_parser)
-    _ = add_dbt_config_args(plan_parser)
+    _ = add_dbt_config_args(parser=plan_parser)
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -163,7 +163,7 @@ def _add_plan_and_build_parsers(
     _ = add_execution_args(build_parser)
     _ = add_select_args(build_parser)
     _ = add_vars_args(build_parser)
-    _ = add_dbt_config_args(build_parser)
+    _ = add_dbt_config_args(parser=build_parser)
 
 
 def _add_quality_parsers(
@@ -180,7 +180,7 @@ def _add_quality_parsers(
     _ = add_execution_json_output_arg(freshness_parser)
     _ = add_select_args(freshness_parser)
     _ = add_vars_args(freshness_parser)
-    _ = add_dbt_config_args(freshness_parser)
+    _ = add_dbt_config_args(parser=freshness_parser)
 
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -189,7 +189,7 @@ def _add_quality_parsers(
     _ = add_execution_json_output_arg(test_parser)
     _ = add_select_args(test_parser)
     _ = add_vars_args(test_parser)
-    _ = add_dbt_config_args(test_parser)
+    _ = add_dbt_config_args(parser=test_parser)
 
     check_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CHECK)
     check_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -198,7 +198,7 @@ def _add_quality_parsers(
     _ = add_execution_json_output_arg(check_parser)
     _ = add_select_args(check_parser)
     _ = add_vars_args(check_parser)
-    _ = add_dbt_config_args(check_parser)
+    _ = add_dbt_config_args(parser=check_parser)
 
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
@@ -208,7 +208,7 @@ def _add_quality_parsers(
     _ = add_execution_json_output_arg(audit_parser)
     _ = add_select_args(audit_parser)
     _ = add_vars_args(audit_parser)
-    _ = add_dbt_config_args(audit_parser)
+    _ = add_dbt_config_args(parser=audit_parser)
 
 
 def _add_data_parsers(
@@ -242,7 +242,7 @@ def _add_data_parsers(
     clone_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     _ = add_select_args(clone_parser)
     _ = add_vars_args(clone_parser)
-    _ = add_dbt_config_args(clone_parser)
+    _ = add_dbt_config_args(parser=clone_parser)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
     diff_parser.add_argument("target_range", metavar="FROM:TO")

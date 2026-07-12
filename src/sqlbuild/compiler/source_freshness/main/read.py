@@ -43,7 +43,7 @@ def read_latest_source_freshness(
         schema=schema,
     )
     try:
-        result: Any = execute(connection, sql=read_sql)
+        result: Any = execute(connection=connection, sql=read_sql)
     except Exception as error:
         raise SourceFreshnessInputError(
             f"Unable to read source freshness records from {qualified_name}. This can happen "

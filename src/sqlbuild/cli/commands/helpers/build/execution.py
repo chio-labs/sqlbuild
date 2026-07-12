@@ -101,7 +101,9 @@ def prepare_build_execution(
             callbacks=StandardLifecycleCallbacks(
                 use_color=invocation.use_color,
                 progress_stream=invocation.progress_stream,
-                on_node_start=callbacks.on_node_start,
+                on_node_start=lambda name, resource_kind: callbacks.on_node_start(
+                    name=name, resource_kind=resource_kind
+                ),
                 on_node_complete=callbacks.on_node_complete,
             ),
             providers=providers,
@@ -147,14 +149,22 @@ def execute_build_plan(
             providers=providers,
         ),
         callbacks=BuildCallbacks(
-            on_node_start=preparation.callbacks.on_node_start,
+            on_node_start=lambda name, resource_kind: preparation.callbacks.on_node_start(
+                name=name, resource_kind=resource_kind
+            ),
             on_node_complete=preparation.python_lifecycle.on_node_complete,
             on_sub_progress=preparation.callbacks.on_sub_progress,
             on_connection_start=preparation.execution_connection_progress.on_connection_start,
-            on_connection_complete=(
-                preparation.execution_connection_progress.on_connection_complete
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                preparation.execution_connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
             ),
-            on_connection_error=preparation.execution_connection_progress.on_connection_error,
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                preparation.execution_connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
         customizations=BuildCustomizations(
             custom_materializations=pipeline_result.custom_materializations,

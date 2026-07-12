@@ -60,7 +60,7 @@ def test_given_typed_duckdb_relation_when_capturing_then_jsonl_reloads_with_mani
     tmp_path: Path,
 ) -> None:
     adapter.execute(
-        connection,
+        connection=connection,
         sql="""
         CREATE TABLE typed_capture_source AS
         SELECT

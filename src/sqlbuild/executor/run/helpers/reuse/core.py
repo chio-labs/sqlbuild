@@ -23,7 +23,7 @@ def _origin_is_transient(
     if location.schema is None:
         return False
     relations: tuple[Any, ...] = adapter.list_relations(
-        connection,
+        connection=connection,
         database=location.database,
         schemas=(location.schema,),
         names=(location.name,),
@@ -51,7 +51,7 @@ def create_relation_from_reuse_origin(
 
     if hard_copy:
         adapter.create_table_as(
-            connection,
+            connection=connection,
             destination=destination_relation,
             sql=f"SELECT * FROM {origin_relation}",
             statement_recorder=statement_recorder,
@@ -72,7 +72,7 @@ def create_relation_from_reuse_origin(
             "or remove reuse_from to build normally."
         )
     adapter.clone(
-        connection,
+        connection=connection,
         origin=origin_relation,
         destination=destination_relation,
         hard_copy=False,
@@ -93,7 +93,7 @@ def create_relation_from_reuse_plan(
 ) -> Fingerprint:
     """Validate and create a concrete destination relation from a reuse plan."""
 
-    reuse_origin_fingerprint: Fingerprint = validate_reuse_origin_fingerprint(
+    reuse_origin_fingerprint: Fingerprint = read_current_reuse_origin_fingerprint(
         adapter=adapter,
         connection=connection,
         model_name=model_name,
@@ -121,7 +121,7 @@ def create_relation_from_reuse_plan(
     return reuse_origin_fingerprint
 
 
-def validate_reuse_origin_fingerprint(
+def read_current_reuse_origin_fingerprint(
     *,
     adapter: BaseAdapter,
     connection: Any,
@@ -131,7 +131,7 @@ def validate_reuse_origin_fingerprint(
     reuse_origin_fingerprint_database: str | None,
     reuse_origin_fingerprint_schema: str | None,
 ) -> Fingerprint:
-    """Recheck reuse_from target fingerprint immediately before relation reuse."""
+    """Read and verify the reuse origin fingerprint immediately before relation reuse."""
 
     if expected_version_hash is None:
         raise ExecutorInputError(
@@ -147,7 +147,7 @@ def validate_reuse_origin_fingerprint(
         connection=connection,
         execute=adapter.execute,
         table_exists=adapter.relation_exists(
-            connection,
+            connection=connection,
             database=reuse_origin_fingerprint_database,
             schema=reuse_origin_fingerprint_schema,
             name=FINGERPRINT_TABLE_NAME,

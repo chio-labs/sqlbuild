@@ -47,13 +47,19 @@ def resolve_model_plan_action(
     materialization: MaterializationType = get_materialization_type(model)
 
     if materialization == MaterializationType.CUSTOM:
-        return PlanAction.CUSTOM, _custom_reason(change_result, full_refresh=full_refresh)
+        return PlanAction.CUSTOM, _custom_reason(
+            change_result=change_result, full_refresh=full_refresh
+        )
 
     if materialization == MaterializationType.VIEW:
-        return PlanAction.CREATE_VIEW, _view_reason(change_result, full_refresh=full_refresh)
+        return PlanAction.CREATE_VIEW, _view_reason(
+            change_result=change_result, full_refresh=full_refresh
+        )
 
     if materialization == MaterializationType.SNAPSHOT:
-        return PlanAction.SNAPSHOT, _snapshot_reason(change_result, full_refresh=full_refresh)
+        return PlanAction.SNAPSHOT, _snapshot_reason(
+            change_result=change_result, full_refresh=full_refresh
+        )
 
     if full_refresh:
         return PlanAction.CREATE_TABLE, PlanReason.FULL_REFRESH
@@ -68,7 +74,7 @@ def resolve_model_plan_action(
     if materialization == MaterializationType.TABLE:
         return _table_action(change_result)
 
-    return _incremental_action(model, change_result=change_result)
+    return _incremental_action(model=model, change_result=change_result)
 
 
 def resolve_schema_actions(
@@ -260,7 +266,7 @@ def _is_disabled(model: CompiledModel) -> bool:
     return False
 
 
-def _custom_reason(change_result: ChangeDetectionResult, *, full_refresh: bool) -> PlanReason:
+def _custom_reason(*, change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:
     """Determine the reason for a custom materialization action."""
 
     if full_refresh:
@@ -276,7 +282,7 @@ def _custom_reason(change_result: ChangeDetectionResult, *, full_refresh: bool) 
     return PlanReason.NO_CHANGE
 
 
-def _view_reason(change_result: ChangeDetectionResult, *, full_refresh: bool) -> PlanReason:
+def _view_reason(*, change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:
     """Determine the reason for a view action."""
 
     if full_refresh:
@@ -292,7 +298,7 @@ def _view_reason(change_result: ChangeDetectionResult, *, full_refresh: bool) ->
     return PlanReason.NO_CHANGE
 
 
-def _snapshot_reason(change_result: ChangeDetectionResult, *, full_refresh: bool) -> PlanReason:
+def _snapshot_reason(*, change_result: ChangeDetectionResult, full_refresh: bool) -> PlanReason:
     """Determine the reason for a snapshot materialization action."""
 
     if full_refresh:
@@ -337,8 +343,8 @@ def _table_action(
 
 
 def _incremental_action(
-    model: CompiledModel,
     *,
+    model: CompiledModel,
     change_result: ChangeDetectionResult,
 ) -> tuple[PlanAction, PlanReason]:
     """Determine action for an incremental materialization."""

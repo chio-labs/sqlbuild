@@ -30,7 +30,7 @@ def build_destination_uri(*, adapter_name: str, connection_config: dict[str, obj
     )
 
 
-def _required_string(config: dict[str, object], *, key: str, adapter_name: str) -> str:
+def _required_string(*, config: dict[str, object], key: str, adapter_name: str) -> str:
     value: object | None = config.get(key)
     if not isinstance(value, str) or not value.strip():
         raise IngestrIntegrationError(
@@ -39,7 +39,7 @@ def _required_string(config: dict[str, object], *, key: str, adapter_name: str) 
     return value.strip()
 
 
-def _optional_string(config: dict[str, object], *, key: str) -> str | None:
+def _optional_string(*, config: dict[str, object], key: str) -> str | None:
     value: object | None = config.get(key)
     if not isinstance(value, str) or not value.strip():
         return None
@@ -48,40 +48,42 @@ def _optional_string(config: dict[str, object], *, key: str) -> str | None:
 
 def _duckdb_uri(config: dict[str, object]) -> str:
     database: str = _required_string(
-        config, key="database", adapter_name=BuiltinAdapter.DUCKDB.value
+        config=config, key="database", adapter_name=BuiltinAdapter.DUCKDB.value
     )
     return f"duckdb:///{database}"
 
 
 def _motherduck_uri(config: dict[str, object]) -> str:
-    database: str = _optional_string(config, key="database") or ""
+    database: str = _optional_string(config=config, key="database") or ""
     if database.startswith("md:"):
         database = database.removeprefix("md:")
-    token: str | None = _optional_string(config, key="token")
+    token: str | None = _optional_string(config=config, key="token")
     query: str = f"?{urlencode({'token': token})}" if token else ""
     return f"motherduck://{quote(database)}{query}"
 
 
 def _postgres_uri(config: dict[str, object]) -> str:
-    host: str = _optional_string(config, key="host") or "localhost"
+    host: str = _optional_string(config=config, key="host") or "localhost"
     port: object = config.get("port", 5432)
-    user: str = _required_string(config, key="user", adapter_name=BuiltinAdapter.POSTGRES.value)
-    password: str = _optional_string(config, key="password") or ""
-    database: str = _optional_string(config, key="dbname") or _required_string(
-        config, key="database", adapter_name=BuiltinAdapter.POSTGRES.value
+    user: str = _required_string(
+        config=config, key="user", adapter_name=BuiltinAdapter.POSTGRES.value
     )
-    sslmode: str | None = _optional_string(config, key="sslmode")
+    password: str = _optional_string(config=config, key="password") or ""
+    database: str = _optional_string(config=config, key="dbname") or _required_string(
+        config=config, key="database", adapter_name=BuiltinAdapter.POSTGRES.value
+    )
+    sslmode: str | None = _optional_string(config=config, key="sslmode")
     query: str = f"?{urlencode({'sslmode': sslmode})}" if sslmode else ""
     return f"postgresql://{quote(user)}:{quote(password)}@{host}:{port}/{quote(database)}{query}"
 
 
 def _bigquery_uri(config: dict[str, object]) -> str:
-    project: str = _optional_string(config, key="project") or _required_string(
-        config, key="database", adapter_name=BuiltinAdapter.BIGQUERY.value
+    project: str = _optional_string(config=config, key="project") or _required_string(
+        config=config, key="database", adapter_name=BuiltinAdapter.BIGQUERY.value
     )
     params: dict[str, str] = {}
     for key in ("location", "credentials_path", "credentials_base64"):
-        value: str | None = _optional_string(config, key=key)
+        value: str | None = _optional_string(config=config, key=key)
         if value is not None:
             params[key] = value
     query: str = f"?{urlencode(params)}" if params else ""
@@ -90,15 +92,17 @@ def _bigquery_uri(config: dict[str, object]) -> str:
 
 def _snowflake_uri(config: dict[str, object]) -> str:
     account: str = _required_string(
-        config, key="account", adapter_name=BuiltinAdapter.SNOWFLAKE.value
+        config=config, key="account", adapter_name=BuiltinAdapter.SNOWFLAKE.value
     )
-    user: str = _required_string(config, key="user", adapter_name=BuiltinAdapter.SNOWFLAKE.value)
-    password: str = _optional_string(config, key="password") or ""
+    user: str = _required_string(
+        config=config, key="user", adapter_name=BuiltinAdapter.SNOWFLAKE.value
+    )
+    password: str = _optional_string(config=config, key="password") or ""
     database: str = _required_string(
-        config, key="database", adapter_name=BuiltinAdapter.SNOWFLAKE.value
+        config=config, key="database", adapter_name=BuiltinAdapter.SNOWFLAKE.value
     )
     schema: str = _required_string(
-        config, key="schema", adapter_name=BuiltinAdapter.SNOWFLAKE.value
+        config=config, key="schema", adapter_name=BuiltinAdapter.SNOWFLAKE.value
     )
     params: dict[str, str] = {}
     for key in (
@@ -109,7 +113,7 @@ def _snowflake_uri(config: dict[str, object]) -> str:
         "private_key_passphrase",
         "authenticator",
     ):
-        value: str | None = _optional_string(config, key=key)
+        value: str | None = _optional_string(config=config, key=key)
         if value is not None:
             params[key] = value
     query: str = f"?{urlencode(params)}" if params else ""
@@ -121,16 +125,18 @@ def _snowflake_uri(config: dict[str, object]) -> str:
 
 def _databricks_uri(config: dict[str, object]) -> str:
     host: str = _required_string(
-        config, key="server_hostname", adapter_name=BuiltinAdapter.DATABRICKS.value
+        config=config, key="server_hostname", adapter_name=BuiltinAdapter.DATABRICKS.value
     )
-    token: str = _required_string(config, key="token", adapter_name=BuiltinAdapter.DATABRICKS.value)
+    token: str = _required_string(
+        config=config, key="token", adapter_name=BuiltinAdapter.DATABRICKS.value
+    )
     params: dict[str, str] = {
         "http_path": _required_string(
-            config, key="http_path", adapter_name=BuiltinAdapter.DATABRICKS.value
+            config=config, key="http_path", adapter_name=BuiltinAdapter.DATABRICKS.value
         )
     }
     for key in ("catalog", "schema"):
-        value: str | None = _optional_string(config, key=key)
+        value: str | None = _optional_string(config=config, key=key)
         if value is not None:
             params[key] = value
     return f"databricks://token:{quote(token)}@{host}?{urlencode(params)}"
@@ -138,23 +144,25 @@ def _databricks_uri(config: dict[str, object]) -> str:
 
 def _sqlserver_uri(config: dict[str, object]) -> str:
     host: str = (
-        _optional_string(config, key="host")
-        or _optional_string(config, key="server")
+        _optional_string(config=config, key="host")
+        or _optional_string(config=config, key="server")
         or "localhost"
     )
     port: object = config.get("port", 1433)
     user: str = (
-        _optional_string(config, key="user") or _optional_string(config, key="username") or "sa"
+        _optional_string(config=config, key="user")
+        or _optional_string(config=config, key="username")
+        or "sa"
     )
-    password: str = _optional_string(config, key="password") or ""
+    password: str = _optional_string(config=config, key="password") or ""
     database: str = (
-        _optional_string(config, key="database")
-        or _optional_string(config, key="dbname")
+        _optional_string(config=config, key="database")
+        or _optional_string(config=config, key="dbname")
         or "master"
     )
     params: dict[str, str] = {}
     for key in ("driver", "TrustServerCertificate", "Authentication"):
-        value: str | None = _optional_string(config, key=key)
+        value: str | None = _optional_string(config=config, key=key)
         if value is not None:
             params[key] = value
     if "driver" not in params:

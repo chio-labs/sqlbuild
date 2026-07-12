@@ -13,4 +13,4 @@ def expand_project_upstream_keys(
 ) -> frozenset[CompiledObjectKey]:
     """Return the upstream key closure for one compiled graph key."""
 
-    return frozenset(expand_upstream(key, upstream=upstream_deps))
+    return frozenset(expand_upstream(key=key, upstream=upstream_deps))

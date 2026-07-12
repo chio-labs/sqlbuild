@@ -26,7 +26,7 @@ def compile_janitor_project(*, invocation: JanitorInvocation) -> JanitorCompileC
         local_config=invocation.discovered_inputs.local_config,
     )
     adapter: BaseAdapter = resolve_adapter(
-        adapter_name,
+        adapter_name=adapter_name,
         project_dir=invocation.effective_project_dir,
     )
     compile_start: float = time.perf_counter()
@@ -39,7 +39,7 @@ def compile_janitor_project(*, invocation: JanitorInvocation) -> JanitorCompileC
         discovered_inputs=invocation.discovered_inputs,
         adapter=adapter,
     )
-    status.complete(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
+    status.complete(message=f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=project.effective_connection,
         project_dir=invocation.effective_project_dir,

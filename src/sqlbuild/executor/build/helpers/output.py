@@ -113,7 +113,7 @@ def format_build_output(
                 if event.kind == LifeCycleEventKind.SQL:
                     lines.extend(_format_sql_block(event.content))
                 elif event.kind == LifeCycleEventKind.LOG:
-                    lines.extend(_format_log_block(event.content, use_color=use_color))
+                    lines.extend(_format_log_block(message=event.content, use_color=use_color))
 
         test_result: SqlTestExecutionResult | None = test_results_by_model.get(
             model_result.model_name
@@ -132,7 +132,7 @@ def format_build_output(
             for step_result in test_result.step_results:
                 lines.append(
                     _format_test_expectation_sub_line(
-                        step_result,
+                        step_result=step_result,
                         use_color=use_color,
                         name_width=sub_name_width,
                     )
@@ -145,7 +145,7 @@ def format_build_output(
         for audit_entry in audit_entries:
             lines.append(
                 _format_audit_sub_line(
-                    audit_entry,
+                    entry=audit_entry,
                     use_color=use_color,
                     name_width=sub_name_width,
                 )
@@ -156,12 +156,12 @@ def format_build_output(
     lines.append("")
     lines.append(
         _format_completion_message(
-            result.status, warning_count=result.warning_count, use_color=use_color
+            status=result.status, warning_count=result.warning_count, use_color=use_color
         )
     )
     lines.append(_format_summary_counts(result=result, elapsed_seconds=elapsed_seconds))
 
-    failure_lines: list[str] = _format_failure_details(result, use_color=use_color)
+    failure_lines: list[str] = _format_failure_details(result=result, use_color=use_color)
     if failure_lines:
         lines.append("")
         lines.extend(failure_lines)
@@ -298,7 +298,7 @@ def _format_seed_line(
     counter_str: str = f"{counter}/{total}".rjust(len(str(total)) * 2 + 1)
     status: str = _execution_status_to_display(seed_result.status)
     style: CliStyle = CliStyle(use_color=use_color)
-    colored_status: str = style.status(status)
+    colored_status: str = style.status(status=status)
     duration: str = _format_duration(seed_result.duration_ms)
     return format_aligned_name_value(
         plain_name=seed_result.seed_name,
@@ -326,7 +326,7 @@ def _format_model_line(
 
     status: str = _execution_status_to_display(model_result.status)
     style: CliStyle = CliStyle(use_color=use_color)
-    colored_status: str = style.status(status)
+    colored_status: str = style.status(status=status)
     duration: str = _format_duration(model_result.duration_ms)
     detail: str = ""
     if model_result.status == ExecutionStatus.FAILED and model_result.failed_phase is not None:
@@ -374,7 +374,7 @@ def _resolve_verbose_events(
     return ()
 
 
-def _format_log_block(message: str, *, use_color: bool) -> list[str]:
+def _format_log_block(*, message: str, use_color: bool) -> list[str]:
     """Format a log message with indent for verbose output."""
 
     line: str = f"    log  {message}"
@@ -387,7 +387,7 @@ def _format_sub_line(
     *, sub_type: str, name: str, status: str, use_color: bool, name_width: int
 ) -> str:
     style: CliStyle = CliStyle(use_color=use_color)
-    colored_status: str = style.status(status)
+    colored_status: str = style.status(status=status)
     padding: str = " " * 10
     return format_aligned_name_value(
         plain_name=name,
@@ -398,7 +398,7 @@ def _format_sub_line(
     )
 
 
-def _format_audit_sub_line(entry: _AuditDisplayEntry, *, use_color: bool, name_width: int) -> str:
+def _format_audit_sub_line(*, entry: _AuditDisplayEntry, use_color: bool, name_width: int) -> str:
     status: str = _audit_outcome_to_display(entry.outcome)
     detail: str = ""
     if entry.outcome != AuditOutcome.PASS and entry.total_row_count > 0:
@@ -416,7 +416,7 @@ def _format_audit_sub_line(entry: _AuditDisplayEntry, *, use_color: bool, name_w
 
 
 def _format_test_expectation_sub_line(
-    step_result: StepResult, *, use_color: bool, name_width: int
+    *, step_result: StepResult, use_color: bool, name_width: int
 ) -> str:
     status: str = _test_outcome_to_status(step_result.outcome)
     detail: str = ""
@@ -427,7 +427,7 @@ def _format_test_expectation_sub_line(
         else:
             detail = f"  {step_result.mismatched_row_count} mismatched"
     style: CliStyle = CliStyle(use_color=use_color)
-    colored_status: str = style.status(status, text=f"{status}{detail}")
+    colored_status: str = style.status(status=status, text=f"{status}{detail}")
     name: str = _format_test_expectation_name(step_result.model_name)
     return format_aligned_name_value(
         plain_name=name,
@@ -444,7 +444,7 @@ def _format_test_expectation_name(model_name: str) -> str:
     return f"expected {model_name}"
 
 
-def _format_completion_message(status: BuildStatus, *, warning_count: int, use_color: bool) -> str:
+def _format_completion_message(*, status: BuildStatus, warning_count: int, use_color: bool) -> str:
     if status == BuildStatus.FAILED:
         return CliStyle(use_color=use_color).error("Completed with errors.")
     if warning_count > 0:
@@ -464,7 +464,7 @@ def _top_level_name_width(*, result: BuildExecutionResult, plan: PlanOutput) -> 
             names.append(f"{model_result.model_name}  ({annotation})")
         else:
             names.append(model_result.model_name)
-    return resolve_name_column_width(names)
+    return resolve_name_column_width(names=names)
 
 
 def _sub_name_width(result: BuildExecutionResult) -> int:
@@ -480,7 +480,7 @@ def _sub_name_width(result: BuildExecutionResult) -> int:
         audit_entry: _AuditDisplayEntry
         for audit_entry in _aggregate_audit_results(model_result.audit_results):
             names.append(audit_entry.display_name)
-    return resolve_name_column_width(names)
+    return resolve_name_column_width(names=names)
 
 
 def _format_summary_counts(
@@ -569,7 +569,7 @@ def _format_summary_counts(
     )
 
 
-def _format_failure_details(result: BuildExecutionResult, *, use_color: bool) -> list[str]:
+def _format_failure_details(*, result: BuildExecutionResult, use_color: bool) -> list[str]:
     lines: list[str] = []
     has_failures: bool = False
 
@@ -756,7 +756,8 @@ def _format_duration(duration_ms: int | None) -> str:
     if duration_ms is None:
         return ""
     seconds: float = duration_ms / 1000.0
-    if seconds < 60:
+    seconds_per_minute: int = 60
+    if seconds < seconds_per_minute:
         return f"{seconds:.2f}s"
     minutes: int = int(seconds // 60)
     remaining: float = seconds - minutes * 60
@@ -808,7 +809,7 @@ def _aggregate_audit_results(
         worst: AuditOutcome = _worst_audit_outcome(results)
         total_rows: int = sum(r.row_count for r in results)
         pass_count: int = sum(1 for r in results if r.outcome == AuditOutcome.PASS)
-        label: str = _phase_label(_phase, has_delta_audits=has_delta)
+        label: str = _phase_label(phase=_phase, has_delta_audits=has_delta)
         entries.append(
             _AuditDisplayEntry(
                 label=label,
@@ -836,7 +837,7 @@ def _worst_audit_outcome(results: list[AuditExecutionResult]) -> AuditOutcome:
     return AuditOutcome.PASS
 
 
-def _phase_label(phase: str, *, has_delta_audits: bool) -> str:
+def _phase_label(*, phase: str, has_delta_audits: bool) -> str:
     """Return the audit type label, annotated with phase when delta audits are present."""
 
     if not has_delta_audits:

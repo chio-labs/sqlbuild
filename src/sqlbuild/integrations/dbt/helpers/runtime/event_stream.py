@@ -134,7 +134,7 @@ def execute_dbt_json_event_stream(
                     if start_result is not None and start_result.unique_id not in started_indexes:
                         display_index += 1
                         started_indexes[start_result.unique_id] = display_index
-                        _close_status(status_box=status_box, status_lock=status_lock)
+                        status_box = _close_status(status_box=status_box, status_lock=status_lock)
                         render_dbt_node_result(
                             stream=stream,
                             style=style,
@@ -204,7 +204,7 @@ def execute_dbt_json_event_stream(
     status_stop.set()
     if status_thread is not None:
         status_thread.join(timeout=1)
-    _close_status(status_box=status_box, status_lock=status_lock)
+    status_box = _close_status(status_box=status_box, status_lock=status_lock)
     return returncode, tuple(results)
 
 
@@ -284,7 +284,7 @@ def _run_active_node_status_refresher(
     status_lock: threading.Lock,
     status_stop: threading.Event,
     refresh_seconds: float,
-) -> None:
+) -> dict[str, TransientStatusReporter | None]:
     while not status_stop.wait(refresh_seconds):
         with status_lock:
             status_box["status"] = _update_active_node_status(
@@ -293,6 +293,7 @@ def _run_active_node_status_refresher(
                 stream=stream,
                 use_color=use_color,
             )
+    return status_box
 
 
 def _update_message_status(
@@ -314,11 +315,12 @@ def _close_status(
     *,
     status_box: dict[str, TransientStatusReporter | None],
     status_lock: threading.Lock,
-) -> None:
+) -> dict[str, TransientStatusReporter | None]:
     with status_lock:
         if status_box["status"] is not None:
             status_box["status"].close()
             status_box["status"] = None
+    return status_box
 
 
 def _update_active_node_status(
@@ -514,7 +516,7 @@ def render_dbt_node_result(
     duration: str = f"{result.execution_time:.2f}s" if result.execution_time is not None else ""
     rendered_detail: str = style.muted(detail) if detail else ""
     value: str = (
-        f"{_pad_styled(value=style.status(status), plain_value=status, width=6)} "
+        f"{_pad_styled(value=style.status(status=status), plain_value=status, width=6)} "
         f"{duration:<{_DBT_DURATION_WIDTH}}{rendered_detail}"
     ).rstrip()
     stream.write(
@@ -530,7 +532,7 @@ def render_dbt_node_result(
     )
     for message in result.messages:
         message_status: str = "warn" if message.level == "warn" else "error"
-        stream.write(f"         {style.status(message_status):<9} {message.message}\n")
+        stream.write(f"         {style.status(status=message_status):<9} {message.message}\n")
     stream.flush()
 
 

@@ -73,19 +73,19 @@ def read_virtual_bound_state(
         if target_name is None:
             return VirtualBoundState()
         refs: tuple[Any, ...] = backend.get_virtual_environment_model_refs(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             virtual_environment_name=target_name,
         )
         bound_version_hashes: dict[str, str] = build_bound_version_hashes(refs)
         seed_refs: tuple[Any, ...] = backend.get_virtual_environment_seed_refs(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             virtual_environment_name=target_name,
         )
         previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
             backend.get_virtual_environment_source_freshness(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=target_name,
             )
@@ -102,7 +102,7 @@ def read_virtual_bound_state(
         )
         model_versions: dict[str, ModelVersionRecord | None] = {
             model_name: backend.get_model_version(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 model_name=model_name,
                 version_hash=version_hash,
@@ -115,7 +115,7 @@ def read_virtual_bound_state(
         physical_relations: dict[str, PhysicalRelationRecord] = {}
         for model_name, version_hash in bound_version_hashes.items():
             relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 model_name=model_name,
                 version_hash=version_hash,

@@ -18,7 +18,7 @@ _BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"`[^`]+`(?:\s*\.\s*`
 
 
 def lift_step_ctes(
-    sql: str, *, lifted_ctes: OrderedDict[str, str], sql_analysis_enabled: bool = True
+    *, sql: str, lifted_ctes: OrderedDict[str, str], sql_analysis_enabled: bool = True
 ) -> tuple[str, OrderedDict[str, str]]:
     """Lift a step's top-level CTEs into the shared comparison query when possible."""
 
@@ -46,7 +46,7 @@ def lift_step_ctes(
 
 
 def format_sql(
-    sql: str, *, sql_analysis_dialect: str | None = None, sql_analysis_enabled: bool = True
+    *, sql: str, sql_analysis_dialect: str | None = None, sql_analysis_enabled: bool = True
 ) -> str:
     """Format generated comparison SQL when Polyglot is available."""
 
@@ -103,7 +103,7 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
         parsed: Any = polyglot_module.parse_one(protected_sql, dialect="generic")
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="comparison SQL top-level WITH parse failed; falling back",
             sqlbuild_error=str(error),
         )
@@ -179,7 +179,7 @@ def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
         generated: list[str] = polyglot_module.generate(expression, dialect="generic")
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="comparison SQL generation failed; falling back",
             sqlbuild_error=str(error),
         )
@@ -191,13 +191,16 @@ def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
 
 def _protect_backtick_identifiers(sql: str) -> tuple[str, dict[str, str]]:
     protected_identifiers: dict[str, str] = {}
-
-    def _replace(match: re.Match[str]) -> str:
+    protected_sql_parts: list[str] = []
+    previous_end: int = 0
+    match: re.Match[str]
+    for match in _BACKTICK_IDENTIFIER_PATTERN.finditer(sql):
         placeholder: str = f"SQB_PROTECTED_IDENTIFIER_{len(protected_identifiers)}"
         protected_identifiers[placeholder] = match.group(0)
-        return placeholder
-
-    return _BACKTICK_IDENTIFIER_PATTERN.sub(_replace, sql), protected_identifiers
+        protected_sql_parts.extend((sql[previous_end : match.start()], placeholder))
+        previous_end = match.end()
+    protected_sql_parts.append(sql[previous_end:])
+    return "".join(protected_sql_parts), protected_identifiers
 
 
 def _restore_protected_identifiers(*, sql: str, protected_identifiers: dict[str, str]) -> str:

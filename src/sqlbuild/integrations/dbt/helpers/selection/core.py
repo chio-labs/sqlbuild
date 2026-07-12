@@ -61,14 +61,14 @@ def resolve_dbt_interop_sqlbuild_selection(
             if parsed.upstream:
                 for key in tuple(path_keys):
                     expanded_keys.update(
-                        expand_combined_upstream(key, upstream=graph.upstream_deps)
+                        expand_combined_upstream(key=key, upstream=graph.upstream_deps)
                     )
             if parsed.downstream:
                 for key in tuple(path_keys):
                     expanded_keys.update(
-                        expand_combined_downstream(key, downstream=graph.downstream_deps)
+                        expand_combined_downstream(key=key, downstream=graph.downstream_deps)
                     )
-            _add_expanded_keys(
+            selected_sqlbuild, required_dbt = _add_expanded_keys(
                 keys=frozenset(expanded_keys),
                 selected_sqlbuild=selected_sqlbuild,
                 required_dbt=required_dbt,
@@ -88,14 +88,14 @@ def resolve_dbt_interop_sqlbuild_selection(
             if parsed.upstream:
                 for key in tuple(direct_keys):
                     expanded_keys.update(
-                        expand_combined_upstream(key, upstream=graph.upstream_deps)
+                        expand_combined_upstream(key=key, upstream=graph.upstream_deps)
                     )
             if parsed.downstream:
                 for key in tuple(direct_keys):
                     expanded_keys.update(
-                        expand_combined_downstream(key, downstream=graph.downstream_deps)
+                        expand_combined_downstream(key=key, downstream=graph.downstream_deps)
                     )
-            _add_expanded_keys(
+            selected_sqlbuild, required_dbt = _add_expanded_keys(
                 keys=frozenset(expanded_keys),
                 selected_sqlbuild=selected_sqlbuild,
                 required_dbt=required_dbt,
@@ -109,9 +109,9 @@ def resolve_dbt_interop_sqlbuild_selection(
         anchor_result[term] = anchor_unique_ids
         for unique_id in anchor_unique_ids:
             downstream_keys: frozenset[DbtCombinedGraphKey] = expand_combined_downstream(
-                dbt_model_graph_key(unique_id), downstream=graph.downstream_deps
+                key=dbt_model_graph_key(unique_id), downstream=graph.downstream_deps
             )
-            _add_expanded_keys(
+            selected_sqlbuild, required_dbt = _add_expanded_keys(
                 keys=downstream_keys,
                 selected_sqlbuild=selected_sqlbuild,
                 required_dbt=required_dbt,
@@ -218,13 +218,14 @@ def _add_expanded_keys(
     keys: frozenset[DbtCombinedGraphKey],
     selected_sqlbuild: set[str],
     required_dbt: set[str],
-) -> None:
+) -> tuple[set[str], set[str]]:
     key: DbtCombinedGraphKey
     for key in keys:
         if key.owner == DbtCombinedGraphOwner.SQLBUILD:
             selected_sqlbuild.add(key.name)
         elif key.owner == DbtCombinedGraphOwner.DBT:
             required_dbt.add(key.name)
+    return selected_sqlbuild, required_dbt
 
 
 def _resolve_excluded_sqlbuild_names(

@@ -384,7 +384,7 @@ def test_given_cross_schema_table_move_when_moving_then_postgres_uses_native_mov
     statement_recorder: StatementRecorder = StatementRecorder()
 
     adapter.move_or_copy_relation(
-        connection,
+        connection=connection,
         origin=test_case.source,
         destination=test_case.target,
         remove_origin=True,
@@ -454,7 +454,7 @@ def test_given_relation_when_describing_then_postgres_queries_information_schema
     connection: FakePostgresConnection = FakePostgresConnection(cursor)
 
     columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
-        connection, relation=test_case.relation
+        connection=connection, relation=test_case.relation
     )
 
     assert columns == test_case.expected_columns
@@ -539,7 +539,7 @@ def test_given_seed_csv_when_loading_then_postgres_uses_executemany(
     seed_file.write_text(test_case.csv_text, encoding="utf-8")
 
     adapter.load_seed(
-        connection,
+        connection=connection,
         destination="public.waffle_types",
         file_path=seed_file,
         columns=(

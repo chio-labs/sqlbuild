@@ -162,7 +162,7 @@ def detect_model_changes(
             fingerprint=fingerprint,
         )
         log_debug_event(
-            debug_logger,
+            logger=debug_logger,
             message=(
                 "fingerprint comparison"
                 f" compiled_query_hash={compiled_query_hash}"
@@ -178,7 +178,7 @@ def detect_model_changes(
         log_sql(logger=debug_logger, sql=model.query_sql, action="compiled_query")
         log_sql(logger=debug_logger, sql=fingerprint.definition, action="fingerprint_definition")
         if query_changed:
-            raw_policy: str | None = get_config_str(model, key="replay_on_change")
+            raw_policy: str | None = get_config_str(model=model, key="replay_on_change")
             replay_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
 
     schema_findings: tuple[SchemaFinding, ...] = ()
@@ -198,10 +198,10 @@ def detect_model_changes(
             type_enforcement=type_enforcement,
         )
         if schema_findings:
-            raw_policy = get_config_str(model, key="replay_on_change")
+            raw_policy = get_config_str(model=model, key="replay_on_change")
             schema_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
 
-    backfill: BackfillResult = pick_more_aggressive(replay_backfill, b=schema_backfill)
+    backfill: BackfillResult = pick_more_aggressive(a=replay_backfill, b=schema_backfill)
 
     change_kind: ChangeKind
     if query_changed:

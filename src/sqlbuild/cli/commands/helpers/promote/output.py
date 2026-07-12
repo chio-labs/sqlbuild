@@ -37,7 +37,7 @@ def format_promote_output(
     )
     doc: CliDocument = CliDocument(style)
     doc.blank()
-    doc.header("Virtual promotion complete", suffix=f"{from_label} -> {to_label}")
+    doc.header(text="Virtual promotion complete", suffix=f"{from_label} -> {to_label}")
     doc.line(f"  target status          {status_value}")
     doc.line(f"  promoted models        {promoted_count}")
     if promoted_models:

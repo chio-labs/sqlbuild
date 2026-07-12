@@ -128,14 +128,14 @@ def hydrate_relation(
     origin_database_alias: str | None,
 ) -> str:
     if adapter.relation_exists(
-        destination_connection,
+        connection=destination_connection,
         database=destination_location.database,
         schema=destination_location.schema,
         name=destination_location.name,
     ):
         return "reused"
     adapter.ensure_schema(
-        destination_connection,
+        connection=destination_connection,
         database=destination_location.database,
         schema=destination_location.schema or "",
         statement_recorder=StatementRecorder(),
@@ -148,7 +148,7 @@ def hydrate_relation(
         else origin_location
     )
     adapter.durable_clone(
-        destination_connection,
+        connection=destination_connection,
         origin=resolve_relation_location_qualified_name(
             adapter=adapter, location=clone_origin_location
         ),
@@ -171,7 +171,7 @@ def _location_is_transient(
     if location.schema is None:
         return False
     relations: tuple[Any, ...] = adapter.list_relations(
-        connection,
+        connection=connection,
         database=location.database,
         schemas=(location.schema,),
         names=(location.name,),
@@ -194,7 +194,7 @@ def acquire_model_lease(
     connection: Any = backend.connect(config_connection)
     try:
         return acquire_model_version_lease(
-            backend,
+            backend=backend,
             connection=connection,
             schema=config_schema,
             model_name=model_name,
@@ -211,7 +211,9 @@ def release_model_lease(
 ) -> None:
     connection: Any = backend.connect(config_connection)
     try:
-        release_state_lease(backend, connection=connection, schema=config_schema, lease=lease)
+        release_state_lease(
+            backend=backend, connection=connection, schema=config_schema, lease=lease
+        )
     finally:
         backend.close(connection)
 
@@ -229,17 +231,19 @@ def register_hydrated_relation(
     try:
         if (
             backend.get_model_version(
-                connection,
+                connection=connection,
                 schema=config_schema,
                 model_name=model_version.model_name,
                 version_hash=model_version.version_hash,
             )
             is None
         ):
-            backend.upsert_model_version(connection, schema=config_schema, record=model_version)
+            backend.upsert_model_version(
+                connection=connection, schema=config_schema, record=model_version
+            )
         if (
             backend.get_physical_relation(
-                connection,
+                connection=connection,
                 schema=config_schema,
                 model_name=model.name,
                 version_hash=model_version.version_hash,
@@ -247,7 +251,7 @@ def register_hydrated_relation(
             is None
         ):
             backend.upsert_physical_relation(
-                connection,
+                connection=connection,
                 schema=config_schema,
                 record=PhysicalRelationRecord(
                     artifact_type=PhysicalArtifactType.MODEL,
@@ -279,17 +283,19 @@ def register_hydrated_seed_relation(
     try:
         if (
             backend.get_seed_version(
-                connection,
+                connection=connection,
                 schema=config_schema,
                 seed_name=seed_version.seed_name,
                 version_hash=seed_version.version_hash,
             )
             is None
         ):
-            backend.upsert_seed_version(connection, schema=config_schema, record=seed_version)
+            backend.upsert_seed_version(
+                connection=connection, schema=config_schema, record=seed_version
+            )
         if (
             backend.get_physical_relation_for_artifact(
-                connection,
+                connection=connection,
                 schema=config_schema,
                 artifact_type=PhysicalArtifactType.SEED,
                 artifact_name=seed_version.seed_name,
@@ -298,7 +304,7 @@ def register_hydrated_seed_relation(
             is None
         ):
             backend.upsert_physical_relation(
-                connection,
+                connection=connection,
                 schema=config_schema,
                 record=PhysicalRelationRecord(
                     artifact_type=PhysicalArtifactType.SEED,
@@ -329,7 +335,7 @@ def attach_origin_database_for_clone(
         return None
     alias: str = "__sqb_clone_origin"
     adapter.execute(
-        destination_connection,
+        connection=destination_connection,
         sql=f"ATTACH '{str(origin_database)}' AS {alias} (READ_ONLY)",
     )
     return alias
@@ -419,8 +425,8 @@ def build_clone_project_context(clone_pipeline: ClonePipelineResult) -> ClonePro
 
 
 def resolve_clone_versions(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     clone_pipeline: ClonePipelineResult,
@@ -432,7 +438,7 @@ def resolve_clone_versions(
     if virtual_environment_name is None:
         return _resolve_workspace_clone_versions(clone_pipeline=clone_pipeline, context=context)
     return _read_virtual_environment_clone_versions(
-        backend,
+        backend=backend,
         state_connection=state_connection,
         schema=schema,
         context=context,
@@ -493,8 +499,8 @@ def build_clone_origin_lookup(
 
 
 def hydrate_clone_model_relations(
-    backend: Any,
     *,
+    backend: Any,
     adapter: BaseAdapter,
     destination_connection: Any,
     config_schema: str,
@@ -588,8 +594,8 @@ def hydrate_clone_model_relations(
 
 
 def hydrate_clone_seed_relations(
-    backend: Any,
     *,
+    backend: Any,
     adapter: BaseAdapter,
     destination_connection: Any,
     config_schema: str,
@@ -693,15 +699,15 @@ def _resolve_workspace_clone_versions(
 
 
 def _read_virtual_environment_clone_versions(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     context: CloneProjectContext,
     virtual_environment_name: str,
 ) -> CloneVersions:
     refs: tuple[VirtualEnvironmentModelRefRecord, ...] = backend.get_virtual_environment_model_refs(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         virtual_environment_name=virtual_environment_name,
     )
@@ -723,7 +729,7 @@ def _read_virtual_environment_clone_versions(
     for name in context.model_names:
         version_hash: str = ref_hashes[name]
         record: ModelVersionRecord | None = backend.get_model_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             model_name=name,
             version_hash=version_hash,
@@ -736,7 +742,7 @@ def _read_virtual_environment_clone_versions(
         model_versions[name] = record
     seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
         backend.get_virtual_environment_seed_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
         )
@@ -755,7 +761,7 @@ def _read_virtual_environment_clone_versions(
     for name in context.seed_names:
         seed_version_hash: str = seed_hashes[name]
         seed_record: SeedVersionRecord | None = backend.get_seed_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             seed_name=name,
             version_hash=seed_version_hash,

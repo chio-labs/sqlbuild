@@ -70,7 +70,7 @@ def write_scenario_result(*, result: ScenarioRunResult, stream: TextIO, use_colo
         else "FAIL"
     )
     style: CliStyle = CliStyle(use_color=use_color)
-    status: str = style.status(status_text)
+    status: str = style.status(status=status_text)
     stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}\n")
     if result.error_message:
         rendered_error_message: str = render_result_error(
@@ -123,7 +123,7 @@ def _write_expectations(*, result: ScenarioRunResult, stream: TextIO, use_color:
     expected: ScenarioExpectedExpectationExecutionResult
     for expected in result.expected_results:
         status_text: str = "FAIL" if expected.status == FAILED_STATUS else "PASS"
-        status: str = style.status(status_text)
+        status: str = style.status(status=status_text)
         detail: str = ""
         if expected.status == FAILED_STATUS:
             detail = f"  {expected.mismatched_row_count} mismatched"
@@ -144,7 +144,7 @@ def _write_expectations(*, result: ScenarioRunResult, stream: TextIO, use_color:
     assertion: ScenarioAssertionExpectationExecutionResult
     for assertion in result.assertion_results:
         status_text = "FAIL" if assertion.status == FAILED_STATUS else "PASS"
-        status = style.status(status_text)
+        status = style.status(status=status_text)
         row_label: str = "row" if assertion.failing_row_count == 1 else "rows"
         detail = ""
         if assertion.status == FAILED_STATUS:

@@ -67,7 +67,7 @@ def load_scenario_snapshot_into_duckdb(
         raise ExecutorInputError(
             f"Scenario '{scenario_name}' has invalid local snapshot manifest "
             f"'{manifest_path.as_posix()}': {error_message(exc)}",
-            code=error_code(exc, fallback_code=SCENARIO_LOCAL_MANIFEST_INVALID),
+            code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_MANIFEST_INVALID),
             help="Fix scenario.json or regenerate it with `sqb scenario capture`.",
         ) from exc
 
@@ -233,7 +233,7 @@ def _load_snapshot_relation(
             f"Scenario '{scenario_name}' has invalid local snapshot JSONL "
             f"'{file_path.as_posix()}' for relation "
             f"'{relation.kind.value} {relation.logical_name}': {error_message(exc)}",
-            code=error_code(exc, fallback_code=SCENARIO_LOCAL_JSONL_INVALID),
+            code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_JSONL_INVALID),
             help="Fix the JSONL row data or regenerate the snapshot with `sqb scenario capture`.",
         ) from exc
 
@@ -283,10 +283,12 @@ def _insert_rows(
         return
     column_names: tuple[str, ...] = tuple(column.name for column in relation.columns)
     insert_sql: str = _build_insert_sql(table_name=table_name, column_names=column_names)
-    row_values: list[tuple[object, ...]] = [
-        tuple(_row_value(row=row, column_name=column_name) for column_name in column_names)
-        for row in rows
-    ]
+    row_values: list[tuple[object, ...]] = []
+    for row in rows:
+        values: list[object] = []
+        for column_name in column_names:
+            values.append(_row_value(row=row, column_name=column_name))
+        row_values.append(tuple(values))
     try:
         connection.executemany(insert_sql, row_values)
     except Exception as exc:
@@ -324,8 +326,7 @@ def _load_failure_column_context(
         for column in relation.columns:
             try:
                 connection.execute(
-                    f"SELECT CAST(? AS {column.local_type})",
-                    [row.get(column.name)],
+                    f"SELECT CAST(? AS {column.local_type})", [row.get(column.name)]
                 ).fetchone()
             except Exception:
                 return (

@@ -12,15 +12,14 @@ if TYPE_CHECKING:
 class GraphIdentityComposer(Protocol):
     def __call__(
         self,
-        local_hash: str,
-        /,
         *,
+        local_hash: str,
         upstream_hashes: tuple[tuple[GraphNodeKey, str], ...],
     ) -> str: ...
 
 
 class RelationMarkerTargetResolver(Protocol):
-    def __call__(self, function_name: str, /, *, referenced_name: str) -> str | None: ...
+    def __call__(self, *, function_name: str, referenced_name: str) -> str | None: ...
 
 
 class SelectorKind(StrEnum):

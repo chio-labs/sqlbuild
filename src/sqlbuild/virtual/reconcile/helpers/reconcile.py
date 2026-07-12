@@ -81,7 +81,7 @@ def run_virtual_reconcile(
     try:
         refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
             backend.get_virtual_environment_model_refs(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=resolved_virtual_environment_name,
             )
@@ -89,7 +89,7 @@ def run_virtual_reconcile(
         ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in refs}
         seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
             backend.get_virtual_environment_seed_refs(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=resolved_virtual_environment_name,
             )
@@ -98,7 +98,7 @@ def run_virtual_reconcile(
         physical_map: dict[str, PhysicalRelationRecord] = {}
         for ref in refs:
             relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 model_name=ref.model_name,
                 version_hash=ref.version_hash,
@@ -108,7 +108,7 @@ def run_virtual_reconcile(
         seed_physical_map: dict[str, PhysicalRelationRecord] = {}
         for ref in seed_refs:
             relation = backend.get_physical_relation_for_artifact(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 artifact_type=PhysicalArtifactType.SEED,
                 artifact_name=ref.seed_name,
@@ -124,7 +124,7 @@ def run_virtual_reconcile(
                     code="C248",
                 )
             lease = acquire_virtual_environment_lease(
-                backend,
+                backend=backend,
                 connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=resolved_virtual_environment_name,
@@ -196,7 +196,7 @@ def run_virtual_reconcile(
                     code="C249",
                 )
             lease = acquire_virtual_environment_lease(
-                backend,
+                backend=backend,
                 connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=resolved_virtual_environment_name,
@@ -225,7 +225,7 @@ def run_virtual_reconcile(
                 model_name=model_name,
             )
             backend.replace_virtual_environment_model_refs(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=resolved_virtual_environment_name,
                 refs=build_attached_refs(
@@ -281,7 +281,7 @@ def run_virtual_reconcile(
     finally:
         if lease is not None:
             release_state_lease(
-                backend,
+                backend=backend,
                 connection=state_connection,
                 schema=config.schema,
                 lease=lease,
@@ -499,7 +499,7 @@ def resolve_attach_relation(
     physical_relation_name: str,
 ) -> PhysicalRelationRecord:
     candidates: tuple[PhysicalRelationRecord, ...] = backend.list_physical_relations_for_model(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         model_name=model_name,
     )
@@ -507,7 +507,7 @@ def resolve_attach_relation(
         rendered: str = resolve_relation_location_qualified_name(
             adapter=adapter, location=fallback_target(candidate)
         )
-        if adapter.relation_names_match(rendered, right=physical_relation_name):
+        if adapter.relation_names_match(left=rendered, right=physical_relation_name):
             return candidate
     raise PlannerInputError(
         (
@@ -612,7 +612,7 @@ def physical_relation_exists(
     connection: Any = adapter.connect(connection_config)
     try:
         return adapter.relation_exists(
-            connection,
+            connection=connection,
             database=relation.database_name,
             schema=relation.schema_name,
             name=relation.relation_name,
@@ -634,7 +634,7 @@ def _record_reconcile_event(
     *, backend: Any, state_connection: Any, schema: str, action: ReconcileAction, message: str
 ) -> None:
     backend.create_reconcile_event(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         record=ReconcileEventRecord(
             event_id=uuid4().hex,

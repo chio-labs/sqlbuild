@@ -260,7 +260,7 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=FINGERPRINT_TABLE_NAME,
@@ -315,7 +315,7 @@ def test_given_no_table_when_reading_then_returns_empty_set(
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=FINGERPRINT_TABLE_NAME,
@@ -384,7 +384,7 @@ def test_given_old_fingerprint_table_without_version_hash_when_reading_then_rais
             connection=connection,
             execute=execute,
             table_exists=RELATION_EXISTS(
-                connection, database=None, schema=schema, name=FINGERPRINT_TABLE_NAME
+                connection=connection, database=None, schema=schema, name=FINGERPRINT_TABLE_NAME
             ),
             database=None,
             schema=schema,
@@ -552,7 +552,7 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=FINGERPRINT_TABLE_NAME,
@@ -747,7 +747,7 @@ def test_given_fingerprint_history_when_pruning_then_keeps_latest_versions_per_n
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=FINGERPRINT_TABLE_NAME,
@@ -822,7 +822,10 @@ def test_given_invalid_definition_storage_when_reading_then_raises_contextual_er
             connection=connection,
             execute=execute,
             table_exists=RELATION_EXISTS(
-                connection, database=None, schema=test_case.schema, name=FINGERPRINT_TABLE_NAME
+                connection=connection,
+                database=None,
+                schema=test_case.schema,
+                name=FINGERPRINT_TABLE_NAME,
             ),
             database=None,
             schema=test_case.schema,

@@ -48,7 +48,7 @@ def observe_configured_source_freshness(
         where_sql: str = f" WHERE {config.filter}" if config.filter is not None else ""
         sql: str = adapter.render_source_freshness_max_query(
             column=config.column,
-            source_relation=render_source_relation(source, adapter=adapter),
+            source_relation=render_source_relation(entry=source, adapter=adapter),
             source_is_subquery=source.expression is not None,
             where_sql=where_sql,
         )
@@ -101,7 +101,7 @@ def _observe_adapter_freshness(
             f"source '{source.name}' adapter freshness requires a physical table source"
         )
     metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
-        connection,
+        connection=connection,
         database=source.database,
         schema=source.schema,
         name=source.table,
@@ -149,7 +149,7 @@ def observe_adapter_sources_freshness(
 
     metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
         adapter.get_tables_freshness_metadata(
-            connection,
+            connection=connection,
             requests=tuple(requests_by_source_name.values()),
         )
     )
@@ -183,7 +183,7 @@ def _query_single_data_version(
     sql: str,
 ) -> object:
     try:
-        result: QueryResult = adapter.query(connection, sql=sql, limit=None)
+        result: QueryResult = adapter.query(connection=connection, sql=sql, limit=None)
     except Exception as exc:
         raise SourceFreshnessObservationError(
             f"source '{source_name}' freshness query failed: {exc}"

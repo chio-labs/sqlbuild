@@ -11,28 +11,28 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-default_repo_url = "https://github.com/chio-labs/sqlbuild-docs"
-default_clone_dir = Path(tempfile.gettempdir()) / "sqlbuild-docs-skill-source"
-default_output_path = Path("src/sqlbuild/.agents/skills/sqlbuild/SKILL.md")
-generated_marker = "<!-- generated-by: sqlbuild skills update -->"
-skill_description = (
+default_repo_url: str = "https://github.com/chio-labs/sqlbuild-docs"
+default_clone_dir: Path = Path(tempfile.gettempdir()) / "sqlbuild-docs-skill-source"
+default_output_path: Path = Path("src/sqlbuild/.agents/skills/sqlbuild/SKILL.md")
+generated_marker: str = "<!-- generated-by: sqlbuild skills update -->"
+skill_description: str = (
     "Use when working with SQLBuild syntax, project structure, configuration, testing, "
     "adapters, CLI behavior, SQLBuild docs, or SQLBuild-related code."
 )
-skill_frontmatter = f"""---
+skill_frontmatter: str = f"""---
 name: sqlbuild
 description: {skill_description}
 ---"""
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
+    args: argparse.Namespace = _parse_args(argv)
 
-    docs_root = args.docs_root
+    docs_root: Path | None = args.docs_root
     if docs_root is None:
         docs_root = clone_docs_repo(repo_url=args.repo_url, clone_dir=args.clone_dir)
 
-    skill_markdown = build_skill_markdown(
+    skill_markdown: str = build_skill_markdown(
         docs_root=docs_root,
         include_introduction=not args.exclude_introduction,
     )
@@ -55,38 +55,38 @@ def clone_docs_repo(*, repo_url: str, clone_dir: Path) -> Path:
 
 
 def build_skill_markdown(*, docs_root: Path, include_introduction: bool = True) -> str:
-    page_paths = list_ordered_page_paths(docs_root=docs_root)
+    page_paths: list[Path] = list_ordered_page_paths(docs_root=docs_root)
     if not include_introduction:
         page_paths = [path for path in page_paths if path.with_suffix("").as_posix() != "index"]
 
-    sections = [_render_skill_header(page_paths=page_paths)]
+    sections: list[str] = [_render_skill_header(page_paths=page_paths)]
     for page_path in page_paths:
-        absolute_path = docs_root / page_path
-        page = _parse_mdx_page(absolute_path.read_text(encoding="utf-8"))
+        absolute_path: Path = docs_root / page_path
+        page: dict[str, str] = _parse_mdx_page(absolute_path.read_text(encoding="utf-8"))
         sections.append(_render_page_section(page=page, source_path=page_path))
 
     return _normalize_blank_lines("\n\n".join(sections)).strip() + "\n"
 
 
 def list_ordered_page_paths(*, docs_root: Path) -> list[Path]:
-    docs_json_path = docs_root / "docs.json"
+    docs_json_path: Path = docs_root / "docs.json"
     if docs_json_path.exists():
-        docs_json = json.loads(docs_json_path.read_text(encoding="utf-8"))
-        ordered_pages = _collect_navigation_pages(docs_json.get("navigation", {}))
+        docs_json: dict[str, Any] = json.loads(docs_json_path.read_text(encoding="utf-8"))
+        ordered_pages: list[str] = _collect_navigation_pages(docs_json.get("navigation", {}))
     else:
         ordered_pages = sorted(path.with_suffix("").as_posix() for path in docs_root.rglob("*.mdx"))
 
     page_paths: list[Path] = []
     seen_pages: set[str] = set()
     for page in ordered_pages:
-        page_path = Path(f"{page}.mdx")
+        page_path: Path = Path(f"{page}.mdx")
         if page in seen_pages or not (docs_root / page_path).exists():
             continue
         page_paths.append(page_path)
         seen_pages.add(page)
 
     for mdx_path in sorted(docs_root.rglob("*.mdx")):
-        page = mdx_path.relative_to(docs_root).with_suffix("").as_posix()
+        page: str = mdx_path.relative_to(docs_root).with_suffix("").as_posix()
         if page not in seen_pages:
             page_paths.append(mdx_path.relative_to(docs_root))
             seen_pages.add(page)
@@ -95,7 +95,7 @@ def list_ordered_page_paths(*, docs_root: Path) -> list[Path]:
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Clone sqlbuild-docs and convert all MDX pages into a single SKILL.md."
     )
     parser.add_argument("--repo-url", default=default_repo_url)
@@ -124,8 +124,8 @@ def _collect_navigation_pages(node: Any) -> list[str]:
 
 def _parse_mdx_page(contents: str) -> dict[str, str]:
     frontmatter, body = _split_frontmatter(contents)
-    title = frontmatter.get("title") or "Untitled"
-    description = frontmatter.get("description", "")
+    title: str = frontmatter.get("title") or "Untitled"
+    description: str = frontmatter.get("description", "")
     return {
         "title": title,
         "description": description,
@@ -134,12 +134,12 @@ def _parse_mdx_page(contents: str) -> dict[str, str]:
 
 
 def _split_frontmatter(contents: str) -> tuple[dict[str, str], str]:
-    lines = contents.splitlines()
+    lines: list[str] = contents.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}, contents
 
     frontmatter: dict[str, str] = {}
-    end_index = 0
+    end_index: int = 0
     for index, line in enumerate(lines[1:], start=1):
         if line.strip() == "---":
             end_index = index
@@ -156,10 +156,10 @@ def _split_frontmatter(contents: str) -> tuple[dict[str, str], str]:
 
 def _clean_mdx_body(body: str) -> str:
     cleaned_lines: list[str] = []
-    in_code_block = False
+    in_code_block: bool = False
 
     for raw_line in body.splitlines():
-        line = raw_line.rstrip()
+        line: str = raw_line.rstrip()
         if line.startswith("```"):
             in_code_block = not in_code_block
             cleaned_lines.append(line)
@@ -168,7 +168,7 @@ def _clean_mdx_body(body: str) -> str:
             cleaned_lines.append(line)
             continue
 
-        stripped = line.strip()
+        stripped: str = line.strip()
         if _is_mdx_only_line(stripped):
             continue
         cleaned_lines.append(_shift_markdown_heading(line))
@@ -197,7 +197,7 @@ def _shift_markdown_heading(line: str) -> str:
 
 
 def _render_skill_header(*, page_paths: list[Path]) -> str:
-    page_list = "\n".join(f"- `{path.with_suffix('').as_posix()}`" for path in page_paths)
+    page_list: str = "\n".join(f"- `{path.with_suffix('').as_posix()}`" for path in page_paths)
     return (
         f"{skill_frontmatter}\n\n"
         f"{generated_marker}\n\n"
@@ -209,9 +209,9 @@ def _render_skill_header(*, page_paths: list[Path]) -> str:
 
 
 def _render_page_section(*, page: dict[str, str], source_path: Path) -> str:
-    description = page["description"]
-    description_block = f"\n\n{description}" if description else ""
-    body_block = f"\n\n{page['body']}" if page["body"] else ""
+    description: str = page["description"]
+    description_block: str = f"\n\n{description}" if description else ""
+    body_block: str = f"\n\n{page['body']}" if page["body"] else ""
     return f"""## {page["title"]}
 
 Source: `{source_path.as_posix()}`{description_block}{body_block}"""

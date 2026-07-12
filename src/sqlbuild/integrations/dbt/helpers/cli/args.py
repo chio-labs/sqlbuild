@@ -24,12 +24,12 @@ def route_dbt_interop_args(
     _validate_sqlbuild_flags_allowed(command=normalized_command, parsed=parsed)
     dbt_args: list[str] = []
     sqlbuild_args: list[str] = []
-    _route_selection(parsed=parsed, dbt_args=dbt_args)
-    _route_shared(
+    dbt_args = _route_selection(parsed=parsed, dbt_args=dbt_args)
+    dbt_args, sqlbuild_args = _route_shared(
         command=normalized_command, parsed=parsed, dbt_args=dbt_args, sqlbuild_args=sqlbuild_args
     )
-    _route_dbt_config(parsed=parsed, dbt_args=dbt_args)
-    _route_sqlbuild_only(parsed=parsed, sqlbuild_args=sqlbuild_args)
+    dbt_args = _route_dbt_config(parsed=parsed, dbt_args=dbt_args)
+    sqlbuild_args = _route_sqlbuild_only(parsed=parsed, sqlbuild_args=sqlbuild_args)
     _validate_event_time_cursor_conflict(command=normalized_command, parsed=parsed)
     dbt_args.extend(parsed.dbt_passthrough)
     return DbtInteropRoutedArgs(
@@ -42,11 +42,12 @@ def route_dbt_interop_args(
     )
 
 
-def _route_selection(*, parsed: DbtInteropParsedArgs, dbt_args: list[str]) -> None:
+def _route_selection(*, parsed: DbtInteropParsedArgs, dbt_args: list[str]) -> list[str]:
     if parsed.select:
         dbt_args.extend(("--select", *parsed.select))
     if parsed.exclude:
         dbt_args.extend(("--exclude", *parsed.exclude))
+    return dbt_args
 
 
 def _route_shared(
@@ -55,7 +56,7 @@ def _route_shared(
     parsed: DbtInteropParsedArgs,
     dbt_args: list[str],
     sqlbuild_args: list[str],
-) -> None:
+) -> tuple[list[str], list[str]]:
     if parsed.vars is not None:
         dbt_args.extend(("--vars", parsed.vars))
         sqlbuild_args.extend(("--vars", parsed.vars))
@@ -74,9 +75,10 @@ def _route_shared(
         dbt_args.extend(("--event-time-end", parsed.event_time_end))
         if _map_event_time_to_sqlbuild(command):
             sqlbuild_args.extend(("--end-cursor-ts", parsed.event_time_end))
+    return dbt_args, sqlbuild_args
 
 
-def _route_dbt_config(*, parsed: DbtInteropParsedArgs, dbt_args: list[str]) -> None:
+def _route_dbt_config(*, parsed: DbtInteropParsedArgs, dbt_args: list[str]) -> list[str]:
     for flag, value in (
         ("--project-dir", parsed.project_dir),
         ("--profiles-dir", parsed.profiles_dir),
@@ -90,9 +92,10 @@ def _route_dbt_config(*, parsed: DbtInteropParsedArgs, dbt_args: list[str]) -> N
             dbt_args.extend((flag, value))
     if parsed.defer:
         dbt_args.append("--defer")
+    return dbt_args
 
 
-def _route_sqlbuild_only(*, parsed: DbtInteropParsedArgs, sqlbuild_args: list[str]) -> None:
+def _route_sqlbuild_only(*, parsed: DbtInteropParsedArgs, sqlbuild_args: list[str]) -> list[str]:
     for flag, value in (
         ("--start-cursor-ts", parsed.start_cursor_ts),
         ("--end-cursor-ts", parsed.end_cursor_ts),
@@ -109,6 +112,7 @@ def _route_sqlbuild_only(*, parsed: DbtInteropParsedArgs, sqlbuild_args: list[st
     ):
         if enabled:
             sqlbuild_args.append(flag)
+    return sqlbuild_args
 
 
 def _validate_event_time_pair(parsed: DbtInteropParsedArgs) -> None:

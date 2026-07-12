@@ -14,13 +14,15 @@ def build_function_local_hashes(
 ) -> dict[str, str]:
     """Derive local-only semantic hashes for functions."""
 
-    return {
-        function.name: _stable_hash(
+    hashes: dict[str, str] = {}
+    for function in functions:
+        arguments: list[tuple[str, str]] = []
+        for argument in function.arguments:
+            arguments.append((argument.name, argument.type))
+        hashes[function.name] = _stable_hash(
             json.dumps(
                 {
-                    "arguments": [
-                        (argument.name, argument.type) for argument in function.arguments
-                    ],
+                    "arguments": arguments,
                     "returns": function.returns,
                     "body_sql": function.body_sql,
                     "language": function.language.value,
@@ -29,8 +31,7 @@ def build_function_local_hashes(
                 default=str,
             )
         )
-        for function in functions
-    }
+    return hashes
 
 
 def _stable_hash(value: str) -> str:

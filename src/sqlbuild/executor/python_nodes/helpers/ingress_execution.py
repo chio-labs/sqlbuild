@@ -185,7 +185,7 @@ def _execute_ingress_python_node(
     results.record_python_result(name=node.name, result=result)
     if result.status == PythonNodeStatus.SUCCESS:
         if callbacks.identity_recorder is not None:
-            callbacks.identity_recorder(node.identity, _target_name=None)
+            callbacks.identity_recorder(identity=node.identity, _target_name=None)
         else:
             try_write_python_node_identity_fingerprint(
                 identity=node.identity,
@@ -217,7 +217,9 @@ def _execute_ingress_loader(
     if source_entry is None:
         raise ExecutorInputError(f"No source entry found for Python ingress loader '{loader.name}'")
     if callbacks.on_node_start is not None:
-        callbacks.on_node_start(source_entry.name, resource_kind=load_resource_kind(source_entry))
+        callbacks.on_node_start(
+            name=source_entry.name, resource_kind=load_resource_kind(source_entry)
+        )
     result: LoadExecutionResult = execute_source_load(
         source_entry=source_entry,
         loader_function=loader,
@@ -253,7 +255,7 @@ def _execute_ingress_loader(
     )
     if result.status == ExecutionStatus.SUCCESS:
         if callbacks.identity_recorder is not None:
-            callbacks.identity_recorder(node.identity, _target_name=source_entry.name)
+            callbacks.identity_recorder(identity=node.identity, _target_name=source_entry.name)
         else:
             try_write_python_node_identity_fingerprint(
                 identity=node.identity,
@@ -319,7 +321,7 @@ def _record_scheduler_skips(
             source_entry: SourceEntry | None = source_by_loader_name.get(result.name)
             if source_entry is not None and result.name not in results.load_results_by_name:
                 skipped_result: LoadExecutionResult = skipped_load_result(
-                    source_entry,
+                    source=source_entry,
                     reason=result.skip_reason,
                     mode=result.skip_mode or SkipMode.HARD,
                 )

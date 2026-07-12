@@ -26,7 +26,7 @@ def render_column_trace_tree[Column, Edge](
     """Render the box-drawing column-trace tree lines plus any truncation note."""
 
     lines: list[str] = render_column_trace_branch(
-        target,
+        column=target,
         deps=deps,
         prefix="",
         seen={column_id(target)},

@@ -46,7 +46,7 @@ _SOURCE_FRESHNESS_VALUE_KINDS: frozenset[str] = frozenset(
 )
 
 
-def parse_sources_yml(contents: str, *, file_path: Path) -> tuple[SourceEntry, ...]:
+def parse_sources_yml(*, contents: str, file_path: Path) -> tuple[SourceEntry, ...]:
     """Parse one sources/*.yml file into raw source declarations."""
 
     payload: dict[str, object] = _load_sources_payload(contents=contents, file_path=file_path)
@@ -206,7 +206,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
     return source_entry
 
 
-def _validate_source_entry(entry: SourceEntry, *, file_path: Path) -> None:
+def _validate_source_entry(*, entry: SourceEntry, file_path: Path) -> None:
     relation_keys: tuple[str, ...] = tuple(
         key
         for key, value in (
@@ -533,7 +533,8 @@ def _validate_source_freshness_age_policy(
 
 
 def _is_valid_source_freshness_duration(value: str) -> bool:
-    if len(value) < 2:
+    quoted_value_character_count: int = 2
+    if len(value) < quoted_value_character_count:
         return False
     unit: str = value[-1]
     amount: str = value[:-1]

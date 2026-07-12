@@ -32,7 +32,7 @@ def build_compiled_project(
     """Build one compiled project with adapter defaults and target validation applied."""
 
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=True,
@@ -44,8 +44,8 @@ def build_compiled_project(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     project: CompiledProject = apply_target_defaults(
-        assemble_project(
-            compile_inputs,
+        project=assemble_project(
+            inputs=compile_inputs,
             inference_profile=adapter.expression_inference_profile(),
             skip_column_inference=skip_column_inference,
             column_lineage_mode=column_lineage_mode,

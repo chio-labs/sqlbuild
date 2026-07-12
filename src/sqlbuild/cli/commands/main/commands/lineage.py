@@ -32,8 +32,8 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_lineage(
-    project_dir: Path | None,
     *,
+    project_dir: Path | None,
     no_sql_validation: bool = False,
     target: str | None = None,
     output_format: str = "tree",
@@ -59,7 +59,7 @@ def run_lineage(
         project_dir=effective_project_dir
     )
     adapter: BaseAdapter = resolve_adapter(
-        resolve_effective_adapter_name(
+        adapter_name=resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
@@ -86,13 +86,13 @@ def run_lineage(
             elif output_format == "list":
                 print(
                     "\n"
-                    + format_column_lineage_list(column_trace, use_color=supports_color())
+                    + format_column_lineage_list(trace=column_trace, use_color=supports_color())
                     + "\n"
                 )
             else:
                 print(
                     "\n"
-                    + format_column_lineage_tree(column_trace, use_color=supports_color())
+                    + format_column_lineage_tree(trace=column_trace, use_color=supports_color())
                     + "\n"
                 )
             return 0
@@ -113,7 +113,7 @@ def run_lineage(
     if output_format == "json":
         print(format_lineage_json(lineage_graph))
     elif output_format == "list":
-        print("\n" + format_lineage_list(lineage_graph, use_color=supports_color()) + "\n")
+        print("\n" + format_lineage_list(graph=lineage_graph, use_color=supports_color()) + "\n")
     else:
-        print("\n" + format_lineage_tree(lineage_graph, use_color=supports_color()) + "\n")
+        print("\n" + format_lineage_tree(graph=lineage_graph, use_color=supports_color()) + "\n")
     return 0

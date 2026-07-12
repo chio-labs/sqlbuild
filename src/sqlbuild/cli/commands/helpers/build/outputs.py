@@ -40,7 +40,7 @@ def write_build_plan_text(
 
     plan_stream: TextIO = sys.stderr if request.debug or request.json_output else sys.stdout
     plan_text: str = format_plan(
-        pipeline_result.plan_output,
+        plan=pipeline_result.plan_output,
         full_refresh=request.full_refresh,
         use_color=invocation.use_color,
         python_plan_entries=pipeline_result.python_plan_entries,

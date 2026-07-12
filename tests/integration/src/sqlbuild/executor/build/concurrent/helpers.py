@@ -49,7 +49,9 @@ def run_concurrent_build(
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     provider_session: Any | None = (
-        build_provider_session(discovered.providers) if test_case.use_provider_session else None
+        build_provider_session(discovered_providers=discovered.providers)
+        if test_case.use_provider_session
+        else None
     )
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
@@ -99,7 +101,7 @@ def build_ordering_trace_callbacks(
 ) -> tuple[NodeStartCallback, Any]:
     """Build on_node_start/on_node_complete callbacks that record ordering traces."""
 
-    def on_node_start(name: str, /, *, resource_kind: ExecutionResourceKind) -> None:
+    def on_node_start(name: str, *, resource_kind: ExecutionResourceKind) -> None:
         del resource_kind
         with lock:
             snapshot: frozenset[str] = frozenset(completed_names)

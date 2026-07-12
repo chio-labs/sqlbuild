@@ -83,7 +83,7 @@ def build_clone_plan_output(
         path_index=build_model_path_index(project),
     )
     return PlanOutput(
-        execution_order=topologically_order_keys(upstream_deps),
+        execution_order=topologically_order_keys(upstream=upstream_deps),
         selected_keys=selected_keys,
         upstream_deps=upstream_deps,
         downstream_deps=downstream_deps,

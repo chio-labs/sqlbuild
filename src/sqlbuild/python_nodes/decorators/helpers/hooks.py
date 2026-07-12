@@ -10,8 +10,8 @@ from sqlbuild.shared.models import HookDefinition
 
 
 def _decorate_hook(
-    function: Callable[..., object],
     *,
+    function: Callable[..., object],
     name: str | None = None,
     description: str | None = None,
 ) -> Callable[..., object]:
@@ -24,7 +24,9 @@ def _decorate_hook(
 
 
 @overload
-def hook(function: Callable[..., object], /) -> Callable[..., object]: ...
+def hook(
+    function: Callable[..., object],
+) -> Callable[..., object]: ...
 
 
 @overload
@@ -35,7 +37,6 @@ def hook(
 
 def hook(
     function: Callable[..., object] | None = None,
-    /,
     *,
     name: str | None = None,
     description: str | None = None,
@@ -43,10 +44,10 @@ def hook(
     """Mark a Python function as a SQLBuild model lifecycle hook."""
 
     if function is not None:
-        return _decorate_hook(function, name=name, description=description)
+        return _decorate_hook(function=function, name=name, description=description)
 
     def decorate(inner: Callable[..., object]) -> Callable[..., object]:
-        return _decorate_hook(inner, name=name, description=description)
+        return _decorate_hook(function=inner, name=name, description=description)
 
     return decorate
 

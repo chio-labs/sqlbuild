@@ -293,22 +293,39 @@ def _validate_loader_dependencies(loader_functions: tuple[DiscoveredLoaderFuncti
     visiting: set[str] = set()
     visited: set[str] = set()
 
-    def visit(loader_function: DiscoveredLoaderFunction, *, path: tuple[str, ...]) -> None:
-        if loader_function.name in visited:
-            return
-        if loader_function.name in visiting:
+    def visit(
+        *,
+        loader_function: DiscoveredLoaderFunction,
+        path: tuple[str, ...],
+        visiting_names: set[str],
+        visited_names: set[str],
+    ) -> tuple[set[str], set[str]]:
+        if loader_function.name in visited_names:
+            return visiting_names, visited_names
+        if loader_function.name in visiting_names:
             cycle_path: str = " -> ".join((*path, loader_function.name))
             raise DiscoveryConflictError(f"Loader dependency cycle detected: {cycle_path}")
-        visiting.add(loader_function.name)
+        visiting_names = visiting_names | {loader_function.name}
         dependency: object
         for dependency in loader_function.depends_on:
             if dependency in loader_by_function:
-                visit(loader_by_function[dependency], path=(*path, loader_function.name))
-        visiting.remove(loader_function.name)
-        visited.add(loader_function.name)
+                visiting_names, visited_names = visit(
+                    loader_function=loader_by_function[dependency],
+                    path=(*path, loader_function.name),
+                    visiting_names=visiting_names,
+                    visited_names=visited_names,
+                )
+        visiting_names = visiting_names - {loader_function.name}
+        visited_names = visited_names | {loader_function.name}
+        return visiting_names, visited_names
 
     for loader_function in loader_functions:
-        visit(loader_function, path=())
+        visiting, visited = visit(
+            loader_function=loader_function,
+            path=(),
+            visiting_names=visiting,
+            visited_names=visited,
+        )
 
 
 def _validate_python_node_dependencies(
@@ -356,29 +373,39 @@ def _validate_python_node_dependencies(
     visited: set[str] = set()
 
     def visit(
-        current: DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction,
         *,
+        current: DiscoveredLoaderFunction | DiscoveredTaskFunction | DiscoveredAssetFunction,
         path: tuple[str, ...],
-    ) -> None:
-        if current.name in visited:
-            return
-        if current.name in visiting:
+        visiting_names: set[str],
+        visited_names: set[str],
+    ) -> tuple[set[str], set[str]]:
+        if current.name in visited_names:
+            return visiting_names, visited_names
+        if current.name in visiting_names:
             cycle_path: str = " -> ".join((*path, current.name))
             raise DiscoveryConflictError(f"Python node dependency cycle detected: {cycle_path}")
-        visiting.add(current.name)
+        visiting_names = visiting_names | {current.name}
         dependency: object
         for dependency in current.depends_on:
             if isinstance(dependency, SqlResourceRef):
                 continue
-            visit(
-                node_by_dependency_key[_python_node_dependency_key(dependency)],
+            visiting_names, visited_names = visit(
+                current=node_by_dependency_key[_python_node_dependency_key(dependency)],
                 path=(*path, current.name),
+                visiting_names=visiting_names,
+                visited_names=visited_names,
             )
-        visiting.remove(current.name)
-        visited.add(current.name)
+        visiting_names = visiting_names - {current.name}
+        visited_names = visited_names | {current.name}
+        return visiting_names, visited_names
 
     for node in nodes:
-        visit(node, path=())
+        visiting, visited = visit(
+            current=node,
+            path=(),
+            visiting_names=visiting,
+            visited_names=visited,
+        )
 
 
 def _validate_check_dependencies(
@@ -677,7 +704,7 @@ def _validate_seed_csv_header(
     *, seed_entry: SchemaSeedEntry, seed_file: DiscoveredSeedFile
 ) -> None:
     header_columns: tuple[str, ...] = _load_seed_csv_header(
-        seed_file.file_path,
+        file_path=seed_file.file_path,
         delimiter=seed_entry.csv_settings.delimiter,
         quotechar=seed_entry.csv_settings.quotechar,
         escapechar=seed_entry.csv_settings.escapechar,
@@ -706,8 +733,8 @@ def _validate_seed_csv_header(
 
 
 def _load_seed_csv_header(
-    file_path: Path,
     *,
+    file_path: Path,
     delimiter: str | None,
     quotechar: str | None,
     escapechar: str | None,

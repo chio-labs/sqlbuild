@@ -140,12 +140,12 @@ def build_downstream_deps(
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
     """Return downstream edges keyed by upstream object key."""
 
-    return invert_edges(upstream, sort_key=_key_sort_key)
+    return invert_edges(edges=upstream, sort_key=_key_sort_key)
 
 
 def topologically_order_keys(
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     *,
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     injected_edge_origins: dict[tuple[CompiledObjectKey, CompiledObjectKey], str] | None = None,
 ) -> tuple[CompiledObjectKey, ...]:
     """Return all keys in stable dependency order using Kahn's algorithm."""
@@ -229,8 +229,8 @@ def _cycle_origin_notes(
 
 
 def expand_upstream(
-    key: CompiledObjectKey,
     *,
+    key: CompiledObjectKey,
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     """Return all transitive upstream keys reachable from the given key."""
@@ -239,8 +239,8 @@ def expand_upstream(
 
 
 def expand_downstream(
-    key: CompiledObjectKey,
     *,
+    key: CompiledObjectKey,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     """Return all transitive downstream keys reachable from the given key."""
@@ -249,8 +249,8 @@ def expand_downstream(
 
 
 def find_path_keys(
-    start: CompiledObjectKey,
     *,
+    start: CompiledObjectKey,
     end: CompiledObjectKey,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:

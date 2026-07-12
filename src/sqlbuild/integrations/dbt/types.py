@@ -10,7 +10,7 @@ from typing import Protocol
 class DbtInvoker(Protocol):
     """Callable dbt process invocation contract."""
 
-    def __call__(self, argv: tuple[str, ...], *, cwd: Path | None) -> object: ...
+    def __call__(self, *, argv: tuple[str, ...], cwd: Path | None) -> object: ...
 
 
 class DbtCombinedGraphOwner(StrEnum):

@@ -22,7 +22,7 @@ _SUPPORTED_AUDIT_HEADER_KEYS: frozenset[str] = frozenset(
 )
 
 
-def parse_sql_audit_file(contents: str, *, file_path: Path) -> tuple[DiscoveredAuditBlock, ...]:
+def parse_sql_audit_file(*, contents: str, file_path: Path) -> tuple[DiscoveredAuditBlock, ...]:
     """Parse one SQL audit file into one or more raw AUDIT(...) blocks."""
 
     raw_audit_blocks: tuple[str, ...] = _split_sql_audit_blocks(

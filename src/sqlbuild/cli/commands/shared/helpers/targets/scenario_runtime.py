@@ -296,7 +296,12 @@ def _model_output_path(relative_path: Path) -> Path:
 def _function_output_path(*, relative_path: Path, language: FunctionLanguage) -> Path:
     parts: tuple[str, ...] = relative_path.parts
     language_dir: str = language.value
-    if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == language_dir:
+    function_language_path_part_count: int = 2
+    if (
+        len(parts) >= function_language_path_part_count
+        and parts[0] == _FUNCTIONS_DIR
+        and parts[1] == language_dir
+    ):
         return Path(*parts).with_suffix(_SQL_FILE_SUFFIX)
     return (Path(_FUNCTIONS_DIR) / language_dir / relative_path).with_suffix(_SQL_FILE_SUFFIX)
 

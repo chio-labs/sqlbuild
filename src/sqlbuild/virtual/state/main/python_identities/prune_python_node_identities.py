@@ -23,7 +23,7 @@ def prune_unreferenced_python_node_versions(
     connection: Any = backend.connect(config.connection)
     try:
         return backend.prune_unreferenced_python_node_versions(
-            connection,
+            connection=connection,
             schema=config.schema,
         )
     finally:

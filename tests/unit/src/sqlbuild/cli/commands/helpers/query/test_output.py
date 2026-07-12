@@ -73,7 +73,7 @@ def test_given_query_result_when_rendering_then_returns_expected_output(
     test_case: QueryOutputTestCase,
 ) -> None:
     result: str = render_query_result(
-        test_case.result,
+        result=test_case.result,
         output_format=test_case.output_format,
         limit=test_case.limit,
     )

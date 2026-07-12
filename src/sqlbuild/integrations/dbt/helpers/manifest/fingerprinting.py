@@ -31,18 +31,18 @@ def try_write_dbt_node_fingerprint(
     query_sql: str | None = None,
     seed_identity_hash: str | None = None,
     version_hash_override: str | None = None,
-) -> None:
+) -> list[str]:
     """Best-effort append of one successful dbt node fingerprint."""
 
     if not _is_successful_dbt_result(result):
-        return
+        return warnings
     fingerprint_database: str | None = destination.fingerprint_database
     fingerprint_schema: str | None = destination.fingerprint_schema
     if fingerprint_schema is None:
         warnings.append(
             f"dbt fingerprint write skipped for '{result.unique_id}': fingerprint schema is missing"
         )
-        return
+        return warnings
     try:
         metadata: str = json.dumps(
             {
@@ -60,7 +60,7 @@ def try_write_dbt_node_fingerprint(
                     f"dbt fingerprint write skipped for '{result.unique_id}': "
                     "dbt model SQL is missing"
                 )
-                return
+                return warnings
             definition: str = query_sql
         else:
             definition = metadata
@@ -97,7 +97,7 @@ def try_write_dbt_node_fingerprint(
             ts=datetime.now(tz=UTC),
         )
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=fingerprint_database,
             schema=fingerprint_schema,
             statement_recorder=StatementRecorder(),
@@ -119,6 +119,7 @@ def try_write_dbt_node_fingerprint(
             "dbt fingerprint write failed for "
             f"'{result.unique_id}'; future dbt change detection may be incorrect: {exc}"
         )
+    return warnings
 
 
 def build_dbt_fingerprint_destination(project: CompiledProject) -> DbtFingerprintDestination:

@@ -25,11 +25,11 @@ def start_compile_status(*, json_output: bool, no_color: bool) -> TransientStatu
     )
 
 
-def start_compile_phase(status: TransientStatusReporter | None, *, message: str) -> None:
+def start_compile_phase(*, status: TransientStatusReporter | None, message: str) -> None:
     if status is not None:
         status.start(message)
 
 
-def complete_compile_phase(status: TransientStatusReporter | None, *, message: str) -> None:
+def complete_compile_phase(*, status: TransientStatusReporter | None, message: str) -> None:
     if status is not None:
-        status.complete(message)
+        status.complete(message=message)

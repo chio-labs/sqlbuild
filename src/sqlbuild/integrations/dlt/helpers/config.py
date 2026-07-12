@@ -15,7 +15,7 @@ def resolve_dlt_config(
     """Resolve supported templates in dlt source config values."""
 
     values: object = expand_template_data(
-        {
+        value={
             "config": config.config,
             "destination": config.destination,
             "schema": config.schema,

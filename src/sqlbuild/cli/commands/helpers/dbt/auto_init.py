@@ -78,11 +78,11 @@ def ensure_sqlbuild_project_for_dbt_command(
 def _render_auto_init_result(*, result: DbtInitResult, stream: TextIO, use_color: bool) -> None:
     style: CliStyle = CliStyle(use_color=use_color)
     doc: CliDocument = CliDocument(style)
-    doc.header("SQLBuild dbt setup created")
+    doc.header(text="SQLBuild dbt setup created")
     doc.blank()
     doc.section("Setup summary")
     doc.fields(
-        (
+        rows=(
             ("Config file", str(result.project_file)),
             ("Production git ref", result.production_git_ref),
             ("Production schema macro", str(result.macro_file)),

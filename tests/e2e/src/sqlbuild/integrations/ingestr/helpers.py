@@ -78,7 +78,7 @@ def execute_postgres_sql(*, config: Mapping[str, object], sql: str) -> None:
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(dict(config))
     try:
-        adapter.execute(connection, sql=sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 
@@ -89,7 +89,7 @@ def fetch_postgres_rows(
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(dict(config))
     try:
-        cursor: Any = adapter.execute(connection, sql=sql)
+        cursor: Any = adapter.execute(connection=connection, sql=sql)
         return tuple(cursor.fetchall())
     finally:
         adapter.close(connection)

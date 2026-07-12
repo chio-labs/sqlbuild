@@ -68,7 +68,7 @@ def run_virtual_rollback(
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
         lease = acquire_virtual_environment_lease_or_raise(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
@@ -76,14 +76,14 @@ def run_virtual_rollback(
             locked_error_code="S019",
         )
         checkpoint_state: RollbackCheckpointState = read_rollback_checkpoint_state(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
             checkpoint_id=options.checkpoint_id,
         )
         resolution: RollbackResolution = resolve_rollback_final_refs(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             graph=context.graph,
@@ -95,7 +95,7 @@ def run_virtual_rollback(
             allow_partial_rollback=options.allow_partial_rollback,
         )
         relations: VirtualEnvironmentPhysicalRelations = read_rollback_physical_relations(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             checkpoint_id=checkpoint_state.target_checkpoint.checkpoint_id,
@@ -108,7 +108,7 @@ def run_virtual_rollback(
             physical_relations=relations.model_relations,
         )
         update: RollbackRefUpdate = build_rollback_ref_update(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
@@ -116,7 +116,7 @@ def run_virtual_rollback(
             checkpoint_function_refs=checkpoint_state.checkpoint_function_refs,
         )
         backend.upsert_virtual_environment_and_replace_node_ref_groups(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             record=update.virtual_environment_record,
             refs_by_node_type=update.refs_by_node_type,
@@ -126,7 +126,7 @@ def run_virtual_rollback(
     finally:
         if lease is not None:
             _ = release_state_lease(
-                backend,
+                backend=backend,
                 connection=state_connection,
                 schema=config.schema,
                 lease=lease,

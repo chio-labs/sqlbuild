@@ -23,6 +23,6 @@ def delete_lock(
     )
     connection: Any = backend.connect(config.connection)
     try:
-        backend.delete_lock(connection, schema=config.schema, lock_key=lock_key)
+        backend.delete_lock(connection=connection, schema=config.schema, lock_key=lock_key)
     finally:
         backend.close(connection)

@@ -92,13 +92,13 @@ class NestedCommandProgressCallbacks:
 
         self._counter += 1
 
-        status: str = self._style.status(status_text)
+        status: str = self._style.status(status=status_text)
         self._stream.write(
             f"    {self._label:<{_LABEL_WIDTH}}{item_name:<{self._name_width}} {status}{detail}\n"
         )
         child_row: NestedProgressChildRow
         for child_row in child_rows:
-            child_status: str = self._style.status(child_row.status_text)
+            child_status: str = self._style.status(status=child_row.status_text)
             self._stream.write(
                 f"      {child_row.label:<{_LABEL_WIDTH - 2}}"
                 f"{child_row.name:<{self._name_width}} "
@@ -115,7 +115,7 @@ class NestedCommandProgressCallbacks:
         self._stream.flush()
 
     def _write_spinner_line(self) -> None:
-        spinner: str = self._style.status(_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
+        spinner: str = self._style.status(status=_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
         self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
         name: str = self._active_name
         with self._write_lock:

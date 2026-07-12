@@ -48,7 +48,7 @@ def detach_from_virtual_state(
     if active_target_name is None:
         raise PlannerInputError("state detach requires an active target", code="C260")
     environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-        state_connection,
+        connection=state_connection,
         schema=config.schema,
         virtual_environment_name=active_target_name,
     )
@@ -59,7 +59,7 @@ def detach_from_virtual_state(
         )
     operation_id: str = f"detach:{active_target_name}"
     record_state_operation(
-        backend,
+        backend=backend,
         connection=state_connection,
         schema=config.schema,
         operation_id=operation_id,
@@ -76,7 +76,7 @@ def detach_from_virtual_state(
         )
         refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
             backend.get_virtual_environment_model_refs(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=active_target_name,
             )
@@ -89,7 +89,7 @@ def detach_from_virtual_state(
             if version_hash is None:
                 continue
             relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 model_name=model.name,
                 version_hash=version_hash,
@@ -97,7 +97,7 @@ def detach_from_virtual_state(
             if relation is None:
                 continue
             adapter.drop_view(
-                connection,
+                connection=connection,
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter,
                     location=build_virtual_logical_destination(
@@ -114,7 +114,7 @@ def detach_from_virtual_state(
             )
             if model_relation_type == "view":
                 adapter.create_view_as(
-                    connection,
+                    connection=connection,
                     destination=resolve_relation_location_qualified_name(
                         adapter=adapter, location=model.destination
                     ),
@@ -130,7 +130,7 @@ def detach_from_virtual_state(
                 qualified_name=relation.relation_name,
             )
             adapter.move_or_copy_relation(
-                connection,
+                connection=connection,
                 origin=resolve_relation_location_qualified_name(
                     adapter=adapter, location=physical_target
                 ),
@@ -143,7 +143,7 @@ def detach_from_virtual_state(
             )
             detached_count += 1
         backend.upsert_virtual_environment(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
                 virtual_environment_name=active_target_name,
@@ -153,7 +153,7 @@ def detach_from_virtual_state(
             ),
         )
         record_state_operation(
-            backend,
+            backend=backend,
             connection=state_connection,
             schema=config.schema,
             operation_id=operation_id,
@@ -166,7 +166,7 @@ def detach_from_virtual_state(
         return f"Detached {detached_count} models from virtual environment {active_target_name}."
     except BaseException as error:
         record_state_operation(
-            backend,
+            backend=backend,
             connection=state_connection,
             schema=config.schema,
             operation_id=operation_id,

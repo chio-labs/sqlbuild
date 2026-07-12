@@ -52,8 +52,16 @@ def compile_plan_pipeline(
             hooks=ConnectionHooks(
                 on_progress=invocation.planning_progress.on_progress,
                 on_connection_start=invocation.connection_progress.on_connection_start,
-                on_connection_complete=invocation.connection_progress.on_connection_complete,
-                on_connection_error=invocation.connection_progress.on_connection_error,
+                on_connection_complete=lambda connection_count, elapsed_seconds: (
+                    invocation.connection_progress.on_connection_complete(
+                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                    )
+                ),
+                on_connection_error=lambda connection_count, elapsed_seconds: (
+                    invocation.connection_progress.on_connection_error(
+                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                    )
+                ),
             ),
         )
     return run_compile_pipeline(
@@ -78,7 +86,15 @@ def compile_plan_pipeline(
         hooks=ConnectionHooks(
             on_progress=invocation.planning_progress.on_progress,
             on_connection_start=invocation.connection_progress.on_connection_start,
-            on_connection_complete=invocation.connection_progress.on_connection_complete,
-            on_connection_error=invocation.connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                invocation.connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                invocation.connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )

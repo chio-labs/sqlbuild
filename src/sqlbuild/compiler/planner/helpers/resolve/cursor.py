@@ -46,12 +46,12 @@ def compute_cursor_bounds(
         raw_end = end_cursor_override
 
     if backfill_duration is not None and start_cursor_override is None:
-        adjusted_start: str | None = _subtract_duration(raw_end, duration=backfill_duration)
+        adjusted_start: str | None = _subtract_duration(value=raw_end, duration=backfill_duration)
         if adjusted_start is not None:
             raw_start = adjusted_start
 
     if lookback is not None and start_cursor_override is None and backfill_duration is None:
-        adjusted_lookback: str | None = _subtract_duration(raw_start, duration=lookback)
+        adjusted_lookback: str | None = _subtract_duration(value=raw_start, duration=lookback)
         if adjusted_lookback is not None:
             raw_start = adjusted_lookback
 
@@ -82,7 +82,7 @@ def _compute_raw_end(snapshot: ModelCursorSnapshot) -> str | None:
     return min(snapshot.upstream_maxes)
 
 
-def _subtract_duration(value: str, *, duration: str) -> str | None:
+def _subtract_duration(*, value: str, duration: str) -> str | None:
     """Subtract a duration string from a cursor value."""
 
     td: timedelta | None = _parse_duration(duration)

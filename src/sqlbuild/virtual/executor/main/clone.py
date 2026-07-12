@@ -62,7 +62,7 @@ def run_virtual_clone(
     state_connection: Any = backend.connect(config.connection)
     try:
         versions: CloneVersions = resolve_clone_versions(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             clone_pipeline=clone_pipeline,
@@ -92,7 +92,7 @@ def run_virtual_clone(
     )
     try:
         model_items: tuple[VirtualCloneItemResult, ...] = hydrate_clone_model_relations(
-            backend,
+            backend=backend,
             adapter=adapter,
             destination_connection=destination_connection,
             config_schema=config.schema,
@@ -103,7 +103,7 @@ def run_virtual_clone(
             skip_locked=resolved_options.skip_locked,
         )
         seed_items: tuple[VirtualCloneItemResult, ...] = hydrate_clone_seed_relations(
-            backend,
+            backend=backend,
             adapter=adapter,
             destination_connection=destination_connection,
             config_schema=config.schema,

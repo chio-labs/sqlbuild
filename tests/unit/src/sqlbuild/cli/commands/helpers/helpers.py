@@ -31,7 +31,8 @@ class RecordingAdapter:
     def close(self, _connection: object) -> None:
         return None
 
-    def execute(self, _connection: object, sql: str) -> None:
+    def execute(self, *, connection: object, sql: str) -> None:
+        del connection
         self.executed_sql.append(sql)
         if sql.strip().upper().startswith("INSERT"):
             self.insert_count += 1

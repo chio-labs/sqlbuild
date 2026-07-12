@@ -46,8 +46,8 @@ _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.lineage")
 
 
 def build_fast_project_column_lineage(
-    project: CompiledProject,
     *,
+    project: CompiledProject,
     dialect: str | None = None,
     model_names: frozenset[str] | None = None,
 ) -> ProjectColumnLineage | None:
@@ -64,7 +64,7 @@ def build_fast_project_column_lineage(
         if model_names is not None and model.name not in model_names:
             continue
         result: ModelColumnLineage | None = _build_polyglot_fast_model_column_lineage(
-            model,
+            model=model,
             schema=schema,
             dialect=dialect,
         )
@@ -91,30 +91,33 @@ def build_fast_project_column_lineage(
 
 
 def _build_polyglot_fast_model_column_lineage(
-    model: CompiledModel,
     *,
+    model: CompiledModel,
     schema: dict[str, dict[str, str]],
     dialect: str | None,
 ) -> ModelColumnLineage | None:
     if model.fast_lineage_columns is not None:
-        lineages: list[ColumnLineage] = [
-            ColumnLineage(
-                output_column=fact.output_column,
-                transform_kind=fact.transform_kind,
-                expression_sql=None,
-                upstream_columns=tuple(
+        lineages: list[ColumnLineage] = []
+        for fact in model.fast_lineage_columns:
+            upstream_columns: list[ColumnLineageSource] = []
+            for source in fact.upstream_columns:
+                upstream_columns.append(
                     ColumnLineageSource(
                         resource_type=source.resource_type,
                         resource_name=source.resource_name,
                         column_name=source.column_name,
                     )
-                    for source in fact.upstream_columns
-                ),
-                nullability=InferredNullability.UNKNOWN,
-                confidence=fact.confidence,
+                )
+            lineages.append(
+                ColumnLineage(
+                    output_column=fact.output_column,
+                    transform_kind=fact.transform_kind,
+                    expression_sql=None,
+                    upstream_columns=tuple(upstream_columns),
+                    nullability=InferredNullability.UNKNOWN,
+                    confidence=fact.confidence,
+                )
             )
-            for fact in model.fast_lineage_columns
-        ]
         if model.fast_lineage_has_star:
             normalized_sql: str
             physical_resources: tuple[_PhysicalResource, ...]
@@ -144,7 +147,7 @@ def _build_polyglot_fast_model_column_lineage(
         parsed: Any = polyglot_module.parse_one(normalized_sql, dialect=dialect or "generic")
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="fast column lineage parse failed; falling back",
             sqlbuild_model=model.name,
             sqlbuild_error=str(error),
@@ -153,7 +156,7 @@ def _build_polyglot_fast_model_column_lineage(
     parsed_kind: str = str(getattr(parsed, "kind", ""))
     if parsed_kind == POLYGLOT_KIND_UNION:
         return _build_polyglot_union_model_column_lineage(
-            model,
+            model=model,
             parsed=parsed,
             schema=schema,
             physical_resources=physical_resources,
@@ -162,7 +165,7 @@ def _build_polyglot_fast_model_column_lineage(
         return None
 
     alias_map: dict[str, _PhysicalResource] = _polyglot_table_alias_map(
-        parsed,
+        parsed=parsed,
         physical_resources=physical_resources,
     )
     unqualified_resource: _PhysicalResource | None = _single_alias_resource(alias_map)
@@ -183,19 +186,19 @@ def _build_polyglot_fast_model_column_lineage(
             has_star = True
             continue
         output_column: str | None = _polyglot_projection_output_name(
-            projection,
+            projection=projection,
             index=index,
             inferred_names=inferred_names,
         )
         if output_column is None:
             continue
         upstream_columns, confidence = _polyglot_projection_upstream_columns(
-            projection,
+            projection=projection,
             alias_map=alias_map,
             unqualified_resource=unqualified_resource,
         )
         transform_kind: ColumnTransformKind = _polyglot_classify_transform(
-            inner,
+            expression=inner,
             upstream_columns=upstream_columns,
         )
         lineages.append(
@@ -224,8 +227,8 @@ def _build_polyglot_fast_model_column_lineage(
 
 
 def _build_polyglot_union_model_column_lineage(
-    model: CompiledModel,
     *,
+    model: CompiledModel,
     parsed: Any,
     schema: dict[str, dict[str, str]],
     physical_resources: tuple[_PhysicalResource, ...],
@@ -264,16 +267,16 @@ def _build_polyglot_union_model_column_lineage(
                 continue
             if output_column is None:
                 output_column = _polyglot_projection_output_name(
-                    projection,
+                    projection=projection,
                     index=index,
                     inferred_names=inferred_names,
                 )
             alias_map: dict[str, _PhysicalResource] = _polyglot_table_alias_map(
-                select,
+                parsed=select,
                 physical_resources=physical_resources,
             )
             branch_upstream, branch_confidence = _polyglot_projection_upstream_columns(
-                projection,
+                projection=projection,
                 alias_map=alias_map,
                 unqualified_resource=_single_alias_resource(alias_map),
             )
@@ -285,7 +288,7 @@ def _build_polyglot_union_model_column_lineage(
             ):
                 confidence = ColumnLineageConfidence.MEDIUM
             branch_transform: ColumnTransformKind = _polyglot_classify_transform(
-                inner,
+                expression=inner,
                 upstream_columns=branch_upstream,
             )
             if branch_transform != ColumnTransformKind.DIRECT:
@@ -344,8 +347,8 @@ def _polyglot_set_expression_selects(expression: Any) -> tuple[Any, ...]:
 
 
 def _polyglot_table_alias_map(
-    parsed: Any,
     *,
+    parsed: Any,
     physical_resources: tuple[_PhysicalResource, ...],
 ) -> dict[str, _PhysicalResource]:
     physical_resource_by_name: dict[str, _PhysicalResource] = {
@@ -372,7 +375,7 @@ def _polyglot_table_alias_map(
 
 
 def _polyglot_projection_output_name(
-    projection: Any, *, index: int, inferred_names: tuple[str, ...]
+    *, projection: Any, index: int, inferred_names: tuple[str, ...]
 ) -> str | None:
     raw_name: str = str(getattr(projection, "output_name", "") or "")
     if raw_name and raw_name != "*":
@@ -386,8 +389,8 @@ def _polyglot_projection_output_name(
 
 
 def _polyglot_projection_upstream_columns(
-    projection: Any,
     *,
+    projection: Any,
     alias_map: dict[str, _PhysicalResource],
     unqualified_resource: _PhysicalResource | None,
 ) -> tuple[tuple[ColumnLineageSource, ...], ColumnLineageConfidence]:
@@ -446,14 +449,14 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
         payload: object = expression.to_dict()
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="fast column lineage expression payload extraction failed; falling back",
             sqlbuild_error=str(error),
         )
         return ()
     refs: list[tuple[str, str]] = []
 
-    def visit(node: object) -> None:
+    def visit(node: object, collected_refs: list[tuple[str, str]]) -> list[tuple[str, str]]:
         if isinstance(node, dict):
             node_dict: dict[str, object] = cast(dict[str, object], node)
             column_payload: object = node_dict.get("column")
@@ -465,15 +468,15 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
                 if isinstance(table_payload, dict):
                     table_dict: dict[str, object] = cast(dict[str, object], table_payload)
                     table_name = _polyglot_name_payload_value(table_dict.get("name"))
-                refs.append((column_name, table_name))
-                return
+                return [*collected_refs, (column_name, table_name)]
             for value in node_dict.values():
-                visit(value)
+                collected_refs = visit(value, collected_refs)
         elif isinstance(node, list):
             for value in node:
-                visit(value)
+                collected_refs = visit(value, collected_refs)
+        return collected_refs
 
-    visit(payload)
+    refs = visit(payload, refs)
     return tuple(refs)
 
 
@@ -493,7 +496,7 @@ def _polyglot_column_table_name(column: Any) -> str:
         payload: object = column.to_dict().get("column", {})
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="fast column lineage column table extraction failed; falling back",
             sqlbuild_error=str(error),
         )
@@ -513,18 +516,18 @@ def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
     columns: list[Any] = []
     seen: set[int] = set()
 
-    def visit(node: Any) -> None:
+    def visit(node: Any, visited: set[int], found: list[Any]) -> tuple[set[int], list[Any]]:
         node_id: int = id(node)
-        if node_id in seen:
-            return
-        seen.add(node_id)
+        if node_id in visited:
+            return visited, found
+        visited = visited | {node_id}
         if str(getattr(node, "kind", "")) == POLYGLOT_KIND_COLUMN:
-            columns.append(node)
-            return
+            return visited, [*found, node]
         for child in _polyglot_child_expressions(node):
-            visit(child)
+            visited, found = visit(child, visited, found)
+        return visited, found
 
-    visit(expression)
+    seen, columns = visit(expression, seen, columns)
     return tuple(columns)
 
 
@@ -541,8 +544,8 @@ def _polyglot_child_expressions(expression: Any) -> tuple[Any, ...]:
 
 
 def _polyglot_classify_transform(
-    expression: Any,
     *,
+    expression: Any,
     upstream_columns: tuple[ColumnLineageSource, ...],
 ) -> ColumnTransformKind:
     kind: str = str(getattr(expression, "kind", ""))
@@ -564,7 +567,7 @@ def _polyglot_has_aggregation(expression: Any) -> bool:
         nodes: tuple[Any, ...] = tuple(expression.walk())
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="fast column lineage aggregation detection failed; falling back",
             sqlbuild_error=str(error),
         )

@@ -21,6 +21,7 @@ from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
 
 
 @dataclass(frozen=True)
@@ -180,3 +181,12 @@ class VirtualBuildCliRequest:
     use_color: bool = False
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     providers: ProviderContainer | None = None
+
+
+@dataclass(frozen=True)
+class VirtualBuildExecution:
+    """Pipeline result and output context produced by virtual build execution."""
+
+    result: VirtualBuildPipelineResult
+    stream: TextIO
+    elapsed: float

@@ -105,9 +105,13 @@ def test_given_project_dir_when_discovering_python_nodes_then_returns_expected(
     assert tuple(len(asset.depends_on) for asset in assets) == (
         test_case.expected_asset_dependency_counts
     )
-    assert tuple(tuple(column.name for column in asset.columns) for asset in assets) == (
-        test_case.expected_asset_column_names
-    )
+    actual_asset_column_names: list[tuple[str, ...]] = []
+    for asset in assets:
+        column_names: list[str] = []
+        for column in asset.columns:
+            column_names.append(column.name)
+        actual_asset_column_names.append(tuple(column_names))
+    assert tuple(actual_asset_column_names) == test_case.expected_asset_column_names
     assert (
         tuple(tuple((asset.column_lineage or {}).keys()) for asset in assets)
         == test_case.expected_asset_lineage_columns

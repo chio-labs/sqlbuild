@@ -53,7 +53,7 @@ def build_debug_result(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=project_dir)
+    adapter: BaseAdapter = resolve_adapter(adapter_name=adapter_name, project_dir=project_dir)
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=project_dir,
@@ -93,7 +93,7 @@ def build_debug_result(
         ),
     ]
     connection: list[DebugLine] = _build_connection_config_lines(connection_config)
-    _append_connection_checks(
+    connection = _append_connection_checks(
         connection_lines=connection,
         adapter=adapter,
         connection_config=connection_config,
@@ -186,7 +186,7 @@ def _append_connection_checks(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     check_connection: bool,
-) -> None:
+) -> list[DebugLine]:
     if not check_connection:
         connection_lines.append(
             DebugLine(
@@ -204,7 +204,7 @@ def _append_connection_checks(
                 status_message="connection skipped",
             )
         )
-        return
+        return connection_lines
 
     connection: object | None = None
     try:
@@ -234,10 +234,10 @@ def _append_connection_checks(
                 status_message="connection failed",
             )
         )
-        return
+        return connection_lines
 
     try:
-        adapter.query(connection, sql="SELECT 1", limit=None)
+        adapter.query(connection=connection, sql="SELECT 1", limit=None)
         connection_lines.append(
             DebugLine(
                 label="query test",
@@ -257,6 +257,7 @@ def _append_connection_checks(
         )
     finally:
         adapter.close(connection)
+    return connection_lines
 
 
 def _sanitize_connection_value(*, key: str, value: object) -> str:
@@ -267,6 +268,7 @@ def _sanitize_connection_value(*, key: str, value: object) -> str:
     if isinstance(value, bool | int | float):
         return str(value)
     text: str = str(value)
-    if len(text) <= 32:
+    digest_preview_character_limit: int = 32
+    if len(text) <= digest_preview_character_limit:
         return text
     return f"{text[:4]}...{text[-4:]}"

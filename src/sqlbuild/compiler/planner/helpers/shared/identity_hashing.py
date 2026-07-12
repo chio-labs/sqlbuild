@@ -84,7 +84,7 @@ def graph_key_for_compiled_resource(
 
 
 def compose_native_graph_identity(
-    local_hash: str, *, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
+    *, local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
 ) -> str:
     return stable_version_identity_hash(
         "\n".join((local_hash, *(upstream_hash for _, upstream_hash in upstream_hashes)))

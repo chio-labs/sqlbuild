@@ -6,8 +6,13 @@ import itertools
 import threading
 import time
 from collections.abc import Callable
+from functools import partial
 from typing import TextIO
 
+from sqlbuild.executor.clone.classes.prephase_progress_reporter import (
+    ClonePrephaseProgressReporter,
+)
+from sqlbuild.executor.clone.classes.progress_state import CloneProgressState
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneItemCallback, CloneStatus
 from sqlbuild.shared.helpers.output.cli_style import CliStyle
@@ -31,7 +36,7 @@ def run_prephase_clone_stream[RESULT](
     write_prephase_header(stream=stream, title=title, use_color=use_color)
     stop_spinner: threading.Event = threading.Event()
     write_lock: threading.Lock = threading.Lock()
-    progress: dict[str, int | None] = {"completed": 0, "total": None}
+    progress: CloneProgressState = CloneProgressState()
     spinner_thread: threading.Thread | None = _start_prephase_spinner(
         stream=stream,
         use_color=use_color,
@@ -40,28 +45,47 @@ def run_prephase_clone_stream[RESULT](
         progress=progress,
     )
 
-    def on_item(index: int, *, total: int, item: CloneItemResult) -> None:
-        progress["completed"] = index
-        progress["total"] = total
-        with write_lock:
-            _clear_prephase_transient_status(stream=stream)
-            write_prephase_row(
-                stream=stream,
-                row=prephase_row_from_clone_item(item=item, caused_by_names=caused_by_names),
-                index=index,
-                total=total,
-                use_color=use_color,
-            )
-
     try:
-        return run_clone(on_item)
+        return run_clone(
+            ClonePrephaseProgressReporter(
+                progress=progress,
+                report_item=partial(
+                    _report_completed_clone_item,
+                    stream=stream,
+                    caused_by_names=caused_by_names,
+                    use_color=use_color,
+                    write_lock=write_lock,
+                ),
+            )
+        )
     finally:
         stop_spinner.set()
         if spinner_thread is not None:
             spinner_thread.join(timeout=1)
         with write_lock:
-            _clear_prephase_transient_status(stream=stream)
+            clear_prephase_transient_status(stream=stream)
             _show_cursor(stream=stream)
+
+
+def _report_completed_clone_item(
+    *,
+    index: int,
+    total: int,
+    item: CloneItemResult,
+    stream: TextIO,
+    caused_by_names: tuple[str, ...],
+    use_color: bool,
+    write_lock: threading.Lock,
+) -> None:
+    with write_lock:
+        clear_prephase_transient_status(stream=stream)
+        write_prephase_row(
+            stream=stream,
+            row=prephase_row_from_clone_item(item=item, caused_by_names=caused_by_names),
+            index=index,
+            total=total,
+            use_color=use_color,
+        )
 
 
 def prephase_row_from_clone_item(
@@ -122,8 +146,10 @@ def write_prephase_row(
     style: CliStyle = CliStyle(use_color=use_color)
     index_width: int = len(str(total)) * 2 + 1
     ctr: str = f"{index}/{total}".rjust(index_width)
-    name: str = _truncate(row.name, width=_NAME_WIDTH)
-    status: str = _pad_styled(value=style.status(row.status), plain_value=row.status, width=6)
+    name: str = _truncate(value=row.name, width=_NAME_WIDTH)
+    status: str = _pad_styled(
+        value=style.status(status=row.status), plain_value=row.status, width=6
+    )
     duration: str = _format_duration(row.duration_seconds)
     detail: str = row.detail
     cause: str = style.muted(format_prephase_cause_annotation(row.caused_by_names))
@@ -151,10 +177,11 @@ def _format_duration(duration_seconds: float | None) -> str:
     return f"{duration_seconds:.2f}s"
 
 
-def _truncate(value: str, *, width: int) -> str:
+def _truncate(*, value: str, width: int) -> str:
     if len(value) <= width:
         return value
-    if width <= 3:
+    minimum_collapsible_width: int = 3
+    if width <= minimum_collapsible_width:
         return value[:width]
     return value[: width - 3] + "..."
 
@@ -173,7 +200,7 @@ def _start_prephase_spinner(
     use_color: bool,
     stop_spinner: threading.Event,
     write_lock: threading.Lock,
-    progress: dict[str, int | None],
+    progress: CloneProgressState,
 ) -> threading.Thread | None:
     if not _stream_is_tty(stream):
         return None
@@ -199,7 +226,7 @@ def _run_prephase_spinner(
     use_color: bool,
     stop_spinner: threading.Event,
     write_lock: threading.Lock,
-    progress: dict[str, int | None],
+    progress: CloneProgressState,
 ) -> None:
     style: CliStyle = CliStyle(use_color=use_color)
     frame: str
@@ -214,10 +241,11 @@ def _run_prephase_spinner(
         time.sleep(0.12)
 
 
-def _format_clone_progress(*, progress: dict[str, int | None]) -> str:
-    completed: int | None = progress["completed"]
-    total: int | None = progress["total"]
-    if completed is None or total is None:
+def _format_clone_progress(*, progress: CloneProgressState) -> str:
+    completed: int
+    total: int | None
+    completed, total = progress.snapshot()
+    if total is None:
         return "Cloning..."
     return f"Cloning {completed}/{total}..."
 
@@ -229,7 +257,7 @@ def _write_prephase_transient_status(*, stream: TextIO, message: str) -> None:
     stream.flush()
 
 
-def _clear_prephase_transient_status(*, stream: TextIO) -> None:
+def clear_prephase_transient_status(*, stream: TextIO) -> None:
     if not _stream_is_tty(stream):
         return
     stream.write("\r\033[K")

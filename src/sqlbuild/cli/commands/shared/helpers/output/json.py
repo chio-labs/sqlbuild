@@ -25,7 +25,7 @@ from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
 
 
 def format_plan_json(
-    plan: PlanOutput, *, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+    *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
 ) -> str:
     """Serialize a PlanOutput to JSON."""
 
@@ -379,7 +379,7 @@ def _python_source_diff(entry: PythonPlanEntry) -> list[str]:
     current: str | None = _python_definition_source_text(entry.current_definition_json)
     if previous is None or current is None or previous == current:
         return []
-    return _unified_diff(previous, current=current)
+    return _unified_diff(previous=previous, current=current)
 
 
 def _python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
@@ -387,7 +387,7 @@ def _python_dependency_diff(entry: PythonPlanEntry) -> list[str]:
     current: str | None = _python_dependency_source_text(entry.current_metadata_json)
     if previous is None or current is None or previous == current:
         return []
-    return _unified_diff(previous, current=current)
+    return _unified_diff(previous=previous, current=current)
 
 
 def _python_definition_source_text(raw_json: str | None) -> str | None:
@@ -453,7 +453,7 @@ def _json_object(raw_json: str | None) -> dict[str, object] | None:
     return cast(dict[str, object], payload) if isinstance(payload, dict) else None
 
 
-def _unified_diff(previous: str, *, current: str) -> list[str]:
+def _unified_diff(*, previous: str, current: str) -> list[str]:
     return [
         line.rstrip("\n")
         for line in difflib.unified_diff(
@@ -485,23 +485,16 @@ def _serialize_provider_usages(
                     annotation_module=provider_usage.annotation_module,
                 )
             )
-    return [
-        {
-            "name": provider_name,
-            "used_by": [
-                _serialize_provider_usage(usage)
-                for usage in sorted(
-                    usages,
-                    key=lambda item: (
-                        item.consumer_kind,
-                        item.consumer_name,
-                        item.parameter_name,
-                    ),
-                )
-            ],
-        }
-        for provider_name, usages in sorted(usage_by_provider.items())
-    ]
+    providers: list[dict[str, object]] = []
+    for provider_name, usages in sorted(usage_by_provider.items()):
+        serialized_usages: list[dict[str, object]] = []
+        for usage in sorted(
+            usages,
+            key=lambda item: (item.consumer_kind, item.consumer_name, item.parameter_name),
+        ):
+            serialized_usages.append(_serialize_provider_usage(usage))
+        providers.append({"name": provider_name, "used_by": serialized_usages})
+    return providers
 
 
 def _serialize_provider_usage(usage: PlanProviderUsage) -> dict[str, object]:

@@ -81,46 +81,55 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
     model_entries: tuple[SchemaModelEntry, ...]
     seed_entries: tuple[SchemaSeedEntry, ...]
     model_entries, seed_entries = parse_schema_yml(
-        test_case.contents, file_path=Path("seeds/lookups.yml")
+        contents=test_case.contents, file_path=Path("seeds/lookups.yml")
     )
 
     assert tuple(entry.name for entry in model_entries) == test_case.expected_model_names
     assert tuple(entry.name for entry in seed_entries) == test_case.expected_seed_names
-    assert (
-        tuple(tuple(column.name for column in entry.columns) for entry in model_entries)
-        == test_case.expected_model_column_names
-    )
-    assert (
-        tuple(tuple(column.name for column in entry.columns) for entry in seed_entries)
-        == test_case.expected_seed_column_names
-    )
+    actual_model_column_names: list[tuple[str, ...]] = []
+    actual_model_column_nullables_list: list[tuple[bool | None, ...]] = []
+    actual_model_audit_names: list[tuple[str, ...]] = []
+    actual_column_audit_names: list[tuple[tuple[str, ...], ...]] = []
+    for entry in model_entries:
+        column_names: list[str] = []
+        column_nullables: list[bool | None] = []
+        column_audit_names: list[tuple[str, ...]] = []
+        for column in entry.columns:
+            column_names.append(column.name)
+            column_nullables.append(column.nullable)
+            column_audit_names.append(tuple(audit.definition_name for audit in column.audits))
+        actual_model_column_names.append(tuple(column_names))
+        actual_model_column_nullables_list.append(tuple(column_nullables))
+        actual_model_audit_names.append(tuple(audit.definition_name for audit in entry.audits))
+        actual_column_audit_names.append(tuple(column_audit_names))
+    assert tuple(actual_model_column_names) == test_case.expected_model_column_names
+    actual_seed_column_names: list[tuple[str, ...]] = []
+    actual_seed_column_nullables_list: list[tuple[bool | None, ...]] = []
+    for entry in seed_entries:
+        column_names = []
+        column_nullables = []
+        for column in entry.columns:
+            column_names.append(column.name)
+            column_nullables.append(column.nullable)
+        actual_seed_column_names.append(tuple(column_names))
+        actual_seed_column_nullables_list.append(tuple(column_nullables))
+    assert tuple(actual_seed_column_names) == test_case.expected_seed_column_names
     actual_model_column_nullables: tuple[tuple[bool | None, ...], ...] = tuple(
-        tuple(column.nullable for column in entry.columns) for entry in model_entries
+        actual_model_column_nullables_list
     )
     assert actual_model_column_nullables == expected_or_actual(
         test_case.expected_model_column_nullables, actual_model_column_nullables
     )
     actual_seed_column_nullables: tuple[tuple[bool | None, ...], ...] = tuple(
-        tuple(column.nullable for column in entry.columns) for entry in seed_entries
+        actual_seed_column_nullables_list
     )
     assert actual_seed_column_nullables == expected_or_actual(
         test_case.expected_seed_column_nullables, actual_seed_column_nullables
     )
     assert tuple(entry.database for entry in seed_entries) == test_case.expected_seed_databases
     assert tuple(entry.schema for entry in seed_entries) == test_case.expected_seed_schemas
-    assert (
-        tuple(tuple(audit.definition_name for audit in entry.audits) for entry in model_entries)
-        == test_case.expected_model_audit_names
-    )
-    assert (
-        tuple(
-            tuple(
-                tuple(audit.definition_name for audit in column.audits) for column in entry.columns
-            )
-            for entry in model_entries
-        )
-        == test_case.expected_column_audit_names
-    )
+    assert tuple(actual_model_audit_names) == test_case.expected_model_audit_names
+    assert tuple(actual_column_audit_names) == test_case.expected_column_audit_names
 
 
 @pytest.mark.parametrize(
@@ -164,7 +173,9 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
 def test_given_seed_csv_settings_when_parsing_then_it_returns_normalized_settings(
     test_case: ParseSeedCsvSettingsYamlTestCase,
 ) -> None:
-    _, seed_entries = parse_schema_yml(test_case.contents, file_path=Path("seeds/lookups.yml"))
+    _, seed_entries = parse_schema_yml(
+        contents=test_case.contents, file_path=Path("seeds/lookups.yml")
+    )
 
     assert seed_entries[0].csv_settings == SeedCsvSettings(
         delimiter=test_case.expected_delimiter,
@@ -367,4 +378,4 @@ def test_given_invalid_schema_yaml_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSchemaYamlErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        parse_schema_yml(test_case.contents, file_path=Path("seeds/lookups.yml"))
+        parse_schema_yml(contents=test_case.contents, file_path=Path("seeds/lookups.yml"))

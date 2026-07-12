@@ -89,8 +89,8 @@ def build_dbt_interop_plan(
 
 
 def format_dbt_interop_plan(
-    plan: DbtInteropPlan,
     *,
+    plan: DbtInteropPlan,
     use_color: bool = True,
     display_options: DisplayOptions | None = None,
 ) -> str:
@@ -99,7 +99,7 @@ def format_dbt_interop_plan(
     resolved_display_options: DisplayOptions = display_options or DisplayOptions()
     if plan.command == DbtInteropCommand.TEST:
         return _format_dbt_test_plan(
-            plan, use_color=use_color, display_options=resolved_display_options
+            plan=plan, use_color=use_color, display_options=resolved_display_options
         )
     lines: list[str] = []
     dbt_selected_count: int = len(plan.dbt_selected_unique_ids)
@@ -123,14 +123,14 @@ def format_dbt_interop_plan(
         )
     )
     lines.append("")
-    _format_dbt_section(lines, plan=plan, display_options=resolved_display_options)
-    _format_anchor_section(lines, plan=plan, display_options=resolved_display_options)
+    lines = _format_dbt_section(lines=lines, plan=plan, display_options=resolved_display_options)
+    lines = _format_anchor_section(lines=lines, plan=plan, display_options=resolved_display_options)
     lines.append("")
-    _format_sqlbuild_section(
-        lines, plan=plan, use_color=use_color, display_options=resolved_display_options
+    lines = _format_sqlbuild_section(
+        lines=lines, plan=plan, use_color=use_color, display_options=resolved_display_options
     )
-    _format_path_translation_section(lines, plan=plan)
-    _format_warning_section(lines, plan=plan)
+    lines = _format_path_translation_section(lines=lines, plan=plan)
+    lines = _format_warning_section(lines=lines, plan=plan)
     result: str = "\n".join(lines)
     return result if use_color else _strip_ansi(result)
 
@@ -178,8 +178,8 @@ def format_dbt_interop_plan_json(plan: DbtInteropPlan) -> str:
 
 
 def _format_dbt_section(
-    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
-) -> None:
+    *, lines: list[str], plan: DbtInteropPlan, display_options: DisplayOptions
+) -> list[str]:
     style: CliStyle = CliStyle(use_color=True)
     dbt_selected_count: int = len(plan.dbt_selected_unique_ids)
     dbt_required_count: int = len(plan.selection.dbt_required_unique_ids)
@@ -193,15 +193,17 @@ def _format_dbt_section(
             + ")"
         )
     )
-    _format_dbt_resource_summary(lines, plan=plan)
+    lines = _format_dbt_resource_summary(lines=lines, plan=plan)
     if plan.dbt_skip_reason is not None:
         lines.append(style.muted(f"  skipped: {_dbt_skip_reason_label(plan.dbt_skip_reason)}"))
         if plan.dbt_model_plan is not None:
-            _format_dbt_model_plan(lines, plan=plan, display_options=display_options)
-            _format_dbt_non_model_sections(lines, plan=plan, display_options=display_options)
-        return
+            lines = _format_dbt_model_plan(lines=lines, plan=plan, display_options=display_options)
+            lines = _format_dbt_non_model_sections(
+                lines=lines, plan=plan, display_options=display_options
+            )
+        return lines
     display_argv: str = _format_display_argv(
-        plan.dbt_command_argv,
+        argv=plan.dbt_command_argv,
         display_options=display_options,
     )
     lines.append(f"  {style.label('command')}: {style.command(display_argv)}")
@@ -209,10 +211,10 @@ def _format_dbt_section(
     for argv in plan.supplemental_dbt_command_argvs:
         lines.append(
             f"  {style.label('command')}: "
-            f"{style.command(_format_display_argv(argv, display_options=display_options))}"
+            f"{style.command(_format_display_argv(argv=argv, display_options=display_options))}"
         )
     if _is_verbose(display_options) or plan.dbt_model_plan is None:
-        _format_dbt_selected_nodes(lines, plan=plan, display_options=display_options)
+        lines = _format_dbt_selected_nodes(lines=lines, plan=plan, display_options=display_options)
     if _is_verbose(display_options) and plan.selection.dbt_required_unique_ids:
         lines.append("")
         lines.append(style.dbt_label(f"  required: {len(plan.selection.dbt_required_unique_ids)}"))
@@ -223,46 +225,50 @@ def _format_dbt_section(
             )
         unique_id: str
         visible_required: Sequence[str] = visible_entries(
-            plan.selection.dbt_required_unique_ids, options=display_options
+            entries=plan.selection.dbt_required_unique_ids, options=display_options
         )
         for unique_id in visible_required:
             lines.append(f"    {style.dbt_object_name(unique_id)}")
-        append_overflow_line(
-            lines,
+        lines = append_overflow_line(
+            lines=lines,
             total_count=len(plan.selection.dbt_required_unique_ids),
             visible_count=len(visible_required),
             indent="    ",
             options=display_options,
         )
-    _format_dbt_model_plan(lines, plan=plan, display_options=display_options)
-    _format_dbt_non_model_sections(lines, plan=plan, display_options=display_options)
+    lines = _format_dbt_model_plan(lines=lines, plan=plan, display_options=display_options)
+    lines = _format_dbt_non_model_sections(lines=lines, plan=plan, display_options=display_options)
+    return lines
 
 
 def _format_dbt_model_plan(
-    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
-) -> None:
+    *, lines: list[str], plan: DbtInteropPlan, display_options: DisplayOptions
+) -> list[str]:
     if plan.dbt_model_plan is None:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     run_ids: tuple[str, ...] = plan.dbt_model_plan.displayed_run_unique_ids
     current_ids: tuple[str, ...] = plan.dbt_model_plan.displayed_current_unique_ids
     blocked_ids: tuple[str, ...] = plan.dbt_model_plan.displayed_blocked_unique_ids
     blocked_sqlbuild: tuple[str, ...] = plan.dbt_model_plan.blocked_sqlbuild_model_names
     if not run_ids and not current_ids and not blocked_ids:
-        return
+        return lines
     displayed_entries: tuple[DbtModelPlanEntry, ...] = plan.dbt_model_plan.displayed_entries
-    entries_by_action: dict[DbtModelPlanAction, tuple[DbtModelPlanEntry, ...]] = {
-        action: tuple(entry for entry in displayed_entries if entry.action == action)
-        for action in DbtModelPlanAction
-    }
+    entries_by_action: dict[DbtModelPlanAction, tuple[DbtModelPlanEntry, ...]] = {}
+    for action in DbtModelPlanAction:
+        action_entries: list[DbtModelPlanEntry] = []
+        for entry in displayed_entries:
+            if entry.action == action:
+                action_entries.append(entry)
+        entries_by_action[action] = tuple(action_entries)
     lines.append("")
     lines.append(f"  {style.plan_section('Model plan')}")
     name_column_width: int = resolve_name_column_width(
-        tuple(entry.unique_id for entry in displayed_entries)
+        names=tuple(entry.unique_id for entry in displayed_entries)
     )
     if run_ids:
-        _format_dbt_run_reason_sections(
-            lines,
+        lines = _format_dbt_run_reason_sections(
+            lines=lines,
             run_entries=entries_by_action[DbtModelPlanAction.RUN],
             style=style,
             name_column_width=name_column_width,
@@ -271,17 +277,17 @@ def _format_dbt_model_plan(
     lines.append(f"    {style.plan_section(f'Current ({len(current_ids)})')}")
     if current_ids:
         visible_current: Sequence[DbtModelPlanEntry] = visible_entries(
-            entries_by_action[DbtModelPlanAction.CURRENT], options=display_options
+            entries=entries_by_action[DbtModelPlanAction.CURRENT], options=display_options
         )
         for entry in visible_current:
-            _append_dbt_model_plan_entry(
-                lines,
+            lines = _append_dbt_model_plan_entry(
+                lines=lines,
                 entry=entry,
                 style=style,
                 name_column_width=name_column_width,
             )
-        _append_dbt_overflow_line(
-            lines,
+        lines = _append_dbt_overflow_line(
+            lines=lines,
             total_count=len(current_ids),
             visible_count=len(visible_current),
             indent="      ",
@@ -290,17 +296,17 @@ def _format_dbt_model_plan(
     lines.append(f"    {style.plan_section(f'Blocked ({len(blocked_ids)})')}")
     if blocked_ids:
         visible_blocked: Sequence[DbtModelPlanEntry] = visible_entries(
-            entries_by_action[DbtModelPlanAction.BLOCKED], options=display_options
+            entries=entries_by_action[DbtModelPlanAction.BLOCKED], options=display_options
         )
         for entry in visible_blocked:
-            _append_dbt_model_plan_entry(
-                lines,
+            lines = _append_dbt_model_plan_entry(
+                lines=lines,
                 entry=entry,
                 style=style,
                 name_column_width=name_column_width,
             )
-        _append_dbt_overflow_line(
-            lines,
+        lines = _append_dbt_overflow_line(
+            lines=lines,
             total_count=len(blocked_ids),
             visible_count=len(visible_blocked),
             indent="      ",
@@ -308,26 +314,29 @@ def _format_dbt_model_plan(
         )
     if blocked_sqlbuild:
         lines.append(f"    {style.label('blocked SQLBuild')}: {len(blocked_sqlbuild)}")
-        visible_sqlbuild: Sequence[str] = visible_entries(blocked_sqlbuild, options=display_options)
+        visible_sqlbuild: Sequence[str] = visible_entries(
+            entries=blocked_sqlbuild, options=display_options
+        )
         for name in visible_sqlbuild:
             lines.append(f"      {style.object_name(name)}")
-        _append_dbt_overflow_line(
-            lines,
+        lines = _append_dbt_overflow_line(
+            lines=lines,
             total_count=len(blocked_sqlbuild),
             visible_count=len(visible_sqlbuild),
             indent="      ",
             options=display_options,
         )
+    return lines
 
 
 def _format_dbt_run_reason_sections(
-    lines: list[str],
     *,
+    lines: list[str],
     run_entries: tuple[DbtModelPlanEntry, ...],
     style: CliStyle,
     name_column_width: int,
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     reason_order: tuple[DbtModelPlanReason, ...] = (
         DbtModelPlanReason.CHECKSUM_CHANGED,
         DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED,
@@ -347,33 +356,34 @@ def _format_dbt_run_reason_sections(
         reason_label: str = _dbt_model_plan_reason_section_label(reason)
         lines.append(f"    {style.plan_section(f'{reason_label} ({len(reason_entries)})')}")
         visible_entries_for_reason: Sequence[DbtModelPlanEntry] = visible_entries(
-            reason_entries, options=display_options
+            entries=reason_entries, options=display_options
         )
         for entry in visible_entries_for_reason:
-            _append_dbt_model_plan_entry(
-                lines,
+            lines = _append_dbt_model_plan_entry(
+                lines=lines,
                 entry=entry,
                 style=style,
                 name_column_width=name_column_width,
             )
-        _append_dbt_overflow_line(
-            lines,
+        lines = _append_dbt_overflow_line(
+            lines=lines,
             total_count=len(reason_entries),
             visible_count=len(visible_entries_for_reason),
             indent="      ",
             options=display_options,
         )
+    return lines
 
 
-def _format_dbt_resource_summary(lines: list[str], *, plan: DbtInteropPlan) -> None:
+def _format_dbt_resource_summary(*, lines: list[str], plan: DbtInteropPlan) -> list[str]:
     if plan.dbt_model_plan is None:
-        return
+        return lines
     selected_resource_count: int = len(plan.dbt_selected_unique_ids)
     required_resource_count: int = len(plan.selection.dbt_required_unique_ids)
     planned_model_count: int = len(plan.dbt_model_plan.displayed_entries)
     non_model_count: int = len(plan.dbt_non_model_run_unique_ids)
     if not selected_resource_count and not planned_model_count and not non_model_count:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     resource_counts: Counter[str] = Counter(
         _dbt_resource_type_display_label(node.resource_type) for node in plan.dbt_selected_nodes
@@ -408,6 +418,7 @@ def _format_dbt_resource_summary(lines: list[str], *, plan: DbtInteropPlan) -> N
             + (" selected tests/seeds preserved for execution" if non_model_count else "")
         )
     )
+    return lines
 
 
 def _format_plan_ready_resource_counts(
@@ -440,14 +451,14 @@ def _format_count_breakdown(resource_counts: Counter[str]) -> str:
     for label in ordered_labels:
         count: int = resource_counts.get(label, 0)
         if count:
-            parts.append(f"{count} {_pluralize(label, count=count)}")
+            parts.append(f"{count} {_pluralize(label=label, count=count)}")
     for label, count in sorted(resource_counts.items()):
         if label not in ordered_labels and count:
-            parts.append(f"{count} {_pluralize(label, count=count)}")
+            parts.append(f"{count} {_pluralize(label=label, count=count)}")
     return ", ".join(parts)
 
 
-def _pluralize(label: str, *, count: int) -> str:
+def _pluralize(*, label: str, count: int) -> str:
     if count == 1:
         return label
     if label == "unit test":
@@ -456,8 +467,8 @@ def _pluralize(label: str, *, count: int) -> str:
 
 
 def _append_dbt_model_plan_entry(
-    lines: list[str], *, entry: DbtModelPlanEntry, style: CliStyle, name_column_width: int
-) -> None:
+    *, lines: list[str], entry: DbtModelPlanEntry, style: CliStyle, name_column_width: int
+) -> list[str]:
     lines.append(
         "    "
         + format_aligned_name_value(
@@ -467,23 +478,27 @@ def _append_dbt_model_plan_entry(
             name_column_width=name_column_width,
         )
     )
-    _append_dbt_query_diff(lines, entry=entry, style=style)
+    lines = _append_dbt_query_diff(lines=lines, entry=entry, style=style)
+    return lines
 
 
-def _append_dbt_query_diff(lines: list[str], *, entry: DbtModelPlanEntry, style: CliStyle) -> None:
+def _append_dbt_query_diff(
+    *, lines: list[str], entry: DbtModelPlanEntry, style: CliStyle
+) -> list[str]:
     if entry.reason != DbtModelPlanReason.CHECKSUM_CHANGED:
-        return
+        return lines
     if entry.previous_query_sql is None or entry.fingerprint_query_sql is None:
-        return
+        return lines
     if entry.previous_query_sql == entry.fingerprint_query_sql:
-        return
+        return lines
     lines.append(style.label("      query diff:"))
     lines.extend(
         format_query_diff(
-            entry.previous_query_sql,
+            previous=entry.previous_query_sql,
             current=entry.fingerprint_query_sql,
         )
     )
+    return lines
 
 
 def _dbt_model_plan_reason_label(reason: DbtModelPlanReason) -> str:
@@ -521,8 +536,8 @@ def _dbt_skip_reason_label(reason: DbtInteropSkipReason) -> str:
 
 
 def _format_dbt_non_model_sections(
-    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
-) -> None:
+    *, lines: list[str], plan: DbtInteropPlan, display_options: DisplayOptions
+) -> list[str]:
     run_ids: frozenset[str] = frozenset(plan.dbt_non_model_run_unique_ids)
     pruned_seed_ids: frozenset[str] = frozenset(plan.dbt_pruned_seed_unique_ids)
     pruned_test_ids: frozenset[str] = frozenset(plan.dbt_pruned_test_unique_ids)
@@ -546,22 +561,22 @@ def _format_dbt_non_model_sections(
         lines.append("")
         lines.append(f"  {style.plan_section('Non-model dbt work')}")
         if seed_nodes:
-            _format_dbt_non_model_resource_group(
-                lines,
+            lines = _format_dbt_non_model_resource_group(
+                lines=lines,
                 label=f"Seeds ({len(seed_nodes)}, changed)",
                 nodes=seed_nodes,
                 display_options=display_options,
             )
         if test_nodes:
-            _format_dbt_non_model_resource_group(
-                lines,
+            lines = _format_dbt_non_model_resource_group(
+                lines=lines,
                 label=f"Tests ({len(test_nodes)})",
                 nodes=test_nodes,
                 display_options=display_options,
             )
         if unit_test_nodes:
-            _format_dbt_non_model_resource_group(
-                lines,
+            lines = _format_dbt_non_model_resource_group(
+                lines=lines,
                 label=f"Unit tests ({len(unit_test_nodes)})",
                 nodes=unit_test_nodes,
                 display_options=display_options,
@@ -572,8 +587,8 @@ def _format_dbt_non_model_sections(
             unique_ids=pruned_seed_ids,
             resource_type=DbtSupportedResourceType.SEED,
         )
-        _format_dbt_pruned_non_model_group(
-            lines,
+        lines = _format_dbt_pruned_non_model_group(
+            lines=lines,
             label=f"Seeds pruned ({len(pruned_seed_nodes)})",
             note="pruned because seed content is unchanged",
             nodes=pruned_seed_nodes,
@@ -585,8 +600,8 @@ def _format_dbt_non_model_sections(
             unique_ids=pruned_test_ids,
             resource_type=DbtSupportedResourceType.TEST,
         )
-        _format_dbt_pruned_non_model_group(
-            lines,
+        lines = _format_dbt_pruned_non_model_group(
+            lines=lines,
             label=f"Tests pruned ({len(pruned_nodes)})",
             note="use sqb dbt test to run dbt validation",
             nodes=pruned_nodes,
@@ -597,58 +612,61 @@ def _format_dbt_non_model_sections(
             unique_ids=pruned_test_ids,
             resource_type=DbtSupportedResourceType.UNIT_TEST,
         )
-        _format_dbt_pruned_non_model_group(
-            lines,
+        lines = _format_dbt_pruned_non_model_group(
+            lines=lines,
             label=f"Unit tests pruned ({len(pruned_unit_test_nodes)})",
             note="use sqb dbt test to run dbt validation",
             nodes=pruned_unit_test_nodes,
             display_options=display_options,
         )
+    return lines
 
 
 def _format_dbt_non_model_resource_group(
-    lines: list[str], *, label: str, nodes: tuple[DbtLsNode, ...], display_options: DisplayOptions
-) -> None:
+    *, lines: list[str], label: str, nodes: tuple[DbtLsNode, ...], display_options: DisplayOptions
+) -> list[str]:
     style: CliStyle = CliStyle(use_color=True)
     lines.append(f"    {style.plan_section(label)}")
-    visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
+    visible_nodes: Sequence[DbtLsNode] = visible_entries(entries=nodes, options=display_options)
     node: DbtLsNode
     for node in visible_nodes:
         lines.append(f"      {style.dbt_object_name(_dbt_node_display_name(node))}")
-    _append_dbt_overflow_line(
-        lines,
+    lines = _append_dbt_overflow_line(
+        lines=lines,
         total_count=len(nodes),
         visible_count=len(visible_nodes),
         indent="      ",
         options=display_options,
     )
+    return lines
 
 
 def _format_dbt_pruned_non_model_group(
-    lines: list[str],
     *,
+    lines: list[str],
     label: str,
     note: str,
     nodes: tuple[DbtLsNode, ...],
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     if not nodes:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(f"  {style.plan_section(label)}")
     lines.append(style.muted(f"    {note}"))
-    visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
+    visible_nodes: Sequence[DbtLsNode] = visible_entries(entries=nodes, options=display_options)
     node: DbtLsNode
     for node in visible_nodes:
         lines.append(f"    {style.muted(_dbt_node_display_name(node))}")
-    _append_dbt_overflow_line(
-        lines,
+    lines = _append_dbt_overflow_line(
+        lines=lines,
         total_count=len(nodes),
         visible_count=len(visible_nodes),
         indent="    ",
         options=display_options,
     )
+    return lines
 
 
 def _nodes_by_unique_ids(
@@ -693,10 +711,10 @@ def _format_dbt_model_plan_json(plan: DbtInteropPlan) -> dict[str, object] | Non
 
 
 def _format_dbt_selected_nodes(
-    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
-) -> None:
+    *, lines: list[str], plan: DbtInteropPlan, display_options: DisplayOptions
+) -> list[str]:
     if not plan.dbt_selected_nodes:
-        return
+        return lines
     nodes_by_type: dict[str, list[DbtLsNode]] = defaultdict(list)
     node: DbtLsNode
     for node in sorted(plan.dbt_selected_nodes, key=_dbt_node_sort_key):
@@ -708,8 +726,8 @@ def _format_dbt_selected_nodes(
         lines.append("")
         lines.append(f"  {style.plan_section(f'{section_label} ({len(nodes)})')}")
         labels: tuple[str, ...] = tuple(_dbt_node_display_name(node) for node in nodes)
-        name_width: int = resolve_name_column_width(labels)
-        visible_nodes: Sequence[DbtLsNode] = visible_entries(nodes, options=display_options)
+        name_width: int = resolve_name_column_width(names=labels)
+        visible_nodes: Sequence[DbtLsNode] = visible_entries(entries=nodes, options=display_options)
         for node in visible_nodes:
             name: str = _dbt_node_display_name(node)
             lines.append(
@@ -721,16 +739,17 @@ def _format_dbt_selected_nodes(
                     name_column_width=name_width,
                 )
             )
-        _append_dbt_overflow_line(
-            lines,
+        lines = _append_dbt_overflow_line(
+            lines=lines,
             total_count=len(nodes),
             visible_count=len(visible_nodes),
             indent="    ",
             options=display_options,
         )
+    return lines
 
 
-def _format_display_argv(argv: tuple[str, ...], *, display_options: DisplayOptions) -> str:
+def _format_display_argv(*, argv: tuple[str, ...], display_options: DisplayOptions) -> str:
     if _is_verbose(display_options):
         return " ".join(argv)
     max_terms: int | None = display_options.max_entries_per_section
@@ -756,11 +775,11 @@ def _format_display_argv(argv: tuple[str, ...], *, display_options: DisplayOptio
 
 
 def _append_dbt_overflow_line(
-    lines: list[str], *, total_count: int, visible_count: int, indent: str, options: DisplayOptions
-) -> None:
+    *, lines: list[str], total_count: int, visible_count: int, indent: str, options: DisplayOptions
+) -> list[str]:
     before_count: int = len(lines)
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=total_count,
         visible_count=visible_count,
         indent=indent,
@@ -769,36 +788,39 @@ def _append_dbt_overflow_line(
     if len(lines) > before_count:
         style: CliStyle = CliStyle(use_color=True)
         lines[-1] = style.muted(lines[-1])
+    return lines
 
 
 def _format_sqlbuild_section(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: DbtInteropPlan,
     use_color: bool,
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     style: CliStyle = CliStyle(use_color=True)
     sqlbuild_count: int = len(plan.selection.sqlbuild_model_names)
     lines.append(style.object_name(f"SQLBuild ({sqlbuild_count} selected)"))
     if plan.sqlbuild_skip_reason is not None:
         lines.append(style.muted("  skipped: no SQLBuild work selected"))
-        return
+        return lines
     argv: tuple[str, ...]
     for argv in plan.sqlbuild_command_argvs:
         lines.append(f"  {style.label('command')}: {style.command(' '.join(argv))}")
     if plan.sqlbuild_plan_output is None:
-        _format_sqlbuild_model_fallback(lines, plan=plan, display_options=display_options)
-        return
+        lines = _format_sqlbuild_model_fallback(
+            lines=lines, plan=plan, display_options=display_options
+        )
+        return lines
     sqlbuild_plan: str = format_plan(
-        plan.sqlbuild_plan_output,
+        plan=plan.sqlbuild_plan_output,
         use_color=use_color,
         include_header=False,
         display_options=display_options,
         section_header_style=style.plan_section,
     )
     if not sqlbuild_plan:
-        return
+        return lines
     lines.append("")
     sqlbuild_lines: list[str] = sqlbuild_plan.splitlines()
     while sqlbuild_lines and not sqlbuild_lines[0]:
@@ -806,11 +828,12 @@ def _format_sqlbuild_section(
     line: str
     for line in sqlbuild_lines:
         lines.append(f"  {line}" if line else "")
+    return lines
 
 
 def _format_dbt_test_plan(
-    plan: DbtInteropPlan,
     *,
+    plan: DbtInteropPlan,
     use_color: bool,
     display_options: DisplayOptions,
 ) -> str:
@@ -835,21 +858,21 @@ def _format_dbt_test_plan(
             + ")"
         )
     )
-    _format_dbt_test_section(
-        lines,
+    lines = _format_dbt_test_section(
+        lines=lines,
         plan=plan,
         dbt_model_names=dbt_model_names,
         dbt_test_node_count=dbt_test_node_count,
         display_options=display_options,
     )
-    _format_sqlbuild_test_section(
-        lines,
+    lines = _format_sqlbuild_test_section(
+        lines=lines,
         plan=plan,
         sqlbuild_test_count=sqlbuild_test_count,
         sqlbuild_audit_count=sqlbuild_audit_count,
         display_options=display_options,
     )
-    _format_warning_section(lines, plan=plan)
+    lines = _format_warning_section(lines=lines, plan=plan)
     result: str = "\n".join(lines)
     return result if use_color else _strip_ansi(result)
 
@@ -859,42 +882,46 @@ def _format_test_plan_ready_counts(
 ) -> str:
     parts: list[str] = []
     if dbt_model_count:
-        parts.append(f"{dbt_model_count} dbt {_pluralize('model', count=dbt_model_count)}")
+        parts.append(f"{dbt_model_count} dbt {_pluralize(label='model', count=dbt_model_count)}")
     if sqlbuild_test_count:
         parts.append(
-            f"{sqlbuild_test_count} SQLBuild {_pluralize('test', count=sqlbuild_test_count)}"
+            f"{sqlbuild_test_count} SQLBuild {_pluralize(label='test', count=sqlbuild_test_count)}"
         )
     if sqlbuild_audit_count:
-        parts.append(f"{sqlbuild_audit_count} {_pluralize('audit', count=sqlbuild_audit_count)}")
+        parts.append(
+            f"{sqlbuild_audit_count} {_pluralize(label='audit', count=sqlbuild_audit_count)}"
+        )
     if not parts:
         return "nothing selected"
     return ", ".join(parts)
 
 
 def _format_dbt_test_section(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: DbtInteropPlan,
     dbt_model_names: tuple[str, ...],
     dbt_test_node_count: int,
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(
         style.dbt_section(
-            f"dbt ({len(dbt_model_names)} {_pluralize('model', count=len(dbt_model_names))})"
+            f"dbt ({len(dbt_model_names)} {_pluralize(label='model', count=len(dbt_model_names))})"
         )
     )
     if not dbt_model_names:
         lines.append(style.muted("  no dbt models selected"))
-        return
-    visible_models: Sequence[str] = visible_entries(dbt_model_names, options=display_options)
+        return lines
+    visible_models: Sequence[str] = visible_entries(
+        entries=dbt_model_names, options=display_options
+    )
     model_name: str
     for model_name in visible_models:
         lines.append(f"  {style.dbt_object_name(model_name)}")
-    _append_dbt_overflow_line(
-        lines,
+    lines = _append_dbt_overflow_line(
+        lines=lines,
         total_count=len(dbt_model_names),
         visible_count=len(visible_models),
         indent="  ",
@@ -904,44 +931,46 @@ def _format_dbt_test_section(
         lines.append(style.muted(f"  dbt tests: {dbt_test_node_count}"))
     else:
         lines.append(style.muted("  dbt tests: none"))
+    return lines
 
 
 def _format_sqlbuild_test_section(
-    lines: list[str],
     *,
+    lines: list[str],
     plan: DbtInteropPlan,
     sqlbuild_test_count: int,
     sqlbuild_audit_count: int,
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     style: CliStyle = CliStyle(use_color=True)
     if sqlbuild_test_count:
         lines.append("")
         lines.append(
             style.object_name(
                 f"SQLBuild tests "
-                f"({sqlbuild_test_count} {_pluralize('test', count=sqlbuild_test_count)})"
+                f"({sqlbuild_test_count} {_pluralize(label='test', count=sqlbuild_test_count)})"
             )
         )
-        _format_sqlbuild_test_groups(
-            lines,
+        lines = _format_sqlbuild_test_groups(
+            lines=lines,
             plan_output=plan.sqlbuild_plan_output,
             display_options=display_options,
         )
     if sqlbuild_audit_count:
-        audit_label: str = _pluralize("audit", count=sqlbuild_audit_count)
+        audit_label: str = _pluralize(label="audit", count=sqlbuild_audit_count)
         lines.append("")
         lines.append(style.object_name(f"SQLBuild audits ({sqlbuild_audit_count} {audit_label})"))
+    return lines
 
 
 def _format_sqlbuild_test_groups(
-    lines: list[str],
     *,
+    lines: list[str],
     plan_output: PlanOutput | None,
     display_options: DisplayOptions,
-) -> None:
+) -> list[str]:
     if plan_output is None:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     tests_by_target: dict[str, list[str]] = defaultdict(list)
     entry: object
@@ -954,6 +983,7 @@ def _format_sqlbuild_test_groups(
         test_name: str
         for test_name in tests_by_target[target]:
             lines.append(f"    {style.muted(test_name)}")
+    return lines
 
 
 def _sqlbuild_test_target_name(entry: object) -> str:
@@ -986,12 +1016,12 @@ def _dbt_test_nodes(plan: DbtInteropPlan) -> tuple[DbtLsNode, ...]:
 
 
 def _format_sqlbuild_model_fallback(
-    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
-) -> None:
+    *, lines: list[str], plan: DbtInteropPlan, display_options: DisplayOptions
+) -> list[str]:
     style: CliStyle = CliStyle(use_color=True)
-    name_width: int = resolve_name_column_width(plan.selection.sqlbuild_model_names)
+    name_width: int = resolve_name_column_width(names=plan.selection.sqlbuild_model_names)
     visible_models: Sequence[str] = visible_entries(
-        plan.selection.sqlbuild_model_names, options=display_options
+        entries=plan.selection.sqlbuild_model_names, options=display_options
     )
     model_name: str
     for model_name in visible_models:
@@ -1004,20 +1034,21 @@ def _format_sqlbuild_model_fallback(
                 name_column_width=name_width,
             )
         )
-    append_overflow_line(
-        lines,
+    lines = append_overflow_line(
+        lines=lines,
         total_count=len(plan.selection.sqlbuild_model_names),
         visible_count=len(visible_models),
         indent="  ",
         options=display_options,
     )
+    return lines
 
 
 def _format_anchor_section(
-    lines: list[str], *, plan: DbtInteropPlan, display_options: DisplayOptions
-) -> None:
+    *, lines: list[str], plan: DbtInteropPlan, display_options: DisplayOptions
+) -> list[str]:
     if not _is_verbose(display_options) or not plan.selection.dbt_anchor_terms:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(style.plan_section(f"dbt anchors ({len(plan.selection.dbt_anchor_terms)})"))
@@ -1026,25 +1057,28 @@ def _format_anchor_section(
         unique_ids: tuple[str, ...] = plan.selection.dbt_anchor_unique_ids_by_term.get(term, ())
         lines.append(f"  {style.command(term)}: {style.value(str(len(unique_ids)))}")
         unique_id: str
-        visible_unique_ids: Sequence[str] = visible_entries(unique_ids, options=display_options)
+        visible_unique_ids: Sequence[str] = visible_entries(
+            entries=unique_ids, options=display_options
+        )
         for unique_id in visible_unique_ids:
             lines.append(f"    {style.dbt_object_name(unique_id)}")
-        append_overflow_line(
-            lines,
+        lines = append_overflow_line(
+            lines=lines,
             total_count=len(unique_ids),
             visible_count=len(visible_unique_ids),
             indent="    ",
             options=display_options,
         )
+    return lines
 
 
 def _is_verbose(display_options: DisplayOptions) -> bool:
     return display_options.max_entries_per_section is None
 
 
-def _format_path_translation_section(lines: list[str], *, plan: DbtInteropPlan) -> None:
+def _format_path_translation_section(*, lines: list[str], plan: DbtInteropPlan) -> list[str]:
     if not plan.selection.path_translations:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(
@@ -1054,11 +1088,12 @@ def _format_path_translation_section(lines: list[str], *, plan: DbtInteropPlan) 
     translated: str
     for original, translated in plan.selection.path_translations:
         lines.append(f"  {original} -> {translated}")
+    return lines
 
 
-def _format_warning_section(lines: list[str], *, plan: DbtInteropPlan) -> None:
+def _format_warning_section(*, lines: list[str], plan: DbtInteropPlan) -> list[str]:
     if not plan.warnings:
-        return
+        return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(style.warning_strong(f"Warnings ({len(plan.warnings)})"))
@@ -1069,6 +1104,7 @@ def _format_warning_section(lines: list[str], *, plan: DbtInteropPlan) -> None:
         continuation: str
         for continuation in message_lines[1:]:
             lines.append(f"    {style.warning(continuation)}")
+    return lines
 
 
 def _strip_ansi(text: str) -> str:

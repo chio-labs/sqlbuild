@@ -28,7 +28,7 @@ def format_rollback_output(
     model_count: str = style.value(f"{len(rolled_back_models):,}")
     doc: CliDocument = CliDocument(style)
     doc.blank()
-    doc.header("Virtual rollback complete")
+    doc.header(text="Virtual rollback complete")
     doc.blank()
     doc.line(f"  virtual environment  {environment_label}")
     doc.line(f"  checkpoint           {checkpoint_label}")

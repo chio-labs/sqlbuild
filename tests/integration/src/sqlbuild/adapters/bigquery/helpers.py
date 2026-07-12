@@ -56,7 +56,7 @@ def execute_statements(
 
     statement: str
     for statement in statements:
-        adapter.execute(connection, sql=statement)
+        adapter.execute(connection=connection, sql=statement)
 
 
 def fetch_rows(
@@ -64,7 +64,7 @@ def fetch_rows(
 ) -> tuple[tuple[object, ...], ...]:
     """Fetch all rows for a query."""
 
-    cursor: Any = adapter.execute(connection, sql=sql)
+    cursor: Any = adapter.execute(connection=connection, sql=sql)
     try:
         return tuple(tuple(row) for row in cursor.fetchall())
     finally:
@@ -97,7 +97,7 @@ def wait_for_bigquery_freshness_after(
     """Poll BigQuery table metadata until modified time advances."""
 
     metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
-        connection,
+        connection=connection,
         database=database,
         schema=schema,
         name=name,
@@ -108,7 +108,7 @@ def wait_for_bigquery_freshness_after(
             return metadata
         time.sleep(5)
         metadata = adapter.get_table_freshness_metadata(
-            connection,
+            connection=connection,
             database=database,
             schema=schema,
             name=name,

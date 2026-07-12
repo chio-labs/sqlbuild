@@ -188,7 +188,7 @@ def execute_dbt_interop_from_project(request: DbtInteropExecutionRequest) -> int
             dbt_returncode=tracked.execution.returncode,
             missing_relation_blocked_models=replan.missing_relation_blocked_models,
         )
-    if not plan_has_executable_work(replan.plan_output):
+    if not plan_has_executable_work(plan=replan.plan_output):
         write_sqlbuild_skip_notice(
             request=request,
             invocation=invocation,

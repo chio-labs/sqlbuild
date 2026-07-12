@@ -52,10 +52,10 @@ def test_given_discovered_providers_when_building_sessions_then_each_session_get
     )
 
     first_session: ProviderSession = build_provider_session(
-        (discovered_provider,), setup_context="first"
+        discovered_providers=(discovered_provider,), setup_context="first"
     )
     second_session: ProviderSession = build_provider_session(
-        (discovered_provider,), setup_context="second"
+        discovered_providers=(discovered_provider,), setup_context="second"
     )
 
     first_provider: Provider = first_session.providers[test_case.provider_name]
@@ -94,10 +94,10 @@ def test_given_two_built_sessions_when_closing_one_then_other_session_remains_ac
         settings=RuntimeFreshProvider(),
     )
     first_session: ProviderSession = build_provider_session(
-        (discovered_provider,), setup_context="first"
+        discovered_providers=(discovered_provider,), setup_context="first"
     )
     second_session: ProviderSession = build_provider_session(
-        (discovered_provider,), setup_context="second"
+        discovered_providers=(discovered_provider,), setup_context="second"
     )
     first_session.providers[test_case.provider_name]
     second_session.providers[test_case.provider_name]

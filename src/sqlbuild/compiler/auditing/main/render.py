@@ -84,6 +84,6 @@ def _render_sources(
         entry: SourceEntry | None = source_map.get(source_name)
         if entry is None:
             return match.group(0)
-        return render_source_relation(entry, adapter=adapter)
+        return render_source_relation(entry=entry, adapter=adapter)
 
     return SOURCE_PATTERN.sub(_replace, sql)

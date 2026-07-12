@@ -124,13 +124,15 @@ def run_dbt_scenario_test(
     )
     if local:
         project_adapter: BaseAdapter = resolve_adapter(
-            discovery.adapter_name, project_dir=effective_project_dir
+            adapter_name=discovery.adapter_name, project_dir=effective_project_dir
         )
         return run_local_scenarios(
             project_dir=effective_project_dir,
             pipeline_result=pipeline_result,
             scenarios=scenarios,
-            adapter=resolve_adapter(BuiltinAdapter.DUCKDB.value, project_dir=effective_project_dir),
+            adapter=resolve_adapter(
+                adapter_name=BuiltinAdapter.DUCKDB.value, project_dir=effective_project_dir
+            ),
             project_name=discovery.project_name,
             strict=strict,
             capture_adapter=discovery.adapter_name,
@@ -149,7 +151,9 @@ def run_dbt_scenario_test(
         pipeline_result=pipeline_result,
         scenarios=scenarios,
         connection_config=discovery.connection_config,
-        adapter=resolve_adapter(discovery.adapter_name, project_dir=effective_project_dir),
+        adapter=resolve_adapter(
+            adapter_name=discovery.adapter_name, project_dir=effective_project_dir
+        ),
         adapter_name=discovery.adapter_name,
         project_name=discovery.project_name,
         target_dir=effective_project_dir / "target",
@@ -221,12 +225,14 @@ def capture_dbt_scenarios(
         progress_stream.write("\nNo scenarios selected.\n")
         progress_stream.flush()
         return 0
-    adapter: BaseAdapter = resolve_adapter(discovery.adapter_name, project_dir=project_dir)
+    adapter: BaseAdapter = resolve_adapter(
+        adapter_name=discovery.adapter_name, project_dir=project_dir
+    )
     pipeline_result: CompilePipelineResult = CompilePipelineResult(
         project=discovery.project,
         plan_output=PlanOutput(),
     )
-    return run_scenario_capture_run(
+    exit_code, _ = run_scenario_capture_run(
         project_dir=project_dir,
         pipeline_result=pipeline_result,
         scenarios=scenarios,
@@ -250,6 +256,7 @@ def capture_dbt_scenarios(
             use_color=use_color,
         ),
     )
+    return exit_code
 
 
 def _build_dbt_scenario(

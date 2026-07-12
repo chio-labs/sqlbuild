@@ -196,7 +196,7 @@ def _write_tests(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOut
         _write_sql(
             path=test_path,
             sql=build_sql_test_comparison_sql(
-                entry,
+                test_entry=entry,
                 set_difference_operator=adapter.render_set_difference_operator(),
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
             ),
@@ -221,7 +221,7 @@ def _write_static_tests(
         _write_sql(
             path=test_path,
             sql=build_sql_test_comparison_sql(
-                entry,
+                test_entry=entry,
                 set_difference_operator=adapter.render_set_difference_operator(),
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
             ),
@@ -252,7 +252,12 @@ def _model_output_path(relative_path: Path) -> Path:
 def _function_output_path(*, relative_path: Path, language: FunctionLanguage) -> Path:
     parts: tuple[str, ...] = relative_path.parts
     language_dir: str = language.value
-    if len(parts) >= 2 and parts[0] == _FUNCTIONS_DIR and parts[1] == language_dir:
+    function_language_path_part_count: int = 2
+    if (
+        len(parts) >= function_language_path_part_count
+        and parts[0] == _FUNCTIONS_DIR
+        and parts[1] == language_dir
+    ):
         return Path(*parts).with_suffix(_SQL_FILE_SUFFIX)
     return (Path(_FUNCTIONS_DIR) / language_dir / relative_path).with_suffix(_SQL_FILE_SUFFIX)
 

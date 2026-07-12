@@ -54,7 +54,7 @@ def execute_audit(
         sqlbuild_audit_name=audit.name,
         sqlbuild_column_name=audit.attached_column_name,
     ):
-        cursor: Any = adapter.execute(connection, sql=executed_sql)
+        cursor: Any = adapter.execute(connection=connection, sql=executed_sql)
         rows: list[Any] = cursor.fetchall()
     row_count: int = len(rows)
 

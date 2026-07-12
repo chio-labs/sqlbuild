@@ -73,8 +73,8 @@ def run_dbt_command(
 
 
 def _run_dbt_plan(
-    project_dir: Path | None,
     *,
+    project_dir: Path | None,
     args: tuple[str, ...],
     no_color: bool = False,
 ) -> int:
@@ -107,7 +107,7 @@ def _run_dbt_plan(
     )
     print(
         render_dbt_interop_plan(
-            plan,
+            plan=plan,
             json_output=json_output,
             use_color=use_color,
             display_options=display_options,

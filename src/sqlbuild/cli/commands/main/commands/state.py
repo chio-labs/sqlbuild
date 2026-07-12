@@ -18,8 +18,8 @@ from sqlbuild.virtual.state.types import StateCommand
 
 
 def run_state(
-    project_dir: Path | None,
     *,
+    project_dir: Path | None,
     state_command: str,
     backup_id: str | None = None,
     auto_approve: bool = False,
@@ -66,8 +66,16 @@ def run_state(
         auto_approve=auto_approve,
         no_color=no_color,
         on_connection_start=state_progress.on_connection_start,
-        on_connection_complete=state_progress.on_connection_complete,
-        on_connection_error=state_progress.on_connection_error,
+        on_connection_complete=lambda connection_count, elapsed_seconds: (
+            state_progress.on_connection_complete(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
+        on_connection_error=lambda connection_count, elapsed_seconds: (
+            state_progress.on_connection_error(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
     )
 
 

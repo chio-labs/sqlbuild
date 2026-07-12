@@ -41,7 +41,9 @@ def run_build(request: BuildCommandRequest) -> int:
     """Execute the build command."""
 
     invocation: BuildInvocation = resolve_build_invocation(request=request)
-    provider_session: Any = build_provider_session(invocation.discovered_inputs.providers)
+    provider_session: Any = build_provider_session(
+        discovered_providers=invocation.discovered_inputs.providers
+    )
     try:
         if invocation.virtual_mode:
             return run_virtual_build(
@@ -108,7 +110,7 @@ def run_build(request: BuildCommandRequest) -> int:
             pipeline_result=pipeline_result,
         )
         if not plan_has_executable_work(
-            pipeline_result.plan_output,
+            plan=pipeline_result.plan_output,
             python_plan_entries=pipeline_result.python_plan_entries,
         ):
             return 0

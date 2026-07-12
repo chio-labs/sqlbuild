@@ -41,7 +41,7 @@ def build_failed_result(
     """Build a failed ModelExecutionResult for a specific phase."""
 
     rendered_error, rendered_code, rendered_help = _render_failure_error(
-        error, fallback_code=_fallback_code_for_phase(phase)
+        error=error, fallback_code=_fallback_code_for_phase(phase)
     )
 
     statement_recorder.log(f"model {entry.name} failed phase={phase.value} error={rendered_error}")
@@ -103,13 +103,17 @@ def _last_skipped_hook(
 
 
 def _render_failure_error(
-    error: str | BaseException, *, fallback_code: str
+    *, error: str | BaseException, fallback_code: str
 ) -> tuple[str, str | None, str | None]:
     """Render legacy string failures and structured exceptions with a code."""
 
     if isinstance(error, str):
         return error, fallback_code, None
-    return error_message(error), error_code(error, fallback_code=fallback_code), error_help(error)
+    return (
+        error_message(error),
+        error_code(error=error, fallback_code=fallback_code),
+        error_help(error),
+    )
 
 
 def _fallback_code_for_phase(phase: ExecutionPhase) -> str:

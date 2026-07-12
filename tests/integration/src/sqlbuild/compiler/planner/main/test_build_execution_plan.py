@@ -836,7 +836,7 @@ def test_given_real_plan_when_formatting_then_contains_expected_fragments(
         full_refresh=test_case.full_refresh,
     )
 
-    result: str = format_plan(plan, full_refresh=test_case.full_refresh)
+    result: str = format_plan(plan=plan, full_refresh=test_case.full_refresh)
 
     fragment: str
     for fragment in test_case.expected_format_fragments:

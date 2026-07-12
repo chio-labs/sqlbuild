@@ -12,7 +12,7 @@ from sqlbuild.shared.helpers.output.colors import supports_color
 
 
 def run_dbt_debug_command(
-    project_dir: Path | None, *, args: tuple[str, ...], no_color: bool
+    *, project_dir: Path | None, args: tuple[str, ...], no_color: bool
 ) -> int:
     """Execute `sqb dbt debug`."""
 

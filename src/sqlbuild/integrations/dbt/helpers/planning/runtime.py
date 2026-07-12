@@ -42,7 +42,7 @@ def resolve_dbt_plan_options(
             local_config=discovered_inputs.local_config.dbt,
             dbt_args=dbt_args,
         ),
-        state=parse_optional_path_flag(dbt_args, flag="--state", project_root=project_dir),
+        state=parse_optional_path_flag(args=dbt_args, flag="--state", project_root=project_dir),
         defer="--defer" in dbt_args,
     )
 
@@ -70,7 +70,7 @@ def resolve_dbt_vars_mapping(
     values: dict[str, object] = {}
     values.update(project_config.vars)
     values.update(local_config.vars)
-    values.update(_parse_cli_dbt_vars(parse_value_flag(dbt_args, flag="--vars")))
+    values.update(_parse_cli_dbt_vars(parse_value_flag(args=dbt_args, flag="--vars")))
     return values
 
 
@@ -78,14 +78,14 @@ def parse_dbt_config_overrides(dbt_args: tuple[str, ...]) -> DbtCliConfigOverrid
     """Parse dbt project/profile/target overrides from routed dbt args."""
 
     return DbtCliConfigOverrides(
-        project_dir=parse_value_flag(dbt_args, flag="--project-dir"),
-        profiles_dir=parse_value_flag(dbt_args, flag="--profiles-dir"),
-        target=parse_value_flag(dbt_args, flag="--target"),
-        target_path=parse_value_flag(dbt_args, flag="--target-path"),
+        project_dir=parse_value_flag(args=dbt_args, flag="--project-dir"),
+        profiles_dir=parse_value_flag(args=dbt_args, flag="--profiles-dir"),
+        target=parse_value_flag(args=dbt_args, flag="--target"),
+        target_path=parse_value_flag(args=dbt_args, flag="--target-path"),
     )
 
 
-def parse_value_flag(args: tuple[str, ...], *, flag: str) -> str | None:
+def parse_value_flag(*, args: tuple[str, ...], flag: str) -> str | None:
     """Return the value after a flag, if present."""
 
     if flag not in args:
@@ -115,11 +115,11 @@ def _parse_cli_dbt_vars(raw_value: str | None) -> dict[str, object]:
 
 
 def parse_optional_path_flag(
-    args: tuple[str, ...], *, flag: str, project_root: Path
+    *, args: tuple[str, ...], flag: str, project_root: Path
 ) -> Path | None:
     """Return a path flag value resolved relative to the SQLBuild project."""
 
-    raw_value: str | None = parse_value_flag(args, flag=flag)
+    raw_value: str | None = parse_value_flag(args=args, flag=flag)
     if raw_value is None:
         return None
     path: Path = Path(raw_value).expanduser()
@@ -138,7 +138,7 @@ def resolve_dbt_manifest_path(*, options: DbtCliOptions) -> Path:
 
 
 def resolve_dbt_interop_adapter(
-    adapter_name: str, *, project_dir: Path | None = None
+    *, adapter_name: str, project_dir: Path | None = None
 ) -> BaseAdapter:
     """Resolve an adapter for dbt interop runtime planning."""
 

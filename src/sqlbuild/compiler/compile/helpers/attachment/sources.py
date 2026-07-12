@@ -42,8 +42,8 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 
 
 def build_source_inputs(
-    discovered_inputs: DiscoveredProjectInputs,
     *,
+    discovered_inputs: DiscoveredProjectInputs,
     effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
     macro_context: MacroContext,
@@ -236,7 +236,7 @@ def _expand_source_template_object(
     *, value: object, effective_vars: dict[str, object], context_label: str
 ) -> object:
     return expand_template_data(
-        value,
+        value=value,
         variables=effective_vars,
         context_values={},
         context_label=context_label,

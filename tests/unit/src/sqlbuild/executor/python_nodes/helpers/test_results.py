@@ -149,15 +149,15 @@ def test_given_check_context_when_building_results_then_returns_check_results(
     )
 
     pass_result: PythonCheckResult = context.pass_(
-        test_case.message,
+        message=test_case.message,
         metadata=test_case.metadata,
     )
     fail_result: PythonCheckResult = context.fail(
-        test_case.message or "failed",
+        message=test_case.message or "failed",
         metadata=test_case.metadata,
     )
     warn_result: PythonCheckResult = context.warn(
-        test_case.message or "warned",
+        message=test_case.message or "warned",
         metadata=test_case.metadata,
     )
 

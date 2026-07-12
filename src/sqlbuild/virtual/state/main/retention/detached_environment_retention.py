@@ -34,7 +34,7 @@ def inspect_detached_environment_retention(
     connection: Any = backend.connect(config.connection)
     try:
         environments: tuple[VirtualEnvironmentRetentionRecord, ...] = (
-            backend.list_virtual_environments(connection, schema=config.schema)
+            backend.list_virtual_environments(connection=connection, schema=config.schema)
         )
         refs_by_environment: dict[str, tuple[VirtualEnvironmentModelRefRecord, ...]] = {}
         physical_relations_by_ref: dict[tuple[str, str], PhysicalRelationRecord] = {}
@@ -42,7 +42,7 @@ def inspect_detached_environment_retention(
         for environment in environments:
             refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
                 backend.get_virtual_environment_model_refs(
-                    connection,
+                    connection=connection,
                     schema=config.schema,
                     virtual_environment_name=environment.virtual_environment_name,
                 )
@@ -51,7 +51,7 @@ def inspect_detached_environment_retention(
             ref: VirtualEnvironmentModelRefRecord
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-                    connection,
+                    connection=connection,
                     schema=config.schema,
                     model_name=ref.model_name,
                     version_hash=ref.version_hash,

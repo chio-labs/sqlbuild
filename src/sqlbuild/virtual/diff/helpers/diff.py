@@ -65,7 +65,7 @@ def read_physical_relations_for_refs(
     relations: dict[str, PhysicalRelationRecord] = {}
     for ref in refs:
         relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             model_name=ref.model_name,
             version_hash=ref.version_hash,
@@ -141,25 +141,25 @@ def read_virtual_diff_state(
     """Read refs, semantics, and physical relations for both diffed VDEs."""
 
     from_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         virtual_environment_name=from_virtual_environment_name,
     )
     to_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         virtual_environment_name=to_virtual_environment_name,
     )
     from_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         backend.get_virtual_environment_model_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=from_virtual_environment_name,
         )
     )
     to_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         backend.get_virtual_environment_model_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=to_virtual_environment_name,
         )
@@ -239,7 +239,7 @@ def _read_model_versions(
 ) -> dict[str, ModelVersionRecord | None]:
     return {
         ref.model_name: backend.get_model_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             model_name=ref.model_name,
             version_hash=ref.version_hash,

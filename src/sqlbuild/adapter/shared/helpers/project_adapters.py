@@ -35,13 +35,13 @@ def discover_project_adapters(
         for adapter in _discover_module_adapters(module=module, file_path=file_path):
             if adapter.adapter_name in reserved_names:
                 raise AdapterUserError(
-                    f"Project-local adapter '{adapter.adapter_name}' in {file_path} "
+                    message=f"Project-local adapter '{adapter.adapter_name}' in {file_path} "
                     "shadows a built-in adapter name. Choose a distinct adapter_name."
                 )
             previous: DiscoveredAdapter | None = discovered.get(adapter.adapter_name)
             if previous is not None:
                 raise AdapterUserError(
-                    f"Duplicate project-local adapter_name '{adapter.adapter_name}' in "
+                    message=f"Duplicate project-local adapter_name '{adapter.adapter_name}' in "
                     f"{file_path} and {previous.file_path}"
                 )
             discovered[adapter.adapter_name] = adapter
@@ -73,7 +73,9 @@ def _load_adapter_module(*, project_dir: Path, file_path: Path) -> ModuleType:
         file_path,
     )
     if spec is None or spec.loader is None:
-        raise AdapterUserError(f"Could not load project-local adapter module from {file_path}")
+        raise AdapterUserError(
+            message=f"Could not load project-local adapter module from {file_path}"
+        )
     module: ModuleType = importlib.util.module_from_spec(spec)
     original_path: list[str] = list(sys.path)
     sys.modules[module_name] = module
@@ -82,7 +84,7 @@ def _load_adapter_module(*, project_dir: Path, file_path: Path) -> ModuleType:
         spec.loader.exec_module(module)
     except Exception as error:
         raise AdapterUserError(
-            f"Error importing project-local adapter module {file_path}: {error}"
+            message=f"Error importing project-local adapter module {file_path}: {error}"
         ) from error
     finally:
         sys.path = original_path
@@ -118,12 +120,12 @@ def _discover_module_adapters(
             continue
         if adapter_name is not None and not is_adapter_class:
             raise AdapterUserError(
-                f"Class '{class_name}' in {file_path} defines adapter_name but does not "
+                message=f"Class '{class_name}' in {file_path} defines adapter_name but does not "
                 "subclass StrictAdapter"
             )
         if not isinstance(adapter_name, str) or not adapter_name:
             raise AdapterUserError(
-                f"Adapter class '{class_name}' in {file_path} must define a non-empty "
+                message=f"Adapter class '{class_name}' in {file_path} must define a non-empty "
                 "string adapter_name"
             )
         discovered.append(

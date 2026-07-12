@@ -37,7 +37,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
 def test_given_adapter_name_when_resolving_adapter_then_returns_expected_adapter(
     test_case: ResolveAdapterTestCase,
 ) -> None:
-    adapter: BaseAdapter = resolve_adapter(test_case.adapter_name)
+    adapter: BaseAdapter = resolve_adapter(adapter_name=test_case.adapter_name)
 
     assert adapter.__class__.__name__ == test_case.expected_adapter_class_name
 
@@ -57,7 +57,7 @@ def test_given_unknown_adapter_when_resolving_adapter_then_raises_cli_user_error
     test_case: ResolveAdapterErrorTestCase,
 ) -> None:
     with pytest.raises(CliUserError) as error_info:
-        resolve_adapter(test_case.adapter_name)
+        resolve_adapter(adapter_name=test_case.adapter_name)
 
     assert error_info.value.code == "C601"
     assert test_case.expected_error_fragment in str(error_info.value)

@@ -168,14 +168,13 @@ def build_python_plan_entries(
 def _ordered_python_names(
     *, selected_names: frozenset[str], python_graph: PythonNodeGraph
 ) -> tuple[str, ...]:
-    upstream_names: dict[str, tuple[str, ...]] = {
-        name: tuple(
-            upstream_name
-            for upstream_name in python_graph.upstream_deps.get(name, ())
-            if upstream_name in selected_names
-        )
-        for name in selected_names
-    }
+    upstream_names: dict[str, tuple[str, ...]] = {}
+    for name in selected_names:
+        selected_upstreams: list[str] = []
+        for upstream_name in python_graph.upstream_deps.get(name, ()):
+            if upstream_name in selected_names:
+                selected_upstreams.append(upstream_name)
+        upstream_names[name] = tuple(selected_upstreams)
     downstream_names: dict[str, list[str]] = {name: [] for name in selected_names}
     node_name: str
     upstream_name: str

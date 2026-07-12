@@ -250,7 +250,7 @@ def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_
         selection=selection,
         warnings=test_case.warnings,
     )
-    human_output: str = format_dbt_interop_plan(plan, use_color=False)
+    human_output: str = format_dbt_interop_plan(plan=plan, use_color=False)
     json_output: str = format_dbt_interop_plan_json(plan)
     json_data: dict[str, object] = json.loads(json_output)
     dbt_data: dict[str, object] = cast(dict[str, object], json_data["dbt"])
@@ -328,7 +328,7 @@ def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_prec
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=False,
         display_options=DisplayOptions(max_entries_per_section=None),
     )
@@ -441,7 +441,7 @@ def test_given_dbt_interop_plan_when_formatting_human_output_then_uses_expected_
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -531,7 +531,7 @@ def test_given_current_dbt_models_when_formatting_then_shows_pruned_non_model_wo
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -610,7 +610,7 @@ def test_given_runnable_dbt_model_when_formatting_verbose_then_shows_non_model_w
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -662,7 +662,7 @@ def test_given_large_dbt_command_when_formatting_then_caps_displayed_select_term
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -739,7 +739,7 @@ def test_given_bare_selection_when_formatting_then_hides_passive_upstream_models
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -828,7 +828,7 @@ def test_given_dbt_model_plan_when_formatting_then_shows_reasons_and_dependency_
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )

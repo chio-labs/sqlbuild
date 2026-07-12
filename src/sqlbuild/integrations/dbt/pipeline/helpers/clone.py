@@ -167,7 +167,7 @@ def execute_dbt_clone(
             )
         results.append(item_result)
         if on_item is not None:
-            on_item(index, total=total, item=item_result)
+            on_item(index=index, total=total, item=item_result)
     return CloneExecutionResult(item_results=tuple(results))
 
 
@@ -180,32 +180,50 @@ def _order_clone_models(
         current_model.unique_id: (current_model, reuse_model)
         for current_model, reuse_model in models
     }
-    ordered: list[tuple[DbtManifestModel, DbtManifestModel]] = []
-    visited: set[str] = set()
-    visiting: set[str] = set()
-
-    def visit(unique_id: str) -> None:
-        if unique_id in visited or unique_id in visiting:
-            return
-        selected_pair: tuple[DbtManifestModel, DbtManifestModel] | None = selected_by_unique_id.get(
-            unique_id
-        )
-        if selected_pair is None:
-            return
-        visiting.add(unique_id)
-        current_model: DbtManifestModel = selected_pair[0]
-        dependency_unique_id: str
-        for dependency_unique_id in current_model.depends_on_nodes:
-            if dependency_unique_id in current_manifest.models_by_unique_id:
-                visit(dependency_unique_id)
-        visiting.remove(unique_id)
-        visited.add(unique_id)
-        ordered.append(selected_pair)
-
+    ordered: tuple[tuple[DbtManifestModel, DbtManifestModel], ...] = ()
+    visited: frozenset[str] = frozenset()
     current_model: DbtManifestModel
     for current_model, _ in models:
-        visit(current_model.unique_id)
-    return tuple(ordered)
+        ordered, visited = _visit_clone_model(
+            unique_id=current_model.unique_id,
+            current_manifest=current_manifest,
+            selected_by_unique_id=selected_by_unique_id,
+            ordered=ordered,
+            visited=visited,
+            visiting=frozenset(),
+        )
+    return ordered
+
+
+def _visit_clone_model(
+    *,
+    unique_id: str,
+    current_manifest: DbtManifestIndex,
+    selected_by_unique_id: dict[str, tuple[DbtManifestModel, DbtManifestModel]],
+    ordered: tuple[tuple[DbtManifestModel, DbtManifestModel], ...],
+    visited: frozenset[str],
+    visiting: frozenset[str],
+) -> tuple[tuple[tuple[DbtManifestModel, DbtManifestModel], ...], frozenset[str]]:
+    if unique_id in visited or unique_id in visiting:
+        return ordered, visited
+    selected_pair: tuple[DbtManifestModel, DbtManifestModel] | None = selected_by_unique_id.get(
+        unique_id
+    )
+    if selected_pair is None:
+        return ordered, visited
+    next_visiting: frozenset[str] = visiting | {unique_id}
+    dependency_unique_id: str
+    for dependency_unique_id in selected_pair[0].depends_on_nodes:
+        if dependency_unique_id in current_manifest.models_by_unique_id:
+            ordered, visited = _visit_clone_model(
+                unique_id=dependency_unique_id,
+                current_manifest=current_manifest,
+                selected_by_unique_id=selected_by_unique_id,
+                ordered=ordered,
+                visited=visited,
+                visiting=next_visiting,
+            )
+    return (*ordered, selected_pair), visited | {unique_id}
 
 
 def _consume_one_value(*, args: tuple[str, ...], index: int) -> tuple[str, int]:
@@ -265,9 +283,11 @@ def _relation_location(*, model: DbtManifestModel) -> tuple[str | None, str | No
 
 def _relation_parts(*, relation_name: str) -> tuple[str | None, str | None, str]:
     parts: list[str] = [_unquote_relation_part(part=part) for part in relation_name.split(".")]
-    if len(parts) >= 3:
+    database_schema_relation_part_count: int = 3
+    schema_relation_part_count: int = 2
+    if len(parts) >= database_schema_relation_part_count:
         return parts[-3], parts[-2], parts[-1]
-    if len(parts) == 2:
+    if len(parts) == schema_relation_part_count:
         return None, parts[0], parts[1]
     return None, None, parts[0]
 
