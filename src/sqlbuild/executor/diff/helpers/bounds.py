@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlbuild.adapter.shared.models import CursorValue
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.models import CursorValue
+from sqlbuild.adapter.types import CursorKind
 from sqlbuild.executor.exceptions import ExecutorInputError
 
 

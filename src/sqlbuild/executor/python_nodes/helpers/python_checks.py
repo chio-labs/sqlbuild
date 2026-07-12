@@ -6,8 +6,8 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus

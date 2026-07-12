@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.freshness.models import (
     FreshnessCommandRequest,
     FreshnessCommandResult,

@@ -4,12 +4,12 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.models import (
     ExpressionInferenceProfile,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.types import FunctionNullabilityRule, LoaderLogicalType
+from sqlbuild.adapter.types import FunctionNullabilityRule, LoaderLogicalType
 from sqlbuild.adapters.databricks.client import DatabricksAdapter
 from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,

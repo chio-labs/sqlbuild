@@ -6,7 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.compile.models import WrittenTarget
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage

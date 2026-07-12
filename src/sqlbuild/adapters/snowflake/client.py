@@ -10,13 +10,15 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
-from sqlbuild.adapter.shared.inference_rules import (
+from sqlbuild.adapter.capabilities.inference_rules import (
     conditional_result_nullability,
     first_arg_nullability,
 )
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.capabilities.type_normalization import normalize_numeric_family, types_equal
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.exceptions import AdapterUserError
+from sqlbuild.adapter.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
     FunctionDefinition,
@@ -30,12 +32,10 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     SnapshotChangeTarget,
-    StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import (
+from sqlbuild.adapter.types import (
     BuiltinAdapter,
     CursorKind,
     FrameworkType,
@@ -1529,7 +1529,7 @@ class SnowflakeAdapter(BaseAdapter):
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         finally:
             cursor.close()
-        from sqlbuild.adapter.shared.models import RelationInfo
+        from sqlbuild.adapter.models import RelationInfo
 
         return tuple(
             RelationInfo(

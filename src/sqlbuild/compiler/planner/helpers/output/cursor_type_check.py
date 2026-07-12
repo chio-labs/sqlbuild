@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.compiler.planner.models import PlanWarning
 from sqlbuild.compiler.planner.types import CursorType, WarningSeverity
 from sqlbuild.diagnostics.helpers.logging import log_debug_event

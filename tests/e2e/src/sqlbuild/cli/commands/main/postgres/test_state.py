@@ -417,8 +417,8 @@ def test_given_postgres_detach_copy_failure_when_detaching_then_operation_is_mar
             "sqlbuild_local.toml": "",
             "adapters/failing_postgres.py": (
                 "from typing import Any\n"
-                "from sqlbuild.adapter.shared.models import StatementRecorder\n"
-                "from sqlbuild.adapter.shared.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapter.classes.statement_recorder import StatementRecorder\n"
+                "from sqlbuild.adapter.exceptions import AdapterUserError\n"
                 "from sqlbuild.adapters.postgres.client import PostgresAdapter\n\n"
                 "class FailingPostgresAdapter(PostgresAdapter):\n"
                 "    adapter_name = 'failing_postgres'\n\n"
@@ -1225,8 +1225,8 @@ def test_given_postgres_warehouse_cleanup_failure_when_janitor_then_state_cleanu
             "sqlbuild_local.toml": "",
             "adapters/failing_janitor_postgres.py": (
                 "from typing import Any\n"
-                "from sqlbuild.adapter.shared.exceptions import AdapterUserError\n"
-                "from sqlbuild.adapter.shared.models import StatementRecorder\n"
+                "from sqlbuild.adapter.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapter.classes.statement_recorder import StatementRecorder\n"
                 "from sqlbuild.adapters.postgres.client import PostgresAdapter\n\n"
                 "class FailingJanitorPostgresAdapter(PostgresAdapter):\n"
                 "    adapter_name = 'failing_janitor_postgres'\n\n"

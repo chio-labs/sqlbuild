@@ -12,10 +12,12 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
-from sqlbuild.adapter.shared.inference_rules import first_arg_nullability
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.capabilities.inference_rules import first_arg_nullability
+from sqlbuild.adapter.capabilities.type_normalization import normalize_numeric_family, types_equal
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.exceptions import AdapterUserError
+from sqlbuild.adapter.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
@@ -31,12 +33,10 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     SnapshotChangeTarget,
-    StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.type_normalization import normalize_numeric_family, types_equal
-from sqlbuild.adapter.shared.types import (
+from sqlbuild.adapter.types import (
     CursorKind,
     FrameworkType,
     LoaderLogicalType,

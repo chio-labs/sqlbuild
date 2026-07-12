@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.models import ColumnInfo
 
 _WHITESPACE_RUN: re.Pattern[str] = re.compile(r"\s+")
 

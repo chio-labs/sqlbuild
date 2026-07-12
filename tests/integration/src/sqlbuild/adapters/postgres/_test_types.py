@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.models import (
     ColumnInfo,
     CursorValue,
     QueryResult,

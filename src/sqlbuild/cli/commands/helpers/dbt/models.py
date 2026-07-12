@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TextIO
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import PlanOutput
 
 

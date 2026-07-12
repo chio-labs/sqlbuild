@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult

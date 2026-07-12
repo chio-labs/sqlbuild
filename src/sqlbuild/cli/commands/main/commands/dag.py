@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
     resolve_external_sql_reference_resolver,

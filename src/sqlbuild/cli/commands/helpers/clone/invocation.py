@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest, CloneInvocation
 from sqlbuild.cli.commands.helpers.clone.validation import validate_clone_request
 from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter

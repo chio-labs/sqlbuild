@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.compile.dag import resolve_compile_dag_path
 from sqlbuild.cli.commands.helpers.compile.lineage import (
     build_compile_lineage,

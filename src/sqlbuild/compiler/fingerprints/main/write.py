@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.shared.types import AdapterExecute, FrameworkType
+from sqlbuild.adapter.types import AdapterExecute, FrameworkType
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_WRITE_ATTEMPTS,
     FINGERPRINT_WRITE_RETRY_BASE_SECONDS,

@@ -6,17 +6,17 @@ import base64
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import (
     ColumnInfo,
     CursorValue,
     RelationInfo,
     RowDiffResult,
     RowDiffTolerances,
     SchemaDiffResult,
-    StatementRecorder,
 )
-from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.adapter.types import TablePromotionMode
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,

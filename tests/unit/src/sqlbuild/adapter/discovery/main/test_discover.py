@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapter.shared.main.project_adapters import discover_project_adapters
-from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.discovery.main.project_adapters import discover_project_adapters
 from tests.unit.src.sqlbuild.adapter.discovery.main._test_types import (
     ProjectAdapterDiscoveryErrorTestCase,
     ProjectAdapterDiscoveryTestCase,

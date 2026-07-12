@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.types import FrameworkType
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.constants import (
     COLUMN_ERROR_MESSAGE,

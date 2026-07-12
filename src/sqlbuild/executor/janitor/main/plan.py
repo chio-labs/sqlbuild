@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
 from sqlbuild.executor.janitor.helpers.classification import (

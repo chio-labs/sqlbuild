@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.lineage.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.cli.commands.helpers.lineage.output import (
     format_column_lineage_json,

@@ -4,7 +4,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import QueryResult, StatementRecorder
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import QueryResult
 from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
 from tests.integration.src.sqlbuild.adapters.motherduck._test_types import (
     MotherDuckBuildFlowTestCase,

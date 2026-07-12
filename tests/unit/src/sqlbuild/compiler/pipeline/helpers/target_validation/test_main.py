@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationLocation,

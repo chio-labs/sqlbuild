@@ -4948,8 +4948,8 @@ def test_given_view_refresh_failure_when_promoting_then_operation_is_marked_fail
         | {
             "adapters/failing_duckdb.py": (
                 "from typing import Any\n"
-                "from sqlbuild.adapter.shared.models import StatementRecorder\n"
-                "from sqlbuild.adapter.shared.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapter.classes.statement_recorder import StatementRecorder\n"
+                "from sqlbuild.adapter.exceptions import AdapterUserError\n"
                 "from sqlbuild.adapters.duckdb.client import DuckDbAdapter\n\n"
                 "class FailingDuckDbAdapter(DuckDbAdapter):\n"
                 "    adapter_name = 'failing_duckdb'\n\n"

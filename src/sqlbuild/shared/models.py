@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.shared.constants import DEFAULT_MAX_DISPLAY_ENTRIES
 from sqlbuild.shared.exceptions.errors import SharedInputError
 from sqlbuild.shared.types import (

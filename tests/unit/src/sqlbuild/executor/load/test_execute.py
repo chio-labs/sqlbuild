@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.main.execute import execute_source_load

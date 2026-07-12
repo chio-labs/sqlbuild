@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.adapter.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType

@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.helpers.graph.core import (

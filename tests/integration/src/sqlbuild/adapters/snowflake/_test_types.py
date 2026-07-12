@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.models import (
     ColumnInfo,
     QueryResult,
     RowDiffResult,

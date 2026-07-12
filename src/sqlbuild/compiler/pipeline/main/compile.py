@@ -6,8 +6,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,

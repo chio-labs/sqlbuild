@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledRelationLocation,

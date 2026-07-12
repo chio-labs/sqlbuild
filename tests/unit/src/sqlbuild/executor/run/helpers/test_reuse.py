@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (

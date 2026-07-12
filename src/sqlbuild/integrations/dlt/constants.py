@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.types import BuiltinAdapter
 
 DLT_DESTINATION_ADAPTERS: frozenset[BuiltinAdapter] = frozenset(
     {

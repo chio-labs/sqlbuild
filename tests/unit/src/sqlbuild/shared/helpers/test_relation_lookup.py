@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.shared.models import RelationLookup
 from tests.unit.src.sqlbuild.shared.helpers._test_types import RelationLookupTestCase
 from tests.unit.src.sqlbuild.shared.helpers.helpers import RecordingRelationAdapter

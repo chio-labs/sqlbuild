@@ -6,8 +6,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
-from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.exceptions import AdapterUserError
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.helpers.age_policy import (
     evaluate_source_freshness_age_policy,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.scenario.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands.helpers.scenario.result_output import complete_scenario_run
 from sqlbuild.cli.commands.shared.helpers.output.execution_json import (

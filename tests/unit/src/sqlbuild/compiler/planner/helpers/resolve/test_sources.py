@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.types import CursorKind
 from sqlbuild.adapters.bigquery.client import BigQueryAdapter
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.adapters.postgres.client import PostgresAdapter

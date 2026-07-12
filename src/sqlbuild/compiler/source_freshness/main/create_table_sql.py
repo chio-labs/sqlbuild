@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.types import FrameworkType
 from sqlbuild.compiler.source_freshness.helpers.sql import (
     build_create_table_sql as _build_create_table_sql,
 )

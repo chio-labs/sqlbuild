@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any, ClassVar
 from urllib.parse import urlencode
 
-from sqlbuild.adapter.shared.types import BuiltinAdapter, LoaderLogicalType
+from sqlbuild.adapter.types import BuiltinAdapter, LoaderLogicalType
 from sqlbuild.adapters.shared.classes.duckdb import DuckDbBackedAdapter
 
 

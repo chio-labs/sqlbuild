@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import time
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.janitor.models import (
     JanitorCompileContext,
     JanitorInvocation,

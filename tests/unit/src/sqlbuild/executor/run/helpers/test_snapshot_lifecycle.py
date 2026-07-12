@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction

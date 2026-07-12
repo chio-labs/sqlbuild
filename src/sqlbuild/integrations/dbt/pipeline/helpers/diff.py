@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.models import CursorValue, RowDiffResult, SchemaDiffResult
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import CursorValue, RowDiffResult, SchemaDiffResult
+from sqlbuild.adapter.types import CursorKind
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropConfigError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel

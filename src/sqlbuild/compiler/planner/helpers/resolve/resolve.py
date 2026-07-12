@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
     CompiledModel,

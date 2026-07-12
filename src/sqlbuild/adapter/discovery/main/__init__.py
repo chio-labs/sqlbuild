@@ -1,0 +1,1 @@
+"""Adapter discovery public entries."""

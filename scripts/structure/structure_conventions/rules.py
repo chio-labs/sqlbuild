@@ -41,7 +41,7 @@ _WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
     }
 )
 _SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
-    "src/sqlbuild/adapter/shared/main/relation_lookup.py": "shared single-query lookup builder",
+    "src/sqlbuild/adapter/main/relation_lookup.py": "single-query lookup capability",
     "src/sqlbuild/executor/janitor/helpers/plan.py": "one list_relations per database",
     "src/sqlbuild/integrations/dbt/helpers/planning/model_planning.py": (
         "one list_relations per database"
@@ -113,15 +113,25 @@ _MAIN_PHASE_REMEDIATION_MESSAGE: str = (
 )
 _MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "helpers", "shared"})
 _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
-    {("executor", "types.py")}
+    {
+        ("adapter", "constants.py"),
+        ("adapter", "models.py"),
+        ("adapter", "types.py"),
+        ("executor", "types.py"),
+    }
 )
 _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
-    {("compiler", "helpers"), ("executor", "helpers"), ("virtual", "helpers")}
+    {
+        ("adapter", "classes"),
+        ("compiler", "helpers"),
+        ("executor", "helpers"),
+        ("virtual", "helpers"),
+    }
 )
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/client.py",
     "src/sqlbuild/adapters/shared/classes/*.py",
-    "src/sqlbuild/adapter/base/base_adapter.py",
+    "src/sqlbuild/adapter/classes/base_adapter.py",
     "src/sqlbuild/virtual/state/classes/*.py",
 )
 _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
@@ -1599,7 +1609,7 @@ def _is_adapter_implementation_file(file_path: Path) -> bool:
         return True
     if "/adapters/shared/classes/" in path_text:
         return True
-    return path_text.endswith("/adapter/base/base_adapter.py")
+    return path_text.endswith("/adapter/classes/base_adapter.py")
 
 
 def _path_is_allowed(*, path_text: str, allowed_paths: tuple[str, ...]) -> bool:
@@ -2033,6 +2043,8 @@ def check_adapter_class_entry_module_shape(
         "sqlbuild",
         "adapter",
     ):
+        return []
+    if _is_within_main_package(relative_parts):
         return []
     if file_path.name.startswith("_") or file_path.name in {
         "main.py",
@@ -2655,8 +2667,8 @@ def _adapter_contract_class_names(
 
 def _builtin_adapter_contract_class_names_by_path(*, repo_root: Path) -> dict[Path, frozenset[str]]:
     try:
-        from sqlbuild.adapter.base.base_adapter import BaseAdapter
-        from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
+        from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+        from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
     except ImportError:
         return {}
 
@@ -2681,7 +2693,7 @@ def _builtin_adapter_contract_class_names_by_path(*, repo_root: Path) -> dict[Pa
 
 def _strict_adapter_contract_method_names() -> frozenset[str]:
     try:
-        from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+        from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
     except Exception:
         return frozenset()
 

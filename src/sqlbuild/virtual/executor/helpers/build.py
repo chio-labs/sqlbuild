@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 import sqlbuild.executor.build.types
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.models import RelationInfo, StatementRecorder
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,

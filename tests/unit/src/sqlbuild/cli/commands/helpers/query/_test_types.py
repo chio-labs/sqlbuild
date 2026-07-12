@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.models import QueryResult
 
 
 @dataclass(frozen=True)

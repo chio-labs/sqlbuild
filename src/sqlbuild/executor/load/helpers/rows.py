@@ -6,9 +6,9 @@ from collections.abc import Iterable, Iterator, Mapping
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.adapter.shared.types import LoaderLogicalType
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.types import LoaderLogicalType
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoaderRowsSchema
 from sqlbuild.spec.models.source import SourceColumnEntry

@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 
 import pytest
 
-from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.adapter.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction

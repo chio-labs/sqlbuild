@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.capabilities.type_normalization import normalize_type, types_equal
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import (
     ColumnInfo,
     NormalizedType,
     SnapshotChangeTarget,
-    StatementRecorder,
 )
-from sqlbuild.adapter.shared.type_normalization import normalize_type, types_equal
-from sqlbuild.adapter.shared.types import TypeFamily
+from sqlbuild.adapter.types import TypeFamily
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     HistoricalInput,

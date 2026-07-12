@@ -9,9 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent, StatementRecorder
-from sqlbuild.adapter.shared.types import LoaderLogicalType
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.adapter.types import LoaderLogicalType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
 from sqlbuild.executor.exceptions import ExecutorInputError

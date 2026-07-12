@@ -7,7 +7,7 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.cli.commands.helpers.janitor.models import JanitorPlanningResult
 from sqlbuild.cli.commands.helpers.janitor.output import write_disabled, write_plan
 from sqlbuild.cli.commands.helpers.janitor.outputs import confirm_janitor_plan

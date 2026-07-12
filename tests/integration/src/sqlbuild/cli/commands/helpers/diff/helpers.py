@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.models import (
     ColumnInfo,
     RowDiffColumnResult,
     RowDiffResult,

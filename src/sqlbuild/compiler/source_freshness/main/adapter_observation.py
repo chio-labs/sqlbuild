@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
+from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
 from sqlbuild.compiler.source_freshness.helpers.observation import (
     observe_adapter_sources_freshness as _observe_adapter_sources_freshness,
 )

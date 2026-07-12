@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.adapter.shared.type_normalization import types_equal
+from sqlbuild.adapter.capabilities.type_normalization import types_equal
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorBounds

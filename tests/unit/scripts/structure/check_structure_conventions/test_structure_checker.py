@@ -1819,7 +1819,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/adapters/example/client.py": dedent(
                     """
-                from sqlbuild.adapter.base.base_adapter import BaseAdapter
+                from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 
 
                 class ExampleAdapter(BaseAdapter):
@@ -1836,7 +1836,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/adapters/example/client.py": dedent(
                     """
-                from sqlbuild.adapter.base.base_adapter import BaseAdapter
+                from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 
 
                 class ExampleAdapter(BaseAdapter):

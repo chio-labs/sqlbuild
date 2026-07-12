@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.types import LifeCycleEventKind
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.clone.helpers.operations import clone_relation
 from sqlbuild.executor.clone.models import CloneItemResult

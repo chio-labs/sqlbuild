@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.adapter.shared.models import CursorValue
+from sqlbuild.adapter.models import CursorValue
 
 
 @dataclass(frozen=True)

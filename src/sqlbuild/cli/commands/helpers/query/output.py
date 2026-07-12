@@ -8,7 +8,7 @@ import json
 from decimal import Decimal
 from typing import Any
 
-from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.models import QueryResult
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 
 

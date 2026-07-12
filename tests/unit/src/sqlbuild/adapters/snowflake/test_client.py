@@ -6,16 +6,16 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.exceptions import AdapterUserError
+from sqlbuild.adapter.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
     SchemaDiffResult,
-    StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
 from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,

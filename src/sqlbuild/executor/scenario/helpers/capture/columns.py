@@ -6,9 +6,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.adapter.shared.types import TypeDialect
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.types import TypeDialect
 from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.scenario.models import ScenarioSnapshotColumn

@@ -7,8 +7,8 @@ import re
 from functools import lru_cache
 from typing import Any, cast
 
-from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.adapter.shared.types import FunctionNullabilityRule
+from sqlbuild.adapter.models import ExpressionInferenceProfile
+from sqlbuild.adapter.types import FunctionNullabilityRule
 from sqlbuild.compiler.compile.models.core import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,

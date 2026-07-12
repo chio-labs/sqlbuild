@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.models import ColumnInfo
 
 
 class StubCursor:

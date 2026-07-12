@@ -6,7 +6,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.models import (
     ColumnInfo,
     CursorValue,
     QueryResult,
@@ -17,9 +18,8 @@ from sqlbuild.adapter.shared.models import (
     RowDiffTolerance,
     RowDiffTolerances,
     SchemaDiffResult,
-    StatementRecorder,
 )
-from sqlbuild.adapter.shared.types import CursorKind
+from sqlbuild.adapter.types import CursorKind
 from sqlbuild.adapters.postgres.client import PostgresAdapter
 from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
 from tests.integration.src.sqlbuild.adapters.postgres._test_types import (

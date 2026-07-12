@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
+from sqlbuild.adapter.exceptions import AdapterUserError
 from sqlbuild.compiler.source_freshness.constants import (
     COLUMN_DATA_VERSION,
     COLUMN_DATA_VERSION_HASH,

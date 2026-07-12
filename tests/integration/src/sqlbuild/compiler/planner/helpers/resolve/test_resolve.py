@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo
+from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledRelationLocation,

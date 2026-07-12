@@ -6,8 +6,8 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
