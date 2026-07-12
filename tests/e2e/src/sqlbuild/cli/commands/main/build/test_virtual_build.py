@@ -2891,7 +2891,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
         f"FROM ({ctx.sql}) AS model_sql"
     )
     exists = ctx.adapter.relation_exists(
-        ctx.connection,
+        connection=ctx.connection,
         database=ctx.destination_database,
         schema=ctx.destination_schema,
         name=ctx.destination_name,

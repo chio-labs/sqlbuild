@@ -148,16 +148,13 @@ def test_given_check_context_when_building_results_then_returns_check_results(
         logger_name="sqlbuild.check.export_customers_exists",
     )
 
-    pass_result: PythonCheckResult = context.pass_(
-        message=test_case.message,
-        metadata=test_case.metadata,
-    )
+    pass_result: PythonCheckResult = context.pass_(test_case.message, metadata=test_case.metadata)
     fail_result: PythonCheckResult = context.fail(
-        message=test_case.message or "failed",
+        test_case.message or "failed",
         metadata=test_case.metadata,
     )
     warn_result: PythonCheckResult = context.warn(
-        message=test_case.message or "warned",
+        test_case.message or "warned",
         metadata=test_case.metadata,
     )
 

@@ -5,3 +5,15 @@ select = ["SF"]
 
 [thresholds]
 max_positional_args = 1
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/executor/run/models.py"
+symbols = ["HookContext.skip"]
+reason = "The public hook API keeps its single semantic reason argument positional."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/integrations/dagster/resource.py"
+symbols = ["SqlBuildCliResource.cli"]
+reason = "The public Dagster API keeps its single semantic args parameter positional."

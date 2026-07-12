@@ -202,10 +202,10 @@ def build_sqlbuild_plan_output(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
+            on_connection_error(connection_count=1, elapsed_seconds=time.monotonic() - start)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
+        on_connection_complete(connection_count=1, elapsed_seconds=time.monotonic() - start)
     try:
         try:
             plan_output: PlanOutput = build_execution_plan(
@@ -292,10 +292,10 @@ def build_dbt_model_plan_output(
         connection: Any = adapter.connect(connection_config)
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
+            on_connection_error(connection_count=1, elapsed_seconds=time.monotonic() - start)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
+        on_connection_complete(connection_count=1, elapsed_seconds=time.monotonic() - start)
     try:
         planning_start: float = time.monotonic()
         report_progress(
