@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
-from sqlbuild.shared.helpers.output.colors import dim
+from sqlbuild.presentation.classes.cli_style import CliStyle
 from tests.unit.src.sqlbuild.cli.commands.shared.helpers._test_types import (
     ConnectionProgressTestCase,
 )
@@ -83,8 +83,8 @@ from tests.unit.src.sqlbuild.cli.commands.shared.helpers._test_types import (
             expected_error="Failed to connect to duckdb after 0.03s.",
             use_color=True,
             expected_lines=(
-                dim("Connecting to duckdb..."),
-                dim("Connected to duckdb. (0.03s)"),
+                CliStyle(use_color=True).muted("Connecting to duckdb..."),
+                CliStyle(use_color=True).muted("Connected to duckdb. (0.03s)"),
                 "Failed to connect to duckdb after 0.03s.",
             ),
         ),

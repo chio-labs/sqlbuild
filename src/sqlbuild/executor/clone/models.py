@@ -21,5 +21,17 @@ class CloneItemResult:
 
 
 @dataclass(frozen=True)
+class PrephaseProgressRow:
+    """One clone prephase progress row."""
+
+    label: str
+    name: str
+    status: str
+    duration_seconds: float | None = None
+    caused_by_names: tuple[str, ...] = ()
+    detail: str = ""
+
+
+@dataclass(frozen=True)
 class CloneExecutionResult:
     item_results: tuple[CloneItemResult, ...] = field(default_factory=tuple)

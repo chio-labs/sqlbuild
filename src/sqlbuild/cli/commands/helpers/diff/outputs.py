@@ -11,7 +11,7 @@ from sqlbuild.cli.commands.helpers.diff.models import (
 from sqlbuild.cli.commands.helpers.diff.output import has_diff_failures, render_diff_output
 from sqlbuild.cli.commands.helpers.diff.virtual_output import format_virtual_diff_header
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def write_standard_diff_output(

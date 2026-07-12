@@ -27,6 +27,11 @@ from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands.helpers.promote.models import PromoteCommandRequest
 from sqlbuild.cli.commands.helpers.rollback.models import RollbackCommandRequest
+from sqlbuild.cli.commands.helpers.scenario.constants import (
+    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+    SCENARIO_CLI_MISSING_SUBCOMMAND,
+)
 from sqlbuild.cli.commands.helpers.scenario.models import (
     ScenarioCaptureCommandRequest,
     ScenarioSnapshotLimitInputs,
@@ -39,12 +44,7 @@ from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
-from sqlbuild.shared.constants import (
-    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
-    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
-    SCENARIO_CLI_MISSING_SUBCOMMAND,
-)
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:

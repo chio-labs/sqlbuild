@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.hooks.models import PythonHookEntry
 from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
@@ -38,7 +39,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioFixtureExecutionResult,
 )
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.models import PythonHookEntry
 from sqlbuild.spec.models.schema import default_seed_csv_settings
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioAssertionExpectationIntegrationTestCase,

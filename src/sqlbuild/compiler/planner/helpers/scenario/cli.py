@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.planner.constants import SCENARIO_PLAN_GRAPH_VALIDATION
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.scenario.artifacts import (
     build_scenario_hash_index,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationPlan,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind, WarningSeverity
-from sqlbuild.shared.constants import SCENARIO_PLAN_GRAPH_VALIDATION
 
 
 def build_cli_scenario_plan(

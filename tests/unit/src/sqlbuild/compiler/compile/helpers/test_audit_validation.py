@@ -17,7 +17,7 @@ from sqlbuild.compiler.compile.helpers.attachment.references import validate_aud
 from sqlbuild.compiler.compile.models.core import CompileSqlReference
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.discovery.models import DiscoveredAuditFile
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     ResolveAuditRunScopeErrorTestCase,
     ResolveAuditRunScopeTestCase,

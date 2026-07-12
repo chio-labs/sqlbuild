@@ -22,8 +22,8 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonRunPhase,
 )
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.executor.custom.models import PrepareVersionContext
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.cli.output.main.plan_json import format_plan_json
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.shared.helpers.output.display import DisplayOptions
+from sqlbuild.presentation.models import DisplayOptions
 
 
 def write_plan_command_output(

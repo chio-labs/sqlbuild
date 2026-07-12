@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_in
 from sqlbuild.compiler.compile.models.core import CompileModelConfig, CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.spec.models.exceptions import SpecConfigError
 from sqlbuild.spec.models.project import (
     ClonePolicy,

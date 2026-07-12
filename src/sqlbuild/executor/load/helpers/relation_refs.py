@@ -7,8 +7,10 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.executor.load.models import LoaderRelationRef
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.spec.models.source import SourceEntry
 
 

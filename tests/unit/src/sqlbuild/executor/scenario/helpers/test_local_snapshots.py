@@ -6,17 +6,17 @@ import duckdb
 import pytest
 
 from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_LOCAL_JSONL_INVALID,
+    SCENARIO_LOCAL_LOAD_FAILED,
+    SCENARIO_LOCAL_TYPE_INVALID,
+)
 from sqlbuild.executor.scenario.helpers.local.snapshots import (
     load_scenario_snapshot_into_duckdb,
 )
 from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadResult,
     ScenarioSnapshotManifest,
-)
-from sqlbuild.shared.constants import (
-    SCENARIO_LOCAL_JSONL_INVALID,
-    SCENARIO_LOCAL_LOAD_FAILED,
-    SCENARIO_LOCAL_TYPE_INVALID,
 )
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ScenarioLocalSnapshotLoadErrorTestCase,

@@ -7,6 +7,9 @@ from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import LifeCycleEvent
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.adapter.types import LifeCycleEventKind
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, ScenarioExecutionPlan
@@ -18,7 +21,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadedRelation,
     ScenarioRunResult,
 )
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 _RUN_DIR: str = "run"
 _SCENARIOS_DIR: str = "scenarios"

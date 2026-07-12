@@ -4,10 +4,10 @@ from sqlbuild.compiler.compile.models.sql_tests import (
     CompileModelSqlTestInputPayload,
     CompileSqlTestInput,
 )
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def base_repo_files() -> dict[str, str]:

@@ -13,7 +13,7 @@ from sqlbuild.cli.commands.helpers.runtime.models import AdapterConnectionContex
 from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest, SeedInvocation
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def resolve_seed_invocation(*, request: SeedCommandRequest) -> SeedInvocation:

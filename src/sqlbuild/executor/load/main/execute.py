@@ -9,6 +9,9 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.exceptions import ExecutorInputError
@@ -35,8 +38,7 @@ from sqlbuild.executor.load.models import (
 )
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import invoke_with_providers
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 

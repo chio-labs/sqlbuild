@@ -28,11 +28,11 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
 )
 from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_JSONL_INVALID
 from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadResult,
     ScenarioSnapshotManifest,
 )
-from sqlbuild.shared.constants import SCENARIO_LOCAL_JSONL_INVALID
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (
     ScenarioLocalPipelineTestCase,

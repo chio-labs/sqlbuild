@@ -28,7 +28,7 @@ from sqlbuild.compiler.lineage.models import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.shared.main.maybe_status import maybe_status
+from sqlbuild.presentation.main.maybe_status import maybe_status
 
 
 @dataclass(frozen=True)

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import (
     build_compile_external_sql_reference_resolver,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def build_compile_reference_resolver(

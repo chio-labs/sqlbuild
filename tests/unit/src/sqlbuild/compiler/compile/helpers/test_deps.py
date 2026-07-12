@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     AuditScopeDepsTestCase,
     ModelBuildDepsTestCase,

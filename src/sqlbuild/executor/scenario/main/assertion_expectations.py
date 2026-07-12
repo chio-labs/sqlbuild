@@ -6,12 +6,12 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioAssertionExpectationPlan
-from sqlbuild.executor.scenario.models import ScenarioAssertionExpectationExecutionResult
-from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import (
+from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_ASSERTION_ERRORED,
     SCENARIO_EXEC_ASSERTION_FAILED,
 )
+from sqlbuild.executor.scenario.models import ScenarioAssertionExpectationExecutionResult
+from sqlbuild.executor.types import ExecutionStatus
 
 
 def execute_scenario_assertion_expectation(

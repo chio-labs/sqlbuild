@@ -44,7 +44,7 @@ from sqlbuild.compiler.helpers.sql_scanning import (
     skip_line_comment,
     skip_quoted_text,
 )
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 
 _CONTEXT: str = "SQL test"
 

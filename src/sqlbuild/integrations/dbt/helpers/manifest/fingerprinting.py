@@ -11,6 +11,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.integrations.dbt.models import (
@@ -18,7 +19,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 
 
 def try_write_dbt_node_fingerprint(

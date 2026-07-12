@@ -35,7 +35,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRuntime,
 )
 from sqlbuild.provider.classes.container import ProviderContainer
-from sqlbuild.shared.models import SqlResourceRef
+from sqlbuild.python_nodes.models import SqlResourceRef
 
 
 def prepare_check_execution(

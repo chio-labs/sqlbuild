@@ -41,7 +41,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import (
     SettingsConfig,
     TargetConfig,

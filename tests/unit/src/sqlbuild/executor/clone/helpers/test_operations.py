@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.adapter.types import LifeCycleEventKind
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.clone.helpers.operations import clone_relation
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
-from sqlbuild.shared.models import RelationLookup
 from tests.unit.src.sqlbuild.executor.clone.helpers._test_types import (
     CloneRelationExecutionTestCase,
 )

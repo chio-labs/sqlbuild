@@ -9,11 +9,11 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.adapter.types import TypeDialect
+from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_TYPE_INVALID
 from sqlbuild.executor.scenario.models import ScenarioSnapshotColumn
-from sqlbuild.shared.constants import SCENARIO_LOCAL_TYPE_INVALID
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 

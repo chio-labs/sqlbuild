@@ -12,6 +12,12 @@ from sqlbuild.adapter.models import (
     NormalizedType,
     SnapshotChangeTarget,
 )
+from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.adapter.types import TypeFamily
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
@@ -48,10 +54,6 @@ from sqlbuild.executor.run.models import (
     PostHookPhaseOutcome,
 )
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.helpers.identity.naming import (
-    resolve_qualified_name_parts,
-    resolve_relation_location_qualified_name,
-)
 from sqlbuild.spec.models.project import SnapshotsConfig
 
 _DEFAULT_VALID_FROM_COLUMN: str = "valid_from"

@@ -19,8 +19,8 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeResult,
     PythonNodeSkipResult,
 )
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.refs import model, source
-from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.tasks import SkipMode as TaskSkipMode
 from sqlbuild.tasks import TaskContext
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (

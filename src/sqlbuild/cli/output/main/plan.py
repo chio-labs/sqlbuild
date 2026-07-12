@@ -7,7 +7,7 @@ from collections.abc import Callable
 from sqlbuild.cli.output.helpers.plan_text import format_plan as _format_plan
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.shared.helpers.output.display import DisplayOptions
+from sqlbuild.presentation.models import DisplayOptions
 
 
 def format_plan(

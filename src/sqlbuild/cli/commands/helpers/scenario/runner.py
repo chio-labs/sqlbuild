@@ -16,7 +16,12 @@ from sqlbuild.cli.commands.helpers.runtime.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.cli.commands.helpers.scenario.capture_run import build_scenario_capture_settings
-from sqlbuild.cli.commands.helpers.scenario.constants import SUCCESS_STATUS
+from sqlbuild.cli.commands.helpers.scenario.constants import (
+    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+    SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
+    SUCCESS_STATUS,
+)
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
 from sqlbuild.cli.commands.helpers.scenario.local_run import run_local_scenarios
 from sqlbuild.cli.commands.helpers.scenario.models import (
@@ -57,16 +62,11 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureRunResult,
 )
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.shared.constants import (
-    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
-    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
-    SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
-)
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.helpers.output.colors import supports_color
-from sqlbuild.shared.main.summary_footer import format_summary_footer
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,

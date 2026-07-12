@@ -16,7 +16,7 @@ from sqlbuild.compiler.planner.helpers.output.plan_entry import (
     validate_source_cursor_input_columns,
 )
 from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     KnownSourceColumnsReuseTestCase,

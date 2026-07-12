@@ -7,6 +7,9 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry
 from sqlbuild.executor.run.helpers.reuse.core import (
     create_relation_from_reuse_origin,
@@ -14,8 +17,7 @@ from sqlbuild.executor.run.helpers.reuse.core import (
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.types import ExecutionResourceKind, NodeStartCallback
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
 
 
 def execute_dependency_baseline_entries(

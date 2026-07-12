@@ -8,8 +8,8 @@ from collections import OrderedDict
 from copy import deepcopy
 from typing import Any
 
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 

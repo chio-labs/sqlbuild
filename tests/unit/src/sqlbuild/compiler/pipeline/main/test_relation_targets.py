@@ -11,8 +11,8 @@ from sqlbuild.compiler.pipeline.main.relation_targets import (
     build_python_relation_targets,
 )
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.refs import source
-from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.spec.models.source import SourceEntry
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import (
     PythonRelationTargetsTestCase,

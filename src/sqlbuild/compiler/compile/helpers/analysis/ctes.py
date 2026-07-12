@@ -7,25 +7,35 @@ import re
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_BODY_SQL as _POLYGLOT_ANALYSIS_BODY_SQL
-from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_CTE_FACTS as _POLYGLOT_ANALYSIS_CTE_FACTS
-from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME
-from sqlbuild.shared.constants import (
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_BODY_SQL as _POLYGLOT_ANALYSIS_BODY_SQL,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_CTE_FACTS as _POLYGLOT_ANALYSIS_CTE_FACTS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_PROJECTIONS as _POLYGLOT_ANALYSIS_PROJECTIONS,
 )
-from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_SHAPE as _POLYGLOT_ANALYSIS_SHAPE
-from sqlbuild.shared.constants import (
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_SHAPE as _POLYGLOT_ANALYSIS_SHAPE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_SHAPE_SELECT as _POLYGLOT_ANALYSIS_SHAPE_SELECT,
 )
-from sqlbuild.shared.constants import (
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT as _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT,
 )
-from sqlbuild.shared.constants import (
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_TRANSFORM_KIND as _POLYGLOT_ANALYSIS_TRANSFORM_KIND,
 )
-from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM,
+)
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 _CEREMONIAL_SELECT_PATTERN: re.Pattern[str] = re.compile(r"\bSELECT\s+1\s*;?\s*$", re.IGNORECASE)

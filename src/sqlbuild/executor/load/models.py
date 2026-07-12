@@ -12,6 +12,9 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.adapter.types import LoaderLogicalType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
@@ -21,8 +24,7 @@ from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.types import ConnectionElapsedCallback, ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 

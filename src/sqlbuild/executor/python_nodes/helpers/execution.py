@@ -45,7 +45,12 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.models import AssetDefinition, RetryPolicy, SqlResourceRef, TaskDefinition
+from sqlbuild.python_nodes.models import (
+    AssetDefinition,
+    RetryPolicy,
+    SqlResourceRef,
+    TaskDefinition,
+)
 from sqlbuild.tasks import get_task_definition
 
 

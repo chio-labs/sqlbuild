@@ -11,15 +11,15 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.pipeline.helpers import scenario as scenario_pipeline
-from sqlbuild.executor.scenario.helpers.local import execution as local_scenario
-from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotStateResult
-from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
-from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import (
+from sqlbuild.executor.scenario.constants import (
     SCENARIO_LOCAL_JSONL_INVALID,
     SCENARIO_LOCAL_SNAPSHOT_MISSING,
     SCENARIO_LOCAL_SNAPSHOT_STALE,
 )
+from sqlbuild.executor.scenario.helpers.local import execution as local_scenario
+from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotStateResult
+from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
+from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (
     ScenarioFailureHelpTestCase,
     ScenarioLocalPipelineTestCase,

@@ -14,9 +14,9 @@ from sqlbuild.cli.commands.helpers.dbt_init.prompt import resolve_production_git
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.integrations.dbt.main.profile_init import run_dbt_profile_init
 from sqlbuild.integrations.dbt.models import DbtInitProgressCallbacks, DbtInitRequest, DbtInitResult
-from sqlbuild.shared.classes.cli_document import CliDocument
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.classes.cli_document import CliDocument
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def ensure_sqlbuild_project_for_dbt_command(

@@ -23,10 +23,10 @@ from sqlbuild.compiler.compile.models.sql_tests import (
 )
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLocation
 from sqlbuild.compiler.diagnostics.types import DiagnosticSeverity
+from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.spec.models.schema import SourceLocation
 
 _HUMAN_MODEL_LIMIT: int = 100

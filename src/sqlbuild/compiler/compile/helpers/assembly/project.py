@@ -59,7 +59,7 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
     TargetConfig,

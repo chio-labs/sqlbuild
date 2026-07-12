@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.scenario.constants import SCENARIO_CLI_CAPTURE_DIALECT_REQUIRED
 from sqlbuild.cli.exceptions import CliUserError
-from sqlbuild.shared.constants import SCENARIO_CLI_CAPTURE_DIALECT_REQUIRED
 
 
 def require_scenario_capture_dialect(*, adapter: BaseAdapter, adapter_name: str) -> str:

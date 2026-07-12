@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
@@ -25,7 +26,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtLineageDirection,
 )
-from sqlbuild.shared.helpers.graph.algorithms import transitive_closure
 
 
 def select_dbt_lineage_target(

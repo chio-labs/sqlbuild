@@ -6,8 +6,8 @@ import inspect
 from collections.abc import Callable, Sequence
 from typing import Any, cast
 
-from sqlbuild.shared.models import CheckDefinition, SqlResourceRef
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.models import CheckDefinition, SqlResourceRef
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 
 
 def _decorate_check(

@@ -33,8 +33,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.shared.models import ColumnLineageRef, SqlResourceRef
-from sqlbuild.shared.types import SqlResourceRefKind
+from sqlbuild.python_nodes.models import ColumnLineageRef, SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 

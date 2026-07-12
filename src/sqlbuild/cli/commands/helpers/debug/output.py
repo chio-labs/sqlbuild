@@ -6,7 +6,7 @@ import json
 
 from sqlbuild.cli.commands.helpers.debug.models import DebugLine, DebugResult
 from sqlbuild.cli.commands.helpers.debug.types import DebugCheckStatus
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def format_debug_text(*, result: DebugResult, use_color: bool) -> str:

@@ -118,6 +118,8 @@ _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
         ("adapter", "models.py"),
         ("adapter", "types.py"),
         ("executor", "types.py"),
+        ("python_nodes", "models.py"),
+        ("python_nodes", "types.py"),
     }
 )
 _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
@@ -241,42 +243,38 @@ def _is_sc045_term_allowed(*, path_text: str, term: str) -> bool:
 
 
 def check_no_raw_color_helper_imports(*, file_path: Path, module: ast.Module) -> list[Violation]:
-    """Reject direct raw color helper imports outside low-level styling modules."""
+    """Reject direct imports from the presentation color capability implementation."""
 
-    if file_path.as_posix().endswith("src/sqlbuild/shared/helpers/colors.py"):
+    if file_path.as_posix().endswith("src/sqlbuild/presentation/main/supports_color.py"):
         return []
 
     violations: list[Violation] = []
     for node in ast.walk(module):
         if isinstance(node, ast.ImportFrom) and node.module == (
-            "sqlbuild.shared.helpers.output.colors"
+            "sqlbuild.presentation.helpers.terminal_capabilities"
         ):
-            imported_names: set[str] = {alias.name for alias in node.names}
-            raw_names: set[str] = imported_names - {"supports_color"}
-            if raw_names:
-                violations.append(
-                    Violation(
-                        code="SC041",
-                        path=file_path,
-                        line=node.lineno,
-                        message=(
-                            "runtime output modules must use CliStyle instead of raw color "
-                            "helpers; only supports_color may be imported from "
-                            "sqlbuild.shared.helpers.output.colors"
-                        ),
-                    )
+            violations.append(
+                Violation(
+                    code="SC041",
+                    path=file_path,
+                    line=node.lineno,
+                    message=(
+                        "runtime modules must import supports_color through "
+                        "sqlbuild.presentation.main.supports_color"
+                    ),
                 )
+            )
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "sqlbuild.shared.helpers.output.colors":
+                if alias.name == "sqlbuild.presentation.helpers.terminal_capabilities":
                     violations.append(
                         Violation(
                             code="SC041",
                             path=file_path,
                             line=node.lineno,
                             message=(
-                                "runtime output modules must not import "
-                                "sqlbuild.shared.helpers.output.colors directly; use CliStyle"
+                                "runtime modules must not import presentation color capability "
+                                "implementation directly; use presentation/main"
                             ),
                         )
                     )
@@ -617,7 +615,7 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
         "sqlbuild",
     ):
         return []
-    if relative_parts[2] == "shared":
+    if relative_parts[2] in {"presentation", "shared"}:
         return []
 
     direct_child_name: str = relative_parts[3]

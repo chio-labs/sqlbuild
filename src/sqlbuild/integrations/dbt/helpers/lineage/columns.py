@@ -27,6 +27,7 @@ from sqlbuild.compiler.lineage.models import (
     ProjectColumnLineage,
     QualifiedLineageColumn,
 )
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.helpers.graph.core import (
     dbt_model_graph_key,
@@ -48,7 +49,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtSourceSchemaInspectionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphResourceType, DbtLineageDirection
-from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 

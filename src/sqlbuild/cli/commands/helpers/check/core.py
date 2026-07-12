@@ -8,6 +8,10 @@ from typing import Any, TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
@@ -31,11 +35,11 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRuntime,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.models import RelationLookup, SqlResourceRef
-from sqlbuild.shared.types import ExecutionResourceKind, SqlResourceRefKind
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 

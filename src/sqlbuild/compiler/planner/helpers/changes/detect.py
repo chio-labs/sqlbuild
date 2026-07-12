@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.config import get_config_str
 from sqlbuild.compiler.planner.helpers.changes.metadata import version_identity_metadata_payload
@@ -43,7 +44,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 from sqlbuild.diagnostics.helpers.logging import log_debug_event, log_sql
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 
 
 def detect_changes(

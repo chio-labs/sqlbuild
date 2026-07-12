@@ -12,7 +12,7 @@ from sqlbuild.cli.commands.helpers.janitor.output import (
     write_plan,
 )
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def write_janitor_disabled(*, invocation: JanitorInvocation) -> None:

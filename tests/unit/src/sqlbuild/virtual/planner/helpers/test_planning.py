@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.compiler.hooks.models import SqlHookEntry
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
-from sqlbuild.shared.models import SqlHookEntry
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind

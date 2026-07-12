@@ -17,6 +17,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProviderUsage,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.hooks.models import PythonHookEntry
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph.loader_dag import upstream_loader_dependency_names
 from sqlbuild.compiler.planner.helpers.graph.source_load_nodes import build_source_load_entries
@@ -49,7 +50,6 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import PlanReason
-from sqlbuild.shared.models import PythonHookEntry
 from sqlbuild.spec.models.source import SourceEntry
 
 

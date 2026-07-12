@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TextIO
 
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 
 
 class PlanningProgressReporter:

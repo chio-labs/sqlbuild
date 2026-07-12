@@ -6,9 +6,13 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
+from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import SkipMode
@@ -30,8 +34,6 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 
 
 def execute_hooks(

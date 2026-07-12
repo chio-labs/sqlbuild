@@ -37,8 +37,8 @@ from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResult
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
 from sqlbuild.providers import Provider
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.refs import model
-from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.tasks import TaskContext, task

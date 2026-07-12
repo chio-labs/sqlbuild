@@ -14,7 +14,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlFunctionFile,
     DiscoveredSqlModelFile,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})

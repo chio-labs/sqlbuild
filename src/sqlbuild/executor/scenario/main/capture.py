@@ -6,6 +6,14 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import QueryResult
+from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
+from sqlbuild.errors.contracts.main.error_code import error_code
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_EXEC_CAPTURE_FAILED,
+    SCENARIO_EXEC_CAPTURE_INTERNAL,
+)
 from sqlbuild.executor.scenario.helpers.capture.columns import build_scenario_snapshot_columns
 from sqlbuild.executor.scenario.helpers.capture.safety import (
     capture_error_help,
@@ -29,12 +37,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotRelation,
 )
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import (
-    SCENARIO_EXEC_CAPTURE_FAILED,
-    SCENARIO_EXEC_CAPTURE_INTERNAL,
-)
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.main.error_code import error_code
 
 
 def execute_scenario_snapshot_capture(

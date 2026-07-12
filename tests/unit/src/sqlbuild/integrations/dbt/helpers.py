@@ -89,7 +89,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtLineageDirection,
 )
-from sqlbuild.shared.types import ConnectionElapsedCallback
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaSeedEntry
 from sqlbuild.spec.models.source import SourceEntry

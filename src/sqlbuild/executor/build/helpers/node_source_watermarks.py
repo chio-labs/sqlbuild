@@ -8,7 +8,9 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.node_source_watermarks.constants import NODE_SOURCE_WATERMARK_TABLE_NAME
 from sqlbuild.compiler.node_source_watermarks.main.context import (
     build_node_source_watermark_execution_context,
@@ -31,8 +33,6 @@ from sqlbuild.compiler.node_source_watermarks.models import (
 )
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
-from sqlbuild.shared.models import RelationLookup
 
 
 def build_native_node_source_watermark_context(

@@ -29,6 +29,14 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.helpers.sources import render_source_relation
+from sqlbuild.compiler.planner.constants import (
+    SCENARIO_PLAN_INTERNAL,
+    SCENARIO_PLAN_MISSING_FIXTURE_SQL,
+    SCENARIO_PLAN_MISSING_RELATION_TARGET,
+    SCENARIO_PLAN_SQLGLOT_PARSE,
+    SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
+    SCENARIO_PLAN_UNKNOWN_SEED,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_execution_upstream_deps,
@@ -58,18 +66,12 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import RelationMarkerTargetResolver, ScenarioArtifactKind
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.shared.constants import (
-    SCENARIO_PLAN_INTERNAL,
-    SCENARIO_PLAN_MISSING_FIXTURE_SQL,
-    SCENARIO_PLAN_MISSING_RELATION_TARGET,
-    SCENARIO_PLAN_SQLGLOT_PARSE,
-    SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
-    SCENARIO_PLAN_UNKNOWN_SEED,
+from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
+    reference_call_prefix_pattern_text,
 )
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
-from sqlbuild.shared.helpers.sql.reference_patterns import reference_call_prefix_pattern_text
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.spec.models.source import SourceEntry
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")

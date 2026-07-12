@@ -14,16 +14,18 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import PlanWarning, ScenarioGraphPlan
-from sqlbuild.compiler.planner.types import WarningSeverity
-from sqlbuild.shared.constants import (
+from sqlbuild.compiler.planner.constants import (
     SCENARIO_PLAN_GRAPH_VALIDATION,
     SCENARIO_PLAN_SQLGLOT_PARSE,
     SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
 )
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
-from sqlbuild.shared.helpers.sql.reference_patterns import reference_call_prefix_pattern_text
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.planner.models import PlanWarning, ScenarioGraphPlan
+from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
+    reference_call_prefix_pattern_text,
+)
+from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _REF_PATTERN: re.Pattern[str] = re.compile(
     rf"{reference_call_prefix_pattern_text(SqlReferenceKind.REF)}\s*"

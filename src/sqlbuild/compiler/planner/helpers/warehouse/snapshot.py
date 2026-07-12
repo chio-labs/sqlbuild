@@ -45,9 +45,9 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 _CURSOR_BATCH_SIZE: int = 100

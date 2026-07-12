@@ -14,6 +14,10 @@ from sqlbuild.cli.commands.helpers.scenario.capture_run import (
     build_scenario_capture_settings,
     run_scenario_capture_run,
 )
+from sqlbuild.cli.commands.helpers.scenario.constants import (
+    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+)
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
 from sqlbuild.cli.commands.helpers.scenario.local_run import run_local_scenarios
 from sqlbuild.cli.commands.helpers.scenario.models import (
@@ -33,11 +37,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import DbtScenarioBuild
 from sqlbuild.integrations.dbt.pipeline.main.scenario import build_dbt_scenario_project
-from sqlbuild.shared.constants import (
-    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
-    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
-)
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_dbt_scenario_test(

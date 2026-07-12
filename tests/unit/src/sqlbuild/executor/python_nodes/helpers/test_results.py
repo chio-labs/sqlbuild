@@ -26,7 +26,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeResult,
     PythonNodeSkipResult,
 )
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonCheckContextResultTestCase,
     PythonCheckReturnNormalizationErrorTestCase,

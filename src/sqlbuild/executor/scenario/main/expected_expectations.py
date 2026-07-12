@@ -5,18 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.planner.models import ScenarioExpectedExpectationPlan
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_EXEC_EXPECTED_ERRORED,
+    SCENARIO_EXEC_EXPECTED_FAILED,
+    SCENARIO_EXEC_EXPECTED_INTERNAL,
+)
 from sqlbuild.executor.scenario.main.expected_comparison_sql import (
     build_scenario_expected_comparison_sql,
 )
 from sqlbuild.executor.scenario.models import ScenarioExpectedExpectationExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import (
-    SCENARIO_EXEC_EXPECTED_ERRORED,
-    SCENARIO_EXEC_EXPECTED_FAILED,
-    SCENARIO_EXEC_EXPECTED_INTERNAL,
-)
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def execute_scenario_expected_expectation(

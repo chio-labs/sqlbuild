@@ -18,7 +18,7 @@ from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
 from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 

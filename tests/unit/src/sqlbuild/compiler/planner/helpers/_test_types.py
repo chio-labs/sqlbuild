@@ -40,7 +40,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     WarningSeverity,
 )
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 

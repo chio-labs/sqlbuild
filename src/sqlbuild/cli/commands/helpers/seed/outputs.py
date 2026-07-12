@@ -13,8 +13,8 @@ from sqlbuild.cli.output.main.write_execution_json_output import write_execution
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.summary_footer import format_summary_footer
 
 
 def write_seed_execution_header(

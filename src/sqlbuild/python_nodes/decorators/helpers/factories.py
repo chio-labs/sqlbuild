@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
-from sqlbuild.shared.models import FactoryDefinition
+from sqlbuild.python_nodes.models import FactoryDefinition
 
 
 def factory(

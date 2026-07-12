@@ -14,8 +14,8 @@ from sqlbuild.cli.commands.helpers.runtime.connection import (
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.virtual.reconcile.main.reconcile import run_virtual_reconcile
 

@@ -35,7 +35,7 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 
 
 def execute_python_check_nodes(

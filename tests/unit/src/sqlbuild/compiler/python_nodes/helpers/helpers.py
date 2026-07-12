@@ -31,9 +31,9 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.helpers.inventory import build_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.providers import Provider
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.refs import model, source
-from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from sqlbuild.tasks import task

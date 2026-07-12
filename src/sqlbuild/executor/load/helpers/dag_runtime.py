@@ -33,7 +33,7 @@ from sqlbuild.executor.load.models import (
 from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 

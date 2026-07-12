@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TextIO
 
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def resolve_production_git_ref(

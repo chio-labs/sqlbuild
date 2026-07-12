@@ -18,6 +18,7 @@ from sqlbuild.cli.commands.helpers.scenario.capture_run import (
     build_scenario_capture_settings,
     run_scenario_capture_run,
 )
+from sqlbuild.cli.commands.helpers.scenario.constants import SCENARIO_CLI_SQL_VALIDATION_REQUIRED
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
 from sqlbuild.cli.commands.helpers.scenario.models import (
     ScenarioCaptureCommandRequest,
@@ -42,9 +43,8 @@ from sqlbuild.compiler.pipeline.models import (
     CompilePipelineResult,
 )
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
-from sqlbuild.shared.constants import SCENARIO_CLI_SQL_VALIDATION_REQUIRED
-from sqlbuild.shared.helpers.output.colors import supports_color
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.models.project import (
     resolve_effective_adapter_name,
     resolve_effective_scenario_config,

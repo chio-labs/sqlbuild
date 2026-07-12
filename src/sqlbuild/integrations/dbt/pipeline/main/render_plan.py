@@ -7,7 +7,7 @@ from sqlbuild.integrations.dbt.helpers.planning.plan import (
     format_dbt_interop_plan_json,
 )
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
-from sqlbuild.shared.helpers.output.display import DisplayOptions
+from sqlbuild.presentation.models import DisplayOptions
 
 
 def render_dbt_interop_plan(

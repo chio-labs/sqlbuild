@@ -35,17 +35,13 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus, PythonRunPhase
-from sqlbuild.shared.helpers.output.alignment import (
-    format_aligned_name_value,
-    resolve_name_column_width,
-)
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.helpers.output.display import (
-    DisplayOptions,
-    append_overflow_line,
-    visible_entries,
-)
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
+from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
+from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
+from sqlbuild.presentation.main.visible_entries import visible_entries
+from sqlbuild.presentation.models import DisplayOptions
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,

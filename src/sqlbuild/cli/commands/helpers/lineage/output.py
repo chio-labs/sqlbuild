@@ -19,7 +19,7 @@ from sqlbuild.compiler.lineage.main.render_dependency_tree import render_depende
 from sqlbuild.compiler.lineage.main.serialize_column import serialize_column
 from sqlbuild.compiler.lineage.main.serialize_column_edge import serialize_column_edge
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 _HUMAN_COLUMN_TRACE_LIMIT: int = 25
 

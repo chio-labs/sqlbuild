@@ -31,6 +31,12 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
+from sqlbuild.compiler.planner.main.planning.resolve_clone_boundary import (
+    resolve_clone_boundary,
+)
+from sqlbuild.compiler.planner.main.planning.resolve_skipped_view_chain import (
+    resolve_skipped_view_chain,
+)
 from sqlbuild.compiler.planner.main.planning.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.executor.clone.main.execute import execute_clone
@@ -38,10 +44,6 @@ from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneStatus
-from sqlbuild.shared.helpers.graph.algorithms import (
-    resolve_clone_boundary,
-    resolve_skipped_view_chain,
-)
 
 
 def build_defer_clone_boundary_selectors(

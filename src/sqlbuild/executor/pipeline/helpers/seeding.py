@@ -12,7 +12,7 @@ from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import PlanOutput, SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.seed.main.execute import execute_seed
-from sqlbuild.shared.types import ConnectionElapsedCallback
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 
 
 def run_seed_pipeline(

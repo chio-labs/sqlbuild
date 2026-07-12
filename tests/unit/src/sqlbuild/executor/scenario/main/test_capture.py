@@ -9,6 +9,10 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import ColumnInfo, QueryResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_EXEC_CAPTURE_FAILED,
+    SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
+)
 from sqlbuild.executor.scenario.helpers.snapshots.core import (
     build_scenario_snapshot_capture_plan,
     build_scenario_snapshot_manifest_shell,
@@ -24,10 +28,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotRelation,
 )
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import (
-    SCENARIO_EXEC_CAPTURE_FAILED,
-    SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
-)
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
     ExecuteScenarioSnapshotCaptureLimitTestCase,
     ExecuteScenarioSnapshotCaptureTestCase,

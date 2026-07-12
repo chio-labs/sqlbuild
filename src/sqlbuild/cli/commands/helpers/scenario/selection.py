@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.cli.commands.helpers.scenario.constants import (
+    SCENARIO_CLI_NONE_DISCOVERED,
+    SCENARIO_CLI_UNKNOWN_SELECTOR,
+    SCENARIO_CLI_UNSUPPORTED_GRAPH_SELECTOR,
+)
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledSqlScenario,
-)
-from sqlbuild.shared.constants import (
-    SCENARIO_CLI_NONE_DISCOVERED,
-    SCENARIO_CLI_UNKNOWN_SELECTOR,
-    SCENARIO_CLI_UNSUPPORTED_GRAPH_SELECTOR,
 )
 
 

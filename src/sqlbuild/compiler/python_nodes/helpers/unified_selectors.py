@@ -21,7 +21,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlSelection,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.shared.types import SqlResourceRefKind
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 _PYTHON_SELECTOR_KINDS: frozenset[SelectorKind] = frozenset(
     {

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.planner.models import ModelPlanEntry
 
 from sqlbuild.executor.types import ExecutionStatus as ExecutionStatus
-from sqlbuild.shared.types import ExecutionResourceKind as ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind as ExecutionResourceKind
 
 
 class BeforeModelMaterializeCallback(Protocol):

@@ -23,7 +23,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtLineageDirection,
     DbtLineageOutputFormat,
 )
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 _HUMAN_COLUMN_TRACE_LIMIT: int = 25
 

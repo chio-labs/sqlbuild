@@ -21,7 +21,7 @@ from sqlbuild.compiler.planner.helpers.output.audit_scheduling import (
     resolve_effective_run_scope,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     ResolveAttachmentErrorTestCase,
     ResolveAttachmentTestCase,

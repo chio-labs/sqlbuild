@@ -13,7 +13,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
 from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 

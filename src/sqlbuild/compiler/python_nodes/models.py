@@ -10,8 +10,8 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
-from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.spec.models.source import SourceColumnEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 

@@ -30,7 +30,7 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.loaders import get_loader_definition
 from sqlbuild.providers import Provider
-from sqlbuild.shared.models import (
+from sqlbuild.python_nodes.models import (
     AssetDefinition,
     CheckDefinition,
     LoaderDefinition,

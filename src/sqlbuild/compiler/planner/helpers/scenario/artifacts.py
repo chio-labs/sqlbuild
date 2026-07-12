@@ -9,6 +9,9 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.planner.constants import (
     SCENARIO_DEFAULT_IDENTIFIER_LIMIT,
     SCENARIO_HASH_PREFIX_LENGTH,
+    SCENARIO_PLAN_HASH_COLLISION,
+    SCENARIO_PLAN_INVALID_HASH_PREFIX,
+    SCENARIO_PLAN_RELATION_COLLISION,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.build_scenario_artifact_physical_name import (
@@ -20,11 +23,6 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationMap,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.shared.constants import (
-    SCENARIO_PLAN_HASH_COLLISION,
-    SCENARIO_PLAN_INVALID_HASH_PREFIX,
-    SCENARIO_PLAN_RELATION_COLLISION,
-)
 
 
 def compute_scenario_hash_prefix(

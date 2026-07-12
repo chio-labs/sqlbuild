@@ -10,6 +10,13 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
+from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
@@ -26,12 +33,7 @@ from sqlbuild.compiler.pipeline.models import ClonePipelineResult, ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.shared.helpers.identity.naming import (
-    resolve_qualified_name_parts,
-    resolve_relation_location_qualified_name,
-)
-from sqlbuild.shared.models import RelationLookup
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_physical_destination,
     build_physical_seed_destination,

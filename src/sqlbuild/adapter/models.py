@@ -75,6 +75,43 @@ class RelationInfo:
 
 
 @dataclass(frozen=True)
+class RelationLookup:
+    """Existing warehouse relations gathered once and queried in memory."""
+
+    relations_by_key: dict[tuple[str | None, str | None, str], RelationInfo]
+
+    @staticmethod
+    def key(
+        *, database: str | None = None, schema: str | None, name: str
+    ) -> tuple[str | None, str | None, str]:
+        """Build the case-insensitive lookup key for one relation."""
+
+        return (
+            None if database is None else database.lower(),
+            None if schema is None else schema.lower(),
+            name.lower(),
+        )
+
+    def get(
+        self, *, database: str | None = None, schema: str | None, name: str
+    ) -> RelationInfo | None:
+        """Return the gathered relation at one schema and name when present."""
+
+        return self.relations_by_key.get(self.key(database=database, schema=schema, name=name))
+
+    def exists(self, *, database: str | None = None, schema: str | None, name: str) -> bool:
+        """Return whether a relation was present at one schema and name."""
+
+        return self.key(database=database, schema=schema, name=name) in self.relations_by_key
+
+    def is_transient(self, *, database: str | None = None, schema: str | None, name: str) -> bool:
+        """Return whether a gathered relation is transient."""
+
+        relation: RelationInfo | None = self.get(database=database, schema=schema, name=name)
+        return bool(relation.is_transient) if relation is not None else False
+
+
+@dataclass(frozen=True)
 class TableFreshnessMetadata:
     """Adapter-observed freshness metadata for one physical table source."""
 

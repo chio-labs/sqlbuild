@@ -97,9 +97,9 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropSkipReason,
     DbtInteropSqlbuildTestAction,
 )
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.helpers.output.display import DisplayOptions
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.models import DisplayOptions
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 
 
 @dataclass

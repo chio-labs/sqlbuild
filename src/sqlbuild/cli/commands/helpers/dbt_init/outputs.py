@@ -6,8 +6,8 @@ import sys
 
 from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.integrations.dbt.models import DbtInitResult
-from sqlbuild.shared.classes.cli_document import CliDocument
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_document import CliDocument
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def write_dbt_init_completion_output(

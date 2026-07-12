@@ -34,14 +34,15 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.main.ingress import run_ingress_python_loader_nodes
 from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
 from sqlbuild.executor.python_nodes.models import (
+    CursorWindow,
     IngressCallbacks,
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
     PythonNodeRuntime,
 )
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.models import CursorWindow, SqlResourceRef
-from sqlbuild.shared.types import NodeStartCallback
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.runtime.contracts.types import NodeStartCallback
 from sqlbuild.spec.models.source import SourceEntry
 
 

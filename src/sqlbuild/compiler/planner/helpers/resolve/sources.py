@@ -11,8 +11,10 @@ from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import ContractPolicy
-from sqlbuild.shared.helpers.sql.reference_patterns import quoted_reference_call_pattern
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.main.quoted_reference_call_pattern import (
+    quoted_reference_call_pattern,
+)
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)

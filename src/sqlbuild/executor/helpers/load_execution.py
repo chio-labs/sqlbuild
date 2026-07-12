@@ -8,8 +8,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 

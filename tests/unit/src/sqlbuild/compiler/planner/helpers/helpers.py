@@ -49,6 +49,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.helpers.graph.core import build_downstream_deps
@@ -82,13 +83,12 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
     StandardSourceFreshnessPlanningResult,
 )
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
-from sqlbuild.shared.types import SqlReferenceKind
 from sqlbuild.spec.models.schema import (
     SchemaColumn,
     SchemaModelEntry,

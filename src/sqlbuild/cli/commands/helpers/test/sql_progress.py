@@ -8,7 +8,7 @@ from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.shared.helpers.output.alignment import resolve_name_column_width
+from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
 
 
 def resolve_test_name_width(test_entries: tuple[SqlTestPlanEntry, ...]) -> int:

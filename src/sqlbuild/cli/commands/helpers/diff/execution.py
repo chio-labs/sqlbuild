@@ -27,8 +27,8 @@ from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningPro
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.shared.helpers.output.colors import supports_color
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.virtual.diff.main.diff import run_virtual_diff
 from sqlbuild.virtual.diff.models import VirtualDiffOptions

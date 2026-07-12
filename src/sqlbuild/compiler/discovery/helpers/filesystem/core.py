@@ -66,7 +66,7 @@ from sqlbuild.hooks import get_hook_definition
 from sqlbuild.loaders import LoaderDefinition, get_loader_definition
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.providers import Provider
-from sqlbuild.shared.models import (
+from sqlbuild.python_nodes.models import (
     AssetDefinition,
     CheckDefinition,
     FactoryDefinition,

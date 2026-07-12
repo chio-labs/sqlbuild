@@ -8,7 +8,7 @@ from typing import TextIO
 
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.integrations.dbt.main.lineage import build_dbt_lineage_output
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_dbt_lineage_command(

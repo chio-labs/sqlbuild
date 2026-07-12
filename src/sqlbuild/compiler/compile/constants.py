@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 
 PRESERVE_TARGET_VALUE: str = "preserve"
 

@@ -10,7 +10,7 @@ from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.shared.types import ConnectionElapsedCallback
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 
 
 def run_audit_pipeline(

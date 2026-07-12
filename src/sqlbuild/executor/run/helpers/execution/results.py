@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.errors.contracts.main.error_code import error_code
+from sqlbuild.errors.contracts.main.error_help import error_help
+from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.constants import (
     RUN_AUDIT_FAILED_CODE,
@@ -21,9 +24,6 @@ from sqlbuild.executor.run.constants import (
 )
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.main.error_code import error_code
-from sqlbuild.shared.main.error_help import error_help
-from sqlbuild.shared.main.error_message import error_message
 
 
 def build_failed_result(

@@ -12,7 +12,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 
 _SCHEMA_FIXTURE_PATH: Path = (
     Path(__file__).resolve().parents[5] / "fixtures" / "dbt_manifest_v12_schema.json"

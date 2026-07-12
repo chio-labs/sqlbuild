@@ -19,9 +19,24 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationPlan,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.errors.contracts.main.error_code import error_code
+from sqlbuild.errors.contracts.main.error_help import error_help
+from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_EXEC_ASSERTION_ERRORED,
+    SCENARIO_EXEC_ASSERTION_FAILED,
+    SCENARIO_EXEC_EXPECTED_ERRORED,
+    SCENARIO_EXEC_EXPECTED_FAILED,
+    SCENARIO_LOCAL_FUNCTION_FAILED,
+    SCENARIO_LOCAL_INTERNAL,
+    SCENARIO_LOCAL_MANIFEST_INVALID,
+    SCENARIO_LOCAL_MODEL_FAILED,
+    SCENARIO_LOCAL_SNAPSHOT_MISSING,
+    SCENARIO_LOCAL_SNAPSHOT_STALE,
+)
 from sqlbuild.executor.scenario.helpers.execution.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario.helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
@@ -51,21 +66,6 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import (
-    SCENARIO_EXEC_ASSERTION_ERRORED,
-    SCENARIO_EXEC_ASSERTION_FAILED,
-    SCENARIO_EXEC_EXPECTED_ERRORED,
-    SCENARIO_EXEC_EXPECTED_FAILED,
-    SCENARIO_LOCAL_FUNCTION_FAILED,
-    SCENARIO_LOCAL_INTERNAL,
-    SCENARIO_LOCAL_MANIFEST_INVALID,
-    SCENARIO_LOCAL_MODEL_FAILED,
-    SCENARIO_LOCAL_SNAPSHOT_MISSING,
-    SCENARIO_LOCAL_SNAPSHOT_STALE,
-)
-from sqlbuild.shared.main.error_code import error_code
-from sqlbuild.shared.main.error_help import error_help
-from sqlbuild.shared.main.error_message import error_message
 from sqlbuild.spec.models.source import SourceEntry
 
 

@@ -1,0 +1,1 @@
+"""Compiled lifecycle hook contracts."""

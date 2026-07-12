@@ -9,7 +9,7 @@ from sqlbuild.compiler.pipeline.helpers.diff import (
     compile_project_for_diff_environment,
     resolve_diff_model_names,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
 def run_diff_pipeline(

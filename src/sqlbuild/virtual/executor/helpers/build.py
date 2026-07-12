@@ -10,11 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts as relation_parts
+import sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name as rn
 import sqlbuild.executor.build.types
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.models import RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
@@ -92,11 +94,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRuntime,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.shared.helpers.identity.naming import (
-    resolve_qualified_name_parts,
-    resolve_relation_location_qualified_name,
-)
-from sqlbuild.shared.models import RelationLookup, SqlResourceRef
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.classes.node_result_store import VirtualNodeResultStore
@@ -1117,7 +1115,7 @@ def _prepare_custom_virtual_version(
         schema=entry.destination.schema,
         statement_recorder=recorder,
     )
-    destination: str = resolve_relation_location_qualified_name(
+    destination: str = rn.resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
     )
     if adapter.relation_exists(
@@ -1132,7 +1130,7 @@ def _prepare_custom_virtual_version(
             if_exists=True,
             statement_recorder=recorder,
         )
-    source: str = resolve_qualified_name_parts(
+    source: str = relation_parts.resolve_qualified_name_parts(
         adapter=adapter,
         database=parent_relation.database_name,
         schema=parent_relation.schema_name,
@@ -1951,12 +1949,12 @@ def _create_logical_vde_views(
             )
             adapter.create_view_as(
                 connection=connection,
-                destination=resolve_relation_location_qualified_name(
+                destination=rn.resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
                 sql=(
                     "SELECT * FROM "
-                    + resolve_relation_location_qualified_name(
+                    + rn.resolve_relation_location_qualified_name(
                         adapter=adapter, location=physical_target
                     )
                 ),
@@ -1985,12 +1983,12 @@ def _create_logical_vde_views(
             )
             adapter.create_view_as(
                 connection=connection,
-                destination=resolve_relation_location_qualified_name(
+                destination=rn.resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
                 sql=(
                     "SELECT * FROM "
-                    + resolve_relation_location_qualified_name(
+                    + rn.resolve_relation_location_qualified_name(
                         adapter=adapter, location=physical_target
                     )
                 ),

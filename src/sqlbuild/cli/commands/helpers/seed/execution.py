@@ -15,8 +15,8 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import Connectio
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.pipeline.main.run import run_seed_pipeline
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.main.coded_error_text import format_coded_error
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.coded_error_text import format_coded_error
 
 
 def execute_seed_plan(

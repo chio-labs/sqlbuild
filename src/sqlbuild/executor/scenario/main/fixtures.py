@@ -6,12 +6,14 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
 from sqlbuild.diagnostics.helpers.logging import diagnostics_context
+from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_FIXTURE_FAILED
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import SCENARIO_EXEC_FIXTURE_FAILED
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def execute_scenario_fixture(

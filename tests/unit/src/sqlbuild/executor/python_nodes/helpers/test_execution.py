@@ -24,7 +24,7 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
-from sqlbuild.shared.models import RetryPolicy
+from sqlbuild.python_nodes.models import RetryPolicy
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonNodeExecutorTestCase,
     PythonNodeRetryExecutorTestCase,

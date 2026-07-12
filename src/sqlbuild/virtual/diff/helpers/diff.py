@@ -17,7 +17,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.diff.models import VirtualDiffOptions, VirtualDiffState
 from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_locations
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics

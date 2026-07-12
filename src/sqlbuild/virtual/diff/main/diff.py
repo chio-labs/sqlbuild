@@ -14,7 +14,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.diff.helpers.diff import (
     execute_virtual_diff_between_relations,
     filter_models_with_changed_virtual_refs,

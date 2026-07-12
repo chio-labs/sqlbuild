@@ -17,7 +17,17 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.errors.contracts.main.error_code import error_code
+from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.exceptions import ExecutorInputError, ExecutorJsonTypeError
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
+    SCENARIO_EXEC_INTERNAL,
+    SCENARIO_LOCAL_JSONL_INVALID,
+    SCENARIO_LOCAL_MANIFEST_INVALID,
+    SCENARIO_LOCAL_SNAPSHOT_MISSING,
+    SCENARIO_LOCAL_SNAPSHOT_STALE,
+)
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotCaptureRelationPlan,
@@ -29,16 +39,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
-from sqlbuild.shared.constants import (
-    SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
-    SCENARIO_EXEC_INTERNAL,
-    SCENARIO_LOCAL_JSONL_INVALID,
-    SCENARIO_LOCAL_MANIFEST_INVALID,
-    SCENARIO_LOCAL_SNAPSHOT_MISSING,
-    SCENARIO_LOCAL_SNAPSHOT_STALE,
-)
-from sqlbuild.shared.main.error_code import error_code
-from sqlbuild.shared.main.error_message import error_message
 
 _SNAPSHOT_ROOT_PARTS: tuple[str, ...] = ("tests", "_scenario_snapshots")
 _MANIFEST_FILE_NAME: str = "scenario.json"

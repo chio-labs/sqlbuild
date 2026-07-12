@@ -25,7 +25,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredTaskFunction,
 )
 from sqlbuild.loaders import get_loader_definition
-from sqlbuild.shared.models import (
+from sqlbuild.python_nodes.models import (
     AssetDefinition,
     CheckDefinition,
     LoaderDefinition,

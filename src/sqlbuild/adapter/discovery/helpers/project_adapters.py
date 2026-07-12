@@ -12,8 +12,8 @@ from typing import Any, cast
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.discovery.models import DiscoveredAdapter
 from sqlbuild.adapter.exceptions import AdapterUserError
-from sqlbuild.shared.models import DiscoveredAdapter
 
 
 def discover_project_adapters(

@@ -8,13 +8,15 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import CompileSqlReference
+from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
+    reference_call_prefix_pattern_text,
+)
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.integrations.dbt.helpers.manifest.core import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.shared.helpers.sql.reference_patterns import reference_call_prefix_pattern_text
-from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
     rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}\s*"([^"]+)"\s*'

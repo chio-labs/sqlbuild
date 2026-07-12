@@ -13,7 +13,7 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import (
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
-from sqlbuild.shared.models import SqlResourceRef
+from sqlbuild.python_nodes.models import SqlResourceRef
 
 
 @dataclass(frozen=True)
