@@ -68,7 +68,7 @@ def resolve_runtime_cursor_bounds(
         + " UNION ALL ".join(upstream_parts)
         + f"){derived_alias}"
     )
-    cursor: Any = adapter.execute(connection, sql=sql)
+    cursor: Any = adapter.execute(connection=connection, sql=sql)
     row: Any = cursor.fetchone()
     if row is None or row[1] is None:
         return None
@@ -83,22 +83,22 @@ def resolve_runtime_cursor_bounds(
         if start_raw is None:
             return None
         start: str | None = _normalize_bound(
-            _floor_timestamp_bound(start_raw, grain=effective_grain), is_end=False
+            value=_floor_timestamp_bound(value=start_raw, grain=effective_grain), is_end=False
         )
         end: str | None = _normalize_bound(
-            _increment_timestamp_bound(
-                _floor_timestamp_bound(row[1], grain=effective_grain),
+            value=_increment_timestamp_bound(
+                value=_floor_timestamp_bound(value=row[1], grain=effective_grain),
                 grain=effective_grain,
             ),
             is_end=False,
         )
     else:
         start: str | None = (
-            _normalize_bound(target_max_raw, is_end=False)
+            _normalize_bound(value=target_max_raw, is_end=False)
             if target_max_raw is not None
-            else _normalize_bound(row[0], is_end=False)
+            else _normalize_bound(value=row[0], is_end=False)
         )
-        end: str | None = _normalize_bound(row[1], is_end=True)
+        end: str | None = _normalize_bound(value=row[1], is_end=True)
     if start is None or end is None:
         return None
     start = _apply_cursor_start_floor(
@@ -148,21 +148,21 @@ def _query_target_max_raw(
     """Read the target cursor high-water mark or None when the target does not exist."""
 
     if not adapter.relation_exists(
-        connection,
+        connection=connection,
         database=target_database,
         schema=target_schema,
         name=target_name,
     ):
         return None
     sql: str = f"SELECT MAX({cursor_column}) FROM {target_relation}"
-    cursor: Any = adapter.execute(connection, sql=sql)
+    cursor: Any = adapter.execute(connection=connection, sql=sql)
     row: Any = cursor.fetchone()
     if row is None or row[0] is None:
         return None
     return row[0]
 
 
-def _floor_timestamp_bound(value: object, *, grain: str) -> object:
+def _floor_timestamp_bound(*, value: object, grain: str) -> object:
     if not isinstance(value, datetime):
         return value
     if grain == CursorGrain.SECOND:
@@ -180,7 +180,7 @@ def _floor_timestamp_bound(value: object, *, grain: str) -> object:
     return value
 
 
-def _increment_timestamp_bound(value: object, *, grain: str) -> object:
+def _increment_timestamp_bound(*, value: object, grain: str) -> object:
     if not isinstance(value, datetime):
         return value
     if grain == CursorGrain.SECOND:
@@ -192,15 +192,16 @@ def _increment_timestamp_bound(value: object, *, grain: str) -> object:
     if grain == CursorGrain.DAY:
         return value + timedelta(days=1)
     if grain == CursorGrain.MONTH:
-        year: int = value.year + (1 if value.month == 12 else 0)
-        month: int = 1 if value.month == 12 else value.month + 1
+        final_month: int = 12
+        year: int = value.year + (1 if value.month == final_month else 0)
+        month: int = 1 if value.month == final_month else value.month + 1
         return value.replace(year=year, month=month, day=1)
     if grain == CursorGrain.YEAR:
         return value.replace(year=value.year + 1, month=1, day=1)
     return value
 
 
-def _normalize_bound(value: object, *, is_end: bool) -> str | None:
+def _normalize_bound(*, value: object, is_end: bool) -> str | None:
     if isinstance(value, datetime):
         normalized: datetime = value + timedelta(seconds=1) if is_end else value
         return normalized.isoformat()

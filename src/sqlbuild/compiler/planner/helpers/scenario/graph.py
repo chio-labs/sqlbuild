@@ -57,7 +57,7 @@ def plan_scenario_graph(
     source_names: frozenset[str] = frozenset(source.name for source in project.sources)
     seed_names: frozenset[str] = frozenset(seed.name for seed in project.seeds)
     assertion_target_names, assertion_warnings = _extract_assertion_target_names(
-        scenario.assertion_ctes,
+        assertion_ctes=scenario.assertion_ctes,
         scenario_name=scenario.name,
         sql_analysis_enabled=sql_analysis_enabled,
         sql_analysis_dialect=sql_analysis_dialect,
@@ -146,8 +146,8 @@ def plan_scenario_graph(
 
 
 def _extract_assertion_target_names(
-    assertion_ctes: tuple[CompileSqlScenarioCte, ...],
     *,
+    assertion_ctes: tuple[CompileSqlScenarioCte, ...],
     scenario_name: str,
     sql_analysis_enabled: bool,
     sql_analysis_dialect: str | None,
@@ -160,15 +160,17 @@ def _extract_assertion_target_names(
             try:
                 names.extend(
                     _extract_assertion_target_names_with_sql_analysis(
-                        cte.sql_body,
+                        sql=cte.sql_body,
                         sql_analysis_dialect=sql_analysis_dialect,
                     )
                 )
             except ValueError as error:
                 warnings.append(
                     _error(
-                        f"Scenario '{scenario_name}' assertion CTE '{cte.name}' could not be "
-                        f"parsed with Polyglot: {error}",
+                        message=(
+                            f"Scenario '{scenario_name}' assertion CTE '{cte.name}' could not be "
+                            f"parsed with Polyglot: {error}"
+                        ),
                         code=str(getattr(error, "code", SCENARIO_PLAN_SQLGLOT_PARSE)),
                     )
                 )
@@ -180,7 +182,7 @@ def _extract_assertion_target_names(
 
 
 def _extract_assertion_target_names_with_sql_analysis(
-    sql: str, *, sql_analysis_dialect: str | None
+    *, sql: str, sql_analysis_dialect: str | None
 ) -> tuple[str, ...]:
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
@@ -228,7 +230,11 @@ def _declared_name_warnings(
     for expected_model_name in scenario.expected_model_names:
         if expected_model_name not in model_map:
             warnings.append(
-                _error(f"Scenario '{scenario.name}' expects unknown model '{expected_model_name}'.")
+                _error(
+                    message=(
+                        f"Scenario '{scenario.name}' expects unknown model '{expected_model_name}'."
+                    )
+                )
             )
 
     assertion_target_name: str
@@ -236,7 +242,7 @@ def _declared_name_warnings(
         if assertion_target_name not in model_map:
             warnings.append(
                 _error(
-                    f"Scenario '{scenario.name}' assertion references unknown model "
+                    message=f"Scenario '{scenario.name}' assertion references unknown model "
                     f"'{assertion_target_name}'."
                 )
             )
@@ -244,7 +250,7 @@ def _declared_name_warnings(
     if not target_model_names:
         warnings.append(
             _error(
-                f"Scenario '{scenario.name}' has no target models. Add __expected__<model> "
+                message=f"Scenario '{scenario.name}' has no target models. Add __expected__<model> "
                 "or reference a model with __ref(...) inside an __assert__ CTE."
             )
         )
@@ -254,7 +260,7 @@ def _declared_name_warnings(
         if ref_fixture_name not in model_map:
             warnings.append(
                 _error(
-                    f"Scenario '{scenario.name}' provides fixture for unknown model "
+                    message=f"Scenario '{scenario.name}' provides fixture for unknown model "
                     f"'{ref_fixture_name}'."
                 )
             )
@@ -264,7 +270,7 @@ def _declared_name_warnings(
         if source_fixture_name not in source_names:
             warnings.append(
                 _error(
-                    f"Scenario '{scenario.name}' provides fixture for unknown source "
+                    message=f"Scenario '{scenario.name}' provides fixture for unknown source "
                     f"'{source_fixture_name}'."
                 )
             )
@@ -274,7 +280,7 @@ def _declared_name_warnings(
         if seed_fixture_name not in seed_names:
             warnings.append(
                 _error(
-                    f"Scenario '{scenario.name}' provides fixture for unknown seed "
+                    message=f"Scenario '{scenario.name}' provides fixture for unknown seed "
                     f"'{seed_fixture_name}'."
                 )
             )
@@ -290,71 +296,135 @@ def _collect_upstream_requirements(
 ) -> _UpstreamRequirements:
     """Walk target model upstreams and collect required fixtures and functions."""
 
-    model_names: set[str] = set()
-    required_ref_fixture_names: set[str] = set()
-    required_source_names: set[str] = set()
-    required_seed_names: set[str] = set()
-    required_dbt_ref_fixture_names: set[str] = set()
-    function_deps: list[CompiledObjectKey] = []
-    seen_function_deps: set[CompiledObjectKey] = set()
-    warnings: list[PlanWarning] = []
-
-    def _walk(model_name: str) -> None:
+    def _walk(
+        model_name: str,
+        requirements: _UpstreamRequirements,
+    ) -> _UpstreamRequirements:
         if model_name in ref_fixture_names:
-            required_ref_fixture_names.add(model_name)
-            return
-        if model_name in model_names:
-            return
+            return _UpstreamRequirements(
+                model_names=requirements.model_names,
+                required_ref_fixture_names=requirements.required_ref_fixture_names | {model_name},
+                required_source_names=requirements.required_source_names,
+                required_seed_names=requirements.required_seed_names,
+                required_dbt_ref_fixture_names=requirements.required_dbt_ref_fixture_names,
+                function_deps=requirements.function_deps,
+                warnings=requirements.warnings,
+            )
+        if model_name in requirements.model_names:
+            return requirements
 
         model: CompiledModel | None = model_map.get(model_name)
         if model is None:
-            return
-        model_names.add(model_name)
+            return requirements
+        requirements = _UpstreamRequirements(
+            model_names=requirements.model_names | {model_name},
+            required_ref_fixture_names=requirements.required_ref_fixture_names,
+            required_source_names=requirements.required_source_names,
+            required_seed_names=requirements.required_seed_names,
+            required_dbt_ref_fixture_names=requirements.required_dbt_ref_fixture_names,
+            function_deps=requirements.function_deps,
+            warnings=requirements.warnings,
+        )
 
         dep_key: CompiledObjectKey
         for dep_key in model.deps:
             if dep_key.resource_type == CompiledResourceType.MODEL:
                 if dep_key.name in ref_fixture_names:
-                    required_ref_fixture_names.add(dep_key.name)
-                    continue
-                if dep_key.name not in model_map:
-                    warnings.append(
-                        _error(
-                            f"Scenario '{scenario_name}' requires model '{dep_key.name}', "
-                            "but it does not exist and no __ref__ fixture was provided."
-                        )
+                    requirements = _UpstreamRequirements(
+                        model_names=requirements.model_names,
+                        required_ref_fixture_names=requirements.required_ref_fixture_names
+                        | {dep_key.name},
+                        required_source_names=requirements.required_source_names,
+                        required_seed_names=requirements.required_seed_names,
+                        required_dbt_ref_fixture_names=requirements.required_dbt_ref_fixture_names,
+                        function_deps=requirements.function_deps,
+                        warnings=requirements.warnings,
                     )
                     continue
-                _walk(dep_key.name)
+                if dep_key.name not in model_map:
+                    requirements = _UpstreamRequirements(
+                        model_names=requirements.model_names,
+                        required_ref_fixture_names=requirements.required_ref_fixture_names,
+                        required_source_names=requirements.required_source_names,
+                        required_seed_names=requirements.required_seed_names,
+                        required_dbt_ref_fixture_names=requirements.required_dbt_ref_fixture_names,
+                        function_deps=requirements.function_deps,
+                        warnings=(
+                            *requirements.warnings,
+                            _error(
+                                message=(
+                                    f"Scenario '{scenario_name}' requires model "
+                                    f"'{dep_key.name}', "
+                                    "but it does not exist and no __ref__ fixture was provided."
+                                )
+                            ),
+                        ),
+                    )
+                    continue
+                requirements = _walk(dep_key.name, requirements)
                 continue
             if dep_key.resource_type == CompiledResourceType.SOURCE:
-                required_source_names.add(dep_key.name)
+                requirements = _UpstreamRequirements(
+                    model_names=requirements.model_names,
+                    required_ref_fixture_names=requirements.required_ref_fixture_names,
+                    required_source_names=requirements.required_source_names | {dep_key.name},
+                    required_seed_names=requirements.required_seed_names,
+                    required_dbt_ref_fixture_names=requirements.required_dbt_ref_fixture_names,
+                    function_deps=requirements.function_deps,
+                    warnings=requirements.warnings,
+                )
                 continue
             if dep_key.resource_type == CompiledResourceType.SEED:
-                required_seed_names.add(dep_key.name)
+                requirements = _UpstreamRequirements(
+                    model_names=requirements.model_names,
+                    required_ref_fixture_names=requirements.required_ref_fixture_names,
+                    required_source_names=requirements.required_source_names,
+                    required_seed_names=requirements.required_seed_names | {dep_key.name},
+                    required_dbt_ref_fixture_names=requirements.required_dbt_ref_fixture_names,
+                    function_deps=requirements.function_deps,
+                    warnings=requirements.warnings,
+                )
                 continue
             if dep_key.resource_type == CompiledResourceType.DBT_REF:
-                required_dbt_ref_fixture_names.add(dep_key.name.replace(".", "__"))
+                requirements = _UpstreamRequirements(
+                    model_names=requirements.model_names,
+                    required_ref_fixture_names=requirements.required_ref_fixture_names,
+                    required_source_names=requirements.required_source_names,
+                    required_seed_names=requirements.required_seed_names,
+                    required_dbt_ref_fixture_names=requirements.required_dbt_ref_fixture_names
+                    | {dep_key.name.replace(".", "__")},
+                    function_deps=requirements.function_deps,
+                    warnings=requirements.warnings,
+                )
                 continue
             if dep_key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
-                if dep_key in seen_function_deps:
+                if dep_key in requirements.function_deps:
                     continue
-                seen_function_deps.add(dep_key)
-                function_deps.append(dep_key)
+                requirements = _UpstreamRequirements(
+                    model_names=requirements.model_names,
+                    required_ref_fixture_names=requirements.required_ref_fixture_names,
+                    required_source_names=requirements.required_source_names,
+                    required_seed_names=requirements.required_seed_names,
+                    required_dbt_ref_fixture_names=requirements.required_dbt_ref_fixture_names,
+                    function_deps=(*requirements.function_deps, dep_key),
+                    warnings=requirements.warnings,
+                )
+        return requirements
 
+    requirements: _UpstreamRequirements = _UpstreamRequirements(
+        model_names=frozenset(),
+        required_ref_fixture_names=frozenset(),
+        required_source_names=frozenset(),
+        required_seed_names=frozenset(),
+        required_dbt_ref_fixture_names=frozenset(),
+        function_deps=(),
+        warnings=(),
+    )
     target_model_name: str
     for target_model_name in target_model_names:
-        _walk(target_model_name)
+        requirements = _walk(target_model_name, requirements)
 
-    return _UpstreamRequirements(
-        model_names=frozenset(model_names),
-        required_ref_fixture_names=frozenset(required_ref_fixture_names),
-        required_source_names=frozenset(required_source_names),
-        required_seed_names=frozenset(required_seed_names),
-        required_dbt_ref_fixture_names=frozenset(required_dbt_ref_fixture_names),
-        function_deps=tuple(function_deps),
-        warnings=tuple(warnings),
-    )
+    return requirements
 
 
 def _dedupe_names(names: tuple[str, ...]) -> tuple[str, ...]:
@@ -373,7 +443,7 @@ def _fixture_name_for(name: str) -> str:
     return name.replace(".", "__")
 
 
-def _error(message: str, *, code: str = SCENARIO_PLAN_GRAPH_VALIDATION) -> PlanWarning:
+def _error(*, message: str, code: str = SCENARIO_PLAN_GRAPH_VALIDATION) -> PlanWarning:
     return PlanWarning(
         model_name=None,
         severity=WarningSeverity.ERROR,

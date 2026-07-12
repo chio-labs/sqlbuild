@@ -218,7 +218,7 @@ def test_given_watermark_classifications_when_reporting_then_groups_warning_sect
     )
 
     result: str = format_node_source_watermark_staleness_report(
-        report,
+        report=report,
         section_limit=test_case.section_limit,
     )
 

@@ -164,8 +164,8 @@ def load_resource_kind(source: SourceEntry) -> ExecutionResourceKind:
 
 
 def skipped_load_result(
-    source: SourceEntry,
     *,
+    source: SourceEntry,
     reason: str | None = None,
     mode: SkipMode = SkipMode.HARD,
 ) -> LoadExecutionResult:

@@ -58,19 +58,19 @@ def test_given_cli_document_when_rendering_simple_output_then_returns_expected_t
 ) -> None:
     doc: CliDocument = CliDocument(CliStyle(use_color=test_case.use_color))
 
-    doc.header("Title")
+    doc.header(text="Title")
     doc.blank()
-    doc.field("Project", value="demo")
-    doc.field("Config", value="sqlbuild_project.toml", value_padding="  ")
+    doc.field(label="Project", value="demo")
+    doc.field(label="Config", value="sqlbuild_project.toml", value_padding="  ")
     doc.blank()
     doc.section("Next steps")
     doc.line("  1. Add sources")
-    doc.command_line("  2. ", command="sqb compile")
+    doc.command_line(prefix="  2. ", command="sqb compile")
     doc.blank()
     doc.section("Objects")
     doc.items(("model_a", "model_b"))
     doc.title_section("Try")
-    doc.commands(("sqb build",), style_command=False)
+    doc.commands(commands=("sqb build",), style_command=False)
 
     assert doc.render() == test_case.expected_rendered
 
@@ -98,15 +98,15 @@ def test_given_cli_document_when_rendering_compound_helpers_then_returns_expecte
 ) -> None:
     doc: CliDocument = CliDocument(CliStyle(use_color=test_case.use_color))
 
-    doc.header("Summary", suffix="dev")
+    doc.header(text="Summary", suffix="dev")
     doc.fields(
-        (
+        rows=(
             ("target status", "finalized"),
             ("promoted models", "3"),
         ),
         label_width=15,
     )
     doc.section("Commands")
-    doc.commands(("sqb compile", "sqb build"), numbered=True)
+    doc.commands(commands=("sqb compile", "sqb build"), numbered=True)
 
     assert doc.render() == test_case.expected_rendered

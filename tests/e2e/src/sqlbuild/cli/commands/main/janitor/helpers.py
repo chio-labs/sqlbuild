@@ -73,7 +73,7 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
         connection.execute("CREATE TABLE partition_state AS SELECT 1 AS id")
         write_fingerprint(
             connection=connection,
-            execute=lambda active_connection, sql: active_connection.execute(sql),
+            execute=lambda *, connection, sql: connection.execute(sql),
             database=None,
             schema="main",
             fingerprint=Fingerprint(
@@ -127,7 +127,7 @@ def create_direct_state_history(*, db_path: Path) -> None:
         ):
             write_fingerprint(
                 connection=connection,
-                execute=lambda active_connection, sql: active_connection.execute(sql),
+                execute=lambda *, connection, sql: connection.execute(sql),
                 database=None,
                 schema="main",
                 fingerprint=Fingerprint(
@@ -148,7 +148,7 @@ def create_direct_state_history(*, db_path: Path) -> None:
             )
             write_source_freshness_records(
                 connection=connection,
-                execute=lambda active_connection, sql: active_connection.execute(sql),
+                execute=lambda *, connection, sql: connection.execute(sql),
                 database=None,
                 schema="main",
                 records=(

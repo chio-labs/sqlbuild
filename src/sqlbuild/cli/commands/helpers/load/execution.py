@@ -69,11 +69,21 @@ def execute_load_plan(
         ),
         callbacks=LoadCallbacks(
             on_load_start=load_progress.on_start,
-            on_load_progress=load_progress.on_progress,
+            on_load_progress=lambda source, message: load_progress.on_progress(
+                source=source, message=message
+            ),
             on_load_complete=load_progress.on_complete,
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     return LoadRunOutcome(

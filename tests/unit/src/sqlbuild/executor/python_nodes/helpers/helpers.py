@@ -263,7 +263,9 @@ def fetch_orders(ctx: TaskContext) -> object:
 
 @asset(depends_on=(fetch_orders,))
 def export_orders(ctx: AssetContext) -> object:
-    upstream_result: NodeResultEnvelope = cast(NodeResultEnvelope, ctx.result_of(fetch_orders))
+    upstream_result: NodeResultEnvelope = cast(
+        NodeResultEnvelope, ctx.result_of(node_function=fetch_orders)
+    )
     payload: object = upstream_result.payload
     metadata: object = upstream_result.metadata
     if not isinstance(payload, dict) or not isinstance(metadata, dict):
@@ -281,11 +283,11 @@ def export_orders(ctx: AssetContext) -> object:
 
 
 def skip_empty_orders(ctx: TaskContext) -> object:
-    return ctx.skip("No new orders")
+    return ctx.skip(reason="No new orders")
 
 
 def hard_skip_empty_orders(ctx: TaskContext) -> object:
-    return ctx.skip("No new orders", mode=SkipMode.HARD)
+    return ctx.skip(reason="No new orders", mode=SkipMode.HARD)
 
 
 def export_after_skip(ctx: AssetContext) -> object:
@@ -462,7 +464,7 @@ def profile_stg_orders(ctx: TaskContext) -> object:
 def export_stg_profile(ctx: AssetContext) -> object:
     READ_SIDE_CALLS.append("export_stg_profile")
     return ctx.result(
-        payload=cast(NodeResultEnvelope, ctx.result_of(profile_stg_orders)).payload,
+        payload=cast(NodeResultEnvelope, ctx.result_of(node_function=profile_stg_orders)).payload,
         materialized=False,
     )
 
@@ -501,13 +503,13 @@ def check_upstream_task(_ctx: object) -> object:
 
 def passing_python_check(ctx: CheckContext) -> object:
     metadata: dict[str, object] = cast(
-        NodeResultEnvelope, ctx.result_of(check_upstream_task)
+        NodeResultEnvelope, ctx.result_of(node_function=check_upstream_task)
     ).metadata
-    return ctx.pass_("passed", metadata={"rows": metadata["rows"]})
+    return ctx.pass_(message="passed", metadata={"rows": metadata["rows"]})
 
 
 def warning_python_check(ctx: CheckContext) -> object:
-    return ctx.warn("warned")
+    return ctx.warn(message="warned")
 
 
 def false_python_check(_ctx: CheckContext) -> object:

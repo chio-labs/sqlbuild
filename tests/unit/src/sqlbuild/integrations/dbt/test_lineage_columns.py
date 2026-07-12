@@ -421,8 +421,8 @@ def test_given_column_lineage_trace_when_formatting_human_output_then_includes_e
 
     assert trace is not None
     outputs: dict[DbtLineageOutputFormat, str] = {
-        DbtLineageOutputFormat.LIST: format_dbt_column_lineage_list(trace, use_color=False),
-        DbtLineageOutputFormat.TREE: format_dbt_column_lineage_tree(trace, use_color=False),
+        DbtLineageOutputFormat.LIST: format_dbt_column_lineage_list(trace=trace, use_color=False),
+        DbtLineageOutputFormat.TREE: format_dbt_column_lineage_tree(trace=trace, use_color=False),
     }
     output: str = outputs[test_case.output_format]
     expected_fragment: str
@@ -462,7 +462,7 @@ def test_given_no_edge_column_trace_when_formatting_tree_then_explains_no_depend
     )
 
     assert trace is not None
-    output: str = format_dbt_column_lineage_tree(trace, use_color=False)
+    output: str = format_dbt_column_lineage_tree(trace=trace, use_color=False)
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in output

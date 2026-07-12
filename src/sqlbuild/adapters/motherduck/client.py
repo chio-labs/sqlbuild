@@ -66,18 +66,18 @@ class MotherDuckAdapter(DuckDbBackedAdapter):
                 for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
-        values_sql: str = ", ".join(
-            "("
-            + ", ".join(
-                self.render_loader_value_literal(
-                    value=row.get(column_name),
-                    logical_type=inferred_types.get(column_name),
+        value_rows: list[str] = []
+        for row in rows:
+            row_values: list[str] = []
+            for column_name in column_names:
+                row_values.append(
+                    self.render_loader_value_literal(
+                        value=row.get(column_name),
+                        logical_type=inferred_types.get(column_name),
+                    )
                 )
-                for column_name in column_names
-            )
-            + ")"
-            for row in rows
-        )
+            value_rows.append(f"({', '.join(row_values)})")
+        values_sql: str = ", ".join(value_rows)
         column_sql: str = ", ".join(
             self.render_identifier(column_name) for column_name in column_names
         )
@@ -153,19 +153,19 @@ class MotherDuckAdapter(DuckDbBackedAdapter):
         extensions: list[str] | tuple[str, ...] = duckdb_config.get("extensions", ())
         extension_name: str
         for extension_name in extensions:
-            self.execute(connection, sql=f"INSTALL '{extension_name}'")
-            self.execute(connection, sql=f"LOAD '{extension_name}'")
+            self.execute(connection=connection, sql=f"INSTALL '{extension_name}'")
+            self.execute(connection=connection, sql=f"LOAD '{extension_name}'")
 
         settings: dict[str, object] = duckdb_config.get("settings", {})
         setting_key: str
         setting_value: object
         for setting_key, setting_value in settings.items():
-            self.execute(connection, sql=f"SET {setting_key} = '{setting_value}'")
+            self.execute(connection=connection, sql=f"SET {setting_key} = '{setting_value}'")
 
         attach_entries: list[dict[str, object]] = duckdb_config.get("attach", [])
         attach_entry: dict[str, object]
         for attach_entry in attach_entries:
-            self.execute(connection, sql=self.duckdb_build_attach_sql(attach_entry))
+            self.execute(connection=connection, sql=self.duckdb_build_attach_sql(attach_entry))
 
         return connection
 

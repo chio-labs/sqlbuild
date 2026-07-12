@@ -81,12 +81,12 @@ def test_given_task_context_when_using_helpers_then_records_and_qualifies_names(
         query_result: object = context.query("SELECT * FROM scratch_orders")
         context.log("loading scratch orders")
     qualified_name: str = context.qualify_name(
-        test_case.raw_name,
+        name=test_case.raw_name,
         database=test_case.database,
         schema=test_case.schema,
     )
-    default_qualified_name: str = context.qualify_name(test_case.raw_name)
-    already_qualified_name: str = context.qualify_name("custom.schema.table")
+    default_qualified_name: str = context.qualify_name(name=test_case.raw_name)
+    already_qualified_name: str = context.qualify_name(name="custom.schema.table")
 
     assert execute_result == test_case.expected_execute_result
     assert query_result == test_case.expected_query_result
@@ -139,7 +139,7 @@ def test_given_asset_context_when_building_results_then_returns_result_and_skip_
         materialized=False,
     )
     skip_result: PythonNodeSkipResult = context.skip(
-        test_case.expected_query_result,
+        reason=test_case.expected_query_result,
         mode=SkipMode.SOFT,
         metadata={"cursor": "2026-05-30"},
     )
@@ -154,7 +154,7 @@ def test_given_asset_context_when_building_results_then_returns_result_and_skip_
         mode=SkipMode.SOFT,
         metadata={"cursor": "2026-05-30"},
     )
-    assert context.qualify_name(test_case.raw_name) == test_case.expected_qualified_name
+    assert context.qualify_name(name=test_case.raw_name) == test_case.expected_qualified_name
     assert context.run_id == test_case.expected_run_id
     assert context.target == test_case.expected_target
     assert context.vars == test_case.expected_vars
@@ -200,7 +200,7 @@ def test_given_context_skip_when_mode_is_string_then_normalizes_to_skip_mode(
         logger_name="sqlbuild.task.fetch_orders",
     )
 
-    skip_result: PythonNodeSkipResult = context.skip("optional", mode=test_case.raw_mode)
+    skip_result: PythonNodeSkipResult = context.skip(reason="optional", mode=test_case.raw_mode)
 
     assert skip_result.mode is test_case.expected_mode
 
@@ -247,7 +247,7 @@ def test_given_task_context_when_inspecting_api_then_loader_only_fields_are_abse
         materialized=None,
     )
     assert test_case.expected_error_fragment not in inspect.signature(context.result).parameters
-    assert context.qualify_name(test_case.raw_name) == test_case.expected_qualified_name
+    assert context.qualify_name(name=test_case.raw_name) == test_case.expected_qualified_name
     assert not hasattr(context, loader_only_attribute_names()[0])
     assert not hasattr(context, loader_only_attribute_names()[1])
     assert not hasattr(context, loader_only_attribute_names()[2])
@@ -344,13 +344,13 @@ def test_given_context_with_result_store_when_reading_upstream_outputs_then_retu
         ),
     )
 
-    result: object = context.result_of(upstream_task)
+    result: object = context.result_of(node_function=upstream_task)
     assert result == expected_result
-    assert context.result_of(skipped_upstream_task, default=test_case.expected_default) == (
-        test_case.expected_default
-    )
+    assert context.result_of(
+        node_function=skipped_upstream_task, default=test_case.expected_default
+    ) == (test_case.expected_default)
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        context.result_of(skipped_upstream_task)
+        context.result_of(node_function=skipped_upstream_task)
 
 
 @pytest.mark.parametrize(
@@ -375,8 +375,8 @@ def test_given_context_without_result_store_when_reading_result_then_raises_or_r
         logger_name="sqlbuild.task.fetch_orders",
     )
 
-    assert context.result_of(upstream_task, default=test_case.expected_default) == (
+    assert context.result_of(node_function=upstream_task, default=test_case.expected_default) == (
         test_case.expected_default
     )
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        context.result_of(upstream_task)
+        context.result_of(node_function=upstream_task)

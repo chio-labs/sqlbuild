@@ -325,8 +325,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def get_table_freshness_metadata(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         name: str,
@@ -350,16 +350,18 @@ class SnowflakeAdapter(BaseAdapter):
         finally:
             cursor.close()
         if row is None:
-            raise AdapterUserError(f"Snowflake table freshness metadata not found for {name}")
+            raise AdapterUserError(
+                message=f"Snowflake table freshness metadata not found for {name}"
+            )
         table_type: str = str(row[0]).upper()
         if table_type != "BASE TABLE":
             raise AdapterUserError(
-                "Snowflake table freshness metadata only supports physical tables; "
+                message="Snowflake table freshness metadata only supports physical tables; "
                 f"found {table_type}"
             )
         if row[1] is None:
             raise AdapterUserError(
-                f"Snowflake table freshness metadata is missing LAST_ALTERED for {name}"
+                message=f"Snowflake table freshness metadata is missing LAST_ALTERED for {name}"
             )
         return TableFreshnessMetadata(
             data_version=row[1],
@@ -369,8 +371,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def get_tables_freshness_metadata(
         self,
-        connection: Any,
         *,
+        connection: Any,
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         if not requests:
@@ -435,12 +437,12 @@ class SnowflakeAdapter(BaseAdapter):
                 table_type: str = str(row[3]).upper()
                 if table_type != "BASE TABLE":
                     raise AdapterUserError(
-                        "Snowflake table freshness metadata only supports physical tables; "
+                        message="Snowflake table freshness metadata only supports physical tables; "
                         f"found {table_type}"
                     )
                 if row[4] is None:
                     raise AdapterUserError(
-                        "Snowflake table freshness metadata is missing LAST_ALTERED "
+                        message="Snowflake table freshness metadata is missing LAST_ALTERED "
                         f"for {matched_request.name}"
                     )
                 results[matched_request] = TableFreshnessMetadata(
@@ -454,7 +456,7 @@ class SnowflakeAdapter(BaseAdapter):
         if missing_requests:
             missing_names: str = ", ".join(request.name for request in missing_requests)
             raise AdapterUserError(
-                f"Snowflake table freshness metadata not found for {missing_names}"
+                message=f"Snowflake table freshness metadata not found for {missing_names}"
             )
         return results
 
@@ -488,8 +490,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def ensure_schema(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         statement_recorder: StatementRecorder,
@@ -503,7 +505,7 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TRANSIENT TABLE {destination} AS {sql}",)
@@ -632,8 +634,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def create_table_as(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
@@ -643,12 +645,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def create_view_as(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
@@ -657,12 +659,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def create_function(
         self,
-        connection: Any,
         *,
+        connection: Any,
         definition: FunctionDefinition,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -680,12 +682,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def drop(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
@@ -694,12 +696,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def drop_view(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
@@ -710,12 +712,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def rename(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         statement_recorder: StatementRecorder,
@@ -728,8 +730,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def swap(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         statement_recorder: StatementRecorder,
@@ -739,12 +741,12 @@ class SnowflakeAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, sql=stmt)
+                self.execute(connection=connection, sql=stmt)
 
     def clone(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         hard_copy: bool = False,
@@ -760,12 +762,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def replace_table_from_relation(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         origin: str,
         statement_recorder: StatementRecorder,
@@ -777,12 +779,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def move_or_copy_relation(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         remove_origin: bool,
@@ -791,20 +793,21 @@ class SnowflakeAdapter(BaseAdapter):
     ) -> None:
         origin_parts: list[str] = origin.split(".")
         destination_parts: list[str] = destination.split(".")
+        schema_and_relation_part_count: int = 2
         if (
             remove_origin
-            and len(origin_parts) >= 2
-            and len(destination_parts) >= 2
+            and len(origin_parts) >= schema_and_relation_part_count
+            and len(destination_parts) >= schema_and_relation_part_count
             and origin_parts[:-2] == destination_parts[:-2]
         ):
             statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
             statement_recorder.record_many(statements)
             stmt: str
             for stmt in statements:
-                self.execute(connection, sql=stmt)
+                self.execute(connection=connection, sql=stmt)
             return
         if not allow_copy_fallback:
-            raise AdapterUserError("Snowflake relation move/copy requires --allow-copy")
+            raise AdapterUserError(message="Snowflake relation move/copy requires --allow-copy")
         statements: tuple[str, ...] = self.render_replace_table_from_relation(
             destination=destination,
             origin=origin,
@@ -814,12 +817,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def append(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
@@ -831,12 +834,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def delete_insert(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
@@ -851,12 +854,12 @@ class SnowflakeAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, sql=stmt)
+                self.execute(connection=connection, sql=stmt)
 
     def delete_insert_cursor(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         cursor_column: str,
@@ -877,7 +880,7 @@ class SnowflakeAdapter(BaseAdapter):
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection, sql=stmt)
+                self.execute(connection=connection, sql=stmt)
 
     def sql_analysis_dialect(self) -> str | None:
         """Return the SQL analysis dialect name for this adapter, if any."""
@@ -947,18 +950,18 @@ class SnowflakeAdapter(BaseAdapter):
                 for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
-        values_sql: str = ", ".join(
-            "("
-            + ", ".join(
-                self.render_loader_value_literal(
-                    value=row.get(column_name),
-                    logical_type=inferred_types.get(column_name),
+        value_rows: list[str] = []
+        for row in rows:
+            row_values: list[str] = []
+            for column_name in column_names:
+                row_values.append(
+                    self.render_loader_value_literal(
+                        value=row.get(column_name),
+                        logical_type=inferred_types.get(column_name),
+                    )
                 )
-                for column_name in column_names
-            )
-            + ")"
-            for row in rows
-        )
+            value_rows.append(f"({', '.join(row_values)})")
+        values_sql: str = ", ".join(value_rows)
         column_sql: str = ", ".join(
             self.render_identifier(column_name) for column_name in column_names
         )
@@ -1393,7 +1396,7 @@ class SnowflakeAdapter(BaseAdapter):
             import snowflake.connector
         except ImportError as error:
             raise AdapterUserError(
-                "Snowflake adapter requires optional dependency "
+                message="Snowflake adapter requires optional dependency "
                 "snowflake-connector-python. Install with: sqlbuild[snowflake]",
                 code="A301",
             ) from error
@@ -1422,16 +1425,16 @@ class SnowflakeAdapter(BaseAdapter):
         )
         return connection
 
-    def execute(self, connection: _SnowflakeConnection, *, sql: str) -> Any:
+    def execute(self, *, connection: _SnowflakeConnection, sql: str) -> Any:
         """Execute a SQL statement against a Snowflake connection."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.snowflake"), sql=sql)
         return connection.execute(sql)
 
-    def query(self, connection: Any, *, sql: str, limit: int | None) -> QueryResult:
+    def query(self, *, connection: Any, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""
 
-        cursor: Any = self.execute(connection, sql=sql)
+        cursor: Any = self.execute(connection=connection, sql=sql)
         try:
             description: Any | None = getattr(cursor, "description", None)
             if description is None:
@@ -1472,8 +1475,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def relation_exists(
         self,
-        connection: _SnowflakeConnection,
         *,
+        connection: _SnowflakeConnection,
         database: str | None,
         schema: str | None,
         name: str,
@@ -1498,8 +1501,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def list_relations(
         self,
-        connection: _SnowflakeConnection,
         *,
+        connection: _SnowflakeConnection,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -1541,8 +1544,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def list_functions(
         self,
-        connection: _SnowflakeConnection,
         *,
+        connection: _SnowflakeConnection,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -1581,8 +1584,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def get_columns(
         self,
-        connection: _SnowflakeConnection,
         *,
+        connection: _SnowflakeConnection,
         database: str | None,
         schema: str | None,
         name: str,
@@ -1621,8 +1624,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def get_all_columns(
         self,
-        connection: _SnowflakeConnection,
         *,
+        connection: _SnowflakeConnection,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -1819,7 +1822,7 @@ class SnowflakeAdapter(BaseAdapter):
         argument_sql: str = ", ".join(f"{argument.name} {argument.type}" for argument in arguments)
         if return_columns:
             if language != FunctionLanguage.SQL:
-                raise AdapterUserError("Snowflake table functions must use SQL language")
+                raise AdapterUserError(message="Snowflake table functions must use SQL language")
             column_sql: str = ", ".join(f"{column.name} {column.type}" for column in return_columns)
             del returns, runtime_version, entry_point, packages
             return (
@@ -1830,7 +1833,7 @@ class SnowflakeAdapter(BaseAdapter):
         if language == FunctionLanguage.PYTHON:
             if runtime_version is None or entry_point is None:
                 raise AdapterUserError(
-                    "Snowflake Python UDFs require runtime_version and entry_point"
+                    message="Snowflake Python UDFs require runtime_version and entry_point"
                 )
             package_clause: str = ""
             if packages:
@@ -1852,7 +1855,7 @@ class SnowflakeAdapter(BaseAdapter):
             f"AS $$\n{body_sql}\n$$",
         )
 
-    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:
             return value
         if cursor_type == CursorKind.TIMESTAMP:
@@ -1946,13 +1949,13 @@ class SnowflakeAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
 
-    def relation_names_match(self, left: str, *, right: str) -> bool:
-        return self._relation_names_match_impl(left, right=right)
+    def relation_names_match(self, *, left: str, right: str) -> bool:
+        return self._relation_names_match_impl(left=left, right=right)
 
     def durable_clone(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         origin_is_transient: bool = False,
@@ -1964,12 +1967,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
-            self.execute(connection, sql=stmt)
+            self.execute(connection=connection, sql=stmt)
 
     def load_seed(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
@@ -1981,7 +1984,7 @@ class SnowflakeAdapter(BaseAdapter):
         del infer_types
         if replace:
             self.drop(
-                connection,
+                connection=connection,
                 destination=destination,
                 if_exists=True,
                 statement_recorder=statement_recorder,
@@ -1989,7 +1992,7 @@ class SnowflakeAdapter(BaseAdapter):
         column_defs: str = ", ".join(f"{col.name} {col.type}" for col in columns)
         create_sql: str = f"CREATE TRANSIENT TABLE {destination} ({column_defs})"
         statement_recorder.record(create_sql)
-        self.execute(connection, sql=create_sql)
+        self.execute(connection=connection, sql=create_sql)
 
         column_names: tuple[str, ...] = tuple(column.name for column in columns)
         placeholders: str = ", ".join(["%s"] * len(column_names))
@@ -2017,7 +2020,9 @@ class SnowflakeAdapter(BaseAdapter):
                 rows.append(
                     tuple(
                         self._normalize_seed_csv_value(
-                            row.get(column_name), column_name=column_name, csv_settings=csv_settings
+                            value=row.get(column_name),
+                            column_name=column_name,
+                            csv_settings=csv_settings,
                         )
                         for column_name in column_names
                     )
@@ -2033,24 +2038,24 @@ class SnowflakeAdapter(BaseAdapter):
 
     def merge(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        source_columns: tuple[str, ...] = self.query_column_names(connection, sql=sql)
+        source_columns: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
         statements: tuple[str, ...] = self.render_merge(
             destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
-    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:
         """Return Snowflake query column names using cursor description."""
 
         cursor: Any = connection.cursor()
@@ -2065,8 +2070,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def get_relation_max_cursor(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation: str,
         cursor_column: str,
     ) -> object | None:
@@ -2085,8 +2090,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def add_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
@@ -2097,12 +2102,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def drop_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -2113,12 +2118,12 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def alter_column_types(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
@@ -2129,17 +2134,21 @@ class SnowflakeAdapter(BaseAdapter):
         statement_recorder.record_many(statements)
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     def diff_schema(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
     ) -> SchemaDiffResult:
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
-        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=right)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
+        )
+        right_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=right
+        )
         left_map: dict[str, str] = {col.name: col.type for col in left_columns}
         right_map: dict[str, str] = {col.name: col.type for col in right_columns}
 
@@ -2173,8 +2182,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def diff_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -2185,7 +2194,9 @@ class SnowflakeAdapter(BaseAdapter):
         end_cursor: Any | None = None,
     ) -> RowDiffResult:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
+        )
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2203,13 +2214,13 @@ class SnowflakeAdapter(BaseAdapter):
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=right_cte,
             relation_label="right",
             keys=keys,
@@ -2258,7 +2269,7 @@ class SnowflakeAdapter(BaseAdapter):
             f"COUNT(CASE WHEN __left.{keys[0]} IS NULL THEN 1 END) AS right_only"
             f"{column_count_sql} FROM __left FULL OUTER JOIN __right ON {join_condition}"
         )
-        row: tuple[Any, ...] = self.execute(connection, sql=diff_sql).fetchone()
+        row: tuple[Any, ...] = self.execute(connection=connection, sql=diff_sql).fetchone()
         column_results: tuple[RowDiffColumnResult, ...] = tuple(
             RowDiffColumnResult(
                 name=col,
@@ -2280,8 +2291,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def count_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation: str,
         cursor_column: str | None = None,
         start_cursor: Any | None = None,
@@ -2295,13 +2306,13 @@ class SnowflakeAdapter(BaseAdapter):
         query: str = f"SELECT COUNT(*) FROM {relation}"
         if cursor_filter:
             query += f" WHERE {cursor_filter}"
-        result: Any = self.execute(connection, sql=query).fetchone()
+        result: Any = self.execute(connection=connection, sql=query).fetchone()
         return int(result[0])
 
     def sample_unequal_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -2313,7 +2324,9 @@ class SnowflakeAdapter(BaseAdapter):
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
-        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(connection, relation=left)
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
+        )
         compare_columns: tuple[str, ...] = tuple(
             col.name
             for col in left_columns
@@ -2331,13 +2344,13 @@ class SnowflakeAdapter(BaseAdapter):
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=right_cte,
             relation_label="right",
             keys=keys,
@@ -2373,7 +2386,7 @@ class SnowflakeAdapter(BaseAdapter):
             f"AND ({unequal_condition}) "
             f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
+        rows: list[tuple[Any, ...]] = self.execute(connection=connection, sql=sample_sql).fetchall()
         samples: list[RowDiffSampleRow] = []
         row: tuple[Any, ...]
         for row in rows:
@@ -2403,8 +2416,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def sample_side_only_rows(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         unique_key: str | tuple[str, ...],
@@ -2426,13 +2439,13 @@ class SnowflakeAdapter(BaseAdapter):
             left_cte += f" WHERE {cursor_filter}"
             right_cte += f" WHERE {cursor_filter}"
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
         )
         self.validate_row_diff_keys(
-            connection,
+            connection=connection,
             relation_sql=right_cte,
             relation_label="right",
             keys=keys,
@@ -2446,7 +2459,7 @@ class SnowflakeAdapter(BaseAdapter):
         elif side == "right":
             side_condition = f"__right.{keys[0]} IS NOT NULL AND __left.{keys[0]} IS NULL"
         else:
-            raise AdapterUserError("sample_side_only_rows side must be 'left' or 'right'")
+            raise AdapterUserError(message="sample_side_only_rows side must be 'left' or 'right'")
         sample_sql: str = (
             f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
             f"SELECT {key_select_sql} "
@@ -2454,10 +2467,16 @@ class SnowflakeAdapter(BaseAdapter):
             f"WHERE {side_condition} "
             f"ORDER BY {', '.join(f'__key_{key}' for key in keys)} LIMIT {limit}"
         )
-        rows: list[tuple[Any, ...]] = self.execute(connection, sql=sample_sql).fetchall()
-        return tuple(tuple((key, row[index]) for index, key in enumerate(keys)) for row in rows)
+        rows: list[tuple[Any, ...]] = self.execute(connection=connection, sql=sample_sql).fetchall()
+        samples: list[tuple[tuple[str, object], ...]] = []
+        for row in rows:
+            sample: list[tuple[str, object]] = []
+            for index, key in enumerate(keys):
+                sample.append((key, row[index]))
+            samples.append(tuple(sample))
+        return tuple(samples)
 
-    def describe_relation(self, connection: Any, *, relation: str) -> tuple[ColumnInfo, ...]:
+    def describe_relation(self, *, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         """Return Snowflake relation metadata using DESCRIBE TABLE."""
 
         cursor: Any = connection.cursor()
@@ -2507,22 +2526,24 @@ class SnowflakeAdapter(BaseAdapter):
 
     def validate_row_diff_keys(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation_sql: str,
         relation_label: str,
         keys: tuple[str, ...],
     ) -> None:
         if not keys:
-            raise AdapterUserError("row diff requires at least one unique_key column")
+            raise AdapterUserError(message="row diff requires at least one unique_key column")
         null_condition: str = " OR ".join(f"{key} IS NULL" for key in keys)
         null_count_sql: str = (
             f"SELECT COUNT(*) FROM ({relation_sql}) AS __key_check WHERE {null_condition}"
         )
-        null_row: tuple[Any, ...] = self.execute(connection, sql=null_count_sql).fetchone()
+        null_row: tuple[Any, ...] = self.execute(
+            connection=connection, sql=null_count_sql
+        ).fetchone()
         if int(null_row[0]) > 0:
             raise AdapterUserError(
-                f"row diff {relation_label} relation contains null unique_key values"
+                message=f"row diff {relation_label} relation contains null unique_key values"
             )
 
         key_list: str = ", ".join(keys)
@@ -2533,11 +2554,11 @@ class SnowflakeAdapter(BaseAdapter):
             f") AS __duplicates"
         )
         duplicate_row: tuple[Any, ...] = self.execute(
-            connection, sql=duplicate_count_sql
+            connection=connection, sql=duplicate_count_sql
         ).fetchone()
         if int(duplicate_row[0]) > 0:
             raise AdapterUserError(
-                f"row diff {relation_label} relation contains duplicate unique_key values"
+                message=f"row diff {relation_label} relation contains duplicate unique_key values"
             )
 
     def build_row_diff_equal_expression(
@@ -2586,7 +2607,7 @@ class SnowflakeAdapter(BaseAdapter):
         if column_tolerance is not None:
             if self.normalize_row_diff_numeric_type(column_type) is None:
                 raise AdapterUserError(
-                    f"row diff tolerance for non-numeric column '{column}' is invalid"
+                    message=f"row diff tolerance for non-numeric column '{column}' is invalid"
                 )
             self.validate_row_diff_tolerance(
                 column=column,
@@ -2607,7 +2628,7 @@ class SnowflakeAdapter(BaseAdapter):
     def validate_row_diff_tolerance(self, *, column: str, tolerance: RowDiffTolerance) -> None:
         if tolerance.absolute is None and tolerance.relative is None:
             raise AdapterUserError(
-                f"row diff tolerance for column '{column}' must define absolute or relative"
+                message=f"row diff tolerance for column '{column}' must define absolute or relative"
             )
 
     def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
@@ -2644,7 +2665,7 @@ class SnowflakeAdapter(BaseAdapter):
             statements.append(f"USE SCHEMA {normalized_schema}")
         statement: str
         for statement in statements:
-            self.execute(connection, sql=statement)
+            self.execute(connection=connection, sql=statement)
 
     @staticmethod
     def _normalize_session_value(value: object | None) -> str | None:
@@ -2657,8 +2678,8 @@ class SnowflakeAdapter(BaseAdapter):
 
     def schema_exists(
         self,
-        connection: _SnowflakeConnection,
         *,
+        connection: _SnowflakeConnection,
         database: str | None,
         schema: str,
     ) -> bool:
@@ -2677,7 +2698,7 @@ class SnowflakeAdapter(BaseAdapter):
             cursor.close()
 
     def _normalize_seed_csv_value(
-        self, value: str | None, *, column_name: str, csv_settings: SeedCsvSettings
+        self, *, value: str | None, column_name: str, csv_settings: SeedCsvSettings
     ) -> str | None:
         if value is None:
             return None

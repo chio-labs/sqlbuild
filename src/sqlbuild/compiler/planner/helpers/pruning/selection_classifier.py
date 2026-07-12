@@ -65,49 +65,58 @@ def _changed_upstream_names(
     visiting: set[SelectionStalenessNodeKey] = set()
     stale_by_key: dict[SelectionStalenessNodeKey, bool] = {}
 
-    def visit(upstream_key: SelectionStalenessNodeKey) -> bool:
-        cached: bool | None = stale_by_key.get(upstream_key)
+    def visit(
+        upstream_key: SelectionStalenessNodeKey,
+        found_names: set[str],
+        visiting_keys: set[SelectionStalenessNodeKey],
+        stale_cache: dict[SelectionStalenessNodeKey, bool],
+    ) -> tuple[
+        bool, set[str], set[SelectionStalenessNodeKey], dict[SelectionStalenessNodeKey, bool]
+    ]:
+        cached: bool | None = stale_cache.get(upstream_key)
         if cached is not None:
-            return cached
-        if upstream_key in visiting:
-            return False
-        visiting.add(upstream_key)
+            return cached, found_names, visiting_keys, stale_cache
+        if upstream_key in visiting_keys:
+            return False, found_names, visiting_keys, stale_cache
+        visiting_keys = visiting_keys | {upstream_key}
         is_stale: bool
         if upstream_key.resource_type == "model":
             in_run_set: bool = upstream_key.name in graph.run_model_names
             own_changed: bool = upstream_key.name in graph.changed_model_names
             if own_changed and not in_run_set:
                 is_stale = True
-                names.add(upstream_key.name)
+                found_names = found_names | {upstream_key.name}
             else:
                 ancestor_stale: bool = False
                 parent_key: SelectionStalenessNodeKey
                 for parent_key in graph.upstream_deps.get(upstream_key, ()):
-                    ancestor_stale = visit(parent_key) or ancestor_stale
+                    parent_stale, found_names, visiting_keys, stale_cache = visit(
+                        parent_key, found_names, visiting_keys, stale_cache
+                    )
+                    ancestor_stale = parent_stale or ancestor_stale
                     if _run_parent_changed(graph=graph, parent_key=parent_key):
                         ancestor_stale = True
                 is_stale = ancestor_stale
                 if ancestor_stale and not in_run_set and upstream_key != model_key:
-                    names.add(upstream_key.name)
+                    found_names = found_names | {upstream_key.name}
         elif upstream_key.resource_type == "seed":
             changed: bool = upstream_key.name in graph.changed_seed_names
             if changed and upstream_key.name not in graph.run_seed_names:
-                names.add(upstream_key.name)
+                found_names = found_names | {upstream_key.name}
             is_stale = changed
         elif upstream_key.resource_type == "source":
             changed = upstream_key.name in graph.changed_source_names
             if changed and upstream_key.name not in graph.run_source_names:
-                names.add(upstream_key.name)
+                found_names = found_names | {upstream_key.name}
             is_stale = changed
         else:
             is_stale = False
-        visiting.remove(upstream_key)
-        stale_by_key[upstream_key] = is_stale
-        return is_stale
+        visiting_keys = visiting_keys - {upstream_key}
+        return is_stale, found_names, visiting_keys, {**stale_cache, upstream_key: is_stale}
 
     upstream_key: SelectionStalenessNodeKey
     for upstream_key in graph.upstream_deps.get(model_key, ()):
-        visit(upstream_key)
+        _, names, visiting, stale_by_key = visit(upstream_key, names, visiting, stale_by_key)
     return tuple(sorted(names))
 
 

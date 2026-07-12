@@ -74,7 +74,7 @@ class ConnectionElapsedCallback(Protocol):
 class NodeStartCallback(Protocol):
     """Report the start of an execution node."""
 
-    def __call__(self, name: str, /, *, resource_kind: ExecutionResourceKind) -> None: ...
+    def __call__(self, name: str, *, resource_kind: ExecutionResourceKind) -> None: ...
 
 
 class SqlReferenceKind(StrEnum):

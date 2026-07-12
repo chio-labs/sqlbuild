@@ -11,8 +11,8 @@ from sqlbuild.shared.helpers.output.display import DisplayOptions
 
 
 def render_dbt_interop_plan(
-    plan: DbtInteropPlan,
     *,
+    plan: DbtInteropPlan,
     json_output: bool,
     use_color: bool,
     display_options: DisplayOptions | None = None,
@@ -22,5 +22,5 @@ def render_dbt_interop_plan(
     if json_output:
         return format_dbt_interop_plan_json(plan)
     return "\n" + format_dbt_interop_plan(
-        plan, use_color=use_color, display_options=display_options
+        plan=plan, use_color=use_color, display_options=display_options
     )

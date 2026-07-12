@@ -197,9 +197,11 @@ def loader_to_source_entry(
         parts: tuple[str, ...] = tuple(part for part in loader.destination.split(".") if part)
         if len(parts) == 1:
             table = parts[0]
-        elif len(parts) == 2:
+        source_name_part_count: int = 2
+        qualified_source_name_part_count: int = 3
+        if len(parts) == source_name_part_count:
             schema, table = parts
-        elif len(parts) == 3:
+        elif len(parts) == qualified_source_name_part_count:
             database, schema, table = parts
         else:
             table = loader.destination

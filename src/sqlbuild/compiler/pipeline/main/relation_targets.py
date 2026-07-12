@@ -33,4 +33,4 @@ def build_python_relation_targets(
 
 def _source_relation(*, adapter: BaseAdapter, source_name: str, plan_output: PlanOutput) -> str:
     source_entry: SourceEntry = (plan_output.source_read_map or plan_output.source_map)[source_name]
-    return render_source_relation(source_entry, adapter=adapter)
+    return render_source_relation(entry=source_entry, adapter=adapter)

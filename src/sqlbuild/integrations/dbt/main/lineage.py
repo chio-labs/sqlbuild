@@ -48,7 +48,9 @@ def build_dbt_lineage_output(
         depth=preparation.lineage_args.depth,
     )
     if column_lineage_selected_keys:
-        report_progress(on_progress, message="Inspecting dbt source and seed schemas...")
+        report_progress(
+            on_progress=on_progress, message="Inspecting dbt source and seed schemas..."
+        )
     column_trace: DbtColumnLineageTrace | None = select_dbt_column_lineage_target(
         project=preparation.project,
         manifest=preparation.manifest,
@@ -65,7 +67,7 @@ def build_dbt_lineage_output(
     )
     if column_trace is not None:
         return render_dbt_column_lineage(
-            column_trace,
+            trace=column_trace,
             output_format=preparation.lineage_args.output_format,
             use_color=use_color,
         )
@@ -78,7 +80,7 @@ def build_dbt_lineage_output(
         depth=preparation.lineage_args.depth,
     )
     return render_dbt_lineage_graph(
-        lineage_graph,
+        graph=lineage_graph,
         output_format=preparation.lineage_args.output_format,
         use_color=use_color,
     )

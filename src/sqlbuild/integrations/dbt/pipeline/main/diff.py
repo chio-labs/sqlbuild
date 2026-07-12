@@ -44,7 +44,7 @@ def run_dbt_diff_from_project(
         missing_config_code="C346",
         on_progress=on_progress,
     )
-    report_progress(on_progress, message="Resolving dbt selection...")
+    report_progress(on_progress=on_progress, message="Resolving dbt selection...")
     selection_start: float = time.monotonic()
     selected_nodes: tuple[DbtLsNode, ...] = resolve_selected_dbt_model_nodes(
         runner=preparation.runner,
@@ -53,7 +53,8 @@ def run_dbt_diff_from_project(
         exclude=options.exclude,
     )
     report_progress(
-        on_progress, message=f"Resolved dbt selection. ({time.monotonic() - selection_start:.2f}s)"
+        on_progress=on_progress,
+        message=f"Resolved dbt selection. ({time.monotonic() - selection_start:.2f}s)",
     )
     if not selected_nodes:
         raise DbtInteropConfigError(
@@ -67,7 +68,7 @@ def run_dbt_diff_from_project(
         on_progress=on_progress,
     )
     try:
-        report_progress(on_progress, message="Comparing dbt relations...")
+        report_progress(on_progress=on_progress, message="Comparing dbt relations...")
         diff_start: float = time.monotonic()
         result: DiffExecutionResult = execute_dbt_diff(
             adapter=warehouse.adapter,
@@ -78,7 +79,8 @@ def run_dbt_diff_from_project(
             options=options,
         )
         report_progress(
-            on_progress, message=f"Compared dbt relations. ({time.monotonic() - diff_start:.2f}s)"
+            on_progress=on_progress,
+            message=f"Compared dbt relations. ({time.monotonic() - diff_start:.2f}s)",
         )
     finally:
         warehouse.adapter.close(warehouse.connection)

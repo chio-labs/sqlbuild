@@ -66,3 +66,20 @@ class LoadRunOutcome:
     success_count: int
     fail_count: int
     skip_count: int
+
+
+@dataclass(frozen=True)
+class LoadSelectionSets:
+    """Mutable selection sets returned explicitly by selection phases."""
+
+    selected_sources: set[str]
+    selected_loaders: set[str]
+
+
+@dataclass(frozen=True)
+class LoadSelectorSets:
+    """Selection sets updated while applying include selectors."""
+
+    selected_sources: set[str]
+    selected_loaders: set[str]
+    directly_selected_loaders: set[str]

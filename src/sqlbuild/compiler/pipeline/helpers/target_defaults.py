@@ -16,8 +16,8 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 
 
 def apply_target_defaults(
-    project: CompiledProject,
     *,
+    project: CompiledProject,
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
@@ -29,7 +29,7 @@ def apply_target_defaults(
         replace(
             m,
             destination=_resolve_target(
-                m.destination,
+                target=m.destination,
                 default_schema=default_schema,
                 default_database=default_database,
                 render_qualified_name=render_qualified_name,
@@ -41,7 +41,7 @@ def apply_target_defaults(
         replace(
             s,
             destination=_resolve_target(
-                s.destination,
+                target=s.destination,
                 default_schema=default_schema,
                 default_database=default_database,
                 render_qualified_name=render_qualified_name,
@@ -62,7 +62,7 @@ def apply_target_defaults(
                 ),
             ),
             fingerprint_destination=_resolve_target(
-                f.fingerprint_destination,
+                target=f.fingerprint_destination,
                 default_schema=default_schema,
                 default_database=default_database,
                 render_qualified_name=render_qualified_name,
@@ -92,7 +92,7 @@ def _resolve_function_target(
         function.language != FunctionLanguage.PYTHON or python_functions_inherit_default_namespace
     )
     resolved: CompiledRelationLocation = _resolve_target(
-        function.destination,
+        target=function.destination,
         default_schema=default_schema if apply_defaults else None,
         default_database=default_database if apply_defaults else None,
         render_qualified_name=render_qualified_name,
@@ -103,8 +103,8 @@ def _resolve_function_target(
 
 
 def _resolve_target(
-    target: CompiledRelationLocation,
     *,
+    target: CompiledRelationLocation,
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],

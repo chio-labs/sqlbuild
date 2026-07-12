@@ -198,7 +198,8 @@ def build_dbt_node_source_watermark_staleness_warning(
         key
         for unique_id in selected_unique_ids
         if unique_id in manifest.models_by_unique_id
-        and (key := _graph_key(unique_id, resource_kind=WatermarkGraphResourceKind.MODEL)) in nodes
+        and (key := _graph_key(unique_id=unique_id, resource_kind=WatermarkGraphResourceKind.MODEL))
+        in nodes
     )
     materialized_node_keys: frozenset[WatermarkGraphKey] = frozenset(
         node.key
@@ -244,7 +245,7 @@ def build_dbt_node_source_watermark_staleness_warning(
     report: NodeSourceWatermarkStalenessReport = build_node_source_watermark_staleness_report(
         classifications=classifications
     )
-    message: str = format_node_source_watermark_staleness_report(report)
+    message: str = format_node_source_watermark_staleness_report(report=report)
     return message or None
 
 
@@ -253,7 +254,7 @@ def _nodes_by_key(*, manifest: DbtManifestIndex) -> dict[WatermarkGraphKey, Wate
     model: DbtManifestModel
     for model in manifest.models_by_unique_id.values():
         key: WatermarkGraphKey = _graph_key(
-            model.unique_id, resource_kind=WatermarkGraphResourceKind.MODEL
+            unique_id=model.unique_id, resource_kind=WatermarkGraphResourceKind.MODEL
         )
         nodes[key] = WatermarkGraphNode(
             key=key,
@@ -262,7 +263,9 @@ def _nodes_by_key(*, manifest: DbtManifestIndex) -> dict[WatermarkGraphKey, Wate
         )
     source: DbtManifestSource
     for source in manifest.sources_by_unique_id.values():
-        key = _graph_key(source.unique_id, resource_kind=WatermarkGraphResourceKind.SOURCE)
+        key = _graph_key(
+            unique_id=source.unique_id, resource_kind=WatermarkGraphResourceKind.SOURCE
+        )
         nodes[key] = WatermarkGraphNode(
             key=key,
             resource_kind=WatermarkGraphResourceKind.SOURCE,
@@ -324,7 +327,7 @@ def _source_identities_by_key(
 ) -> dict[WatermarkGraphKey, SourceFreshnessIdentity]:
     return {
         _graph_key(
-            source.unique_id, resource_kind=WatermarkGraphResourceKind.SOURCE
+            unique_id=source.unique_id, resource_kind=WatermarkGraphResourceKind.SOURCE
         ): _source_identity(source)
         for source in manifest.sources_by_unique_id.values()
     }
@@ -422,10 +425,10 @@ def _watermark_key_from_combined_key(key: DbtCombinedGraphKey) -> WatermarkGraph
         if key.resource_type == DbtCombinedGraphResourceType.MODEL
         else WatermarkGraphResourceKind.SOURCE
     )
-    return _graph_key(key.name, resource_kind=resource_kind)
+    return _graph_key(unique_id=key.name, resource_kind=resource_kind)
 
 
-def _graph_key(unique_id: str, *, resource_kind: WatermarkGraphResourceKind) -> WatermarkGraphKey:
+def _graph_key(*, unique_id: str, resource_kind: WatermarkGraphResourceKind) -> WatermarkGraphKey:
     node_type: str = (
         NODE_TYPE_DBT if resource_kind == WatermarkGraphResourceKind.MODEL else resource_kind.value
     )

@@ -409,14 +409,14 @@ def _read_virtual_build_state(
         )
         bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
             backend.get_virtual_environment_function_refs(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=target_vde_name,
             )
         )
         bound_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
             backend.get_virtual_environment_seed_refs(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=target_vde_name,
             )
@@ -429,7 +429,7 @@ def _read_virtual_build_state(
         )
         source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
             backend.get_virtual_environment_source_freshness(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 virtual_environment_name=target_vde_name,
             )
@@ -761,7 +761,7 @@ def _prepare_virtual_python_execution(
 
 
 def _build_python_identity_recorder(runtime: _VirtualBuildRuntime) -> PythonIdentityRecorder:
-    def record_python_identity(identity: Any, *, _target_name: str | None) -> None:
+    def record_python_identity(*, identity: Any, _target_name: str | None) -> None:
         state_connection: Any = runtime.backend.connect(runtime.config.connection)
         try:
             try_record_virtual_python_node_identity(
@@ -934,7 +934,7 @@ def _build_before_model_materialize(
     run_id: str,
     prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]],
 ) -> sqlbuild.executor.build.types.BeforeModelMaterializeCallback:
-    def before_model_materialize(entry: ModelPlanEntry, *, connection: Any) -> None:
+    def before_model_materialize(*, entry: ModelPlanEntry, connection: Any) -> None:
         if entry.action not in INCREMENTAL_ACTIONS and entry.action != PlanAction.CUSTOM:
             return
         parent_relation: PhysicalRelationRecord | None = reads.bound_physical_relations.get(
@@ -1051,17 +1051,14 @@ def _sql_loader_functions_for_lifecycle_handoff(
     loader_functions: frozenset[object] = frozenset(
         loader.function for loader in discovered_inputs.loader_functions
     )
-    return tuple(
-        replace(
-            loader,
-            depends_on=tuple(
-                dependency
-                for dependency in loader.depends_on
-                if dependency in loader_functions or loader.name not in ingress_loader_names
-            ),
-        )
-        for loader in discovered_inputs.loader_functions
-    )
+    handoff_loaders: list[Any] = []
+    for loader in discovered_inputs.loader_functions:
+        dependencies: list[object] = []
+        for dependency in loader.depends_on:
+            if dependency in loader_functions or loader.name not in ingress_loader_names:
+                dependencies.append(dependency)
+        handoff_loaders.append(replace(loader, depends_on=tuple(dependencies)))
+    return tuple(handoff_loaders)
 
 
 def _load_result_key(*, plan: PlanOutput, result: LoadExecutionResult) -> CompiledObjectKey:
@@ -1091,7 +1088,7 @@ def _prepare_virtual_physical_schemas(
     try:
         for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=database,
                 schema=schema,
                 statement_recorder=recorder,
@@ -1114,7 +1111,7 @@ def _prepare_custom_virtual_version(
     adapter: BaseAdapter = runtime.adapter
     recorder: StatementRecorder = StatementRecorder()
     adapter.ensure_schema(
-        connection,
+        connection=connection,
         database=entry.destination.database,
         schema=entry.destination.schema,
         statement_recorder=recorder,
@@ -1123,13 +1120,16 @@ def _prepare_custom_virtual_version(
         adapter=adapter, location=entry.destination
     )
     if adapter.relation_exists(
-        connection,
+        connection=connection,
         database=entry.destination.database,
         schema=entry.destination.schema,
         name=entry.destination.name,
     ):
         adapter.drop(
-            connection, destination=destination, if_exists=True, statement_recorder=recorder
+            connection=connection,
+            destination=destination,
+            if_exists=True,
+            statement_recorder=recorder,
         )
     source: str = resolve_qualified_name_parts(
         adapter=adapter,
@@ -1157,7 +1157,7 @@ def _prepare_custom_virtual_version(
         )
     )
     runtime.backend.upsert_physical_relation_ancestry(
-        state_connection,
+        connection=state_connection,
         schema=runtime.config.schema,
         record=PhysicalRelationAncestryRecord(
             model_name=entry.name,
@@ -1178,7 +1178,7 @@ def _read_or_initialize_refs(
     baseline_vde_name: str | None,
 ) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
     environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-        state_connection,
+        connection=state_connection,
         schema=config.schema,
         virtual_environment_name=target_vde_name,
     )
@@ -1189,7 +1189,7 @@ def _read_or_initialize_refs(
             help="Run state adopt again or choose a non-detached virtual environment.",
         )
     refs: tuple[VirtualEnvironmentModelRefRecord, ...] = backend.get_virtual_environment_model_refs(
-        state_connection,
+        connection=state_connection,
         schema=config.schema,
         virtual_environment_name=target_vde_name,
     )
@@ -1197,7 +1197,7 @@ def _read_or_initialize_refs(
         return refs
     baseline_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         backend.get_virtual_environment_model_refs(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             virtual_environment_name=baseline_vde_name,
         )
@@ -1221,7 +1221,7 @@ def _read_bound_model_versions(
 ) -> dict[str, ModelVersionRecord | None]:
     return {
         ref.model_name: backend.get_model_version(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             model_name=ref.model_name,
             version_hash=ref.version_hash,
@@ -1240,7 +1240,7 @@ def _read_bound_relations(
     relations: dict[str, PhysicalRelationRecord] = {}
     for model_name, version_hash in bound_version_hashes.items():
         relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             model_name=model_name,
             version_hash=version_hash,
@@ -1295,7 +1295,7 @@ def _read_available_seed_physical_relations(
     version_hash: str
     for seed_name, version_hash in desired_seed_version_hashes.items():
         relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             artifact_type=PhysicalArtifactType.SEED,
             artifact_name=seed_name,
@@ -1454,7 +1454,7 @@ def _persist_successful_virtual_build(
             for seed_name, version_hash in sorted(seeds.final_seed_hashes.items())
         )
         runtime.backend.upsert_virtual_environment_and_replace_node_ref_groups(
-            state_connection,
+            connection=state_connection,
             schema=runtime.config.schema,
             record=virtual_environment_record,
             refs_by_node_type=_build_node_ref_groups(
@@ -1463,7 +1463,7 @@ def _persist_successful_virtual_build(
         )
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
             create_finalized_virtual_environment_checkpoint(
-                runtime.backend,
+                backend=runtime.backend,
                 connection=state_connection,
                 schema=runtime.config.schema,
                 virtual_environment_name=names.target_vde_name,
@@ -1495,7 +1495,7 @@ def _observe_and_persist_source_freshness(
 ) -> None:
     previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
         runtime.backend.get_virtual_environment_source_freshness(
-            state_connection,
+            connection=state_connection,
             schema=runtime.config.schema,
             virtual_environment_name=runtime.names.target_vde_name,
         )
@@ -1544,7 +1544,7 @@ def _write_model_version_records(
             continue
         entry: Any | None = model_entries_by_name.get(model.name)
         existing_model_version: ModelVersionRecord | None = runtime.backend.get_model_version(
-            state_connection,
+            connection=state_connection,
             schema=runtime.config.schema,
             model_name=model.name,
             version_hash=version_hash,
@@ -1552,7 +1552,7 @@ def _write_model_version_records(
         if existing_model_version is None:
             metadata_json: str = semantics.expected_metadata_jsons.get(model.name, "{}")
             runtime.backend.upsert_model_version(
-                state_connection,
+                connection=state_connection,
                 schema=runtime.config.schema,
                 record=ModelVersionRecord(
                     model_name=model.name,
@@ -1575,7 +1575,7 @@ def _write_model_version_records(
         if target is not None:
             existing_physical_relation: PhysicalRelationRecord | None = (
                 runtime.backend.get_physical_relation(
-                    state_connection,
+                    connection=state_connection,
                     schema=runtime.config.schema,
                     model_name=model.name,
                     version_hash=version_hash,
@@ -1583,7 +1583,7 @@ def _write_model_version_records(
             )
             if existing_physical_relation is None:
                 runtime.backend.upsert_physical_relation(
-                    state_connection,
+                    connection=state_connection,
                     schema=runtime.config.schema,
                     record=PhysicalRelationRecord(
                         artifact_type=PhysicalArtifactType.MODEL,
@@ -1619,7 +1619,7 @@ def _persist_function_versions(
         function_ref_node_types[function_entry.name] = str(function_entry.key.resource_type)
         existing_function_version: FunctionVersionRecord | None = (
             runtime.backend.get_function_version(
-                state_connection,
+                connection=state_connection,
                 schema=runtime.config.schema,
                 function_name=function_version.function_name,
                 version_hash=function_version.version_hash,
@@ -1627,7 +1627,7 @@ def _persist_function_versions(
         )
         if existing_function_version is None:
             runtime.backend.upsert_function_version(
-                state_connection,
+                connection=state_connection,
                 schema=runtime.config.schema,
                 record=function_version,
             )
@@ -1666,14 +1666,14 @@ def _persist_seed_versions(
         target: CompiledRelationLocation | None = plan_output.seed_locations.get(seed_name)
         metadata_json: str = semantics.seed_identity_metadata_jsons.get(seed_name, "{}")
         existing_seed_version: SeedVersionRecord | None = runtime.backend.get_seed_version(
-            state_connection,
+            connection=state_connection,
             schema=runtime.config.schema,
             seed_name=seed_name,
             version_hash=version_hash,
         )
         if existing_seed_version is None:
             runtime.backend.upsert_seed_version(
-                state_connection,
+                connection=state_connection,
                 schema=runtime.config.schema,
                 record=SeedVersionRecord(
                     seed_name=seed_name,
@@ -1688,7 +1688,7 @@ def _persist_seed_versions(
         if target is not None:
             existing_seed_physical_relation: PhysicalRelationRecord | None = (
                 runtime.backend.get_physical_relation_for_artifact(
-                    state_connection,
+                    connection=state_connection,
                     schema=runtime.config.schema,
                     artifact_type=PhysicalArtifactType.SEED,
                     artifact_name=seed_name,
@@ -1706,7 +1706,7 @@ def _persist_seed_versions(
                     relation_type="table",
                 )
                 runtime.backend.upsert_physical_relation(
-                    state_connection,
+                    connection=state_connection,
                     schema=runtime.config.schema,
                     record=seed_physical_relation,
                 )
@@ -1718,7 +1718,7 @@ def _persist_seed_versions(
         if seed_name in final_seed_physical_relations:
             continue
         seed_physical_relation = runtime.backend.get_physical_relation_for_artifact(
-            state_connection,
+            connection=state_connection,
             schema=runtime.config.schema,
             artifact_type=PhysicalArtifactType.SEED,
             artifact_name=seed_name,
@@ -1943,13 +1943,13 @@ def _create_logical_vde_views(
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=virtual_target.database,
                 schema=virtual_target.schema,
                 statement_recorder=recorder,
             )
             adapter.create_view_as(
-                connection,
+                connection=connection,
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
@@ -1977,13 +1977,13 @@ def _create_logical_vde_views(
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=virtual_target.database,
                 schema=virtual_target.schema,
                 statement_recorder=recorder,
             )
             adapter.create_view_as(
-                connection,
+                connection=connection,
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),

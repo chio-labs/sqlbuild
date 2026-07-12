@@ -58,8 +58,8 @@ class VirtualBuildPlanHook:
 
     def on_plan_ready(
         self,
-        project: object,
         *,
+        project: object,
         plan_output: PlanOutput,
         python_plan_entries: tuple[PythonPlanEntry, ...],
     ) -> VirtualBuildExecutionHooks:
@@ -67,7 +67,7 @@ class VirtualBuildPlanHook:
 
         del project
         plan_text: str = format_plan(
-            plan_output,
+            plan=plan_output,
             full_refresh=self._full_refresh,
             use_color=self._use_color,
             display_options=DisplayOptions(max_entries_per_section=None if self._verbose else 50),
@@ -104,7 +104,9 @@ class VirtualBuildPlanHook:
             use_color=self._use_color,
         )
         return VirtualBuildExecutionHooks(
-            on_node_start=callbacks.on_node_start,
+            on_node_start=lambda name, resource_kind: callbacks.on_node_start(
+                name=name, resource_kind=resource_kind
+            ),
             on_node_complete=callbacks.on_node_complete,
             on_sub_progress=callbacks.on_sub_progress,
         )

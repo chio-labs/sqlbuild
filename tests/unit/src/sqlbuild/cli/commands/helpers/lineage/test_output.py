@@ -69,8 +69,8 @@ def test_given_lineage_graph_when_formatting_then_returns_expected_human_output(
     )
 
     renderers: dict[str, Callable[[LineageGraph], str]] = {
-        "tree": lambda graph: format_lineage_tree(graph, use_color=False),
-        "list": lambda graph: format_lineage_list(graph, use_color=False),
+        "tree": lambda graph: format_lineage_tree(graph=graph, use_color=False),
+        "list": lambda graph: format_lineage_list(graph=graph, use_color=False),
     }
     result: str = renderers[test_case.output_format](lineage_graph)
 
@@ -141,8 +141,8 @@ def test_given_column_lineage_trace_when_formatting_then_returns_expected_output
 ) -> None:
     trace: ColumnLineageTrace = build_column_lineage_trace()
     renderers: dict[str, Callable[[ColumnLineageTrace], str]] = {
-        "tree": lambda trace: format_column_lineage_tree(trace, use_color=False),
-        "list": lambda trace: format_column_lineage_list(trace, use_color=False),
+        "tree": lambda trace: format_column_lineage_tree(trace=trace, use_color=False),
+        "list": lambda trace: format_column_lineage_list(trace=trace, use_color=False),
         "json": format_column_lineage_json,
     }
 
@@ -179,8 +179,8 @@ def test_given_lineage_graph_when_formatting_with_color_then_styles_semantic_par
         depth=None,
     )
     color_renderers: dict[str, Callable[[LineageGraph], str]] = {
-        "tree": lambda graph: format_lineage_tree(graph, use_color=True),
-        "list": lambda graph: format_lineage_list(graph, use_color=True),
+        "tree": lambda graph: format_lineage_tree(graph=graph, use_color=True),
+        "list": lambda graph: format_lineage_list(graph=graph, use_color=True),
     }
 
     color_result: str = color_renderers[test_case.output_format](lineage_graph)
@@ -211,8 +211,8 @@ def test_given_column_lineage_trace_when_formatting_with_color_then_styles_seman
 ) -> None:
     trace: ColumnLineageTrace = build_column_lineage_trace()
     color_renderers: dict[str, Callable[[ColumnLineageTrace], str]] = {
-        "tree": lambda trace: format_column_lineage_tree(trace, use_color=True),
-        "list": lambda trace: format_column_lineage_list(trace, use_color=True),
+        "tree": lambda trace: format_column_lineage_tree(trace=trace, use_color=True),
+        "list": lambda trace: format_column_lineage_list(trace=trace, use_color=True),
         "json": format_column_lineage_json,
     }
 
@@ -240,7 +240,7 @@ def test_given_large_column_trace_when_formatting_tree_then_limits_human_output(
 ) -> None:
     trace: ColumnLineageTrace = build_large_column_lineage_trace()
 
-    result: str = format_column_lineage_tree(trace, use_color=False)
+    result: str = format_column_lineage_tree(trace=trace, use_color=False)
 
     assert test_case.expected_included_fragment in result
     assert test_case.expected_excluded_fragment not in result

@@ -61,12 +61,12 @@ def test_given_loader_context_when_using_helpers_then_records_and_qualifies_name
     query_result: object = context.query("SELECT * FROM scratch_orders")
     context.log("loading scratch orders")
     qualified_name: str = context.qualify_name(
-        test_case.raw_name,
+        name=test_case.raw_name,
         database=test_case.database,
         schema=test_case.schema,
     )
     destination_schema_name: str = context.qualify_in_destination_schema(test_case.raw_name)
-    already_qualified_name: str = context.qualify_name("custom.schema.table")
+    already_qualified_name: str = context.qualify_name(name="custom.schema.table")
 
     assert execute_result == test_case.expected_execute_result
     assert query_result == test_case.expected_query_result

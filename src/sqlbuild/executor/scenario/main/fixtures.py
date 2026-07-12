@@ -31,7 +31,7 @@ def execute_scenario_fixture(
 
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=fixture_plan.destination.database,
             schema=fixture_plan.destination.schema,
             statement_recorder=statement_recorder,
@@ -44,7 +44,7 @@ def execute_scenario_fixture(
             sqlbuild_fixture_name=fixture_plan.logical_name,
         ):
             adapter.create_table_as(
-                connection,
+                connection=connection,
                 destination=target_relation,
                 sql=fixture_plan.sql,
                 config=None,

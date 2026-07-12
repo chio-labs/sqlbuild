@@ -12,7 +12,7 @@ type FunctionNullabilityRule = Callable[[tuple[InferredNullability, ...]], Infer
 
 
 class AdapterExecute[ConnectionT, ResultT](Protocol):
-    def __call__(self, connection: ConnectionT, /, *, sql: str) -> ResultT: ...
+    def __call__(self, *, connection: ConnectionT, sql: str) -> ResultT: ...
 
 
 class BuiltinAdapter(StrEnum):

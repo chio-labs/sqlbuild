@@ -12,7 +12,7 @@ def format_reconcile_output(*, message: str, use_color: bool) -> str:
     style: CliStyle = CliStyle(use_color=use_color)
     doc: CliDocument = CliDocument(style)
     doc.blank()
-    doc.header("Virtual reconcile")
+    doc.header(text="Virtual reconcile")
     doc.blank()
     doc.line(_format_reconcile_message(message=message, style=style))
     return doc.render()

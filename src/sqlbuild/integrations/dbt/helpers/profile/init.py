@@ -46,16 +46,22 @@ def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult:
     if output_dir.exists() and not output_dir.is_dir():
         raise DbtProfileError(f"SQLBuild output path is not a directory: {output_dir}")
 
-    _start_progress(request.progress_callbacks, message="Inspecting dbt project and profile...")
+    _start_progress(
+        callbacks=request.progress_callbacks, message="Inspecting dbt project and profile..."
+    )
     metadata: DbtProjectProfileMetadata = load_dbt_project_metadata(project_dir=dbt_project_dir)
     profile_name: str = request.profile_name or metadata.profile_name
     selected: SelectedDbtProfileOutput = select_dbt_profile_output(
         profile=load_raw_dbt_profile(profiles_dir=profiles_dir, profile_name=profile_name),
         target_name=request.target_name,
     )
-    _complete_progress(request.progress_callbacks, message="Inspected dbt project and profile.")
+    _complete_progress(
+        callbacks=request.progress_callbacks, message="Inspected dbt project and profile."
+    )
 
-    _start_progress(request.progress_callbacks, message="Rendering dbt profile connection...")
+    _start_progress(
+        callbacks=request.progress_callbacks, message="Rendering dbt profile connection..."
+    )
     resolved: ResolvedDbtProfileOutput = render_selected_dbt_profile_output(
         selected=selected,
         project_dir=dbt_project_dir,
@@ -75,10 +81,12 @@ def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult:
         target_database=normalized.target_database,
         production_git_ref=request.production_git_ref,
     )
-    _complete_progress(request.progress_callbacks, message="Rendered dbt profile connection.")
+    _complete_progress(
+        callbacks=request.progress_callbacks, message="Rendered dbt profile connection."
+    )
     warnings: list[str] = list(normalized.warnings)
     if not request.skip_dbt_debug:
-        _start_progress(request.progress_callbacks, message="Running dbt debug...")
+        _start_progress(callbacks=request.progress_callbacks, message="Running dbt debug...")
         warnings.extend(
             _dbt_debug_warnings(
                 dbt_project_dir=dbt_project_dir,
@@ -86,16 +94,20 @@ def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult:
                 target_name=selected.target_name,
             )
         )
-        _complete_progress(request.progress_callbacks, message="Finished dbt debug.")
+        _complete_progress(callbacks=request.progress_callbacks, message="Finished dbt debug.")
     if not request.dry_run:
-        _start_progress(request.progress_callbacks, message="Writing SQLBuild project config...")
+        _start_progress(
+            callbacks=request.progress_callbacks, message="Writing SQLBuild project config..."
+        )
         output_dir.mkdir(parents=True, exist_ok=True)
         project_file.write_text(toml, encoding="utf-8")
         macro_file: Path = output_dir / "dbt" / "macros" / "generate_schema_name.sql"
         macro_file.parent.mkdir(parents=True, exist_ok=True)
         if not macro_file.exists() or request.overwrite:
             macro_file.write_text(_default_generate_schema_name_macro(), encoding="utf-8")
-        _complete_progress(request.progress_callbacks, message="Wrote SQLBuild project config.")
+        _complete_progress(
+            callbacks=request.progress_callbacks, message="Wrote SQLBuild project config."
+        )
     else:
         macro_file = output_dir / "dbt" / "macros" / "generate_schema_name.sql"
     return DbtInitResult(
@@ -150,12 +162,12 @@ def _resolve_profiles_dir(*, cwd: Path, dbt_project_dir: Path, profiles_dir: Pat
     return default_profiles_dir()
 
 
-def _start_progress(callbacks: DbtInitProgressCallbacks, *, message: str) -> None:
+def _start_progress(*, callbacks: DbtInitProgressCallbacks, message: str) -> None:
     if callbacks.start is not None:
         callbacks.start(message)
 
 
-def _complete_progress(callbacks: DbtInitProgressCallbacks, *, message: str) -> None:
+def _complete_progress(*, callbacks: DbtInitProgressCallbacks, message: str) -> None:
     if callbacks.complete is not None:
         callbacks.complete(message)
 

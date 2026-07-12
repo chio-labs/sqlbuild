@@ -233,10 +233,13 @@ def _add_neutral_propagated_model_keys(
 
 
 def _neutral_upstream_deps(*, scope: PlannerScope) -> dict[GraphNodeKey, tuple[GraphNodeKey, ...]]:
-    return {
-        _graph_key(key): tuple(_graph_key(upstream_key) for upstream_key in upstream_keys)
-        for key, upstream_keys in scope.upstream_deps.items()
-    }
+    neutral_deps: dict[GraphNodeKey, tuple[GraphNodeKey, ...]] = {}
+    for key, upstream_keys in scope.upstream_deps.items():
+        neutral_upstreams: list[GraphNodeKey] = []
+        for upstream_key in upstream_keys:
+            neutral_upstreams.append(_graph_key(upstream_key))
+        neutral_deps[_graph_key(key)] = tuple(neutral_upstreams)
+    return neutral_deps
 
 
 def _neutral_model_keys(
@@ -420,15 +423,25 @@ def _upstream_identity_scope_is_complete(
 ) -> bool:
     visited: set[CompiledObjectKey] = set()
 
-    def visit(upstream_key: CompiledObjectKey) -> bool:
-        if upstream_key in visited:
-            return True
-        visited.add(upstream_key)
+    def visit(
+        upstream_key: CompiledObjectKey, seen: set[CompiledObjectKey]
+    ) -> tuple[bool, set[CompiledObjectKey]]:
+        if upstream_key in seen:
+            return True, seen
+        seen = seen | {upstream_key}
         if upstream_key.resource_type in _RUN_PARENT_TYPES and upstream_key not in selected_keys:
-            return False
-        return all(visit(parent_key) for parent_key in upstream_deps.get(upstream_key, ()))
+            return False, seen
+        for parent_key in upstream_deps.get(upstream_key, ()):
+            complete, seen = visit(parent_key, seen)
+            if not complete:
+                return False, seen
+        return True, seen
 
-    return all(visit(upstream_key) for upstream_key in upstream_deps.get(key, ()))
+    for upstream_key in upstream_deps.get(key, ()):
+        complete, visited = visit(upstream_key, visited)
+        if not complete:
+            return False
+    return True
 
 
 def _source_freshness_marks_model_stale(

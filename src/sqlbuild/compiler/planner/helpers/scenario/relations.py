@@ -188,7 +188,7 @@ def build_scenario_relation_plan(
 
     for seed_name in graph_plan.seed_fixture_names:
         seed_fixture_locations[seed_name] = _required_target(
-            seed_locations,
+            targets=seed_locations,
             name=seed_name,
             kind=ScenarioArtifactKind.SEED,
         )
@@ -245,7 +245,7 @@ def resolve_scenario_check_sql(
         source: SourceEntry | None = relation_plan.source_map.get(match.group("name"))
         if source is None:
             return match.group(0)
-        return render_source_relation(source, adapter=adapter)
+        return render_source_relation(entry=source, adapter=adapter)
 
     def _replace_dbt_ref(match: re.Match[str]) -> str:
         target: CompiledRelationLocation | None = relation_plan.dbt_ref_fixture_locations.get(
@@ -292,7 +292,7 @@ def build_scenario_execution_plan(
     )
     ordered_model_keys: tuple[CompiledObjectKey, ...] = tuple(
         key
-        for key in topologically_order_keys(upstream_deps)
+        for key in topologically_order_keys(upstream=upstream_deps)
         if key.resource_type == CompiledResourceType.MODEL and key.name in scenario_model_names
     )
     fixture_plans: tuple[ScenarioFixturePlan, ...] = build_scenario_fixture_plans(
@@ -316,7 +316,7 @@ def build_scenario_execution_plan(
             function_locations=function_locations,
             source_warehouse_columns=effective_source_warehouse_columns,
         )
-        for key in topologically_order_keys(upstream_deps)
+        for key in topologically_order_keys(upstream=upstream_deps)
         if key in graph_plan.function_deps and key in functions_by_key
     )
 
@@ -326,7 +326,7 @@ def build_scenario_execution_plan(
     for key in ordered_model_keys:
         model: CompiledModel = models_by_name[key.name]
         scenario_target: CompiledRelationLocation = _required_target(
-            relation_plan.model_locations,
+            targets=relation_plan.model_locations,
             name=model.name,
             kind=ScenarioArtifactKind.MODEL,
         )
@@ -485,14 +485,14 @@ def build_scenario_fixture_plans(
                 kind=ScenarioArtifactKind.SOURCE,
                 logical_name=source_name,
                 destination=_required_target(
-                    relation_plan.source_fixture_locations,
+                    targets=relation_plan.source_fixture_locations,
                     name=source_name,
                     kind=ScenarioArtifactKind.SOURCE,
                 ),
                 sql=_wrap_sql_with_helpers(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(
-                            source_ctes, logical_name=source_name, kind="source"
+                            fixture_sql=source_ctes, logical_name=source_name, kind="source"
                         ),
                         source_map=relation_plan.project_source_map,
                         adapter=adapter,
@@ -511,13 +511,15 @@ def build_scenario_fixture_plans(
                 kind=ScenarioArtifactKind.REF,
                 logical_name=ref_name,
                 destination=_required_target(
-                    relation_plan.ref_fixture_locations,
+                    targets=relation_plan.ref_fixture_locations,
                     name=ref_name,
                     kind=ScenarioArtifactKind.REF,
                 ),
                 sql=_wrap_sql_with_helpers(
                     sql=_resolve_project_source_refs(
-                        sql=_required_fixture_sql(ref_ctes, logical_name=ref_name, kind="ref"),
+                        sql=_required_fixture_sql(
+                            fixture_sql=ref_ctes, logical_name=ref_name, kind="ref"
+                        ),
                         source_map=relation_plan.project_source_map,
                         adapter=adapter,
                         sql_analysis_enabled=sql_analysis_enabled,
@@ -535,13 +537,15 @@ def build_scenario_fixture_plans(
                 kind=ScenarioArtifactKind.SEED,
                 logical_name=seed_name,
                 destination=_required_target(
-                    relation_plan.seed_fixture_locations,
+                    targets=relation_plan.seed_fixture_locations,
                     name=seed_name,
                     kind=ScenarioArtifactKind.SEED,
                 ),
                 sql=_wrap_sql_with_helpers(
                     sql=_resolve_project_source_refs(
-                        sql=_required_fixture_sql(seed_ctes, logical_name=seed_name, kind="seed"),
+                        sql=_required_fixture_sql(
+                            fixture_sql=seed_ctes, logical_name=seed_name, kind="seed"
+                        ),
                         source_map=relation_plan.project_source_map,
                         adapter=adapter,
                         sql_analysis_enabled=sql_analysis_enabled,
@@ -559,14 +563,14 @@ def build_scenario_fixture_plans(
                 kind=ScenarioArtifactKind.DBT_REF,
                 logical_name=dbt_ref_name,
                 destination=_required_target(
-                    relation_plan.dbt_ref_fixture_locations,
+                    targets=relation_plan.dbt_ref_fixture_locations,
                     name=dbt_ref_name,
                     kind=ScenarioArtifactKind.DBT_REF,
                 ),
                 sql=_wrap_sql_with_helpers(
                     sql=_resolve_project_source_refs(
                         sql=_required_fixture_sql(
-                            dbt_ref_ctes,
+                            fixture_sql=dbt_ref_ctes,
                             logical_name=dbt_ref_name,
                             kind="dbt_ref",
                         ),
@@ -609,7 +613,7 @@ def build_scenario_seed_entries(
                 key=seed.key,
                 name=seed.name,
                 destination=_required_target(
-                    relation_plan.seed_locations,
+                    targets=relation_plan.seed_locations,
                     name=seed_name,
                     kind=ScenarioArtifactKind.SEED,
                 ),
@@ -645,7 +649,7 @@ def _resolve_scenario_check_sql_with_sql_analysis(
 
     parsed_dict: dict[str, Any] = parsed.to_dict()
     replacement_result: bool = _replace_relation_markers_in_polyglot_dict(
-        parsed_dict,
+        node=parsed_dict,
         polyglot_module=polyglot_module,
         sql_analysis_dialect=sql_analysis_dialect,
         target_for_marker=lambda function_name, referenced_name: _scenario_target_name_for_marker(
@@ -676,7 +680,7 @@ def _build_expected_check_plan(
 ) -> ScenarioExpectedExpectationPlan:
     model_name: str = expected_cte.name.removeprefix("__expected__")
     actual_destination: CompiledRelationLocation = _required_target(
-        relation_plan.model_locations,
+        targets=relation_plan.model_locations,
         name=model_name,
         kind=ScenarioArtifactKind.MODEL,
     )
@@ -750,7 +754,7 @@ def _resolve_project_source_refs(
         source: SourceEntry | None = source_map.get(match.group("name"))
         if source is None:
             return match.group(0)
-        return render_source_relation(source, adapter=adapter)
+        return render_source_relation(entry=source, adapter=adapter)
 
     return _SOURCE_PATTERN.sub(_replace_source, sql)
 
@@ -771,32 +775,39 @@ def _try_resolve_project_source_refs_with_sql_analysis(
         parsed: Any = polyglot_module.parse_one(sql, dialect=sql_analysis_dialect or "generic")
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="scenario source ref resolution parse failed; falling back",
             sqlbuild_error=str(error),
         )
         return None
     parsed_dict: dict[str, Any] = parsed.to_dict()
-    expression_source_names: set[str] = set()
 
-    def _target_for_source(function_name: str, *, referenced_name: str) -> str | None:
-        if function_name != SqlReferenceKind.SOURCE.function_name:
-            return None
-        source: SourceEntry | None = source_map.get(referenced_name)
-        if source is None:
-            return None
-        if source.expression is not None:
-            expression_source_names.add(referenced_name)
-            return None
-        return render_source_relation(source, adapter=adapter)
+    class _ExpressionSourceState:
+        def __init__(self, sources: dict[str, SourceEntry], relation_adapter: BaseAdapter) -> None:
+            self.names: set[str] = set()
+            self.sources = sources
+            self.relation_adapter = relation_adapter
+
+        def __call__(self, *, function_name: str, referenced_name: str) -> str | None:
+            if function_name != SqlReferenceKind.SOURCE.function_name:
+                return None
+            source: SourceEntry | None = self.sources.get(referenced_name)
+            if source is None:
+                return None
+            if source.expression is not None:
+                self.names.add(referenced_name)
+                return None
+            return render_source_relation(entry=source, adapter=self.relation_adapter)
+
+    expression_sources: _ExpressionSourceState = _ExpressionSourceState(source_map, adapter)
 
     replacement_result: bool = _replace_relation_markers_in_polyglot_dict(
-        parsed_dict,
+        node=parsed_dict,
         polyglot_module=polyglot_module,
         sql_analysis_dialect=sql_analysis_dialect,
-        target_for_marker=_target_for_source,
+        target_for_marker=expression_sources,
     )
-    if expression_source_names or not replacement_result:
+    if expression_sources.names or not replacement_result:
         return None
     generated: list[str] = polyglot_module.generate(
         parsed_dict,
@@ -808,8 +819,8 @@ def _try_resolve_project_source_refs_with_sql_analysis(
 
 
 def _replace_relation_markers_in_polyglot_dict(
-    node: Any,
     *,
+    node: Any,
     polyglot_module: Any,
     sql_analysis_dialect: str | None,
     target_for_marker: RelationMarkerTargetResolver,
@@ -818,43 +829,58 @@ def _replace_relation_markers_in_polyglot_dict(
 
     relation_cache: dict[str, dict[str, Any] | None] = {}
 
-    def _cached_relation(target_name: str) -> dict[str, Any] | None:
-        if target_name not in relation_cache:
-            relation_cache[target_name] = _polyglot_relation_dict(
-                target_name=target_name,
-                polyglot_module=polyglot_module,
-                sql_analysis_dialect=sql_analysis_dialect,
-            )
-        return relation_cache[target_name]
+    def _cached_relation(
+        target_name: str,
+        cache: dict[str, dict[str, Any] | None],
+    ) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any] | None]]:
+        if target_name not in cache:
+            cache = {
+                **cache,
+                target_name: _polyglot_relation_dict(
+                    target_name=target_name,
+                    polyglot_module=polyglot_module,
+                    sql_analysis_dialect=sql_analysis_dialect,
+                ),
+            }
+        return cache[target_name], cache
 
-    def _replacement(expression: Any) -> dict[str, Any] | None:
+    def _replacement(
+        expression: Any,
+        cache: dict[str, dict[str, Any] | None],
+    ) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any] | None]]:
         if not isinstance(expression, dict):
-            return None
+            return None, cache
         alias_payload: Any | None = expression.get("alias")
         if isinstance(alias_payload, dict) and "this" in alias_payload:
-            inner_replacement: dict[str, Any] | None = _replacement(alias_payload.get("this"))
+            inner_replacement, cache = _replacement(alias_payload.get("this"), cache)
             if inner_replacement is None:
-                return None
+                return None, cache
             alias_payload["this"] = inner_replacement
-            return expression
+            return expression, cache
 
         function_payload: Any | None = expression.get("function")
         if not isinstance(function_payload, dict):
-            return None
+            return None, cache
         function_name: str = str(function_payload.get("name", "")).lower()
         referenced_name: str | None = _polyglot_marker_reference_name(
             function_name=function_name,
             function_payload=function_payload,
         )
         if referenced_name is None:
-            return None
-        target_name: str | None = target_for_marker(function_name, referenced_name=referenced_name)
+            return None, cache
+        target_name: str | None = target_for_marker(
+            function_name=function_name,
+            referenced_name=referenced_name,
+        )
         if target_name is None:
-            return None
-        relation: dict[str, Any] | None = _cached_relation(target_name)
-        return None if relation is None else deepcopy(relation)
+            return None, cache
+        relation, cache = _cached_relation(target_name, cache)
+        return (None if relation is None else deepcopy(relation)), cache
 
-    def _walk(walk_node: Any) -> bool:
+    def _walk(
+        walk_node: Any,
+        cache: dict[str, dict[str, Any] | None],
+    ) -> tuple[bool, dict[str, dict[str, Any] | None]]:
         changed: bool = False
         if isinstance(walk_node, dict):
             from_clause: Any | None = walk_node.get("from")
@@ -862,7 +888,7 @@ def _replace_relation_markers_in_polyglot_dict(
                 expressions: Any = from_clause.get("expressions")
                 if isinstance(expressions, list):
                     for index, expression in enumerate(expressions):
-                        replacement: dict[str, Any] | None = _replacement(expression)
+                        replacement, cache = _replacement(expression, cache)
                         if replacement is not None:
                             expressions[index] = replacement
                             changed = True
@@ -872,22 +898,25 @@ def _replace_relation_markers_in_polyglot_dict(
                 for join in joins:
                     if not isinstance(join, dict):
                         continue
-                    replacement = _replacement(join.get("this"))
+                    replacement, cache = _replacement(join.get("this"), cache)
                     if replacement is not None:
                         join["this"] = replacement
                         changed = True
             value: Any
             for value in walk_node.values():
                 if isinstance(value, dict | list):
-                    changed = _walk(value) or changed
+                    child_changed, cache = _walk(value, cache)
+                    changed = child_changed or changed
         elif isinstance(walk_node, list):
             item: Any
             for item in walk_node:
                 if isinstance(item, dict | list):
-                    changed = _walk(item) or changed
-        return changed
+                    child_changed, cache = _walk(item, cache)
+                    changed = child_changed or changed
+        return changed, cache
 
-    return _walk(node)
+    changed, relation_cache = _walk(node, relation_cache)
+    return changed
 
 
 def _polyglot_marker_reference_name(
@@ -899,7 +928,8 @@ def _polyglot_marker_reference_name(
     if function_name == SqlReferenceKind.DBT_REF.function_name:
         if len(args) == 1:
             return _polyglot_column_arg_name(args[0])
-        if len(args) == 2:
+        two_argument_count: int = 2
+        if len(args) == two_argument_count:
             first: str | None = _polyglot_column_arg_name(args[0])
             second: str | None = _polyglot_column_arg_name(args[1])
             if first is None or second is None:
@@ -934,7 +964,7 @@ def _polyglot_relation_dict(
         )
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="scenario relation dict parse failed; falling back",
             sqlbuild_error=str(error),
         )
@@ -953,7 +983,7 @@ def _polyglot_relation_dict(
     return relation if isinstance(relation, dict) else None
 
 
-def _required_fixture_sql(fixture_sql: dict[str, str], *, logical_name: str, kind: str) -> str:
+def _required_fixture_sql(*, fixture_sql: dict[str, str], logical_name: str, kind: str) -> str:
     sql: str | None = fixture_sql.get(logical_name)
     if sql is None:
         raise PlannerInputError(
@@ -964,8 +994,8 @@ def _required_fixture_sql(fixture_sql: dict[str, str], *, logical_name: str, kin
 
 
 def _required_target(
-    targets: dict[str, CompiledRelationLocation],
     *,
+    targets: dict[str, CompiledRelationLocation],
     name: str,
     kind: ScenarioArtifactKind,
 ) -> CompiledRelationLocation:
@@ -994,7 +1024,7 @@ def _scenario_target_name_for_marker(
         return None if target is None else target.qualified_name
     if function_name == SqlReferenceKind.SOURCE.function_name:
         source: SourceEntry | None = relation_plan.source_map.get(referenced_name)
-        return None if source is None else render_source_relation(source, adapter=adapter)
+        return None if source is None else render_source_relation(entry=source, adapter=adapter)
     if function_name == SqlReferenceKind.DBT_REF.function_name:
         target = relation_plan.dbt_ref_fixture_locations.get(referenced_name)
         return None if target is None else target.qualified_name

@@ -66,7 +66,7 @@ def resolve_target_checkpoint(
             continue
         checkpoint_model_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
             backend.get_virtual_environment_checkpoint_model_refs(
-                state_connection,
+                connection=state_connection,
                 schema=schema,
                 checkpoint_id=checkpoint.checkpoint_id,
             )
@@ -134,7 +134,7 @@ def guard_partial_rollback_scope(
     checkpoint_ref_map: dict[str, str],
     final_version_hashes: dict[str, str],
     include_stale_upstreams: bool,
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], dict[str, str]]:
     checkpoint_mismatched_models: tuple[str, ...] = tuple(
         model_name
         for model_name, checkpoint_hash in checkpoint_ref_map.items()
@@ -163,7 +163,7 @@ def guard_partial_rollback_scope(
                 code="S025",
             )
         final_version_hashes[model_name] = checkpoint_ref_map[model_name]
-    return tuple(sorted({*selected_model_names, *stale_upstream_set}))
+    return tuple(sorted({*selected_model_names, *stale_upstream_set})), final_version_hashes
 
 
 def read_model_versions(
@@ -175,7 +175,7 @@ def read_model_versions(
 ) -> dict[str, Any]:
     return {
         ref.model_name: backend.get_model_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             model_name=ref.model_name,
             version_hash=ref.version_hash,
@@ -195,7 +195,7 @@ def read_physical_relations(
     ref: VirtualEnvironmentCheckpointModelRefRecord
     for ref in refs:
         relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             model_name=ref.model_name,
             version_hash=ref.version_hash,
@@ -220,7 +220,7 @@ def read_seed_physical_relations(
     ref: VirtualEnvironmentCheckpointSeedRefRecord
     for ref in refs:
         relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             artifact_type=PhysicalArtifactType.SEED,
             artifact_name=ref.seed_name,
@@ -290,7 +290,7 @@ def read_function_versions(
     ref: VirtualEnvironmentCheckpointFunctionRefRecord
     for ref in refs:
         record: FunctionVersionRecord | None = backend.get_function_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             function_name=ref.function_name,
             version_hash=ref.version_hash,
@@ -328,7 +328,7 @@ def publish_function_versions(
                 virtual_environment_name=virtual_environment_name,
             )
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=target.database,
                 schema=target.schema,
                 statement_recorder=recorder,
@@ -336,7 +336,7 @@ def publish_function_versions(
             if target.qualified_name is None:
                 continue
             adapter.create_function(
-                connection,
+                connection=connection,
                 definition=FunctionDefinition(
                     destination=target.qualified_name,
                     arguments=decode_function_arguments(record),
@@ -356,8 +356,8 @@ def publish_function_versions(
 
 
 def read_rollback_checkpoint_state(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     virtual_environment_name: str,
@@ -366,7 +366,7 @@ def read_rollback_checkpoint_state(
     """Read current refs and resolve the rollback target checkpoint."""
 
     environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         virtual_environment_name=virtual_environment_name,
     )
@@ -377,7 +377,7 @@ def read_rollback_checkpoint_state(
         )
     current_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         backend.get_virtual_environment_model_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
         )
@@ -390,7 +390,7 @@ def read_rollback_checkpoint_state(
     current_ref_map: dict[str, str] = {ref.model_name: ref.version_hash for ref in current_refs}
     checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...] = (
         backend.list_virtual_environment_checkpoints(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
         )
@@ -410,14 +410,14 @@ def read_rollback_checkpoint_state(
         )
     target_checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (
         backend.get_virtual_environment_checkpoint_function_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             checkpoint_id=target_checkpoint.checkpoint_id,
         )
     )
     target_checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (
         backend.get_virtual_environment_checkpoint_seed_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             checkpoint_id=target_checkpoint.checkpoint_id,
         )
@@ -432,8 +432,8 @@ def read_rollback_checkpoint_state(
 
 
 def resolve_rollback_final_refs(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     graph: ProjectGraph,
@@ -472,7 +472,7 @@ def resolve_rollback_final_refs(
         final_version_hashes[model_name] = checkpoint_ref_map[model_name]
     current_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
         backend.get_virtual_environment_seed_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
         )
@@ -503,7 +503,7 @@ def resolve_rollback_final_refs(
     )
     is_partial_scope: bool = bool(select or exclude)
     if is_partial_scope:
-        selected_model_names = guard_partial_rollback_scope(
+        selected_model_names, final_version_hashes = guard_partial_rollback_scope(
             graph=graph,
             selected_model_names=selected_model_names,
             stale_after=stale_after,
@@ -545,8 +545,8 @@ def resolve_rollback_final_refs(
 
 
 def read_rollback_physical_relations(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     checkpoint_id: str,
@@ -587,8 +587,8 @@ def read_rollback_physical_relations(
 
 
 def build_rollback_ref_update(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     virtual_environment_name: str,

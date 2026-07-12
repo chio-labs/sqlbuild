@@ -6,8 +6,8 @@ import json
 import subprocess
 import sys
 import tempfile
-import threading
 from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import IO, Any, TextIO
 
@@ -48,25 +48,20 @@ class SqlBuildCliInvocation:
     def wait(self) -> SqlBuildCliInvocation:
         """Wait for the SQLBuild process to complete."""
 
-        stdout_lines: list[str] = []
-        stderr_lines: list[str] = []
-        stdout_thread: threading.Thread | None = _start_stream_thread(
-            source=self.process.stdout,
-            sink=sys.stdout,
-            captured=stdout_lines,
-        )
-        stderr_thread: threading.Thread | None = _start_stream_thread(
-            source=self.process.stderr,
-            sink=sys.stderr,
-            captured=stderr_lines,
-        )
-        self.returncode = self.process.wait()
-        if stdout_thread is not None:
-            stdout_thread.join()
-        if stderr_thread is not None:
-            stderr_thread.join()
-        self.stdout = "".join(stdout_lines)
-        self.stderr = "".join(stderr_lines)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            stdout_future: Future[str] | None = _start_stream_future(
+                executor=executor,
+                source=self.process.stdout,
+                sink=sys.stdout,
+            )
+            stderr_future: Future[str] | None = _start_stream_future(
+                executor=executor,
+                source=self.process.stderr,
+                sink=sys.stderr,
+            )
+            self.returncode = self.process.wait()
+            self.stdout = stdout_future.result() if stdout_future is not None else ""
+            self.stderr = stderr_future.result() if stderr_future is not None else ""
         self.execution_payload = _load_execution_payload_from_path(self.execution_json_path)
         if self.raise_on_error and not self.is_successful():
             error: Exception | None = self.get_error()
@@ -225,11 +220,11 @@ def _log_invocation(*, context: Any, invocation: SqlBuildCliInvocation) -> None:
             logger.info("SQLBuild selector file:")
             logger.info("  %s", invocation.selector_file_path)
         logger.info("SQLBuild selected assets from Dagster (%s):", len(invocation.selection))
-        for line in _wrap_selectors(invocation.selection):
+        for line in _wrap_selectors(selectors=invocation.selection):
             logger.info("  %s", line)
 
 
-def _wrap_selectors(selectors: tuple[str, ...], *, width: int = 100) -> tuple[str, ...]:
+def _wrap_selectors(*, selectors: tuple[str, ...], width: int = 100) -> tuple[str, ...]:
     lines: list[str] = []
     current: str = ""
     for selector in selectors:
@@ -250,7 +245,8 @@ def _with_selected_asset_args(
 ) -> tuple[tuple[str, ...], tuple[str, ...], Path | None]:
     if dag is None or context is None or not args:
         return args, (), None
-    if len(args) >= 2 and args[0] == "scenario" and args[1] == "test":
+    scenario_test_argument_count: int = 2
+    if len(args) >= scenario_test_argument_count and args[0] == "scenario" and args[1] == "test":
         return _with_selected_scenario_args(args=args, context=context, dag=dag)
     if args[0] not in {"build", "run", "test", "audit", "seed", "load"}:
         return args, (), None
@@ -288,14 +284,16 @@ def _with_selected_scenario_args(
         selected_paths = {asset_key for asset_key, _check_name in selected_check_keys}
     if not selected_paths and not selected_check_keys:
         return args, (), None
-    nodes_by_id: dict[str, Mapping[str, Any]] = {
-        str(node.get("id")): node for node in dag.get("nodes", ())
-    }
-    selected_asset_ids: set[str] = {
-        str(node.get("id"))
-        for node in dag.get("nodes", ())
-        if tuple(str(part) for part in node.get("asset_key", ())) in selected_paths
-    }
+    nodes_by_id: dict[str, Mapping[str, Any]] = {}
+    selected_asset_ids: set[str] = set()
+    for node in dag.get("nodes", ()):
+        node_id: str = str(node.get("id"))
+        nodes_by_id[node_id] = node
+        asset_key: list[str] = []
+        for part in node.get("asset_key", ()):
+            asset_key.append(str(part))
+        if tuple(asset_key) in selected_paths:
+            selected_asset_ids.add(node_id)
     selectors: list[str] = []
     check: Mapping[str, Any]
     for check in dag.get("checks", ()):  # type: ignore[assignment]
@@ -369,7 +367,8 @@ def _with_json_output_args(
     if args[0] in {"build", "run", "test", "audit", "seed", "load"}:
         path: Path = _create_execution_json_path()
         return (*args, "--json-output", str(path)), path
-    if len(args) >= 2 and args[0] == "scenario" and args[1] == "test":
+    scenario_test_argument_count: int = 2
+    if len(args) >= scenario_test_argument_count and args[0] == "scenario" and args[1] == "test":
         path = _create_execution_json_path()
         return (*args, "--json-output", str(path)), path
     return args, None
@@ -387,24 +386,24 @@ def _create_execution_json_path() -> Path:
         return Path(handle.name)
 
 
-def _start_stream_thread(
-    *, source: IO[str] | None, sink: TextIO, captured: list[str]
-) -> threading.Thread | None:
+def _start_stream_future(
+    *, executor: ThreadPoolExecutor, source: IO[str] | None, sink: TextIO
+) -> Future[str] | None:
     if source is None:
         return None
+    return executor.submit(_forward_stream, source=source, sink=sink)
 
-    def _forward() -> None:
-        try:
-            for chunk in iter(source.readline, ""):
-                captured.append(chunk)
-                sink.write(chunk)
-                sink.flush()
-        finally:
-            source.close()
 
-    thread: threading.Thread = threading.Thread(target=_forward, daemon=True)
-    thread.start()
-    return thread
+def _forward_stream(*, source: IO[str], sink: TextIO) -> str:
+    captured: list[str] = []
+    try:
+        for chunk in iter(source.readline, ""):
+            captured.append(chunk)
+            sink.write(chunk)
+            sink.flush()
+    finally:
+        source.close()
+    return "".join(captured)
 
 
 def _write_selector_file(selectors: tuple[str, ...]) -> Path:
@@ -432,19 +431,28 @@ def _build_results_for_selected_assets(
         selected_paths = {tuple(key.path) for key in selected_keys}
     nodes: list[Mapping[str, Any]] = _sort_nodes_topologically(dag=dag)
     if selected_paths:
-        nodes = [
-            node
-            for node in nodes
-            if tuple(str(part) for part in node["asset_key"]) in selected_paths
-        ]
-    return tuple(
-        dg.MaterializeResult(
-            asset_key=dg.AssetKey([str(part) for part in node["asset_key"]]),
-            metadata={"command": " ".join(command), "sqlbuild_id": node.get("id")},
+        selected_nodes: list[Mapping[str, Any]] = []
+        for node in nodes:
+            asset_path: list[str] = []
+            for part in node["asset_key"]:
+                asset_path.append(str(part))
+            if tuple(asset_path) in selected_paths:
+                selected_nodes.append(node)
+        nodes = selected_nodes
+    results: list[Any] = []
+    for node in nodes:
+        if not _is_materializable_node_kind(str(node.get("kind"))):
+            continue
+        asset_path = []
+        for part in node["asset_key"]:
+            asset_path.append(str(part))
+        results.append(
+            dg.MaterializeResult(
+                asset_key=dg.AssetKey(asset_path),
+                metadata={"command": " ".join(command), "sqlbuild_id": node.get("id")},
+            )
         )
-        for node in nodes
-        if _is_materializable_node_kind(str(node.get("kind")))
-    )
+    return tuple(results)
 
 
 def _selectable_kinds_for_command(command: str) -> frozenset[str]:
@@ -539,7 +547,7 @@ def _build_results_from_execution_payload(
     check: Mapping[str, Any]
     seen_check_outputs: set[tuple[tuple[str, ...], str]] = set()
     for check in payload.get("checks", ()):  # type: ignore[assignment]
-        check_results: tuple[Any, ...] = _build_check_results_from_execution_check(
+        check_results, seen_check_outputs = _build_check_results_from_execution_check(
             dg=dg,
             dag=dag,
             nodes_by_id=nodes_by_id,
@@ -563,7 +571,7 @@ def _build_check_results_from_execution_check(
     check: Mapping[str, Any],
     selected_paths: set[tuple[str, ...]],
     seen_check_outputs: set[tuple[tuple[str, ...], str]],
-) -> tuple[Any, ...]:
+) -> tuple[tuple[Any, ...], set[tuple[tuple[str, ...], str]]]:
     dag_check: Mapping[str, Any] | None = _dag_check_for_execution_check(dag=dag, check=check)
     asset_ids: tuple[str, ...]
     check_name: str
@@ -595,7 +603,7 @@ def _build_check_results_from_execution_check(
                 severity=_dagster_check_severity(dg=dg, check=check),
             )
         )
-    return tuple(results)
+    return tuple(results), seen_check_outputs
 
 
 def _loader_results_for_source_payload(

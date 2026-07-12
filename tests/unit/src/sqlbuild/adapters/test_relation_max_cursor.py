@@ -101,7 +101,7 @@ def test_given_first_class_adapter_when_getting_relation_max_cursor_then_uses_ad
     test_case: AdapterRelationMaxCursorTestCase,
 ) -> None:
     result: object | None = test_case.adapter.get_relation_max_cursor(
-        test_case.connection,
+        connection=test_case.connection,
         relation=test_case.relation,
         cursor_column=test_case.cursor_column,
     )

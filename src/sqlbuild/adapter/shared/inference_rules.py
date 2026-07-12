@@ -20,7 +20,8 @@ def conditional_result_nullability(
 ) -> InferredNullability:
     """Infer IF/IFF-style nullability from true/false result arguments."""
 
-    if len(args) < 3:
+    source_target_and_default_argument_count: int = 3
+    if len(args) < source_target_and_default_argument_count:
         return InferredNullability.UNKNOWN
     result_args: tuple[InferredNullability, InferredNullability] = (args[1], args[2])
     if all(value == InferredNullability.NON_NULL for value in result_args):

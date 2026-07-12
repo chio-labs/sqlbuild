@@ -196,7 +196,7 @@ def test_given_relation_when_getting_max_cursor_then_base_adapter_queries_quoted
     connection: RecordingConnection = RecordingConnection(rows=test_case.rows)
 
     result: object | None = adapter.get_relation_max_cursor(
-        connection,
+        connection=connection,
         relation=test_case.relation,
         cursor_column=test_case.cursor_column,
     )
@@ -247,33 +247,35 @@ def test_given_metadata_names_with_quotes_when_querying_then_base_adapter_escape
     adapter: RecordingBaseAdapter = RecordingBaseAdapter()
     connection: RecordingConnection = RecordingConnection()
 
-    adapter.schema_exists(connection, database=test_case.database, schema=test_case.schema)
+    adapter.schema_exists(
+        connection=connection, database=test_case.database, schema=test_case.schema
+    )
     adapter.relation_exists(
-        connection,
+        connection=connection,
         database=test_case.database,
         schema=test_case.schema,
         name=test_case.name,
     )
     adapter.list_relations(
-        connection,
+        connection=connection,
         database=test_case.database,
         schemas=(test_case.schema,),
         names=(test_case.name,),
     )
     adapter.list_functions(
-        connection,
+        connection=connection,
         database=test_case.database,
         schemas=(test_case.schema,),
         names=(test_case.name,),
     )
     adapter.get_columns(
-        connection,
+        connection=connection,
         database=test_case.database,
         schema=test_case.schema,
         name=test_case.name,
     )
     adapter.get_all_columns(
-        connection,
+        connection=connection,
         database=test_case.database,
         schemas=(test_case.schema,),
         names=(test_case.name,),

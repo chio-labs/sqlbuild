@@ -108,14 +108,14 @@ def execute_view_entry(
 
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=target_database,
             schema=target_schema,
             statement_recorder=statement_recorder,
         )
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_view"):
             adapter.create_view_as(
-                connection,
+                connection=connection,
                 destination=target_qualified,
                 sql=entry.resolved_sql,
                 statement_recorder=statement_recorder,

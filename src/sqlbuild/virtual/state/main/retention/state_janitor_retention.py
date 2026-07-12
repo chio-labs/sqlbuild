@@ -26,7 +26,7 @@ def inspect_state_janitor_retention(
     connection: Any = backend.connect(config.connection)
     try:
         backups: tuple[StateBackupRecord, ...] = backend.list_state_backups(
-            connection,
+            connection=connection,
             schema=config.schema,
         )
         latest_backup_id: str | None = backups[0].backup_id if backups else None
@@ -42,9 +42,9 @@ def inspect_state_janitor_retention(
                     now=datetime.now(UTC),
                 )
             ),
-            expired_locks=backend.list_expired_locks(connection, schema=config.schema),
+            expired_locks=backend.list_expired_locks(connection=connection, schema=config.schema),
             unreferenced_python_node_versions=backend.count_unreferenced_python_node_versions(
-                connection, schema=config.schema
+                connection=connection, schema=config.schema
             ),
         )
     finally:

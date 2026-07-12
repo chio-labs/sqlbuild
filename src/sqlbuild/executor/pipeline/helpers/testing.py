@@ -109,7 +109,7 @@ def _prepare_test_functions(
     existing_function_names: set[tuple[str | None, str | None, str]] = set()
     for database, schema, names in _group_function_names(required_targets_by_key.values()):
         function_infos: tuple[FunctionInfo, ...] = adapter.list_functions(
-            connection,
+            connection=connection,
             database=database,
             schemas=(schema,) if schema is not None else None,
             names=names,

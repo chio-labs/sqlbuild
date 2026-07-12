@@ -26,7 +26,7 @@ def create_staging_relation(
     adapter: BaseAdapter = context.adapter
     connection: Any = context.connection
     adapter.drop(
-        connection,
+        connection=connection,
         destination=staging_qualified,
         if_exists=True,
         statement_recorder=statement_recorder,
@@ -45,7 +45,7 @@ def create_staging_relation(
             statement_recorder=statement_recorder,
         )
     adapter.create_table_as(
-        connection,
+        connection=connection,
         destination=staging_qualified,
         sql=resolved_sql,
         statement_recorder=statement_recorder,

@@ -47,7 +47,7 @@ def add_dbt_execution_args(parser: argparse.ArgumentParser) -> None:
 
 
 def build_dbt_execution_parser(
-    command: DbtInteropCommand, *, prog: str | None = None
+    *, command: DbtInteropCommand, prog: str | None = None
 ) -> argparse.ArgumentParser:
     """Build the standalone argparse parser declaring flags for a dbt command."""
 
@@ -67,7 +67,7 @@ def parse_dbt_execution_args(
     """Parse raw `sqb dbt <command>` tokens into declared flags and a `--` tail."""
 
     head, tail = _split_passthrough(args)
-    parser: argparse.ArgumentParser = build_dbt_execution_parser(command)
+    parser: argparse.ArgumentParser = build_dbt_execution_parser(command=command)
     namespace: argparse.Namespace
     unknown: list[str]
     namespace, unknown = parser.parse_known_args(head)

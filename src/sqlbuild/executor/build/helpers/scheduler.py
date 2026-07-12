@@ -308,9 +308,9 @@ class BuildScheduler:
                         self._mark_complete(key)
                         continue
                     result: LoadExecutionResult = self._execute_source_node(
-                        key, connection=connection
+                        key=key, connection=connection
                     )
-                    self._handle_completion(key, result=result)
+                    self._handle_completion(key=key, result=result)
                     continue
                 if key in self._blocked_keys:
                     self._record_skipped(key)
@@ -325,8 +325,8 @@ class BuildScheduler:
                     | FunctionExecutionResult
                     | SqlTestExecutionResult
                     | LoadExecutionResult
-                ) = self._execute_node(key, connection=connection)
-                self._handle_completion(key, result=result)
+                ) = self._execute_node(key=key, connection=connection)
+                self._handle_completion(key=key, result=result)
         finally:
             self._connection_pool.put(connection)
 
@@ -362,14 +362,14 @@ class BuildScheduler:
 
                 completion: NodeCompletion = self._completion_queue.get()
                 self._in_flight.discard(completion.key)
-                self._handle_completion(completion.key, result=completion.result)
+                self._handle_completion(key=completion.key, result=completion.result)
 
     def _worker(self, key: CompiledObjectKey) -> None:
         run_worker_with_completion(
             key=key,
             connection_pool=self._connection_pool,
             completion_queue=self._completion_queue,
-            execute=lambda connection: self._execute_node(key, connection=connection),
+            execute=lambda connection: self._execute_node(key=key, connection=connection),
             build_success=_build_worker_success_completion,
             build_failure=_build_worker_failure_completion,
         )
@@ -419,7 +419,7 @@ class BuildScheduler:
         return True
 
     def _execute_node(
-        self, key: CompiledObjectKey, *, connection: Any
+        self, *, key: CompiledObjectKey, connection: Any
     ) -> (
         ModelExecutionResult
         | SeedExecutionResult
@@ -430,15 +430,15 @@ class BuildScheduler:
         """Execute a single node. Runs in a worker thread (or scheduler thread for serial)."""
 
         if key.resource_type == CompiledResourceType.SEED:
-            return self._execute_seed_node(key, connection=connection)
+            return self._execute_seed_node(key=key, connection=connection)
         if key.resource_type == CompiledResourceType.SOURCE:
-            return self._execute_source_node(key, connection=connection)
+            return self._execute_source_node(key=key, connection=connection)
         if key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
-            return self._execute_function_node(key, connection=connection)
+            return self._execute_function_node(key=key, connection=connection)
         if key.resource_type == CompiledResourceType.SQL_TEST:
-            return self._execute_test_node(key, connection=connection)
+            return self._execute_test_node(key=key, connection=connection)
         if key.resource_type == CompiledResourceType.MODEL:
-            return self._execute_model_node(key, connection=connection)
+            return self._execute_model_node(key=key, connection=connection)
         return ModelExecutionResult(
             model_name=key.name,
             status=ExecutionStatus.FAILED,
@@ -447,7 +447,7 @@ class BuildScheduler:
         )
 
     def _execute_source_node(
-        self, key: CompiledObjectKey, *, connection: Any
+        self, *, key: CompiledObjectKey, connection: Any
     ) -> LoadExecutionResult:
         return execute_build_source_node(
             key=key,
@@ -461,7 +461,7 @@ class BuildScheduler:
             callbacks=self._callbacks,
         )
 
-    def _execute_seed_node(self, key: CompiledObjectKey, *, connection: Any) -> SeedExecutionResult:
+    def _execute_seed_node(self, *, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:
         seed_entry: SeedPlanEntry | None = self._indexes.seed_entries_by_key.get(key)
         if seed_entry is None:
             return SeedExecutionResult(
@@ -476,7 +476,7 @@ class BuildScheduler:
             self._on_node_start(seed_entry.name, resource_kind=ExecutionResourceKind.SEED)
         start: float = time.monotonic()
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="",
             sqlbuild_subject="seed",
             sqlbuild_name=seed_entry.name,
@@ -500,7 +500,7 @@ class BuildScheduler:
         duration: int = int((time.monotonic() - start) * 1000)
         completed_result: SeedExecutionResult = dataclasses.replace(result, duration_ms=duration)
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="",
             sqlbuild_subject="seed",
             sqlbuild_name=seed_entry.name,
@@ -511,7 +511,7 @@ class BuildScheduler:
         return completed_result
 
     def _execute_test_node(
-        self, key: CompiledObjectKey, *, connection: Any
+        self, *, key: CompiledObjectKey, connection: Any
     ) -> SqlTestExecutionResult:
         test_entry: SqlTestPlanEntry | None = self._indexes.test_entries_by_key.get(key)
         if test_entry is None:
@@ -524,7 +524,7 @@ class BuildScheduler:
         if self._on_progress is not None:
             self._on_progress(f"test: {test_entry.name}")
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="",
             sqlbuild_subject="test",
             sqlbuild_name=test_entry.name,
@@ -541,7 +541,7 @@ class BuildScheduler:
             )
         duration: int = int((time.monotonic() - start) * 1000)
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="",
             sqlbuild_subject="test",
             sqlbuild_name=test_entry.name,
@@ -552,7 +552,7 @@ class BuildScheduler:
         return result
 
     def _execute_function_node(
-        self, key: CompiledObjectKey, *, connection: Any
+        self, *, key: CompiledObjectKey, connection: Any
     ) -> FunctionExecutionResult:
         function_entry: FunctionPlanEntry | None = self._indexes.function_entries_by_key.get(key)
         if function_entry is None:
@@ -583,7 +583,7 @@ class BuildScheduler:
         return dataclasses.replace(result, duration_ms=duration)
 
     def _execute_model_node(
-        self, key: CompiledObjectKey, *, connection: Any
+        self, *, key: CompiledObjectKey, connection: Any
     ) -> ModelExecutionResult:
         model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
         if model_entry is None:
@@ -609,7 +609,7 @@ class BuildScheduler:
 
         start: float = time.monotonic()
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="",
             sqlbuild_subject="model",
             sqlbuild_name=model_entry.name,
@@ -623,7 +623,7 @@ class BuildScheduler:
         ):
             try:
                 if self._before_model_materialize is not None:
-                    self._before_model_materialize(model_entry, connection=connection)
+                    self._before_model_materialize(entry=model_entry, connection=connection)
                 result: ModelExecutionResult = _dispatch_model(
                     context=ModelMaterializationContext(
                         entry=model_entry,
@@ -661,7 +661,7 @@ class BuildScheduler:
         duration: int = int((time.monotonic() - start) * 1000)
         completed_result: ModelExecutionResult = dataclasses.replace(result, duration_ms=duration)
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="",
             sqlbuild_subject="model",
             sqlbuild_name=model_entry.name,
@@ -673,8 +673,8 @@ class BuildScheduler:
 
     def _handle_completion(
         self,
-        key: CompiledObjectKey,
         *,
+        key: CompiledObjectKey,
         result: (
             ModelExecutionResult
             | SeedExecutionResult
@@ -802,7 +802,7 @@ class BuildScheduler:
             )
             if load_entry is not None:
                 self._load_results.append(
-                    skipped_load_result(self._plan.source_map[load_entry.name])
+                    skipped_load_result(source=self._plan.source_map[load_entry.name])
                 )
 
     def _skip_remaining(self) -> None:
@@ -818,12 +818,12 @@ class BuildScheduler:
 
 
 def _build_worker_success_completion(
-    key: CompiledObjectKey, *, result: _BuildWorkerResult
+    *, key: CompiledObjectKey, result: _BuildWorkerResult
 ) -> NodeCompletion:
     return NodeCompletion(key=key, result=result)
 
 
-def _build_worker_failure_completion(key: CompiledObjectKey, *, error: Exception) -> NodeCompletion:
+def _build_worker_failure_completion(*, key: CompiledObjectKey, error: Exception) -> NodeCompletion:
     return NodeCompletion(
         key=key,
         result=ModelExecutionResult(

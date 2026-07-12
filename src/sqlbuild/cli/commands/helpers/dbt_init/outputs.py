@@ -20,11 +20,11 @@ def write_dbt_init_completion_output(
         return
     style: CliStyle = CliStyle(use_color=use_color)
     doc: CliDocument = CliDocument(style)
-    doc.header("SQLBuild project created")
+    doc.header(text="SQLBuild project created")
     doc.blank()
     doc.section("Setup summary")
     doc.fields(
-        (
+        rows=(
             ("Project", result.project_name),
             ("Config file", str(result.project_file)),
             ("Production git ref", result.production_git_ref),
@@ -52,10 +52,10 @@ def write_dbt_init_completion_output(
     doc.line("     those relation names when copying already-built prod tables.")
     doc.blank()
     doc.section("Next steps")
-    doc.command_line("  1. ", command=f"cd {result.output_dir}")
+    doc.command_line(prefix="  1. ", command=f"cd {result.output_dir}")
     doc.line("  2. " + style.warning("Review the config file and production schema macro above."))
-    doc.command_line("  3. ", command="sqb dbt debug")
-    doc.command_line("  4. ", command="sqb dbt build")
+    doc.command_line(prefix="  3. ", command="sqb dbt debug")
+    doc.command_line(prefix="  4. ", command="sqb dbt build")
     print("\n" + doc.render(), end="")
     for warning in result.warnings:
         print(f"Warning: {warning}", file=sys.stderr)
@@ -70,15 +70,15 @@ def resolve_dbt_init_exit_code(result: DbtInitResult) -> int:
 def _render_dbt_init_dry_run(*, result: DbtInitResult, use_color: bool) -> str:
     style: CliStyle = CliStyle(use_color=use_color)
     doc: CliDocument = CliDocument(style)
-    doc.header("SQLBuild project preview")
+    doc.header(text="SQLBuild project preview")
     doc.blank()
-    doc.field("Project", value=result.project_name)
-    doc.field("Config file", value=str(result.project_file), value_padding="  ")
-    doc.field("Production git ref", value=result.production_git_ref)
-    doc.field("Production schema macro", value=str(result.macro_file))
-    doc.field("Adapter", value=result.adapter)
-    doc.field("Target", value=result.target_name, value_padding="  ")
-    doc.field("Profile", value=result.profile_name)
+    doc.field(label="Project", value=result.project_name)
+    doc.field(label="Config file", value=str(result.project_file), value_padding="  ")
+    doc.field(label="Production git ref", value=result.production_git_ref)
+    doc.field(label="Production schema macro", value=str(result.macro_file))
+    doc.field(label="Adapter", value=result.adapter)
+    doc.field(label="Target", value=result.target_name, value_padding="  ")
+    doc.field(label="Profile", value=result.profile_name)
     doc.blank()
     doc.section("Generated config")
     doc.line(result.toml.rstrip())

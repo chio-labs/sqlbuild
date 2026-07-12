@@ -33,7 +33,7 @@ def inspect_expired_environment_retention(
     connection: Any = backend.connect(config.connection)
     try:
         environments: tuple[VirtualEnvironmentRetentionRecord, ...] = (
-            backend.list_virtual_environments(connection, schema=config.schema)
+            backend.list_virtual_environments(connection=connection, schema=config.schema)
         )
         cleanup_names: set[str] = {
             environment.virtual_environment_name
@@ -52,14 +52,14 @@ def inspect_expired_environment_retention(
                 continue
             refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
                 backend.get_virtual_environment_model_refs(
-                    connection,
+                    connection=connection,
                     schema=config.schema,
                     virtual_environment_name=environment.virtual_environment_name,
                 )
             )
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-                    connection,
+                    connection=connection,
                     schema=config.schema,
                     model_name=ref.model_name,
                     version_hash=ref.version_hash,

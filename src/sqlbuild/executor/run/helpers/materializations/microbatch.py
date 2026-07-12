@@ -149,7 +149,7 @@ def execute_microbatch_entry(
     for batch in batches:
         window_text: str = f"{batch.start}..{batch.end}"
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="",
             sqlbuild_subject="model",
             sqlbuild_name=entry.name,
@@ -170,13 +170,13 @@ def execute_microbatch_entry(
                 sqlbuild_window=window_text,
             ):
                 adapter.drop(
-                    connection,
+                    connection=connection,
                     destination=delta_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
                 adapter.create_table_as(
-                    connection,
+                    connection=connection,
                     destination=delta_qualified,
                     sql=batch_sql,
                     statement_recorder=statement_recorder,
@@ -200,13 +200,13 @@ def execute_microbatch_entry(
                     sqlbuild_window=window_text,
                 ):
                     delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                        connection,
+                        connection=connection,
                         database=target_database,
                         schema=target_schema,
                         name=delta_table,
                     )
                     target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                        connection,
+                        connection=connection,
                         database=target_database,
                         schema=target_schema,
                         name=target_table,
@@ -289,7 +289,7 @@ def execute_microbatch_entry(
             ):
                 target_columns_for_dml: tuple[ColumnInfo, ...] = (
                     adapter.get_columns(
-                        connection,
+                        connection=connection,
                         database=target_database,
                         schema=target_schema,
                         name=target_table,
@@ -298,7 +298,7 @@ def execute_microbatch_entry(
                     else ()
                 )
                 delta_columns_for_dml: tuple[ColumnInfo, ...] = adapter.get_columns(
-                    connection,
+                    connection=connection,
                     database=target_database,
                     schema=target_schema,
                     name=delta_table,
@@ -306,7 +306,7 @@ def execute_microbatch_entry(
                 _validate_cursor_output_columns(entry=entry, delta_columns=delta_columns_for_dml)
                 if is_full_refresh and completed_batches == 0:
                     adapter.create_table_as(
-                        connection,
+                        connection=connection,
                         destination=target_qualified,
                         sql=f"SELECT * FROM {delta_qualified}",
                         statement_recorder=statement_recorder,
@@ -341,13 +341,13 @@ def execute_microbatch_entry(
             sqlbuild_window=window_text,
         ):
             adapter.drop(
-                connection,
+                connection=connection,
                 destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="",
             sqlbuild_subject="model",
             sqlbuild_name=entry.name,
@@ -434,7 +434,7 @@ def _drop_target_for_full_refresh(
     try:
         with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_target"):
             context.adapter.drop(
-                context.connection,
+                connection=context.connection,
                 destination=target_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
@@ -650,7 +650,7 @@ def _discover_cursor_range(
             f"MAX({cursor_input.cursor_column}) AS _max FROM {cursor_input.relation}"
         )
     discovery_sql: str = "SELECT MIN(_min), MAX(_max) FROM (" + " UNION ALL ".join(parts) + ")"
-    cursor: Any = adapter.execute(connection, sql=discovery_sql)
+    cursor: Any = adapter.execute(connection=connection, sql=discovery_sql)
     row: Any = cursor.fetchone()
     if row is None or row[0] is None or row[1] is None:
         return None

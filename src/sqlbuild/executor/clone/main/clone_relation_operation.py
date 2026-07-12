@@ -37,13 +37,13 @@ def clone_relation_by_names(
     start: float = time.monotonic()
     try:
         adapter.drop(
-            connection,
+            connection=connection,
             destination=destination_relation,
             if_exists=True,
             statement_recorder=recorder,
         )
         adapter.clone(
-            connection,
+            connection=connection,
             origin=origin_relation,
             destination=destination_relation,
             hard_copy=hard_copy,

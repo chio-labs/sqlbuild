@@ -186,9 +186,13 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
     )
     assert tuple(loader.cursor_column for loader in result) == test_case.expected_cursor_columns
     assert tuple(loader.unique_key for loader in result) == test_case.expected_unique_keys
-    assert tuple(tuple(column.name for column in loader.columns) for loader in result) == (
-        test_case.expected_column_names
-    )
+    actual_column_names: list[tuple[str, ...]] = []
+    for loader in result:
+        column_names: list[str] = []
+        for column in loader.columns:
+            column_names.append(column.name)
+        actual_column_names.append(tuple(column_names))
+    assert tuple(actual_column_names) == test_case.expected_column_names
     assert tuple(loader.contract for loader in result) == test_case.expected_contracts
 
 

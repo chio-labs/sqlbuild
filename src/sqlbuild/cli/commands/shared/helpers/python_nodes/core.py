@@ -37,17 +37,14 @@ def sql_loader_functions_for_lifecycle_handoff(
     loader_functions: frozenset[object] = frozenset(
         loader.function for loader in discovered_inputs.loader_functions
     )
-    return tuple(
-        replace(
-            loader,
-            depends_on=tuple(
-                dependency
-                for dependency in loader.depends_on
-                if dependency in loader_functions or loader.name not in ingress_loader_names
-            ),
-        )
-        for loader in discovered_inputs.loader_functions
-    )
+    handoff_loaders: list[DiscoveredLoaderFunction] = []
+    for loader in discovered_inputs.loader_functions:
+        dependencies: list[object] = []
+        for dependency in loader.depends_on:
+            if dependency in loader_functions or loader.name not in ingress_loader_names:
+                dependencies.append(dependency)
+        handoff_loaders.append(replace(loader, depends_on=tuple(dependencies)))
+    return tuple(handoff_loaders)
 
 
 def write_python_node_results(
@@ -61,7 +58,7 @@ def write_python_node_results(
         status_text: str = python_node_status_text(result.status)
         stream.write(
             f"  {'python':<10}{result.kind.value:<10}{result.node_name:<50} "
-            f"{style.status(status_text)}"
+            f"{style.status(status=status_text)}"
         )
         if result.error_message:
             stream.write(f"  {result.error_message}")

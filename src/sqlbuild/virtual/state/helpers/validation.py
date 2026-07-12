@@ -52,7 +52,7 @@ def build_validation_result(
                     )
                 )
                 continue
-            if not type_matches(actual_type, expected_type=expected_type):
+            if not type_matches(actual_type=actual_type, expected_type=expected_type):
                 issues.append(
                     StateSchemaValidationIssue(
                         kind=StateSchemaValidationIssueKind.WRONG_TYPE,

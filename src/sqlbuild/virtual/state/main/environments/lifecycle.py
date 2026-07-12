@@ -83,7 +83,7 @@ def _execute_state_command(
 
     if command == StateCommand.INIT:
         backend.initialize(
-            connection,
+            connection=connection,
             schema=config.schema,
             sqlbuild_version=importlib.metadata.version("sqlbuild"),
         )
@@ -96,9 +96,9 @@ def _execute_state_command(
         )
         return 0
     if command == StateCommand.MIGRATE:
-        created_backup_id: str = backend.create_backup(connection, schema=config.schema)
+        created_backup_id: str = backend.create_backup(connection=connection, schema=config.schema)
         backend.initialize(
-            connection,
+            connection=connection,
             schema=config.schema,
             sqlbuild_version=importlib.metadata.version("sqlbuild"),
         )
@@ -113,7 +113,7 @@ def _execute_state_command(
         return 0
     if command == StateCommand.ROLLBACK:
         used_backup_id: str = backend.rollback(
-            connection,
+            connection=connection,
             schema=config.schema,
             backup_id=backup_id,
         )
@@ -136,7 +136,7 @@ def _execute_state_command(
             )
         if not auto_approve:
             raise StateBackendConfigError("state reset requires --auto-approve")
-        backend.reset(connection, schema=config.schema)
+        backend.reset(connection=connection, schema=config.schema)
         print(
             format_state_lifecycle_summary(
                 title="Virtual State Reset",
@@ -145,8 +145,8 @@ def _execute_state_command(
             )
         )
         return 0
-    validation: StateSchemaValidationResult = backend.validate_schema(
-        connection,
+    validation: StateSchemaValidationResult = backend.inspect_schema(
+        connection=connection,
         schema=config.schema,
     )
     print(f"State schema valid: {validation.valid}")

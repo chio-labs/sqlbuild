@@ -2398,7 +2398,7 @@ sql_analysis = false
     ],
     ids=lambda case: case.description,
 )
-def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_metadata(
+def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_metadata(  # noqa: PLR0915
     test_case: BuildCompileInputsTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2413,7 +2413,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         selected_target=test_case.selected_target,
         cli_vars=test_case.cli_vars,
         run_id=test_case.run_id,
@@ -2436,11 +2436,14 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         tuple(model_input.query_sql for model_input in compile_inputs.model_inputs)
         == test_case.expected_model_query_sqls
     )
+    actual_model_column_nullables_list: list[tuple[bool | None, ...]] = []
+    for model_input in compile_inputs.model_inputs:
+        column_nullables: list[bool | None] = []
+        for column in getattr(model_input.schema_entry, "columns", ()):
+            column_nullables.append(column.nullable)
+        actual_model_column_nullables_list.append(tuple(column_nullables))
     actual_model_column_nullables: tuple[tuple[bool | None, ...], ...] = tuple(
-        tuple(column.nullable for column in model_input.schema_entry.columns)
-        if model_input.schema_entry is not None
-        else ()
-        for model_input in compile_inputs.model_inputs
+        actual_model_column_nullables_list
     )
     assert actual_model_column_nullables == expected_or_actual(
         test_case.expected_model_column_nullables, actual_model_column_nullables
@@ -2453,6 +2456,34 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         test_case.expected_model_schema_descriptions,
         actual_model_schema_descriptions,
     )
+    model_column_metadata_list: list[
+        tuple[
+            tuple[
+                str,
+                str | None,
+                str | None,
+                tuple[tuple[str, dict[str, object]], ...],
+            ],
+            ...,
+        ]
+    ] = []
+    for model_input in compile_inputs.model_inputs:
+        column_metadata: list[
+            tuple[str, str | None, str | None, tuple[tuple[str, dict[str, object]], ...]]
+        ] = []
+        for column in getattr(model_input.schema_entry, "columns", ()):
+            audit_metadata: list[tuple[str, dict[str, object]]] = []
+            for audit in column.audits:
+                audit_metadata.append((audit.definition_name, audit.arguments))
+            column_metadata.append(
+                (
+                    column.name,
+                    column.type,
+                    column.description,
+                    tuple(audit_metadata),
+                )
+            )
+        model_column_metadata_list.append(tuple(column_metadata))
     actual_model_column_metadata: tuple[
         tuple[
             tuple[
@@ -2464,20 +2495,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
             ...,
         ],
         ...,
-    ] = tuple(
-        tuple(
-            (
-                column.name,
-                column.type,
-                column.description,
-                tuple((audit.definition_name, audit.arguments) for audit in column.audits),
-            )
-            for column in model_input.schema_entry.columns
-        )
-        if model_input.schema_entry is not None
-        else ()
-        for model_input in compile_inputs.model_inputs
-    )
+    ] = tuple(model_column_metadata_list)
     assert actual_model_column_metadata == expected_or_actual(
         test_case.expected_model_column_metadata,
         actual_model_column_metadata,
@@ -2570,24 +2588,24 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         tuple(function_input.name for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_names
     )
-    assert (
-        tuple(
-            tuple((argument.name, argument.type) for argument in function_input.arguments)
-            for function_input in compile_inputs.sql_function_inputs
-        )
-        == test_case.expected_sql_function_arguments
-    )
+    actual_function_arguments: list[tuple[tuple[str, str], ...]] = []
+    for function_input in compile_inputs.sql_function_inputs:
+        arguments: list[tuple[str, str]] = []
+        for argument in function_input.arguments:
+            arguments.append((argument.name, argument.type))
+        actual_function_arguments.append(tuple(arguments))
+    assert tuple(actual_function_arguments) == test_case.expected_sql_function_arguments
     assert (
         tuple(function_input.returns for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_returns
     )
-    assert (
-        tuple(
-            tuple((column.name, column.type) for column in function_input.return_columns)
-            for function_input in compile_inputs.sql_function_inputs
-        )
-        == test_case.expected_sql_function_return_columns
-    )
+    actual_return_columns: list[tuple[tuple[str, str], ...]] = []
+    for function_input in compile_inputs.sql_function_inputs:
+        return_columns: list[tuple[str, str]] = []
+        for column in function_input.return_columns:
+            return_columns.append((column.name, column.type))
+        actual_return_columns.append(tuple(return_columns))
+    assert tuple(actual_return_columns) == test_case.expected_sql_function_return_columns
     assert (
         tuple(function_input.body_sql for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_body_sqls
@@ -2624,20 +2642,20 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         )
         == test_case.expected_sql_function_replay_on_changes
     )
-    assert (
-        tuple(
-            tuple((reference.ref_kind, reference.ref_name) for reference in model_input.references)
-            for model_input in compile_inputs.model_inputs
-        )
-        == test_case.expected_model_references
-    )
-    assert (
-        tuple(
-            tuple((reference.ref_kind, reference.ref_name) for reference in audit_input.references)
-            for audit_input in compile_inputs.audit_inputs
-        )
-        == test_case.expected_audit_references
-    )
+    actual_model_references: list[tuple[tuple[str, str], ...]] = []
+    for model_input in compile_inputs.model_inputs:
+        references: list[tuple[str, str]] = []
+        for reference in model_input.references:
+            references.append((reference.ref_kind, reference.ref_name))
+        actual_model_references.append(tuple(references))
+    assert tuple(actual_model_references) == test_case.expected_model_references
+    actual_audit_references: list[tuple[tuple[str, str], ...]] = []
+    for audit_input in compile_inputs.audit_inputs:
+        references = []
+        for reference in audit_input.references:
+            references.append((reference.ref_kind, reference.ref_name))
+        actual_audit_references.append(tuple(references))
+    assert tuple(actual_audit_references) == test_case.expected_audit_references
     assert compile_inputs.effective_target_name == test_case.expected_effective_target_name
     assert compile_inputs.effective_connection == test_case.expected_effective_connection
     assert (
@@ -2652,10 +2670,9 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         == test_case.expected_effective_max_concurrency
     )
     assert compile_inputs.effective_vars == test_case.expected_effective_vars
-    assert (
-        compile_inputs.run_id == test_case.run_id
-        if test_case.run_id is not None
-        else re.fullmatch(r"\d{8}T\d{6}Z_[0-9a-f]{12}", compile_inputs.run_id) is not None
+    assert test_case.run_id is None or compile_inputs.run_id == test_case.run_id
+    assert test_case.run_id is not None or re.fullmatch(
+        r"\d{8}T\d{6}Z_[0-9a-f]{12}", compile_inputs.run_id
     )
 
 
@@ -3842,7 +3859,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
         build_compile_inputs(
-            discovered_inputs,
+            discovered_inputs=discovered_inputs,
             selected_target=test_case.selected_target,
             run_id=test_case.run_id,
             external_sql_reference_resolver=build_external_sql_reference_resolver(
@@ -3885,7 +3902,7 @@ def test_given_python_hook_when_building_compile_inputs_then_validation_does_not
     write_repo_files(tmp_path, test_case.repo_files)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    build_compile_inputs(discovered_inputs)
+    build_compile_inputs(discovered_inputs=discovered_inputs)
 
     assert (
         tmp_path / "hooks" / "executed.marker"
@@ -3979,7 +3996,7 @@ def test_given_snapshot_contract_schema_change_conflict_when_building_then_error
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment) as exc_info:
         build_compile_inputs(
-            discovered_inputs,
+            discovered_inputs=discovered_inputs,
             selected_target=test_case.selected_target,
             run_id=test_case.run_id,
             external_sql_reference_resolver=build_external_sql_reference_resolver(
@@ -4024,6 +4041,6 @@ def test_given_model_referencing_seed_when_building_compile_inputs_then_succeeds
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(discovered_inputs)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(discovered_inputs=discovered_inputs)
 
     assert len(compile_inputs.model_inputs) == test_case.expected_model_count

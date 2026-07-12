@@ -13,7 +13,7 @@ from sqlbuild.virtual.state.models import SourceFreshnessRecord
 
 
 def source_freshness_record_from_observation(
-    observation: SourceFreshnessObservation, *, virtual_environment_name: str
+    *, observation: SourceFreshnessObservation, virtual_environment_name: str
 ) -> SourceFreshnessRecord:
     """Build a persisted virtual state record from an observed source freshness value."""
 

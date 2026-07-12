@@ -80,8 +80,8 @@ from tests.unit.src.sqlbuild.cli.commands.helpers.debug._test_types import (
 def test_given_debug_result_when_formatting_then_renders_expected_outputs(
     test_case: DebugOutputTestCase,
 ) -> None:
-    text: str = format_debug_text(test_case.result, use_color=False)
-    color_text: str = format_debug_text(test_case.result, use_color=True)
+    text: str = format_debug_text(result=test_case.result, use_color=False)
+    color_text: str = format_debug_text(result=test_case.result, use_color=True)
     json_text: str = format_debug_json(test_case.result)
 
     assert text == test_case.expected_text

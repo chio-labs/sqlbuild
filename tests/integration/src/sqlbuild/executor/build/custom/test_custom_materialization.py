@@ -431,7 +431,7 @@ def test_given_custom_reuse_with_origin_proof_when_user_runs_audits_then_audit_e
 
     def prepare_version(ctx: PrepareVersionContext) -> None:
         ctx.adapter.create_table_as(
-            ctx.connection,
+            connection=ctx.connection,
             destination=ctx.destination,
             sql=f"SELECT * FROM {ctx.origin_relation}",
             statement_recorder=ctx.statement_recorder,
@@ -561,7 +561,7 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
         captured["target"] = ctx.build_target
         captured["vars"] = ctx.vars
         captured["qualified_name"] = ctx.qualify_name(
-            "partition_state", schema="meta", database=None
+            name="partition_state", schema="meta", database=None
         )
         captured["destination_schema_qualified_name"] = ctx.qualify_in_destination_schema(
             "partition_state"
@@ -570,7 +570,7 @@ def test_given_custom_materialization_when_executing_then_context_fields_populat
             "external.partition_state"
         )
         ctx.adapter.create_table_as(
-            ctx.connection,
+            connection=ctx.connection,
             destination=ctx.destination,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,

@@ -12,15 +12,15 @@ from sqlbuild.adapter.shared.models import QueryResult
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 
 
-def render_query_result(result: QueryResult, *, output_format: str, limit: int | None) -> str:
+def render_query_result(*, result: QueryResult, output_format: str, limit: int | None) -> str:
     """Render a query result using the requested output format."""
 
     if not result.columns:
         return "OK\n"
     if output_format == "long":
-        return render_long_query_result(result, limit=limit)
+        return render_long_query_result(result=result, limit=limit)
     if output_format == "table":
-        return render_table_query_result(result, limit=limit)
+        return render_table_query_result(result=result, limit=limit)
     if output_format == "json":
         return render_json_query_result(result)
     if output_format == "csv":
@@ -28,7 +28,7 @@ def render_query_result(result: QueryResult, *, output_format: str, limit: int |
     raise CliUserError(f"unsupported query output format '{output_format}'")
 
 
-def render_long_query_result(result: QueryResult, *, limit: int | None) -> str:
+def render_long_query_result(*, result: QueryResult, limit: int | None) -> str:
     lines: list[str] = []
     column_width: int = max(len(column) for column in result.columns)
     row_index: int
@@ -49,10 +49,16 @@ def render_long_query_result(result: QueryResult, *, limit: int | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_table_query_result(result: QueryResult, *, limit: int | None) -> str:
-    rows: tuple[tuple[str, ...], ...] = tuple(
-        tuple(_format_display_value(value) for value in row) for row in result.rows
-    )
+def render_table_query_result(*, result: QueryResult, limit: int | None) -> str:
+    display_rows: list[tuple[str, ...]] = []
+    source_row: tuple[object, ...]
+    for source_row in result.rows:
+        display_values: list[str] = []
+        source_value: object
+        for source_value in source_row:
+            display_values.append(_format_display_value(source_value))
+        display_rows.append(tuple(display_values))
+    rows: tuple[tuple[str, ...], ...] = tuple(display_rows)
     widths: list[int] = [len(column) for column in result.columns]
     row: tuple[str, ...]
     for row in rows:

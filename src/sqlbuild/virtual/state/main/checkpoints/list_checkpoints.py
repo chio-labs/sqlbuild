@@ -28,7 +28,7 @@ def list_virtual_environment_checkpoints(
     connection: Any = backend.connect(config.connection)
     try:
         return backend.list_virtual_environment_checkpoints(
-            connection,
+            connection=connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
         )

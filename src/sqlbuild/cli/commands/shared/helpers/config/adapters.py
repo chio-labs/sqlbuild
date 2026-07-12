@@ -12,7 +12,7 @@ from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 
 
-def resolve_adapter(adapter_name: str, *, project_dir: Path | None = None) -> BaseAdapter:
+def resolve_adapter(*, adapter_name: str, project_dir: Path | None = None) -> BaseAdapter:
     """Resolve an adapter name from project config to an adapter instance."""
 
     builtin_adapters: dict[str, type[BaseAdapter]] = builtin_adapter_classes()

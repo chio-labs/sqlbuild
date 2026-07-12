@@ -21,8 +21,8 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_dag(
-    project_dir: Path | None,
     *,
+    project_dir: Path | None,
     no_sql_validation: bool = False,
     json_output: bool = False,
     cli_vars: dict[str, object] | None = None,
@@ -34,7 +34,7 @@ def run_dag(
         project_dir=effective_project_dir
     )
     adapter: BaseAdapter = resolve_adapter(
-        resolve_effective_adapter_name(
+        adapter_name=resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),

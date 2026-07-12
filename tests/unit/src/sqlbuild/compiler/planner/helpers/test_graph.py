@@ -65,9 +65,12 @@ def test_given_project_when_building_upstream_then_includes_expected_deps(
         )
     )
 
-    result: dict[str, tuple[str, ...]] = {
-        key.name: tuple(dep.name for dep in deps) for key, deps in upstream.items()
-    }
+    result: dict[str, tuple[str, ...]] = {}
+    for key, deps in upstream.items():
+        dep_names: list[str] = []
+        for dep in deps:
+            dep_names.append(dep.name)
+        result[key.name] = tuple(dep_names)
 
     assert result == test_case.expected_upstream_keys
 
@@ -145,7 +148,7 @@ def test_given_upstream_deps_when_building_downstream_then_returns_expected(
 def test_given_upstream_deps_when_ordering_topologically_then_returns_expected_order(
     test_case: TopologicalOrderTestCase,
 ) -> None:
-    result: tuple[CompiledObjectKey, ...] = topologically_order_keys(test_case.upstream)
+    result: tuple[CompiledObjectKey, ...] = topologically_order_keys(upstream=test_case.upstream)
 
     assert result == test_case.expected_order
 
@@ -168,7 +171,7 @@ def test_given_cyclic_deps_when_ordering_topologically_then_raises(
     test_case: CycleDetectionTestCase,
 ) -> None:
     with pytest.raises(test_case.expected_error_type, match="cycle"):
-        topologically_order_keys(test_case.upstream)
+        topologically_order_keys(upstream=test_case.upstream)
 
 
 @pytest.mark.parametrize(
@@ -194,7 +197,7 @@ def test_given_injected_edge_cycle_when_ordering_topologically_then_error_names_
 ) -> None:
     with pytest.raises(test_case.expected_error_type, match="cycle") as exc_info:
         topologically_order_keys(
-            test_case.upstream,
+            upstream=test_case.upstream,
             injected_edge_origins=test_case.injected_edge_origins,
         )
 
@@ -263,7 +266,7 @@ def test_given_key_when_expanding_upstream_then_returns_expected_keys(
     test_case: ExpandUpstreamTestCase,
 ) -> None:
     result: frozenset[CompiledObjectKey] = expand_upstream(
-        test_case.key, upstream=test_case.upstream
+        key=test_case.key, upstream=test_case.upstream
     )
 
     assert result == test_case.expected_keys
@@ -298,7 +301,7 @@ def test_given_key_when_expanding_downstream_then_returns_expected_keys(
     test_case: ExpandDownstreamTestCase,
 ) -> None:
     result: frozenset[CompiledObjectKey] = expand_downstream(
-        test_case.key, downstream=test_case.downstream
+        key=test_case.key, downstream=test_case.downstream
     )
 
     assert result == test_case.expected_keys
@@ -335,7 +338,7 @@ def test_given_start_and_end_when_finding_path_keys_then_returns_expected(
     test_case: FindPathKeysTestCase,
 ) -> None:
     result: frozenset[CompiledObjectKey] = find_path_keys(
-        test_case.start,
+        start=test_case.start,
         end=test_case.end,
         downstream=test_case.downstream,
     )
@@ -365,7 +368,7 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
 ) -> None:
     with pytest.raises(test_case.expected_error_type, match="not downstream"):
         find_path_keys(
-            test_case.start,
+            start=test_case.start,
             end=test_case.end,
             downstream=test_case.downstream,
         )
@@ -444,7 +447,7 @@ def test_given_unreachable_end_when_finding_path_keys_then_raises(
 def test_given_project_when_building_upstream_and_ordering_then_returns_expected(
     test_case: TopologicalOrderTestCase,
 ) -> None:
-    result: tuple[CompiledObjectKey, ...] = topologically_order_keys(test_case.upstream)
+    result: tuple[CompiledObjectKey, ...] = topologically_order_keys(upstream=test_case.upstream)
 
     assert result == test_case.expected_order
 

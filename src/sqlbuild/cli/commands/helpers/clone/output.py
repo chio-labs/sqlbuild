@@ -50,7 +50,7 @@ def render_clone_item_line(
     )
     return (
         f"  {style.muted(position)}  {style.accent(item.action.value):<18} "
-        f"{relation_flow}  {style.status(_clone_status_text(item.status))}{duration}"
+        f"{relation_flow}  {style.status(status=_clone_status_text(status=item.status))}{duration}"
     )
 
 

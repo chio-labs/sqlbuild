@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from sqlbuild.shared.models import DisplayOptions
 
 
-def visible_entries[T](entries: Sequence[T], *, options: DisplayOptions) -> Sequence[T]:
+def visible_entries[T](*, entries: Sequence[T], options: DisplayOptions) -> Sequence[T]:
     """Return entries visible under the current display cap."""
 
     if options.max_entries_per_section is None:
@@ -16,11 +16,12 @@ def visible_entries[T](entries: Sequence[T], *, options: DisplayOptions) -> Sequ
 
 
 def append_overflow_line(
-    lines: list[str], *, total_count: int, visible_count: int, indent: str, options: DisplayOptions
-) -> None:
+    *, lines: list[str], total_count: int, visible_count: int, indent: str, options: DisplayOptions
+) -> list[str]:
     """Append a standard overflow hint when a section is truncated."""
 
     hidden_count: int = total_count - visible_count
     if hidden_count <= 0:
-        return
+        return lines
     lines.append(f"{indent}... and {hidden_count} more (use {options.overflow_flag} to show all)")
+    return lines

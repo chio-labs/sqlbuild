@@ -23,7 +23,7 @@ def render_dependency_tree[Node: Hashable](
     """Render the box-drawing dependency tree lines for one focus node."""
 
     return render_dependency_branch(
-        focus,
+        node=focus,
         deps=deps,
         prefix="",
         seen=seen,

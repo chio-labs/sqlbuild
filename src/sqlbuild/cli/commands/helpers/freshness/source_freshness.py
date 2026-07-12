@@ -64,7 +64,7 @@ def append_eligible_standard_source_freshness_records(
             record: SourceFreshnessRecord | None = observed_records_by_identity.get(identity)
             if record is None:
                 continue
-            _collect_record_for_affected_model_schemas(
+            records_by_location = _collect_record_for_affected_model_schemas(
                 records_by_location=records_by_location,
                 record=replace(record, run_id=run_id),
                 affected_model_names=affected_selected_model_names,
@@ -85,7 +85,7 @@ def _collect_record_for_affected_model_schemas(
     record: SourceFreshnessRecord,
     affected_model_names: frozenset[str],
     entries_by_name: dict[str, ModelPlanEntry],
-) -> None:
+) -> dict[tuple[str | None, str], list[SourceFreshnessRecord]]:
     recorded_locations: set[tuple[str | None, str]] = set()
     model_name: str
     for model_name in sorted(affected_model_names):
@@ -97,6 +97,7 @@ def _collect_record_for_affected_model_schemas(
             continue
         recorded_locations.add(location)
         records_by_location.setdefault(location, []).append(record)
+    return records_by_location
 
 
 def _append_records_by_location(

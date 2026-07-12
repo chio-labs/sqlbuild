@@ -98,15 +98,15 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def describe_relation(self, connection: Any, *, relation: str) -> tuple[ColumnInfo, ...]:
+    def describe_relation(self, *, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         """Return relation column metadata."""
         ...
 
     @abstractmethod
     def get_table_freshness_metadata(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         name: str,
@@ -117,23 +117,23 @@ class StrictAdapter(
     @abstractmethod
     def get_tables_freshness_metadata(
         self,
-        connection: Any,
         *,
+        connection: Any,
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         """Return comparable freshness metadata for physical tables in batch."""
         ...
 
     @abstractmethod
-    def query_column_names(self, connection: Any, *, sql: str) -> tuple[str, ...]:
+    def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query."""
         ...
 
     @abstractmethod
     def get_relation_max_cursor(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation: str,
         cursor_column: str,
     ) -> object | None:
@@ -154,8 +154,8 @@ class StrictAdapter(
     @abstractmethod
     def schema_exists(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str,
     ) -> bool:
@@ -255,8 +255,8 @@ class StrictAdapter(
     @abstractmethod
     def drop_view(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
@@ -331,7 +331,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def relation_names_match(self, left: str, *, right: str) -> bool:
+    def relation_names_match(self, *, left: str, right: str) -> bool:
         """Return whether two relation name strings identify the same adapter relation."""
         ...
 
@@ -345,8 +345,8 @@ class StrictAdapter(
     @abstractmethod
     def replace_table_from_relation(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         origin: str,
         statement_recorder: StatementRecorder,
@@ -357,8 +357,8 @@ class StrictAdapter(
     @abstractmethod
     def move_or_copy_relation(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         remove_origin: bool,
@@ -555,8 +555,8 @@ class StrictAdapter(
     @abstractmethod
     def validate_row_diff_keys(
         self,
-        connection: Any,
         *,
+        connection: Any,
         relation_sql: str,
         relation_label: str,
         keys: tuple[str, ...],
@@ -854,7 +854,7 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_cursor_bound_literal(self, value: str, *, cursor_type: str | None) -> str:
+    def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:
         """Render one cursor bound literal for this adapter and cursor type."""
         ...
 

@@ -546,7 +546,7 @@ def test_given_cross_schema_table_move_when_moving_then_sqlserver_uses_native_tr
     statement_recorder: StatementRecorder = StatementRecorder()
 
     adapter.move_or_copy_relation(
-        connection,
+        connection=connection,
         origin=test_case.source,
         destination=test_case.target,
         remove_origin=True,

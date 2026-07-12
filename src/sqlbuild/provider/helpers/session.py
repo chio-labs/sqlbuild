@@ -8,8 +8,8 @@ from sqlbuild.providers import Provider
 
 
 def build_provider_session(
-    discovered_providers: tuple[DiscoveredProvider, ...],
     *,
+    discovered_providers: tuple[DiscoveredProvider, ...],
     setup_context: object | None = None,
 ) -> ProviderSession:
     """Build a runtime provider session with fresh provider instances."""

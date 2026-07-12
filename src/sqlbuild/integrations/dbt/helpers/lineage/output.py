@@ -45,7 +45,7 @@ def format_dbt_lineage_json(graph: DbtLineageGraph) -> str:
     return json.dumps(payload, indent=2)
 
 
-def format_dbt_lineage_list(graph: DbtLineageGraph, *, use_color: bool = True) -> str:
+def format_dbt_lineage_list(*, graph: DbtLineageGraph, use_color: bool = True) -> str:
     """Format mixed dbt/SQLBuild lineage graph as an edge list."""
 
     style: CliStyle = CliStyle(use_color=use_color)
@@ -53,13 +53,13 @@ def format_dbt_lineage_list(graph: DbtLineageGraph, *, use_color: bool = True) -
         node.key: node for node in graph.nodes
     }
     if not graph.edges:
-        return "\n".join(_format_node(node, style=style) for node in graph.nodes)
+        return "\n".join(_format_node(node=node, style=style) for node in graph.nodes)
     left_width: int = max(len(upstream.stable_id) for upstream, _downstream in graph.edges)
     return "\n".join(
-        f"{_format_node(node_by_key[upstream], style=style)}"
+        f"{_format_node(node=node_by_key[upstream], style=style)}"
         f"{' ' * (left_width - len(upstream.stable_id))} "
         f"{style.muted('->')} "
-        f"{_format_node(node_by_key[downstream], style=style)}"
+        f"{_format_node(node=node_by_key[downstream], style=style)}"
         for upstream, downstream in graph.edges
     )
 
@@ -68,7 +68,7 @@ def format_dbt_column_lineage_json(trace: DbtColumnLineageTrace) -> str:
     """Serialize mixed dbt/SQLBuild column lineage as stable JSON."""
 
     payload: dict[str, object] = {
-        "target": serialize_column(trace.target, render_resource_type=_render_resource_type),
+        "target": serialize_column(column=trace.target, render_resource_type=_render_resource_type),
         "direction": trace.direction.value,
         "metadata": {
             "max_depth": trace.max_depth,
@@ -77,7 +77,7 @@ def format_dbt_column_lineage_json(trace: DbtColumnLineageTrace) -> str:
             "warnings": list(trace.warnings),
         },
         "trace": [
-            serialize_column_edge(edge, render_resource_type=_render_resource_type)
+            serialize_column_edge(edge=edge, render_resource_type=_render_resource_type)
             for edge in trace.trace
         ],
     }
@@ -85,8 +85,8 @@ def format_dbt_column_lineage_json(trace: DbtColumnLineageTrace) -> str:
 
 
 def format_dbt_column_lineage_list(
-    trace: DbtColumnLineageTrace,
     *,
+    trace: DbtColumnLineageTrace,
     use_color: bool = True,
 ) -> str:
     """Format mixed dbt/SQLBuild column lineage as an edge list."""
@@ -96,19 +96,19 @@ def format_dbt_column_lineage_list(
         lines: list[str] = [
             style.object_name("Column dependencies"),
             "",
-            _format_column(trace.target, style=style),
+            _format_column(column=trace.target, style=style),
         ]
-        lines.extend(_format_warnings(trace.warnings, style=style))
+        lines.extend(_format_warnings(warnings=trace.warnings, style=style))
         return "\n".join(lines)
     displayed_trace: tuple[ColumnLineageEdge, ...] = trace.trace[:_HUMAN_COLUMN_TRACE_LIMIT]
     left_width: int = max(len(_column_id(edge.source)) for edge in displayed_trace)
     right_width: int = max(len(_column_id(edge.target)) for edge in displayed_trace)
     lines = [style.object_name("Column dependencies"), ""]
     lines.extend(
-        f"{_format_column(edge.source, style=style)}"
+        f"{_format_column(column=edge.source, style=style)}"
         f"{' ' * (left_width - len(_column_id(edge.source)))} "
         f"{style.muted('->')} "
-        f"{_format_column(edge.target, style=style)}"
+        f"{_format_column(column=edge.target, style=style)}"
         f"{' ' * (right_width - len(_column_id(edge.target)))} "
         f"{style.muted(str(edge.transform_kind))}"
         for edge in displayed_trace
@@ -120,11 +120,11 @@ def format_dbt_column_lineage_list(
             note_style=style.muted,
         )
     )
-    lines.extend(_format_warnings(trace.warnings, style=style))
+    lines.extend(_format_warnings(warnings=trace.warnings, style=style))
     return "\n".join(lines)
 
 
-def format_dbt_lineage_tree(graph: DbtLineageGraph, *, use_color: bool = True) -> str:
+def format_dbt_lineage_tree(*, graph: DbtLineageGraph, use_color: bool = True) -> str:
     """Format mixed dbt/SQLBuild lineage graph for humans."""
 
     if len(graph.focus_keys) != 1 or graph.direction is None:
@@ -135,7 +135,7 @@ def format_dbt_lineage_tree(graph: DbtLineageGraph, *, use_color: bool = True) -
         node.key: node for node in graph.nodes
     }
     lines: list[str] = [
-        f"{style.object_name('Lineage')}  {_format_node(node_by_key[focus], style=style)}  "
+        f"{style.object_name('Lineage')}  {_format_node(node=node_by_key[focus], style=style)}  "
         f"{style.muted(graph.direction.value)}"
     ]
     if graph.direction in {DbtLineageDirection.UPSTREAM, DbtLineageDirection.BOTH}:
@@ -149,7 +149,7 @@ def format_dbt_lineage_tree(graph: DbtLineageGraph, *, use_color: bool = True) -
                 focus=focus,
                 deps=upstream,
                 seen={focus},
-                format_node=lambda key: _format_node(node_by_key[key], style=style),
+                format_node=lambda key: _format_node(node=node_by_key[key], style=style),
                 sort_key=lambda key: key.stable_id,
                 branch_style=style.muted,
                 already_shown=lambda: style.muted(" (already shown)"),
@@ -166,7 +166,7 @@ def format_dbt_lineage_tree(graph: DbtLineageGraph, *, use_color: bool = True) -
                 focus=focus,
                 deps=downstream,
                 seen={focus},
-                format_node=lambda key: _format_node(node_by_key[key], style=style),
+                format_node=lambda key: _format_node(node=node_by_key[key], style=style),
                 sort_key=lambda key: key.stable_id,
                 branch_style=style.muted,
                 already_shown=lambda: style.muted(" (already shown)"),
@@ -176,21 +176,22 @@ def format_dbt_lineage_tree(graph: DbtLineageGraph, *, use_color: bool = True) -
 
 
 def format_dbt_column_lineage_tree(
-    trace: DbtColumnLineageTrace,
     *,
+    trace: DbtColumnLineageTrace,
     use_color: bool = True,
 ) -> str:
     """Format mixed dbt/SQLBuild column lineage for humans."""
 
     style: CliStyle = CliStyle(use_color=use_color)
     lines: list[str] = [
-        f"{style.object_name('Column trace')}  {_format_column_short(trace.target, style=style)}  "
+        f"{style.object_name('Column trace')}  "
+        f"{_format_column_short(column=trace.target, style=style)}  "
         f"{style.muted(trace.direction.value)}",
         "",
     ]
     if not trace.trace:
         lines.append(style.muted("  No column dependencies found"))
-        lines.extend(_format_warnings(trace.warnings, style=style))
+        lines.extend(_format_warnings(warnings=trace.warnings, style=style))
         return "\n".join(lines)
     is_downstream: bool = trace.direction == DbtLineageDirection.DOWNSTREAM
     deps: dict[str, list[ColumnLineageEdge]] = {}
@@ -206,21 +207,21 @@ def format_dbt_column_lineage_tree(
             column_id=_column_id,
             related_column=lambda edge: edge.target if is_downstream else edge.source,
             format_related=lambda edge: _format_related_column(
-                edge, is_downstream=is_downstream, style=style
+                edge=edge, is_downstream=is_downstream, style=style
             ),
             branch_style=style.muted,
             already_shown=lambda: style.muted(" (already shown)"),
             note_style=style.muted,
         )
     )
-    lines.extend(_format_warnings(trace.warnings, style=style))
+    lines.extend(_format_warnings(warnings=trace.warnings, style=style))
     return "\n".join(lines)
 
 
-def _format_related_column(edge: ColumnLineageEdge, *, is_downstream: bool, style: CliStyle) -> str:
+def _format_related_column(*, edge: ColumnLineageEdge, is_downstream: bool, style: CliStyle) -> str:
     related_column: QualifiedLineageColumn = edge.target if is_downstream else edge.source
     return (
-        f"{_format_column_short(related_column, style=style)} "
+        f"{_format_column_short(column=related_column, style=style)} "
         f"{style.muted(f'({edge.transform_kind})')}"
     )
 
@@ -244,7 +245,7 @@ def _render_resource_type(column: QualifiedLineageColumn) -> str:
     return str(column.resource_type)
 
 
-def _format_node(node: DbtLineageNode, *, style: CliStyle) -> str:
+def _format_node(*, node: DbtLineageNode, style: CliStyle) -> str:
     if node.key.owner == DbtCombinedGraphOwner.DBT:
         name: str = style.dbt_object_name(node.label)
     else:
@@ -252,11 +253,11 @@ def _format_node(node: DbtLineageNode, *, style: CliStyle) -> str:
     return f"{name} {style.muted(f'[{node.key.owner.value}]')}"
 
 
-def _format_column(column: QualifiedLineageColumn, *, style: CliStyle) -> str:
+def _format_column(*, column: QualifiedLineageColumn, style: CliStyle) -> str:
     return style.object_name(_column_id(column))
 
 
-def _format_column_short(column: QualifiedLineageColumn, *, style: CliStyle) -> str:
+def _format_column_short(*, column: QualifiedLineageColumn, style: CliStyle) -> str:
     return style.object_name(f"{_short_resource_name(column.resource_name)}:{column.column_name}")
 
 
@@ -270,7 +271,7 @@ def _column_id(column: QualifiedLineageColumn) -> str:
     return f"{column.resource_name}:{column.column_name}"
 
 
-def _format_warnings(warnings: tuple[str, ...], *, style: CliStyle) -> list[str]:
+def _format_warnings(*, warnings: tuple[str, ...], style: CliStyle) -> list[str]:
     if not warnings:
         return []
     return [
@@ -285,13 +286,13 @@ def _format_graph_summary(*, graph: DbtLineageGraph, use_color: bool) -> str:
     lines: list[str] = [style.object_name("Lineage graph")]
     if graph.nodes:
         lines.append("")
-        lines.extend(_format_node(node, style=style) for node in graph.nodes)
+        lines.extend(_format_node(node=node, style=style) for node in graph.nodes)
     return "\n".join(lines)
 
 
 def render_dbt_column_lineage(
-    trace: DbtColumnLineageTrace,
     *,
+    trace: DbtColumnLineageTrace,
     output_format: DbtLineageOutputFormat,
     use_color: bool,
 ) -> str:
@@ -300,13 +301,13 @@ def render_dbt_column_lineage(
     if output_format == DbtLineageOutputFormat.JSON:
         return format_dbt_column_lineage_json(trace)
     if output_format == DbtLineageOutputFormat.LIST:
-        return "\n" + format_dbt_column_lineage_list(trace, use_color=use_color) + "\n"
-    return "\n" + format_dbt_column_lineage_tree(trace, use_color=use_color) + "\n"
+        return "\n" + format_dbt_column_lineage_list(trace=trace, use_color=use_color) + "\n"
+    return "\n" + format_dbt_column_lineage_tree(trace=trace, use_color=use_color) + "\n"
 
 
 def render_dbt_lineage_graph(
-    graph: DbtLineageGraph,
     *,
+    graph: DbtLineageGraph,
     output_format: DbtLineageOutputFormat,
     use_color: bool,
 ) -> str:
@@ -315,5 +316,5 @@ def render_dbt_lineage_graph(
     if output_format == DbtLineageOutputFormat.JSON:
         return format_dbt_lineage_json(graph)
     if output_format == DbtLineageOutputFormat.LIST:
-        return "\n" + format_dbt_lineage_list(graph, use_color=use_color) + "\n"
-    return "\n" + format_dbt_lineage_tree(graph, use_color=use_color) + "\n"
+        return "\n" + format_dbt_lineage_list(graph=graph, use_color=use_color) + "\n"
+    return "\n" + format_dbt_lineage_tree(graph=graph, use_color=use_color) + "\n"

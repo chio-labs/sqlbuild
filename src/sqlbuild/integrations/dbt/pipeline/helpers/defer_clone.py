@@ -107,7 +107,8 @@ def run_dbt_defer_clone_prephase(
     connection_config: dict[str, object] = context.connection_config
     if not unique_ids:
         report_progress(
-            on_progress, message="defer-clone enabled but no clonable dbt boundary resolved."
+            on_progress=on_progress,
+            message="defer-clone enabled but no clonable dbt boundary resolved.",
         )
         return None
     production_ref: DbtProductionRefConfig = discovered_inputs.project_config.dbt.production_ref
@@ -121,7 +122,8 @@ def run_dbt_defer_clone_prephase(
             ),
         )
     report_progress(
-        on_progress, message=f"Compiling dbt production ref git ref '{production_ref.git_ref}'..."
+        on_progress=on_progress,
+        message=f"Compiling dbt production ref git ref '{production_ref.git_ref}'...",
     )
     production_ref_start: float = time.monotonic()
     production_ref_compile: DbtProductionRefCompileResult = compile_production_ref_manifest(
@@ -134,7 +136,7 @@ def run_dbt_defer_clone_prephase(
         raw_data=json.loads(production_ref_compile.manifest_contents)
     )
     report_progress(
-        on_progress,
+        on_progress=on_progress,
         message=f"Compiled dbt production ref git ref '{production_ref.git_ref}'. "
         f"({time.monotonic() - production_ref_start:.2f}s)",
     )
@@ -364,7 +366,7 @@ def _write_defer_clone_dbt_fingerprints(
             or current_model.name not in successful_names
         ):
             continue
-        try_write_dbt_node_fingerprint(
+        warnings = try_write_dbt_node_fingerprint(
             result=DbtNodeExecutionResult(
                 unique_id=unique_id,
                 resource_type=DbtSupportedResourceType.MODEL,
@@ -390,7 +392,7 @@ def _write_defer_clone_dbt_fingerprints(
             ),
         )
     if warnings:
-        report_progress(on_progress, message="; ".join(warnings))
+        report_progress(on_progress=on_progress, message="; ".join(warnings))
 
 
 def _write_defer_clone_dbt_node_source_watermarks(
@@ -467,7 +469,7 @@ def _write_defer_clone_dbt_node_source_watermarks(
         render_insert_records_sql=adapter.render_insert_node_source_watermark_records_sql,
     )
     report_progress(
-        on_progress,
+        on_progress=on_progress,
         message=f"Recorded dbt defer-clone node source watermarks ({len(records)}).",
     )
 

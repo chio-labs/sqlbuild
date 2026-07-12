@@ -12,8 +12,8 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 def assemble_project(
-    inputs: CompileProjectInputs,
     *,
+    inputs: CompileProjectInputs,
     inference_profile: ExpressionInferenceProfile | None = None,
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
@@ -21,7 +21,7 @@ def assemble_project(
     """Convert compile inputs into the planner-ready project view."""
 
     return assemble_compiled_project(
-        inputs,
+        inputs=inputs,
         inference_profile=inference_profile,
         skip_column_inference=skip_column_inference,
         column_lineage_mode=column_lineage_mode,

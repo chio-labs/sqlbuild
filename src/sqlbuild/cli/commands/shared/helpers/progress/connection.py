@@ -34,12 +34,12 @@ class ConnectionProgressReporter:
             self._stream.flush()
         self._status.start(self._start_message(connection_count))
 
-    def on_connection_complete(self, connection_count: int, *, elapsed_seconds: float) -> None:
+    def on_connection_complete(self, *, connection_count: int, elapsed_seconds: float) -> None:
         del connection_count
         message: str = f"Connected to {self._adapter_name}. ({elapsed_seconds:.2f}s)"
-        self._status.complete(message, blank_line_after=self._blank_line_after_complete)
+        self._status.complete(message=message, blank_line_after=self._blank_line_after_complete)
 
-    def on_connection_error(self, connection_count: int, *, elapsed_seconds: float) -> None:
+    def on_connection_error(self, *, connection_count: int, elapsed_seconds: float) -> None:
         del connection_count
         self._status.error(
             f"Failed to connect to {self._adapter_name} after {elapsed_seconds:.2f}s."

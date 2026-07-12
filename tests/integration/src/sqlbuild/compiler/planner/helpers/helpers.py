@@ -45,7 +45,7 @@ class RecordingDuckDbAdapter(DuckDbAdapter):
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         self.get_all_columns_names.append(names)
         return super().get_all_columns(
-            connection,
+            connection=connection,
             database=database,
             schemas=schemas,
             names=names,

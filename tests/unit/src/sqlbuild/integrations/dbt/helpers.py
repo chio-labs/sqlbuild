@@ -1090,7 +1090,7 @@ def build_compiled_project_with_model_specs(
             )
         )
     return assemble_compiled_project(
-        CompileProjectInputs(
+        inputs=CompileProjectInputs(
             project_config=ProjectConfig(name="demo", adapter="duckdb"),
             local_config=LocalConfig(),
             discovered_inputs=DiscoveredProjectInputs(
@@ -1107,9 +1107,13 @@ def graph_edge_stable_ids(
 ) -> dict[str, tuple[str, ...]]:
     """Render graph edges as stable IDs for assertions."""
 
-    return {
-        key.stable_id: tuple(dep.stable_id for dep in deps) for key, deps in graph_edges.items()
-    }
+    stable_edges: dict[str, tuple[str, ...]] = {}
+    for key, deps in graph_edges.items():
+        stable_deps: list[str] = []
+        for dep in deps:
+            stable_deps.append(dep.stable_id)
+        stable_edges[key.stable_id] = tuple(stable_deps)
+    return stable_edges
 
 
 def graph_key_stable_ids(keys: frozenset[DbtCombinedGraphKey]) -> tuple[str, ...]:
@@ -1512,7 +1516,7 @@ class CountingModelPlanningAdapter(DuckDbAdapter):
     ) -> tuple[RelationInfo, ...]:
         self.list_relation_calls.append((database, schemas, names))
         return super().list_relations(
-            connection,
+            connection=connection,
             database=database,
             schemas=schemas,
             names=names,
@@ -1528,7 +1532,7 @@ class CountingModelPlanningAdapter(DuckDbAdapter):
     ) -> bool:
         self.relation_exists_calls.append((database, schema, name))
         return super().relation_exists(
-            connection,
+            connection=connection,
             database=database,
             schema=schema,
             name=name,
@@ -1591,7 +1595,7 @@ def setup_dbt_model_planning_state(
     """Create optional relation and fingerprint state for dbt model planning tests."""
 
     if create_relation:
-        adapter.execute(connection, sql="CREATE TABLE main.orders AS SELECT 1 AS id")
+        adapter.execute(connection=connection, sql="CREATE TABLE main.orders AS SELECT 1 AS id")
     if fingerprint_hash is not None:
         write_dbt_test_fingerprint(
             adapter=adapter,
@@ -1736,7 +1740,7 @@ def create_dbt_clone_relation(
 ) -> None:
     """Create a dbt clone table from literal rows in a real DuckDB schema."""
 
-    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     selects: list[str] = []
     row: tuple[object, ...]
     for row in rows:
@@ -1744,7 +1748,9 @@ def create_dbt_clone_relation(
         status: str = cast(str, row[1])
         selects.append(f"SELECT {order_id} AS order_id, '{status}' AS status")
     union_sql: str = " UNION ALL ".join(selects)
-    adapter.execute(connection, sql=f"CREATE OR REPLACE TABLE {schema}.{name} AS {union_sql}")
+    adapter.execute(
+        connection=connection, sql=f"CREATE OR REPLACE TABLE {schema}.{name} AS {union_sql}"
+    )
 
 
 def create_dbt_clone_relation_when_requested(
@@ -1757,7 +1763,7 @@ def create_dbt_clone_relation_when_requested(
 ) -> None:
     """Create a dbt clone fixture relation when requested by a test case."""
 
-    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     if create:
         create_dbt_clone_relation(
             adapter=adapter,
@@ -1773,7 +1779,7 @@ def read_dbt_clone_rows(
     """Read deterministic dbt clone rows from DuckDB."""
 
     result: QueryResult = adapter.query(
-        connection,
+        connection=connection,
         sql=f"SELECT order_id, status FROM {schema}.{name} ORDER BY order_id",
         limit=None,
     )
@@ -1806,11 +1812,11 @@ def create_dbt_diff_relation(
 ) -> None:
     """Create a dbt diff order table from literal rows in a real DuckDB schema."""
 
-    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     union_sql: str = " UNION ALL ".join(
         f"SELECT {order_id} AS order_id, {amount} AS amount_cents" for order_id, amount in rows
     )
-    adapter.execute(connection, sql=f"CREATE TABLE {schema}.{name} AS {union_sql}")
+    adapter.execute(connection=connection, sql=f"CREATE TABLE {schema}.{name} AS {union_sql}")
 
 
 def build_dbt_diff_schema_only_options() -> DbtDiffOptions:
@@ -1862,9 +1868,9 @@ def create_dbt_diff_unique_key_relation(
 ) -> None:
     """Create a two-column-key dbt diff relation for unique key tests."""
 
-    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     adapter.execute(
-        connection,
+        connection=connection,
         sql=f"CREATE TABLE {schema}.dbt_orders AS "
         f"SELECT 1 AS order_id, 1 AS line_id, {amount_cents} AS amount_cents",
     )
@@ -1879,8 +1885,10 @@ def create_dbt_diff_relation_with_columns(
 ) -> None:
     """Create a dbt diff relation from an explicit column projection."""
 
-    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
-    adapter.execute(connection, sql=f"CREATE TABLE {schema}.dbt_orders AS SELECT {column_sql}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(
+        connection=connection, sql=f"CREATE TABLE {schema}.dbt_orders AS SELECT {column_sql}"
+    )
 
 
 def create_dbt_diff_cursor_relation(
@@ -1893,12 +1901,12 @@ def create_dbt_diff_cursor_relation(
 ) -> None:
     """Create a dbt diff relation that carries a bounded cursor column."""
 
-    adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     cursor_value: str = (
         "cast('2026-06-17 00:00:00' as timestamp)" if cursor_kind == "timestamp" else "10"
     )
     adapter.execute(
-        connection,
+        connection=connection,
         sql=f"CREATE TABLE {schema}.dbt_orders AS "
         f"SELECT 1 AS order_id, 100 AS amount_cents, {cursor_value} AS {cursor_column}",
     )
@@ -1910,7 +1918,7 @@ def create_dbt_diff_relation_when_requested(
     """Create a dbt diff relation only when requested, else just the schema."""
 
     if not create:
-        adapter.execute(connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+        adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
         return
     create_dbt_diff_relation(
         adapter=adapter,

@@ -7,8 +7,8 @@ from typing import Any
 
 
 def invert_edges[K](
-    edges: Mapping[K, tuple[K, ...]],
     *,
+    edges: Mapping[K, tuple[K, ...]],
     sort_key: Callable[[K], Any] | None = None,
 ) -> dict[K, tuple[K, ...]]:
     """Return reversed edges so an upstream map becomes a downstream map (or vice versa)."""
@@ -59,7 +59,7 @@ def path_nodes[K](
     if end not in reachable_from_start:
         return None
 
-    upstream: dict[K, tuple[K, ...]] = invert_edges(downstream)
+    upstream: dict[K, tuple[K, ...]] = invert_edges(edges=downstream)
     upstream_from_end: set[K] = set()
     stack: list[K] = [end]
     while stack:
@@ -84,24 +84,27 @@ def resolve_clone_boundary[K](
 ) -> frozenset[K]:
     """Return the first non-view clonable ancestors that anchor data for selected nodes."""
 
-    boundary: set[K] = set()
-    visited: set[K] = set()
+    boundary: frozenset[K] = frozenset()
+    visited: frozenset[K] = frozenset()
 
-    def visit(node: K) -> None:
+    def visit(
+        *, node: K, visited: frozenset[K], boundary: frozenset[K]
+    ) -> tuple[frozenset[K], frozenset[K]]:
         if node in visited:
-            return
-        visited.add(node)
+            return visited, boundary
+        visited = visited | {node}
         upstream_node: K
         for upstream_node in upstream.get(node, ()):
             if upstream_node in selected or is_view(upstream_node):
-                visit(upstream_node)
+                visited, boundary = visit(node=upstream_node, visited=visited, boundary=boundary)
             elif is_clonable(upstream_node):
-                boundary.add(upstream_node)
+                boundary = boundary | {upstream_node}
+        return visited, boundary
 
     selected_node: K
     for selected_node in selected:
-        visit(selected_node)
-    return frozenset(boundary)
+        visited, boundary = visit(node=selected_node, visited=visited, boundary=boundary)
+    return boundary
 
 
 def resolve_skipped_view_chain[K](
@@ -113,23 +116,26 @@ def resolve_skipped_view_chain[K](
 ) -> frozenset[K]:
     """Return out-of-selection view ancestors that must rebuild over cloned boundaries."""
 
-    views: set[K] = set()
-    visited: set[K] = set()
+    views: frozenset[K] = frozenset()
+    visited: frozenset[K] = frozenset()
 
-    def visit(node: K) -> None:
+    def visit(
+        *, node: K, visited: frozenset[K], views: frozenset[K]
+    ) -> tuple[frozenset[K], frozenset[K]]:
         if node in visited:
-            return
-        visited.add(node)
+            return visited, views
+        visited = visited | {node}
         upstream_node: K
         for upstream_node in upstream.get(node, ()):
             if upstream_node in selected:
-                visit(upstream_node)
+                visited, views = visit(node=upstream_node, visited=visited, views=views)
             elif is_view(upstream_node):
                 if is_clonable(upstream_node):
-                    views.add(upstream_node)
-                visit(upstream_node)
+                    views = views | {upstream_node}
+                visited, views = visit(node=upstream_node, visited=visited, views=views)
+        return visited, views
 
     selected_node: K
     for selected_node in selected:
-        visit(selected_node)
-    return frozenset(views)
+        visited, views = visit(node=selected_node, visited=visited, views=views)
+    return views

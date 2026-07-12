@@ -133,7 +133,7 @@ def execute_table_entry(
 
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=targets.target_database,
             schema=targets.target_schema,
             statement_recorder=statement_recorder,
@@ -289,7 +289,7 @@ def _staged_lifecycle(
             sqlbuild_phase="contract", sqlbuild_action_name="validate_staging"
         ):
             staging_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                connection,
+                connection=connection,
                 database=targets.target_database,
                 schema=targets.target_schema,
                 name=targets.staging_table,
@@ -441,7 +441,7 @@ def _direct_lifecycle(
                 and entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
             ):
                 adapter.drop(
-                    connection,
+                    connection=connection,
                     destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
@@ -457,7 +457,7 @@ def _direct_lifecycle(
                 )
             else:
                 adapter.create_table_as(
-                    connection,
+                    connection=connection,
                     destination=target_qualified,
                     sql=state.resolved_sql,
                     statement_recorder=statement_recorder,

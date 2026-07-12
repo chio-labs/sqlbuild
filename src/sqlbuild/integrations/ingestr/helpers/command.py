@@ -19,7 +19,7 @@ def resolve_ingestr_config(
     """Resolve supported templates in ingestr source config values."""
 
     values: object = expand_template_data(
-        {
+        value={
             "source_uri": config.source_uri,
             "source_table": config.source_table,
             "strategy": config.strategy,

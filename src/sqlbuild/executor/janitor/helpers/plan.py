@@ -103,7 +103,7 @@ def list_target_schema_relations(
             concrete_schemas = None
         relation: RelationInfo
         for relation in adapter.list_relations(
-            connection,
+            connection=connection,
             database=database,
             schemas=concrete_schemas,
         ):

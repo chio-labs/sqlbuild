@@ -105,7 +105,9 @@ def _selected_managed_source_refs(
         if model.key not in selected_keys:
             continue
         names.update(
-            _direct_managed_source_refs(model.query_sql, managed_source_names=managed_source_names)
+            _direct_managed_source_refs(
+                sql=model.query_sql, managed_source_names=managed_source_names
+            )
         )
     function: CompiledFunction
     for function in project.functions:
@@ -113,7 +115,7 @@ def _selected_managed_source_refs(
             continue
         names.update(
             _direct_managed_source_refs(
-                function.body_sql, managed_source_names=managed_source_names
+                sql=function.body_sql, managed_source_names=managed_source_names
             )
         )
     audit: CompiledAudit
@@ -131,7 +133,7 @@ def _selected_managed_source_refs(
 
 
 def _direct_managed_source_refs(
-    sql: str, *, managed_source_names: frozenset[str]
+    *, sql: str, managed_source_names: frozenset[str]
 ) -> frozenset[str]:
     names: set[str] = set()
     match: re.Match[str]

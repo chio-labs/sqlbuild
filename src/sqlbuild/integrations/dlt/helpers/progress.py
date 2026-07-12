@@ -82,7 +82,7 @@ class SqlbuildDltProgressCollector:
 
     def _start(self, step: str) -> None:
         self.step = step
-        self._emit_live_message(f"dlt {self._display_step(step)}", force=True)
+        self._emit_live_message(message=f"dlt {self._display_step(step)}", force=True)
 
     def _stop(self) -> None:
         return None
@@ -100,15 +100,18 @@ class SqlbuildDltProgressCollector:
 
     def _emit_live_progress(self, counter: DltProgressCounter) -> None:
         message: str = f"dlt {self._display_step(counter.step)}: {self._format_counter(counter)}"
-        self._emit_live_message(message, force=counter.name in {"Resources", "Files", "Jobs"})
+        self._emit_live_message(
+            message=message, force=counter.name in {"Resources", "Files", "Jobs"}
+        )
 
-    def _emit_live_message(self, message: str, *, force: bool = False) -> None:
+    def _emit_live_message(self, *, message: str, force: bool = False) -> None:
         if self._on_progress is None:
             return
         now: float = time.monotonic()
         if not force and message == self._last_live_message:
             return
-        if not force and now - self._last_live_at < 0.5:
+        live_refresh_interval_seconds: float = 0.5
+        if not force and now - self._last_live_at < live_refresh_interval_seconds:
             return
         self._last_live_message = message
         self._last_live_at = now

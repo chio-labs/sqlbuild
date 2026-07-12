@@ -11,8 +11,8 @@ from sqlbuild.shared.types import PythonCheckSeverity
 
 
 def _decorate_check(
-    function: Callable[..., object],
     *,
+    function: Callable[..., object],
     depends_on: tuple[Callable[..., object] | SqlResourceRef, ...],
     name: str | None = None,
     severity: str | PythonCheckSeverity = PythonCheckSeverity.ERROR,
@@ -56,7 +56,7 @@ def check(
 
     def decorate(inner: Callable[..., object]) -> Callable[..., object]:
         return _decorate_check(
-            inner,
+            function=inner,
             name=name,
             depends_on=normalized_deps,
             severity=severity,

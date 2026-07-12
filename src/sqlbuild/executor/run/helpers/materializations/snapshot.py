@@ -102,7 +102,7 @@ def execute_snapshot_entry(
     try:
         _validate_supported_snapshot(entry)
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=target_database,
             schema=target_schema,
             statement_recorder=statement_recorder,
@@ -135,7 +135,7 @@ def execute_snapshot_entry(
                 and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
             ):
                 adapter.drop(
-                    connection,
+                    connection=connection,
                     destination=seed_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
@@ -160,19 +160,19 @@ def execute_snapshot_entry(
                     statement_recorder=statement_recorder,
                 )
             adapter.drop(
-                connection,
+                connection=connection,
                 destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
             adapter.create_table_as(
-                connection,
+                connection=connection,
                 destination=delta_qualified,
                 sql=entry.resolved_sql,
                 statement_recorder=statement_recorder,
             )
             delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                connection,
+                connection=connection,
                 database=target_database,
                 schema=target_schema,
                 name=delta_table,
@@ -241,13 +241,13 @@ def execute_snapshot_entry(
         with diagnostics_context(sqlbuild_phase="dml", sqlbuild_action_name="apply_snapshot"):
             if entry.reason == PlanReason.FULL_REFRESH:
                 adapter.drop(
-                    connection,
+                    connection=connection,
                     destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
             target_exists: bool = adapter.relation_exists(
-                connection,
+                connection=connection,
                 database=target_database,
                 schema=target_schema,
                 name=target_table,
@@ -265,7 +265,7 @@ def execute_snapshot_entry(
                 )
             else:
                 target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                    connection,
+                    connection=connection,
                     database=target_database,
                     schema=target_schema,
                     name=target_table,
@@ -334,7 +334,7 @@ def execute_snapshot_entry(
     if post_hook_outcome.skipped:
         with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
             adapter.drop(
-                connection,
+                connection=connection,
                 destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
@@ -362,7 +362,7 @@ def execute_snapshot_entry(
 
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
         adapter.drop(
-            connection,
+            connection=connection,
             destination=delta_qualified,
             if_exists=True,
             statement_recorder=statement_recorder,
@@ -461,7 +461,7 @@ def _validate_unique_snapshot_keys(
         f"SELECT COUNT(*) FROM (SELECT {key_list} FROM {delta_qualified} "
         f"GROUP BY {key_list} HAVING COUNT(*) > 1) AS __snapshot_duplicate_keys"
     )
-    cursor: Any = adapter.execute(connection, sql=duplicate_sql)
+    cursor: Any = adapter.execute(connection=connection, sql=duplicate_sql)
     row: tuple[Any, ...] | None = cursor.fetchone()
     if row is not None and int(row[0]) > 0:
         identity_label: str = (
@@ -543,7 +543,7 @@ def _create_initial_snapshot_target(
     statement_recorder.record_many(statements)
     statement: str
     for statement in statements:
-        adapter.execute(connection, sql=statement)
+        adapter.execute(connection=connection, sql=statement)
 
 
 def _apply_snapshot_changes(
@@ -625,7 +625,7 @@ def _apply_timestamp_snapshot_changes(
         with adapter.transaction(connection):
             statement: str
             for statement in statements:
-                adapter.execute(connection, sql=statement)
+                adapter.execute(connection=connection, sql=statement)
         return
     statements: tuple[str, ...] = adapter.render_apply_timestamp_snapshot_changes(
         destination=target_qualified,
@@ -643,7 +643,7 @@ def _apply_timestamp_snapshot_changes(
     with adapter.transaction(connection):
         statement: str
         for statement in statements:
-            adapter.execute(connection, sql=statement)
+            adapter.execute(connection=connection, sql=statement)
 
 
 def _apply_check_snapshot_changes(
@@ -692,7 +692,7 @@ def _apply_check_snapshot_changes(
     with adapter.transaction(connection):
         statement: str
         for statement in statements:
-            adapter.execute(connection, sql=statement)
+            adapter.execute(connection=connection, sql=statement)
 
 
 def _expanded_check_columns(
@@ -780,7 +780,7 @@ def _apply_snapshot_schema_change(
         )
 
     adapter.add_columns(
-        connection,
+        connection=connection,
         destination=target_qualified,
         columns=added,
         statement_recorder=statement_recorder,

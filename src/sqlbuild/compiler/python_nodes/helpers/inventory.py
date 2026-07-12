@@ -81,16 +81,16 @@ def build_python_nodes(
     }
     loader_function: DiscoveredLoaderFunction
     for loader_function in loader_functions:
-        nodes.append(_build_loader_node(loader_function, provider_by_name=provider_by_name))
+        nodes.append(_build_loader_node(loader=loader_function, provider_by_name=provider_by_name))
     task_function: DiscoveredTaskFunction
     for task_function in task_functions:
-        nodes.append(_build_task_node(task_function, provider_by_name=provider_by_name))
+        nodes.append(_build_task_node(task=task_function, provider_by_name=provider_by_name))
     asset_function: DiscoveredAssetFunction
     for asset_function in asset_functions:
-        nodes.append(_build_asset_node(asset_function, provider_by_name=provider_by_name))
+        nodes.append(_build_asset_node(asset=asset_function, provider_by_name=provider_by_name))
     check_function: DiscoveredCheckFunction
     for check_function in check_functions:
-        nodes.append(_build_check_node(check_function, provider_by_name=provider_by_name))
+        nodes.append(_build_check_node(check=check_function, provider_by_name=provider_by_name))
     return tuple(nodes)
 
 
@@ -175,7 +175,7 @@ def build_python_node_path_index(*, nodes: tuple[DiscoveredPythonNode, ...]) -> 
 
 
 def _build_loader_node(
-    loader: DiscoveredLoaderFunction, *, provider_by_name: dict[str, DiscoveredProvider]
+    *, loader: DiscoveredLoaderFunction, provider_by_name: dict[str, DiscoveredProvider]
 ) -> DiscoveredPythonNode:
     return DiscoveredPythonNode(
         kind=PythonNodeKind.LOADER,
@@ -216,7 +216,7 @@ def _build_loader_node(
 
 
 def _build_task_node(
-    task: DiscoveredTaskFunction, *, provider_by_name: dict[str, DiscoveredProvider]
+    *, task: DiscoveredTaskFunction, provider_by_name: dict[str, DiscoveredProvider]
 ) -> DiscoveredPythonNode:
     return DiscoveredPythonNode(
         kind=PythonNodeKind.TASK,
@@ -248,7 +248,7 @@ def _build_task_node(
 
 
 def _build_asset_node(
-    asset: DiscoveredAssetFunction, *, provider_by_name: dict[str, DiscoveredProvider]
+    *, asset: DiscoveredAssetFunction, provider_by_name: dict[str, DiscoveredProvider]
 ) -> DiscoveredPythonNode:
     return DiscoveredPythonNode(
         kind=PythonNodeKind.ASSET,
@@ -288,7 +288,7 @@ def _build_asset_node(
 
 
 def _build_check_node(
-    check: DiscoveredCheckFunction, *, provider_by_name: dict[str, DiscoveredProvider]
+    *, check: DiscoveredCheckFunction, provider_by_name: dict[str, DiscoveredProvider]
 ) -> DiscoveredPythonNode:
     return DiscoveredPythonNode(
         kind=PythonNodeKind.CHECK,

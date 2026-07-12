@@ -50,7 +50,7 @@ class BuildConsole:
         self._start_time = time.monotonic()
         if self._is_tty:
             counter_str: str = self._format_counter(self._counter + 1)
-            status: str = self._style.status("...")
+            status: str = self._style.status(status="...")
             line: str = f"  {counter_str}  {resource_type:<6} {name:<40} {status}"
             self._stream.write(f"\r{line}")
             self._stream.flush()

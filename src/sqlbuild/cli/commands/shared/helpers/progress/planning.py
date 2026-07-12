@@ -37,7 +37,7 @@ class PlanningProgressReporter:
         self._status.update(message)
 
     def complete(self, message: str) -> None:
-        self._status.complete(message)
+        self._status.complete(message=message)
         self._active = False
 
     def finish(self, *, blank_line_after: bool = False) -> None:

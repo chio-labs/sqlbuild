@@ -172,7 +172,7 @@ def _prepare_build_schemas(
     try:
         for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=database,
                 schema=schema,
                 statement_recorder=recorder,

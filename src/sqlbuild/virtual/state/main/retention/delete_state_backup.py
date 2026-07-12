@@ -23,6 +23,8 @@ def delete_state_backup(
     )
     connection: Any = backend.connect(config.connection)
     try:
-        backend.delete_state_backup(connection, schema=config.schema, backup_id=backup_id)
+        backend.delete_state_backup(
+            connection=connection, schema=config.schema, backup_id=backup_id
+        )
     finally:
         backend.close(connection)

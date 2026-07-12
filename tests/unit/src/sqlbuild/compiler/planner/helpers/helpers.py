@@ -137,7 +137,7 @@ class StandardReuseFromTargetTestResult:
 
 
 def compose_readable_identity(
-    local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
+    *, local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
 ) -> str:
     if not upstream_hashes:
         return local_hash
@@ -148,7 +148,7 @@ def compose_readable_identity(
 
 
 def compose_hashed_identity(
-    local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
+    *, local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
 ) -> str:
     if not upstream_hashes:
         return local_hash

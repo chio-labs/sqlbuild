@@ -299,7 +299,7 @@ def build_dbt_model_plan_output(
     try:
         planning_start: float = time.monotonic()
         report_progress(
-            on_progress,
+            on_progress=on_progress,
             message="Inspecting dbt model state: checking warehouse relations and fingerprints...",
         )
         result: DbtModelPlanningResult = build_dbt_model_planning_result(
@@ -314,7 +314,7 @@ def build_dbt_model_plan_output(
             connection=connection,
         )
         report_progress(
-            on_progress,
+            on_progress=on_progress,
             message=f"Inspected dbt model state. ({time.monotonic() - planning_start:.2f}s)",
         )
         return result
@@ -357,14 +357,16 @@ def _dbt_node_source_watermark_graph_kwargs(
             source_identities_by_key=source_identities_by_key,
         )
     for _model, dbt_model in direct_refs:
-        _add_dbt_watermark_subgraph(
-            unique_id=dbt_model.unique_id,
-            manifest=manifest,
-            graph=graph,
-            node_keys=node_keys,
-            materialized_node_keys=materialized_node_keys,
-            upstream_deps=upstream_deps,
-            source_identities_by_key=source_identities_by_key,
+        node_keys, materialized_node_keys, upstream_deps, source_identities_by_key = (
+            _add_dbt_watermark_subgraph(
+                unique_id=dbt_model.unique_id,
+                manifest=manifest,
+                graph=graph,
+                node_keys=node_keys,
+                materialized_node_keys=materialized_node_keys,
+                upstream_deps=upstream_deps,
+                source_identities_by_key=source_identities_by_key,
+            )
         )
     return {
         "node_source_watermark_node_keys": frozenset(node_keys),
@@ -385,13 +387,18 @@ def _add_dbt_watermark_subgraph(
     materialized_node_keys: set[GraphNodeKey],
     upstream_deps: dict[GraphNodeKey, list[GraphNodeKey]],
     source_identities_by_key: dict[GraphNodeKey, SourceFreshnessIdentity],
-) -> None:
+) -> tuple[
+    set[GraphNodeKey],
+    set[GraphNodeKey],
+    dict[GraphNodeKey, list[GraphNodeKey]],
+    dict[GraphNodeKey, SourceFreshnessIdentity],
+]:
     model: DbtManifestModel | None = manifest.models_by_unique_id.get(unique_id)
     if model is None:
-        return
+        return node_keys, materialized_node_keys, upstream_deps, source_identities_by_key
     key: GraphNodeKey = dbt_graph_node_key(unique_id)
     if key in node_keys:
-        return
+        return node_keys, materialized_node_keys, upstream_deps, source_identities_by_key
     node_keys.add(key)
     if dbt_manifest_model_materialization(model=model) != DBT_MATERIALIZATION_VIEW:
         materialized_node_keys.add(key)
@@ -407,14 +414,16 @@ def _add_dbt_watermark_subgraph(
         if upstream_key.resource_type == DbtCombinedGraphResourceType.MODEL:
             upstream_graph_key: GraphNodeKey = dbt_graph_node_key(upstream_key.name)
             upstream_deps.setdefault(key, []).append(upstream_graph_key)
-            _add_dbt_watermark_subgraph(
-                unique_id=upstream_key.name,
-                manifest=manifest,
-                graph=graph,
-                node_keys=node_keys,
-                materialized_node_keys=materialized_node_keys,
-                upstream_deps=upstream_deps,
-                source_identities_by_key=source_identities_by_key,
+            node_keys, materialized_node_keys, upstream_deps, source_identities_by_key = (
+                _add_dbt_watermark_subgraph(
+                    unique_id=upstream_key.name,
+                    manifest=manifest,
+                    graph=graph,
+                    node_keys=node_keys,
+                    materialized_node_keys=materialized_node_keys,
+                    upstream_deps=upstream_deps,
+                    source_identities_by_key=source_identities_by_key,
+                )
             )
             continue
         if upstream_key.resource_type == DbtCombinedGraphResourceType.SOURCE:
@@ -425,6 +434,7 @@ def _add_dbt_watermark_subgraph(
             node_keys.add(source_key)
             upstream_deps.setdefault(key, []).append(source_key)
             source_identities_by_key[source_key] = _dbt_source_identity(source)
+    return node_keys, materialized_node_keys, upstream_deps, source_identities_by_key
 
 
 def _dbt_source_identity(source: DbtManifestSource) -> SourceFreshnessIdentity:
@@ -456,14 +466,14 @@ def _merged_source_freshness(
 
 def _parse_cursor_overrides(args: tuple[str, ...]) -> CursorOverrides:
     return CursorOverrides(
-        start_ts=_parse_value(args, flag="--start-cursor-ts"),
-        end_ts=_parse_value(args, flag="--end-cursor-ts"),
-        start_int=_parse_value(args, flag="--start-cursor-int"),
-        end_int=_parse_value(args, flag="--end-cursor-int"),
+        start_ts=_parse_value(args=args, flag="--start-cursor-ts"),
+        end_ts=_parse_value(args=args, flag="--end-cursor-ts"),
+        start_int=_parse_value(args=args, flag="--start-cursor-int"),
+        end_int=_parse_value(args=args, flag="--end-cursor-int"),
     )
 
 
-def _parse_value(args: tuple[str, ...], *, flag: str) -> str | None:
+def _parse_value(*, args: tuple[str, ...], flag: str) -> str | None:
     if flag not in args:
         return None
     index: int = args.index(flag)
@@ -473,8 +483,8 @@ def _parse_value(args: tuple[str, ...], *, flag: str) -> str | None:
 
 
 def _connection_progress_hooks(
-    connection_progress: Any | None,
     *,
+    connection_progress: Any | None,
     on_progress: Callable[[str], None] | None,
 ) -> ConnectionHooks:
     if connection_progress is None:
@@ -525,7 +535,9 @@ def attach_dbt_model_plan(
         selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh=full_refresh,
         force=force,
-        hooks=_connection_progress_hooks(connection_progress, on_progress=on_progress),
+        hooks=_connection_progress_hooks(
+            connection_progress=connection_progress, on_progress=on_progress
+        ),
     )
     if dbt_model_plan is None:
         return plan
@@ -595,7 +607,9 @@ def attach_sqlbuild_plan_output(
                 ),
             ),
         ),
-        hooks=_connection_progress_hooks(connection_progress, on_progress=on_progress),
+        hooks=_connection_progress_hooks(
+            connection_progress=connection_progress, on_progress=on_progress
+        ),
     )
     if sqlbuild_plan_output is None:
         return plan

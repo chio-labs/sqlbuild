@@ -60,7 +60,7 @@ class LoadProgressReporter:
         self._write_spinner_line()
         self._start_spinner_loop()
 
-    def on_progress(self, source: SourceEntry, *, message: str) -> None:
+    def on_progress(self, *, source: SourceEntry, message: str) -> None:
         if not self._is_tty or self._current_source is None:
             return
         if source.name != self._current_source.name:
@@ -82,7 +82,7 @@ class LoadProgressReporter:
             if result.status.value == "skipped"
             else "FAIL"
         )
-        status: str = self._style.status(status_text)
+        status: str = self._style.status(status=status_text)
         duration: str = ""
         if result.duration_ms is not None:
             duration = f"{result.duration_ms / 1000.0:.2f}s"
@@ -105,7 +105,7 @@ class LoadProgressReporter:
         if source is None:
             return
         ordinal: int = self._source_order[source.name]
-        status: str = self._style.status(_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
+        status: str = self._style.status(status=_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
         self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
         resource_kind: str = (
             "loader" if source.meta.get("sqlbuild_loader_node") is True else "source"

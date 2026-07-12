@@ -31,5 +31,5 @@ class DbtInitProgressReporter:
     def complete(self, message: str) -> None:
         phase_start: float | None = self._phase_start
         elapsed_seconds: float = 0.0 if phase_start is None else time.perf_counter() - phase_start
-        self._status.complete(f"{message} ({elapsed_seconds:.2f}s)")
+        self._status.complete(message=f"{message} ({elapsed_seconds:.2f}s)")
         self._phase_start = None

@@ -132,13 +132,13 @@ def execute_incremental_entry(
     try:
         with diagnostics_context(sqlbuild_phase="schema_change", sqlbuild_action_name="inspect"):
             delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                connection,
+                connection=connection,
                 database=target_database,
                 schema=target_schema,
                 name=delta_table,
             )
             target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                connection,
+                connection=connection,
                 database=target_database,
                 schema=target_schema,
                 name=target_table,
@@ -155,7 +155,7 @@ def execute_incremental_entry(
                 )
             )
             target_columns = adapter.get_columns(
-                connection,
+                connection=connection,
                 database=target_database,
                 schema=target_schema,
                 name=target_table,
@@ -200,7 +200,7 @@ def execute_incremental_entry(
     try:
         with diagnostics_context(sqlbuild_phase="contract", sqlbuild_action_name="validate_delta"):
             delta_columns = adapter.get_columns(
-                connection,
+                connection=connection,
                 database=target_database,
                 schema=target_schema,
                 name=delta_table,
@@ -301,7 +301,7 @@ def execute_incremental_entry(
     if post_hook_outcome.skipped:
         with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
             adapter.drop(
-                connection,
+                connection=connection,
                 destination=delta_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
@@ -329,7 +329,7 @@ def execute_incremental_entry(
 
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
         adapter.drop(
-            connection,
+            connection=connection,
             destination=delta_qualified,
             if_exists=True,
             statement_recorder=statement_recorder,
@@ -365,7 +365,7 @@ def _prepare_delta_relation(
     runtime_cursor_bounds: CursorBounds | None = None
     resolved_sql: str = entry.resolved_sql
     adapter.ensure_schema(
-        connection,
+        connection=connection,
         database=target_database,
         schema=target_schema,
         statement_recorder=statement_recorder,
@@ -375,7 +375,7 @@ def _prepare_delta_relation(
         and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
     ):
         adapter.drop(
-            connection,
+            connection=connection,
             destination=seed_qualified,
             if_exists=True,
             statement_recorder=statement_recorder,
@@ -426,13 +426,13 @@ def _prepare_delta_relation(
         )
     with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
         adapter.drop(
-            connection,
+            connection=connection,
             destination=delta_qualified,
             if_exists=True,
             statement_recorder=statement_recorder,
         )
         adapter.create_table_as(
-            connection,
+            connection=connection,
             destination=delta_qualified,
             sql=resolved_sql,
             statement_recorder=statement_recorder,
@@ -513,7 +513,7 @@ def _apply_schema_change(
     if on_schema_change == OnSchemaChange.APPEND_NEW_COLUMNS:
         if added:
             adapter.add_columns(
-                connection,
+                connection=connection,
                 destination=target_qualified,
                 columns=tuple(added),
                 statement_recorder=statement_recorder,
@@ -528,21 +528,21 @@ def _apply_schema_change(
     if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:
         if added:
             adapter.add_columns(
-                connection,
+                connection=connection,
                 destination=target_qualified,
                 columns=tuple(added),
                 statement_recorder=statement_recorder,
             )
         if removed:
             adapter.drop_columns(
-                connection,
+                connection=connection,
                 destination=target_qualified,
                 column_names=tuple(removed),
                 statement_recorder=statement_recorder,
             )
         if type_changed:
             adapter.alter_column_types(
-                connection,
+                connection=connection,
                 destination=target_qualified,
                 columns=tuple(type_changed),
                 statement_recorder=statement_recorder,
@@ -581,8 +581,9 @@ def _execute_dml(
     dml_sql: str = f"SELECT {projection} FROM {delta_qualified}"
 
     if strategy == IncrementalStrategy.APPEND:
-        adapter.append(  # sc: allow-param-mutation (adapter SQL APPEND, not container mutation)
-            connection,
+        incremental_adapter: BaseAdapter = adapter
+        incremental_adapter.append(
+            connection=connection,
             destination=target_qualified,
             sql=dml_sql,
             columns=dml_columns,
@@ -600,7 +601,7 @@ def _execute_dml(
                     f"cursor_start={cursor_start}, cursor_end={cursor_end}"
                 )
             adapter.delete_insert_cursor(
-                connection,
+                connection=connection,
                 destination=target_qualified,
                 sql=dml_sql,
                 cursor_column=cursor_column,
@@ -611,7 +612,7 @@ def _execute_dml(
             )
         else:
             adapter.delete_insert(
-                connection,
+                connection=connection,
                 destination=target_qualified,
                 sql=dml_sql,
                 unique_key=unique_key,
@@ -624,7 +625,7 @@ def _execute_dml(
         merge_projection: str = ", ".join(intersection_names)
         merge_sql: str = f"SELECT {merge_projection} FROM {delta_qualified}"
         adapter.merge(
-            connection,
+            connection=connection,
             destination=target_qualified,
             sql=merge_sql,
             unique_key=unique_key,

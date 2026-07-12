@@ -36,7 +36,7 @@ def render_insert_source_freshness_records_sql(
         name=SOURCE_FRESHNESS_TABLE_NAME,
     )
     if table_name is None:
-        raise AdapterUserError("source freshness table requires a target schema")
+        raise AdapterUserError(message="source freshness table requires a target schema")
     values_sql: str = ", ".join(_record_values_sql(record) for record in records)
     return (
         f"INSERT INTO {table_name} ("

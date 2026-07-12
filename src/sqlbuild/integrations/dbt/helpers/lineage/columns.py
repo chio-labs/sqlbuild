@@ -139,7 +139,7 @@ def select_dbt_column_lineage_target(
     )
     column_lineage: ProjectColumnLineage | None = (
         _build_project_column_lineage_with_propagated_schema(
-            analysis_project,
+            project=analysis_project,
             model_names=candidate_selection.model_names,
         )
     )
@@ -172,25 +172,26 @@ def select_dbt_column_lineage_target(
 
 
 def _build_project_column_lineage_with_propagated_schema(
-    project: CompiledProject,
     *,
+    project: CompiledProject,
     model_names: frozenset[str],
 ) -> ProjectColumnLineage | None:
     current_project: CompiledProject = project
     lineage: ProjectColumnLineage | None = None
     for _iteration in range(3):
-        lineage = build_project_column_lineage(current_project, model_names=model_names)
+        lineage = build_project_column_lineage(project=current_project, model_names=model_names)
         if lineage is None:
             return None
-        inferred_by_model: dict[str, tuple[InferredColumn, ...]] = {
-            model_name: tuple(
-                InferredColumn(name=column.output_column) for column in model_lineage.columns
-            )
-            for model_name, model_lineage in lineage.models.items()
-            if model_lineage.columns
-        }
+        inferred_by_model: dict[str, tuple[InferredColumn, ...]] = {}
+        for model_name, model_lineage in lineage.models.items():
+            if not model_lineage.columns:
+                continue
+            inferred_columns: list[InferredColumn] = []
+            for column in model_lineage.columns:
+                inferred_columns.append(InferredColumn(name=column.output_column))
+            inferred_by_model[model_name] = tuple(inferred_columns)
         next_models: tuple[CompiledModel, ...] = tuple(
-            _with_propagated_columns(model, columns=inferred_by_model.get(model.name))
+            _with_propagated_columns(model=model, columns=inferred_by_model.get(model.name))
             for model in current_project.models
         )
         next_project: CompiledProject = CompiledProject(
@@ -212,7 +213,7 @@ def _build_project_column_lineage_with_propagated_schema(
 
 
 def _with_propagated_columns(
-    model: CompiledModel, *, columns: tuple[InferredColumn, ...] | None
+    *, model: CompiledModel, columns: tuple[InferredColumn, ...] | None
 ) -> CompiledModel:
     if columns is None or model.inferred_columns == columns:
         return model
@@ -355,7 +356,7 @@ def _inspect_columns_by_unique_id(
         database, schema = database_schema
         names: tuple[str, ...] = tuple(sorted({request.name for request in location_requests}))
         columns_by_name: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-            connection,
+            connection=connection,
             database=database,
             schemas=(schema,) if schema is not None else None,
             names=names,
@@ -388,7 +389,8 @@ def _manifest_relation_database(*, database: str | None, relation_name: str) -> 
     if database is not None:
         return database
     relation_parts: tuple[str, ...] = _relation_parts(relation_name)
-    if len(relation_parts) >= 3:
+    database_schema_relation_part_count: int = 3
+    if len(relation_parts) >= database_schema_relation_part_count:
         return relation_parts[-3]
     return None
 
@@ -397,7 +399,8 @@ def _manifest_relation_schema(*, schema: str | None, relation_name: str) -> str 
     if schema is not None:
         return schema
     relation_parts: tuple[str, ...] = _relation_parts(relation_name)
-    if len(relation_parts) >= 2:
+    schema_relation_part_count: int = 2
+    if len(relation_parts) >= schema_relation_part_count:
         return relation_parts[-2]
     return None
 
@@ -504,7 +507,9 @@ def _column_candidate_selection(
 
 
 def _dbt_model(*, model: DbtManifestModel, manifest: DbtManifestIndex) -> CompiledModel:
-    query_sql: str = _rewrite_dbt_compiled_sql(_dbt_model_compiled_sql(model), manifest=manifest)
+    query_sql: str = _rewrite_dbt_compiled_sql(
+        sql=_dbt_model_compiled_sql(model), manifest=manifest
+    )
     relative_path: Path = Path(
         str(model.payload.get("original_file_path") or f"dbt/{model.unique_id}.sql")
     )
@@ -528,7 +533,7 @@ def _dbt_model(*, model: DbtManifestModel, manifest: DbtManifestIndex) -> Compil
 
 
 def _sqlbuild_model(*, model: CompiledModel, manifest: DbtManifestIndex) -> CompiledModel:
-    query_sql: str = _rewrite_sqlbuild_dbt_refs(model.query_sql, manifest=manifest)
+    query_sql: str = _rewrite_sqlbuild_dbt_refs(sql=model.query_sql, manifest=manifest)
     return CompiledModel(
         key=model.key,
         deps=model.deps,
@@ -596,7 +601,7 @@ def _dbt_seed_source(
     )
 
 
-def _rewrite_sqlbuild_dbt_refs(sql: str, *, manifest: DbtManifestIndex) -> str:
+def _rewrite_sqlbuild_dbt_refs(*, sql: str, manifest: DbtManifestIndex) -> str:
     pattern: re.Pattern[str] = re.compile(
         r"__dbt_ref\(\s*(['\"])(?P<first>[^'\"]+)\1"
         r"(?:\s*,\s*(['\"])(?P<second>[^'\"]+)\3)?\s*\)"
@@ -625,7 +630,7 @@ def _dbt_model_compiled_sql(model: DbtManifestModel) -> str:
     return model.query_sql
 
 
-def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
+def _rewrite_dbt_compiled_sql(*, sql: str, manifest: DbtManifestIndex) -> str:
     rewritten: str = sql
     replacements: dict[str, str] = {}
     relation_names: tuple[str, ...] = (
@@ -642,7 +647,7 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
     for model in manifest.models_by_unique_id.values():
         replacements.update(
             _relation_replacements(
-                model.relation_name,
+                relation_name=model.relation_name,
                 resource_name=model.unique_id,
                 kind="ref",
                 include_table_only=relation_table_counts[_relation_table_name(model.relation_name)]
@@ -653,7 +658,7 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
     for source in manifest.sources_by_unique_id.values():
         replacements.update(
             _relation_replacements(
-                source.relation_name,
+                relation_name=source.relation_name,
                 resource_name=source.unique_id,
                 kind="source",
                 include_table_only=relation_table_counts[_relation_table_name(source.relation_name)]
@@ -664,7 +669,7 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
     for seed in manifest.seeds_by_unique_id.values():
         replacements.update(
             _relation_replacements(
-                seed.relation_name,
+                relation_name=seed.relation_name,
                 resource_name=seed.unique_id,
                 kind="source",
                 include_table_only=relation_table_counts[_relation_table_name(seed.relation_name)]
@@ -675,14 +680,14 @@ def _rewrite_dbt_compiled_sql(sql: str, *, manifest: DbtManifestIndex) -> str:
         replacements.items(), key=lambda item: len(item[0]), reverse=True
     ):
         rewritten = _replace_relation_in_from_or_join(
-            rewritten, relation_name=relation_name, replacement=reference_call
+            sql=rewritten, relation_name=relation_name, replacement=reference_call
         )
     return rewritten
 
 
 def _relation_replacements(
-    relation_name: str,
     *,
+    relation_name: str,
     resource_name: str,
     kind: str,
     include_table_only: bool,
@@ -696,11 +701,14 @@ def _relation_replacements(
     )
     quoted: str = ".".join(f'"{part}"' for part in stripped_parts)
     unquoted: str = ".".join(stripped_parts)
+    schema_relation_part_count: int = 2
     schema_qualified: str | None = (
-        ".".join(stripped_parts[-2:]) if len(stripped_parts) >= 2 else None
+        ".".join(stripped_parts[-2:]) if len(stripped_parts) >= schema_relation_part_count else None
     )
     quoted_schema_qualified: str | None = (
-        ".".join(f'"{part}"' for part in stripped_parts[-2:]) if len(stripped_parts) >= 2 else None
+        ".".join(f'"{part}"' for part in stripped_parts[-2:])
+        if len(stripped_parts) >= schema_relation_part_count
+        else None
     )
     replacements: dict[str, str] = {
         relation_name: reference_call,
@@ -723,7 +731,7 @@ def _relation_table_name(relation_name: str) -> str:
     return stripped_parts[-1] if stripped_parts else relation_name
 
 
-def _replace_relation_in_from_or_join(sql: str, *, relation_name: str, replacement: str) -> str:
+def _replace_relation_in_from_or_join(*, sql: str, relation_name: str, replacement: str) -> str:
     escaped_relation: str = re.escape(relation_name)
     pattern: re.Pattern[str] = re.compile(
         rf"(?P<prefix>\b(?:from|join)\s+){escaped_relation}(?P<suffix>\b|\s|$)",
@@ -756,7 +764,7 @@ def _trace_column_with_depth(
             continue
         if direction == DbtLineageDirection.DOWNSTREAM:
             for edge in column_lineage.column_consumers(
-                current_resource,
+                resource_name=current_resource,
                 column_name=current_column,
             ):
                 result.append(edge)

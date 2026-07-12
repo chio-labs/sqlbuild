@@ -461,8 +461,10 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     monkeypatch.setenv("USE_SEED_DB", "1")
     write_repo_files(tmp_path, test_case.repo_files)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(discovered, run_id="test_run_id")
-    compiled: CompiledProject = assemble_compiled_project(compile_inputs)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered, run_id="test_run_id"
+    )
+    compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
 
     assert tuple(m.name for m in compiled.models) == test_case.expected_model_names
     assert tuple(m.deps for m in compiled.models) == test_case.expected_model_deps
@@ -580,9 +582,11 @@ def test_given_connection_location_when_assembling_project_then_sets_effective_t
         base_repo_files() | {"sqlbuild_project.toml": test_case.project_toml},
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(discovered, run_id="test_run_id")
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered, run_id="test_run_id"
+    )
 
-    compiled: CompiledProject = assemble_compiled_project(compile_inputs)
+    compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
 
     assert compiled.effective_target_database == test_case.expected_effective_target_database
     assert compiled.effective_target_schema == test_case.expected_effective_target_schema

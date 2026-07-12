@@ -333,7 +333,7 @@ def _gather_relations(
     """Fetch relations and the schemas where the fingerprint/freshness state tables exist."""
 
     relations: tuple[RelationInfo, ...] = adapter.list_relations(
-        connection, database=database, schemas=schemas, names=names
+        connection=connection, database=database, schemas=schemas, names=names
     )
     result: dict[str, RelationInfo] = {}
     fingerprint_schemas: set[str] = set()
@@ -363,7 +363,7 @@ def _gather_columns(
     """Fetch column metadata for all relations across target schemas."""
 
     all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-        connection, database=database, schemas=schemas, names=names
+        connection=connection, database=database, schemas=schemas, names=names
     )
     return {name: cols for name, cols in all_columns.items() if name != FINGERPRINT_TABLE_NAME}
 
@@ -492,12 +492,12 @@ def _collect_cursor_models(
             if model_key not in selected_keys:
                 continue
 
-        cursor_column: str | None = _get_config_str(model, key="cursor")
-        materialized: str | None = _get_config_str(model, key="materialized")
+        cursor_column: str | None = _get_config_str(model=model, key="cursor")
+        materialized: str | None = _get_config_str(model=model, key="materialized")
         if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
             continue
 
-        cursor_inputs: dict[str, str] = _get_cursor_inputs(model, cursor_column=cursor_column)
+        cursor_inputs: dict[str, str] = _get_cursor_inputs(model=model, cursor_column=cursor_column)
 
         target_tag: str | None = None
         target_relation: str | None = None
@@ -644,10 +644,10 @@ def _execute_cursor_batch(
         sql = " UNION ALL ".join(parts)
 
     try:
-        result: Any = execute(connection, sql=sql)
+        result: Any = execute(connection=connection, sql=sql)
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="cursor bounds batch query failed; treating batch as unavailable",
             sqlbuild_batch_tags=", ".join(query.tag for query in batch),
             sqlbuild_error=str(error),
@@ -696,7 +696,7 @@ def _assemble_cursor_snapshots(
     return snapshots
 
 
-def _get_cursor_inputs(model: CompiledModel, *, cursor_column: str) -> dict[str, str]:
+def _get_cursor_inputs(*, model: CompiledModel, cursor_column: str) -> dict[str, str]:
     """Resolve cursor column mapping per upstream ref."""
 
     raw: object | None = model.config.values.get("cursor_inputs")
@@ -731,11 +731,11 @@ def _resolve_upstream_qualified_name(
         source: CompiledSource | None = source_map.get(ref.ref_name)
         if source is not None:
             entry: SourceEntry = source.source_entry
-            return render_source_relation(entry, adapter=adapter)
+            return render_source_relation(entry=entry, adapter=adapter)
     return None
 
 
-def _get_config_str(model: CompiledModel, *, key: str) -> str | None:
+def _get_config_str(*, model: CompiledModel, key: str) -> str | None:
     """Extract a string config value from model config."""
 
     raw: object | None = model.config.values.get(key)

@@ -32,13 +32,13 @@ def execute_seed(
     )
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=seed_entry.destination.database,
             schema=seed_entry.destination.schema,
             statement_recorder=statement_recorder,
         )
         adapter.load_seed(
-            connection,
+            connection=connection,
             destination=target_qualified,
             file_path=seed_entry.file_path,
             columns=seed_entry.columns,

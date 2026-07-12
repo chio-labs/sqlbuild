@@ -24,8 +24,8 @@ def create_state_operation_handle(operation_type: StateOperationType) -> StateOp
 
 
 def write_state_operation_started(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     handle: StateOperationHandle,
@@ -35,7 +35,7 @@ def write_state_operation_started(
     """Record the RUNNING start event for one executor state operation."""
 
     record_state_operation(
-        backend,
+        backend=backend,
         connection=state_connection,
         schema=schema,
         operation_id=handle.operation_id,
@@ -48,8 +48,8 @@ def write_state_operation_started(
 
 
 def write_state_operation_result(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     handle: StateOperationHandle,
@@ -59,7 +59,7 @@ def write_state_operation_result(
     """Record the finish event and final status for one executor state operation."""
 
     record_state_operation(
-        backend,
+        backend=backend,
         connection=state_connection,
         schema=schema,
         operation_id=handle.operation_id,
@@ -72,8 +72,8 @@ def write_state_operation_result(
 
 
 def acquire_virtual_environment_lease_or_raise(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     virtual_environment_name: str,
@@ -84,7 +84,7 @@ def acquire_virtual_environment_lease_or_raise(
     """Acquire the environment lease or raise a structured locked error."""
 
     lease: StateLockLease | None = acquire_virtual_environment_lease(
-        backend,
+        backend=backend,
         connection=state_connection,
         schema=schema,
         virtual_environment_name=virtual_environment_name,

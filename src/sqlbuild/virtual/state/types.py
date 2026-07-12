@@ -7,7 +7,7 @@ from typing import Protocol
 
 
 class StateTypeMatcher(Protocol):
-    def __call__(self, actual_type: str, *, expected_type: StateColumnType) -> bool: ...
+    def __call__(self, *, actual_type: str, expected_type: StateColumnType) -> bool: ...
 
 
 class StateBackendName(StrEnum):

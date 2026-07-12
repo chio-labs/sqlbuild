@@ -227,8 +227,12 @@ def _build_cursor_subquery(
     """Wrap a qualified name in a cursor-filtered subquery."""
 
     lower_operator: str = ">=" if lower_bound_inclusive else ">"
-    start_literal: str = adapter.render_cursor_bound_literal(bounds.start, cursor_type=cursor_type)
-    end_literal: str = adapter.render_cursor_bound_literal(bounds.end, cursor_type=cursor_type)
+    start_literal: str = adapter.render_cursor_bound_literal(
+        value=bounds.start, cursor_type=cursor_type
+    )
+    end_literal: str = adapter.render_cursor_bound_literal(
+        value=bounds.end, cursor_type=cursor_type
+    )
     derived_alias: str = (
         " AS __cursor_ref" if inject_alias and adapter.requires_derived_table_aliases() else ""
     )

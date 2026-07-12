@@ -135,7 +135,7 @@ def test_given_mixed_loader_skips_when_running_pipeline_then_fan_in_matches_mode
 
     def a_loader(ctx: LoaderContext) -> object:
         mode: SkipMode = SkipMode.HARD if test_case.hard_skip else SkipMode.SOFT
-        return ctx.skip("no new orders", mode=mode)
+        return ctx.skip(reason="no new orders", mode=mode)
 
     def x_loader(_ctx: LoaderContext) -> None:
         return None

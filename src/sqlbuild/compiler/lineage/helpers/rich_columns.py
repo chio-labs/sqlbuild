@@ -70,8 +70,8 @@ _POLYGLOT_DIALECT_ALIASES: dict[str, PolyglotAnalysisDialect] = {
 
 
 def build_rich_project_column_lineage(
-    project: CompiledProject,
     *,
+    project: CompiledProject,
     dialect: str | None = None,
     model_names: frozenset[str] | None = None,
 ) -> ProjectColumnLineage | None:
@@ -88,7 +88,7 @@ def build_rich_project_column_lineage(
         if model_names is not None and model.name not in model_names:
             continue
         result: ModelColumnLineage | None = _build_polyglot_model_column_lineage(
-            model,
+            model=model,
             schema=schema,
             dialect=dialect,
         )
@@ -116,8 +116,8 @@ def build_rich_project_column_lineage(
 
 
 def _build_polyglot_model_column_lineage(
-    model: CompiledModel,
     *,
+    model: CompiledModel,
     schema: dict[str, dict[str, str]],
     dialect: str | None,
 ) -> ModelColumnLineage | None:
@@ -140,7 +140,7 @@ def _build_polyglot_model_column_lineage(
         )
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="rich column lineage analysis failed; skipping model",
             sqlbuild_model=model.name,
             sqlbuild_error=str(error),
@@ -285,18 +285,13 @@ def _star_expanded_columns(analysis: dict[str, Any]) -> frozenset[str]:
 
 
 def _polyglot_schema(schema: dict[str, dict[str, str]]) -> dict[str, object]:
-    return {
-        "tables": [
-            {
-                "name": table_name,
-                "columns": [
-                    {"name": column_name, "type": column_type or "UNKNOWN"}
-                    for column_name, column_type in sorted(columns.items())
-                ],
-            }
-            for table_name, columns in sorted(schema.items())
-        ]
-    }
+    tables: list[dict[str, object]] = []
+    for table_name, columns in sorted(schema.items()):
+        table_columns: list[dict[str, str]] = []
+        for column_name, column_type in sorted(columns.items()):
+            table_columns.append({"name": column_name, "type": column_type or "UNKNOWN"})
+        tables.append({"name": table_name, "columns": table_columns})
+    return {"tables": tables}
 
 
 def _polyglot_dialect(dialect: str | TypeDialect | None) -> PolyglotAnalysisDialect:

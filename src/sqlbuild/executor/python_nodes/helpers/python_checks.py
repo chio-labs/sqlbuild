@@ -63,13 +63,13 @@ def execute_python_check_nodes(
         result.node_name: result for result in upstream_python_results
     }
     loader_results_by_name: dict[str, PythonNodeExecutionResult] = {
-        result.source_name: _load_result_to_python_result(result)
+        result.source_name: _load_result_to_python_result(result=result)
         for result in upstream_load_results
     }
     if upstream_load_results_by_loader_name is not None:
         loader_results_by_name.update(
             {
-                loader_name: _load_result_to_python_result(result, node_name=loader_name)
+                loader_name: _load_result_to_python_result(result=result, node_name=loader_name)
                 for loader_name, result in upstream_load_results_by_loader_name.items()
             }
         )
@@ -175,7 +175,7 @@ def execute_python_check_nodes(
                 check_function.name
             ].identity
             if identity_recorder is not None:
-                identity_recorder(identity, _target_name=None)
+                identity_recorder(identity=identity, _target_name=None)
             else:
                 try_write_python_node_identity_fingerprint(
                     identity=identity,
@@ -290,7 +290,7 @@ def _blocked_check_result(
 
 
 def _load_result_to_python_result(
-    result: LoadExecutionResult, *, node_name: str | None = None
+    *, result: LoadExecutionResult, node_name: str | None = None
 ) -> PythonNodeExecutionResult:
     status: PythonNodeStatus = (
         PythonNodeStatus.SUCCESS

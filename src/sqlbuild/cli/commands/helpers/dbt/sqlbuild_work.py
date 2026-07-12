@@ -100,12 +100,22 @@ def execute_sqlbuild_build_work(
             use_color=use_color,
         ),
         callbacks=BuildCallbacks(
-            on_node_start=callbacks.on_node_start,
+            on_node_start=lambda name, resource_kind: callbacks.on_node_start(
+                name=name, resource_kind=resource_kind
+            ),
             on_node_complete=callbacks.on_node_complete,
             on_sub_progress=callbacks.on_sub_progress,
             on_connection_start=execution_connection_progress.on_connection_start,
-            on_connection_complete=execution_connection_progress.on_connection_complete,
-            on_connection_error=execution_connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     write_runtime_target(target_dir=project_dir / "target", plan_output=plan_output, result=result)
@@ -197,27 +207,22 @@ def _execute_sqlbuild_tests(
         stream=output_stream,
         use_color=use_color,
     )
-    preflight_active: list[bool] = [False]
-
-    def on_test_progress(message: str) -> None:
-        if message.startswith("Prepared "):
-            preflight_progress.complete(message, blank_line_after=True)
-            preflight_active[0] = False
-            return
-        if not preflight_active[0]:
-            preflight_progress.start(message)
-            preflight_active[0] = True
-            return
-        preflight_progress.update(message)
-
     results: tuple[SqlTestExecutionResult, ...] = run_test_pipeline(
         plan=plan_output,
         connection_config=connection_config,
         adapter=adapter,
         on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
-        on_progress=on_test_progress,
+        on_connection_complete=lambda connection_count, elapsed_seconds: (
+            connection_progress.on_connection_complete(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
+        on_connection_error=lambda connection_count, elapsed_seconds: (
+            connection_progress.on_connection_error(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
+        on_progress=preflight_progress.report_preflight_progress,
         on_test_start=lambda entry: progress.on_item_start(
             group_name=_test_group_name_from_entry(entry),
             item_name=entry.name,
@@ -287,8 +292,16 @@ def _execute_sqlbuild_audits(
         connection_config=connection_config,
         adapter=adapter,
         on_connection_start=connection_progress.on_connection_start,
-        on_connection_complete=connection_progress.on_connection_complete,
-        on_connection_error=connection_progress.on_connection_error,
+        on_connection_complete=lambda connection_count, elapsed_seconds: (
+            connection_progress.on_connection_complete(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
+        on_connection_error=lambda connection_count, elapsed_seconds: (
+            connection_progress.on_connection_error(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
         on_audit_start=lambda entry: progress.on_item_start(
             group_name=entry.attached_target_name or "(unattached)",
             item_name=_audit_display_name_from_entry(entry),

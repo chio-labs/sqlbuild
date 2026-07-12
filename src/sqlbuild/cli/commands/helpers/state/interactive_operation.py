@@ -72,7 +72,9 @@ def run_interactive_state_operation(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    adapter: BaseAdapter = resolve_adapter(
+        adapter_name=adapter_name, project_dir=effective_project_dir
+    )
     connection_config: dict[str, object] = resolve_project_connection_config(
         discovered_inputs=discovered_inputs,
         project_dir=effective_project_dir,
@@ -93,10 +95,12 @@ def run_interactive_state_operation(
         state_connection: Any = backend.connect(config.connection)
     except BaseException:
         state_progress.on_connection_error(
-            1, elapsed_seconds=time.perf_counter() - state_started_at
+            connection_count=1, elapsed_seconds=time.perf_counter() - state_started_at
         )
         raise
-    state_progress.on_connection_complete(1, elapsed_seconds=time.perf_counter() - state_started_at)
+    state_progress.on_connection_complete(
+        connection_count=1, elapsed_seconds=time.perf_counter() - state_started_at
+    )
     warehouse_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
         stream=sys.stdout,
@@ -108,12 +112,12 @@ def run_interactive_state_operation(
         warehouse_connection: Any = adapter.connect(connection_config)
     except BaseException:
         warehouse_progress.on_connection_error(
-            1, elapsed_seconds=time.perf_counter() - warehouse_started_at
+            connection_count=1, elapsed_seconds=time.perf_counter() - warehouse_started_at
         )
         backend.close(state_connection)
         raise
     warehouse_progress.on_connection_complete(
-        1, elapsed_seconds=time.perf_counter() - warehouse_started_at
+        connection_count=1, elapsed_seconds=time.perf_counter() - warehouse_started_at
     )
     status: TransientStatusReporter = TransientStatusReporter(
         stream=sys.stdout,
@@ -130,7 +134,7 @@ def run_interactive_state_operation(
             connection=warehouse_connection,
             allow_copy=allow_copy,
         )
-        status.complete(f"State {state_command.value} complete.")
+        status.complete(message=f"State {state_command.value} complete.")
     finally:
         status.close()
         adapter.close(warehouse_connection)

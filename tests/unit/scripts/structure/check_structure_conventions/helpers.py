@@ -72,6 +72,6 @@ def compliant_repo_files() -> dict[str, str]:
 
 def collect_violation_codes(repo_root: Path) -> tuple[str, ...]:
     violations: list[Violation] = check_paths(
-        [repo_root / "src", repo_root / "scripts"], repo_root=repo_root
+        paths=[repo_root / "src", repo_root / "scripts"], repo_root=repo_root
     )
     return tuple(violation.code for violation in violations)

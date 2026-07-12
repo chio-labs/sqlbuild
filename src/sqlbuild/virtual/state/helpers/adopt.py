@@ -55,7 +55,7 @@ def adopt_into_virtual_state(
         raise PlannerInputError("state adopt requires an active target", code="C259")
     operation_id: str = f"adopt:{active_target_name}"
     record_state_operation(
-        backend,
+        backend=backend,
         connection=state_connection,
         schema=config.schema,
         operation_id=operation_id,
@@ -99,7 +99,7 @@ def adopt_into_virtual_state(
                 version_hash=version_hash,
             )
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=physical_target.database,
                 schema=physical_target.schema,
                 statement_recorder=recorder,
@@ -108,7 +108,7 @@ def adopt_into_virtual_state(
                 str(model.config.values.get("materialized", "table"))
             )
             adapter.move_or_copy_relation(
-                connection,
+                connection=connection,
                 origin=resolve_relation_location_qualified_name(
                     adapter=adapter, location=model.destination
                 ),
@@ -121,7 +121,7 @@ def adopt_into_virtual_state(
             )
             if model_relation_type == "view":
                 adapter.drop_view(
-                    connection,
+                    connection=connection,
                     destination=resolve_relation_location_qualified_name(
                         adapter=adapter, location=model.destination
                     ),
@@ -134,7 +134,7 @@ def adopt_into_virtual_state(
                 unsuffixed_virtual_environment_name=active_target_name,
             )
             adapter.create_view_as(
-                connection,
+                connection=connection,
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
@@ -147,7 +147,7 @@ def adopt_into_virtual_state(
                 statement_recorder=recorder,
             )
             backend.upsert_model_version(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 record=ModelVersionRecord(
                     model_name=model.name,
@@ -158,7 +158,7 @@ def adopt_into_virtual_state(
                 ),
             )
             backend.upsert_physical_relation(
-                state_connection,
+                connection=state_connection,
                 schema=config.schema,
                 record=PhysicalRelationRecord(
                     artifact_type=PhysicalArtifactType.MODEL,
@@ -178,7 +178,7 @@ def adopt_into_virtual_state(
                 )
             )
         backend.upsert_virtual_environment(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
                 virtual_environment_name=active_target_name,
@@ -186,13 +186,13 @@ def adopt_into_virtual_state(
             ),
         )
         backend.replace_virtual_environment_model_refs(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             virtual_environment_name=active_target_name,
             refs=tuple(refs),
         )
         record_state_operation(
-            backend,
+            backend=backend,
             connection=state_connection,
             schema=config.schema,
             operation_id=operation_id,
@@ -205,7 +205,7 @@ def adopt_into_virtual_state(
         return f"Adopted {len(refs)} models into virtual environment {active_target_name}."
     except BaseException as error:
         record_state_operation(
-            backend,
+            backend=backend,
             connection=state_connection,
             schema=config.schema,
             operation_id=operation_id,

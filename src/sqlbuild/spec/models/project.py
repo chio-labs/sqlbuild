@@ -254,19 +254,19 @@ def resolve_effective_scenario_config(
         local_type_overrides=local_type_overrides,
         snapshot_limits=ScenarioSnapshotLimitsConfig(
             max_rows_per_relation=_resolve_optional_int_override(
-                project_limits.max_rows_per_relation,
+                project_value=project_limits.max_rows_per_relation,
                 local_value=local_limits.max_rows_per_relation,
             ),
             max_total_rows=_resolve_optional_int_override(
-                project_limits.max_total_rows,
+                project_value=project_limits.max_total_rows,
                 local_value=local_limits.max_total_rows,
             ),
             max_bytes_per_relation=_resolve_optional_int_override(
-                project_limits.max_bytes_per_relation,
+                project_value=project_limits.max_bytes_per_relation,
                 local_value=local_limits.max_bytes_per_relation,
             ),
             max_total_bytes=_resolve_optional_int_override(
-                project_limits.max_total_bytes,
+                project_value=project_limits.max_total_bytes,
                 local_value=local_limits.max_total_bytes,
             ),
         ),
@@ -274,7 +274,7 @@ def resolve_effective_scenario_config(
 
 
 def _resolve_optional_int_override(
-    project_value: int | None, *, local_value: int | None
+    *, project_value: int | None, local_value: int | None
 ) -> int | None:
     return local_value if local_value is not None else project_value
 

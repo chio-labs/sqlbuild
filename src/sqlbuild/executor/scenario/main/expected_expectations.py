@@ -37,7 +37,7 @@ def execute_scenario_expected_expectation(
         set_difference_operator=adapter.render_set_difference_operator(),
     )
     try:
-        cursor: Any = adapter.execute(connection, sql=comparison_sql)
+        cursor: Any = adapter.execute(connection=connection, sql=comparison_sql)
         row: Any | None = cursor.fetchone()
     except Exception as exc:
         error_message: str = (

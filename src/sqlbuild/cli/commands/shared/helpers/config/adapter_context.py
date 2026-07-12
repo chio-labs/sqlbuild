@@ -28,7 +28,7 @@ def resolve_adapter_connection_context(
         local_config=discovered_inputs.local_config,
     )
     adapter: BaseAdapter = resolve_adapter(
-        adapter_name,
+        adapter_name=adapter_name,
         project_dir=effective_project_dir,
     )
     connection_config: dict[str, object] = resolve_project_connection_config(

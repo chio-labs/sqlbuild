@@ -117,7 +117,7 @@ def read_selector_files(paths: list[str]) -> tuple[str, ...]:
     return tuple(selectors)
 
 
-def add_dbt_config_args(parser: argparse.ArgumentParser, *, prefix: str = "dbt") -> None:
+def add_dbt_config_args(*, parser: argparse.ArgumentParser, prefix: str = "dbt") -> None:
     """Add dbt configuration flags to a subparser."""
 
     flag_prefix: str = f"{prefix}-" if prefix else ""

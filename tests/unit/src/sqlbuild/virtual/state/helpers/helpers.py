@@ -47,13 +47,13 @@ def state_type_matches_for_test(actual_type: str, expected_type: StateColumnType
 def state_columns_for_test(
     expected_columns: dict[str, dict[str, StateColumnType]],
 ) -> dict[str, dict[str, str]]:
-    return {
-        table_name: {
-            column_name: _state_column_type_for_test(column_type)
-            for column_name, column_type in columns.items()
-        }
-        for table_name, columns in expected_columns.items()
-    }
+    rendered_columns: dict[str, dict[str, str]] = {}
+    for table_name, columns in expected_columns.items():
+        rendered_table_columns: dict[str, str] = {}
+        for column_name, column_type in columns.items():
+            rendered_table_columns[column_name] = _state_column_type_for_test(column_type)
+        rendered_columns[table_name] = rendered_table_columns
+    return rendered_columns
 
 
 def state_indexes_for_test(
@@ -105,7 +105,7 @@ class FakeStateBackend(StateBackend):
     def initialize(self, connection: Any, *, schema: str, sqlbuild_version: str) -> None:
         return None
 
-    def validate_schema(self, connection: Any, *, schema: str) -> StateSchemaValidationResult:
+    def inspect_schema(self, connection: Any, *, schema: str) -> StateSchemaValidationResult:
         return StateSchemaValidationResult()
 
     def create_backup(self, connection: Any, *, schema: str) -> str:

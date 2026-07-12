@@ -129,14 +129,14 @@ def _render_model_result(
             console=console,
             title="Changed Columns",
             content=_render_changed_columns(
-                model_result,
+                model_result=model_result,
                 verbose=verbose,
                 max_column_examples=max_column_examples,
             ),
         )
         if verbose and model_result.unequal_row_samples:
             example_content: RenderableType | None = _render_examples(
-                model_result,
+                model_result=model_result,
                 max_column_examples=max_column_examples,
             )
             if example_content is not None:
@@ -253,7 +253,7 @@ def _render_rows(*, rows: RowDiffResult, from_label: str, to_label: str) -> Rend
     counts.add_row(f"{from_label} count", "", f"{to_label} count")
     counts.add_row(
         f"{rows.left_count:,}",
-        _render_delta_label(rows.left_count, right_count=rows.right_count),
+        _render_delta_label(left_count=rows.left_count, right_count=rows.right_count),
         f"{rows.right_count:,}",
     )
 
@@ -284,14 +284,16 @@ def _render_rows(*, rows: RowDiffResult, from_label: str, to_label: str) -> Rend
     renderables.append(_render_row_separator(rows))
     renderables.append(Group("\n", right_box) if rows.left_only_count > 0 else right_box)
     renderables.append(
-        _render_row_stats(rows, joined_count=joined_count, from_label=from_label, to_label=to_label)
+        _render_row_stats(
+            rows=rows, joined_count=joined_count, from_label=from_label, to_label=to_label
+        )
     )
-    renderables.append(_render_joined_annotation(rows, joined_count=joined_count))
+    renderables.append(_render_joined_annotation(rows=rows, joined_count=joined_count))
 
     return Group(counts, "", RichColumns(renderables, padding=0), "", f"joined: {joined_count:,}")
 
 
-def _render_delta_label(left_count: int, *, right_count: int) -> str:
+def _render_delta_label(*, left_count: int, right_count: int) -> str:
     if left_count == 0:
         return "(no baseline)"
     if left_count == right_count:
@@ -316,8 +318,8 @@ def _render_row_separator(rows: RowDiffResult) -> RenderableType:
 
 
 def _render_row_stats(
-    rows: RowDiffResult,
     *,
+    rows: RowDiffResult,
     joined_count: int,
     from_label: str,
     to_label: str,
@@ -329,30 +331,30 @@ def _render_row_stats(
     table.add_row(
         f"{rows.left_only_count:,}",
         f"{from_label} only",
-        f"({_format_percentage(rows.left_only_count, denominator=rows.left_count)})",
+        f"({_format_percentage(numerator=rows.left_only_count, denominator=rows.left_count)})",
     )
     table.add_section()
     table.add_row(
         f"{rows.equal_count:,}",
         "equal",
-        f"({_format_percentage(rows.equal_count, denominator=joined_count)})",
+        f"({_format_percentage(numerator=rows.equal_count, denominator=joined_count)})",
     )
     table.add_section()
     table.add_row(
         f"{rows.unequal_count:,}",
         "unequal",
-        f"({_format_percentage(rows.unequal_count, denominator=joined_count)})",
+        f"({_format_percentage(numerator=rows.unequal_count, denominator=joined_count)})",
     )
     table.add_section()
     table.add_row(
         f"{rows.right_only_count:,}",
         f"{to_label} only",
-        f"({_format_percentage(rows.right_only_count, denominator=rows.right_count)})",
+        f"({_format_percentage(numerator=rows.right_only_count, denominator=rows.right_count)})",
     )
     return table
 
 
-def _render_joined_annotation(rows: RowDiffResult, *, joined_count: int) -> RenderableType:
+def _render_joined_annotation(*, rows: RowDiffResult, joined_count: int) -> RenderableType:
     if joined_count == 0:
         return ""
     lines: list[RenderableType] = []
@@ -368,8 +370,8 @@ def _render_joined_annotation(rows: RowDiffResult, *, joined_count: int) -> Rend
 
 
 def _render_changed_columns(
-    model_result: ModelDiffResult,
     *,
+    model_result: ModelDiffResult,
     verbose: bool,
     max_column_examples: int,
 ) -> RenderableType:
@@ -392,7 +394,7 @@ def _render_changed_columns(
     column: RowDiffColumnResult
     for column in visible_columns:
         match_rate: str = _format_percentage(
-            _matching_rows(row_result, column=column),
+            numerator=_matching_rows(row_result=row_result, column=column),
             denominator=row_result.joined_count,
         )
         table.add_row(
@@ -412,7 +414,7 @@ def _render_changed_columns(
         )
     if not verbose:
         example_content: RenderableType | None = _render_examples(
-            model_result,
+            model_result=model_result,
             max_column_examples=max_column_examples,
             visible_column_names=tuple(column.name for column in visible_columns),
         )
@@ -428,19 +430,19 @@ def _render_changed_columns(
     return table
 
 
-def _matching_rows(row_result: RowDiffResult, *, column: RowDiffColumnResult) -> int:
+def _matching_rows(*, row_result: RowDiffResult, column: RowDiffColumnResult) -> int:
     return max(row_result.joined_count - column.mismatched_count, 0)
 
 
-def _format_percentage(numerator: int | float, *, denominator: int | float) -> str:
+def _format_percentage(*, numerator: int | float, denominator: int | float) -> str:
     if denominator == 0:
         return "0.00%"
     return f"{(numerator / denominator):.2%}"
 
 
 def _render_examples(
-    model_result: ModelDiffResult,
     *,
+    model_result: ModelDiffResult,
     max_column_examples: int,
     visible_column_names: tuple[str, ...] | None = None,
 ) -> RenderableType | None:

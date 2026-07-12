@@ -7,11 +7,11 @@ from typing import Protocol
 
 
 class WorkerSuccessBuilder[KeyT, ResultT, CompletionT](Protocol):
-    def __call__(self, key: KeyT, /, *, result: ResultT) -> CompletionT: ...
+    def __call__(self, *, key: KeyT, result: ResultT) -> CompletionT: ...
 
 
 class WorkerFailureBuilder[KeyT, CompletionT](Protocol):
-    def __call__(self, key: KeyT, /, *, error: Exception) -> CompletionT: ...
+    def __call__(self, *, key: KeyT, error: Exception) -> CompletionT: ...
 
 
 class ExecutionStatus(StrEnum):

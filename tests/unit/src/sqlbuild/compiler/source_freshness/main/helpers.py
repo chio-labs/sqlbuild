@@ -52,7 +52,8 @@ class FakeSourceFreshnessExecute:
         self._read_error: Exception | None = read_error
         self.executed_sql: list[str] = []
 
-    def __call__(self, _connection: object, sql: str) -> Any:
+    def __call__(self, *, connection: object, sql: str) -> Any:
+        del connection
         self.executed_sql.append(sql)
         if self._read_error is not None:
             raise self._read_error
@@ -63,7 +64,7 @@ class FakeSourceFreshnessWriteExecute:
     def __init__(self) -> None:
         self.executed_sql: list[str] = []
 
-    def __call__(self, connection: Any, sql: str) -> None:
+    def __call__(self, *, connection: Any, sql: str) -> None:
         del connection
         self.executed_sql.append(sql)
 
@@ -200,10 +201,13 @@ def source_freshness_identity(source_name: str) -> SourceFreshnessIdentity:
 def downstream_deps_from_edges(
     edges: dict[str, tuple[str, ...]],
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    return {
-        compiled_key(raw_key): tuple(compiled_key(raw_downstream) for raw_downstream in downstream)
-        for raw_key, downstream in edges.items()
-    }
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
+    for raw_key, downstream in edges.items():
+        compiled_downstream: list[CompiledObjectKey] = []
+        for raw_downstream in downstream:
+            compiled_downstream.append(compiled_key(raw_downstream))
+        downstream_deps[compiled_key(raw_key)] = tuple(compiled_downstream)
+    return downstream_deps
 
 
 def compiled_key(raw: str) -> CompiledObjectKey:

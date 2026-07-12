@@ -39,7 +39,7 @@ def seed_virtual_physical_version(
         return
 
     adapter.ensure_schema(
-        connection,
+        connection=connection,
         database=entry.destination.database,
         schema=entry.destination.schema,
         statement_recorder=recorder,
@@ -48,13 +48,13 @@ def seed_virtual_physical_version(
         adapter=adapter, location=entry.destination
     )
     if adapter.relation_exists(
-        connection,
+        connection=connection,
         database=entry.destination.database,
         schema=entry.destination.schema,
         name=entry.destination.name,
     ):
         adapter.drop(
-            connection,
+            connection=connection,
             destination=target,
             if_exists=True,
             statement_recorder=recorder,
@@ -81,7 +81,7 @@ def seed_virtual_physical_version(
         statement_recorder=recorder,
     )
     backend.upsert_physical_relation_ancestry(
-        state_connection,
+        connection=state_connection,
         schema=state_schema,
         record=PhysicalRelationAncestryRecord(
             model_name=entry.name,
@@ -106,7 +106,7 @@ def _seed_physical_relation(
     if _requires_append_bounded_seed(entry=entry):
         cursor_start: str = _cursor_start_for_append_seed(entry=entry)
         adapter.create_table_as(
-            connection,
+            connection=connection,
             destination=destination,
             sql=adapter.render_seed_select_before_cursor(
                 origin=origin,
@@ -120,7 +120,7 @@ def _seed_physical_relation(
 
     if adapter.supports_durable_clone():
         adapter.durable_clone(
-            connection,
+            connection=connection,
             origin=origin,
             destination=destination,
             origin_is_transient=origin_is_transient,
@@ -129,7 +129,7 @@ def _seed_physical_relation(
         return "durable_clone"
 
     adapter.create_table_as(
-        connection,
+        connection=connection,
         destination=destination,
         sql=f"SELECT * FROM {origin}",
         statement_recorder=statement_recorder,
@@ -150,7 +150,7 @@ def _origin_is_transient(
     if schema is None:
         return False
     relations: tuple[Any, ...] = adapter.list_relations(
-        connection, database=database, schemas=(schema,), names=(name,)
+        connection=connection, database=database, schemas=(schema,), names=(name,)
     )
     target_name: str = name.lower()
     for relation in relations:

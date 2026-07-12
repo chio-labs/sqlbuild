@@ -96,7 +96,7 @@ def gather_deferred_relations(
         return {}
 
     relations: tuple[RelationInfo, ...] = adapter.list_relations(
-        connection, database=database, schemas=tuple(sorted(schemas))
+        connection=connection, database=database, schemas=tuple(sorted(schemas))
     )
     return {rel.name: rel for rel in relations}
 

@@ -63,11 +63,11 @@ def parse_dbt_diff_options(args: tuple[str, ...]) -> DbtDiffOptions:
         if token == "--max-column-examples":
             raw_value: str
             raw_value, index = _consume_one_value(args=args, index=index)
-            max_column_examples = _parse_positive_int(raw_value, flag=token)
+            max_column_examples = _parse_positive_int(raw_value=raw_value, flag=token)
             continue
         if token == "--max-row-only-examples":
             raw_value, index = _consume_one_value(args=args, index=index)
-            max_row_only_examples = _parse_positive_int(raw_value, flag=token)
+            max_row_only_examples = _parse_positive_int(raw_value=raw_value, flag=token)
             continue
         if token in _dbt_value_flags():
             value: str
@@ -110,21 +110,29 @@ def execute_dbt_diff(
 ) -> DiffExecutionResult:
     """Execute schema/row diffs for selected dbt models."""
 
+    diffable_model_items: list[tuple[DbtManifestModel, DbtManifestModel]] = []
+    for node in selected_nodes:
+        if node.resource_type != DbtSupportedResourceType.MODEL:
+            continue
+        current_candidate: DbtManifestModel | None = current_manifest.models_by_unique_id.get(
+            node.unique_id
+        )
+        reuse_candidate: DbtManifestModel | None = reuse_manifest.models_by_unique_id.get(
+            node.unique_id
+        )
+        if current_candidate is not None and reuse_candidate is not None:
+            diffable_model_items.append((current_candidate, reuse_candidate))
     diffable_models: tuple[tuple[DbtManifestModel, DbtManifestModel], ...] = tuple(
-        (current_model, reuse_model)
-        for node in selected_nodes
-        if node.resource_type == DbtSupportedResourceType.MODEL
-        and (current_model := current_manifest.models_by_unique_id.get(node.unique_id)) is not None
-        and (reuse_model := reuse_manifest.models_by_unique_id.get(node.unique_id)) is not None
+        diffable_model_items
     )
+    locations: list[tuple[str | None, str | None, str]] = []
+    for current_model, reuse_model in diffable_models:
+        for model in (current_model, reuse_model):
+            locations.append((model.database, model.schema, model.alias or model.name))
     relation_lookup: RelationLookup = build_relation_lookup(
         adapter=adapter,
         connection=connection,
-        locations=tuple(
-            (model.database, model.schema, model.alias or model.name)
-            for current_model, reuse_model in diffable_models
-            for model in (current_model, reuse_model)
-        ),
+        locations=tuple(locations),
     )
     results: list[ModelDiffResult] = []
     current_model: DbtManifestModel
@@ -133,7 +141,7 @@ def execute_dbt_diff(
         _raise_if_missing_relation(relation_lookup=relation_lookup, model=reuse_model)
         _raise_if_missing_relation(relation_lookup=relation_lookup, model=current_model)
         schema_result: SchemaDiffResult = adapter.diff_schema(
-            connection,
+            connection=connection,
             left=reuse_model.relation_name,
             right=current_model.relation_name,
         )
@@ -155,7 +163,7 @@ def execute_dbt_diff(
                     bounded=options.bounded,
                 )
             row_result = adapter.diff_rows(
-                connection,
+                connection=connection,
                 left=reuse_model.relation_name,
                 right=current_model.relation_name,
                 unique_key=unique_key,
@@ -166,7 +174,7 @@ def execute_dbt_diff(
             )
             if row_result.unequal_count > 0:
                 unequal_row_samples = adapter.sample_unequal_rows(
-                    connection,
+                    connection=connection,
                     left=reuse_model.relation_name,
                     right=current_model.relation_name,
                     unique_key=unique_key,
@@ -178,7 +186,7 @@ def execute_dbt_diff(
                 )
             if row_result.left_only_count > 0:
                 left_only_key_samples = adapter.sample_side_only_rows(
-                    connection,
+                    connection=connection,
                     left=reuse_model.relation_name,
                     right=current_model.relation_name,
                     unique_key=unique_key,
@@ -190,7 +198,7 @@ def execute_dbt_diff(
                 )
             if row_result.right_only_count > 0:
                 right_only_key_samples = adapter.sample_side_only_rows(
-                    connection,
+                    connection=connection,
                     left=reuse_model.relation_name,
                     right=current_model.relation_name,
                     unique_key=unique_key,
@@ -245,7 +253,7 @@ def _consume_multi_value(*, args: tuple[str, ...], index: int) -> tuple[tuple[st
     return tuple(values), next_index
 
 
-def _parse_positive_int(raw_value: str, *, flag: str) -> int:
+def _parse_positive_int(*, raw_value: str, flag: str) -> int:
     try:
         value: int = int(raw_value)
     except ValueError as error:
@@ -374,7 +382,8 @@ def _parse_integer_bound(raw: str) -> int:
 
 
 def _parse_duration_bound(raw: str) -> timedelta:
-    if len(raw) < 2:
+    bounded_value_part_count: int = 2
+    if len(raw) < bounded_value_part_count:
         raise DbtInteropArgumentError(
             "timestamp cursor bounded dbt diff requires duration like 30d, 12h, or 15m",
             code="C344",

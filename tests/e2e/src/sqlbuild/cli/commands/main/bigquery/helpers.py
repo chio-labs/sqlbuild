@@ -358,7 +358,7 @@ def execute_bigquery_sql(*, dataset_name: str, sql: str) -> None:
     connection: Any = adapter.connect(config)
     try:
         ensure_bigquery_dataset_ready(dataset_name=dataset_name)
-        adapter.execute(connection, sql=sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 

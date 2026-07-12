@@ -28,7 +28,7 @@ def build_relation_lookup(
     relations_by_key: dict[tuple[str | None, str | None, str], RelationInfo] = {}
     for database, schemas in schemas_by_database.items():
         relations: tuple[RelationInfo, ...] = adapter.list_relations(
-            connection,
+            connection=connection,
             database=database,
             schemas=tuple(sorted(schemas)),
             names=None,
@@ -43,7 +43,7 @@ def build_relation_lookup(
             ] = relation
     for database, names in schema_wildcard_names_by_database.items():
         relations = adapter.list_relations(
-            connection,
+            connection=connection,
             database=database,
             schemas=None,
             names=tuple(sorted(names)),

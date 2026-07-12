@@ -97,7 +97,8 @@ def _parse_timestamp_data_version(value: str) -> datetime:
 
 
 def _parse_lag_tolerance(value: str) -> timedelta:
-    if len(value) < 2:
+    quoted_value_character_count: int = 2
+    if len(value) < quoted_value_character_count:
         raise SourceFreshnessObservationError(
             "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
         )

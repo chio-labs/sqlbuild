@@ -78,7 +78,7 @@ def run_virtual_promote(
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
         write_state_operation_started(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             handle=handle,
@@ -88,7 +88,7 @@ def run_virtual_promote(
             ),
         )
         lease = acquire_virtual_environment_lease_or_raise(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=to_virtual_environment_name,
@@ -96,14 +96,14 @@ def run_virtual_promote(
             locked_error_code="S014",
         )
         environment_state: PromoteEnvironmentState = read_promote_environment_state(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             from_virtual_environment_name=from_virtual_environment_name,
             to_virtual_environment_name=to_virtual_environment_name,
         )
         semantics: PromoteSemantics = build_promote_semantics(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             graph=context.graph,
@@ -127,7 +127,7 @@ def run_virtual_promote(
             allow_partial_promotion=options.allow_partial_promotion,
         )
         update: PromoteRefUpdate = build_promote_ref_update(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             from_virtual_environment_name=from_virtual_environment_name,
@@ -137,14 +137,14 @@ def run_virtual_promote(
             select=options.select,
         )
         write_promote_environment_update(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             to_virtual_environment_name=to_virtual_environment_name,
             update=update,
         )
         relations: VirtualEnvironmentPhysicalRelations = read_promote_physical_relations(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             update=update,
@@ -160,7 +160,7 @@ def run_virtual_promote(
             hooks=hooks,
         )
         write_state_operation_result(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             handle=handle,
@@ -171,7 +171,7 @@ def run_virtual_promote(
             on_progress(f"Inspected virtual state. ({time.perf_counter() - inspect_start:.2f}s)")
     except Exception as error:
         write_state_operation_result(
-            backend,
+            backend=backend,
             state_connection=state_connection,
             schema=config.schema,
             handle=handle,
@@ -182,7 +182,7 @@ def run_virtual_promote(
     finally:
         if lease is not None:
             _ = release_state_lease(
-                backend,
+                backend=backend,
                 connection=state_connection,
                 schema=config.schema,
                 lease=lease,

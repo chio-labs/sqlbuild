@@ -196,7 +196,8 @@ def ensure_databricks_schema_ready(*, schema_name: str) -> None:
     connection: Any = adapter.connect(config)
     try:
         adapter.execute(
-            connection, sql=f"CREATE SCHEMA IF NOT EXISTS `{catalog_name}`.`{schema_name}`"
+            connection=connection,
+            sql=f"CREATE SCHEMA IF NOT EXISTS `{catalog_name}`.`{schema_name}`",
         )
     finally:
         adapter.close(connection)
@@ -211,7 +212,8 @@ def cleanup_databricks_schema(*, schema_name: str) -> None:
     connection: Any = adapter.connect(config)
     try:
         adapter.execute(
-            connection, sql=f"DROP SCHEMA IF EXISTS `{catalog_name}`.`{schema_name}` CASCADE"
+            connection=connection,
+            sql=f"DROP SCHEMA IF EXISTS `{catalog_name}`.`{schema_name}` CASCADE",
         )
     finally:
         adapter.close(connection)
@@ -333,7 +335,7 @@ def execute_databricks_sql(*, schema_name: str, sql: str) -> None:
     connection: Any = adapter.connect(config)
     try:
         ensure_databricks_schema_ready(schema_name=schema_name)
-        adapter.execute(connection, sql=sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 

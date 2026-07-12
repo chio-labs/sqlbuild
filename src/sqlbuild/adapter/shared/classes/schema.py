@@ -14,8 +14,8 @@ class SchemaMixin(ABC):
     @abstractmethod
     def list_relations(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -26,8 +26,8 @@ class SchemaMixin(ABC):
     @abstractmethod
     def list_functions(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -38,8 +38,8 @@ class SchemaMixin(ABC):
     @abstractmethod
     def get_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         name: str,
@@ -50,8 +50,8 @@ class SchemaMixin(ABC):
     @abstractmethod
     def get_all_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
@@ -62,8 +62,8 @@ class SchemaMixin(ABC):
     @abstractmethod
     def relation_exists(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         name: str,
@@ -74,8 +74,8 @@ class SchemaMixin(ABC):
     @abstractmethod
     def ensure_schema(
         self,
-        connection: Any,
         *,
+        connection: Any,
         database: str | None,
         schema: str | None,
         statement_recorder: Any,

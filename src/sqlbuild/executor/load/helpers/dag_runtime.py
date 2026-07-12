@@ -113,14 +113,14 @@ def execute_ready_dag_source(
         failed_or_hard_skipped=dispatch.failed_or_hard_skipped,
         indexes=indexes,
     ):
-        return skipped_load_result(source, reason="Upstream loader hard-skipped")
+        return skipped_load_result(source=source, reason="Upstream loader hard-skipped")
     if should_soft_skip_due_to_all_skipped_dependencies(
         source=source,
         results_by_name=dispatch.results_by_name,
         indexes=indexes,
     ):
         return skipped_load_result(
-            source,
+            source=source,
             reason="All upstream loaders were soft-skipped",
             mode=SkipMode.SOFT,
         )
@@ -181,9 +181,11 @@ def load_dag_worker(
         connection_pool=connection_pool,
         completion_queue=completion_queue,
         execute=_execute,
-        build_success=_load_dag_success_completion,
-        build_failure=lambda failed_source_name, *, error: _load_dag_failure_completion(
-            source_name=failed_source_name,
+        build_success=lambda *, key, result: _load_dag_success_completion(
+            source_name=key, result=result
+        ),
+        build_failure=lambda *, key, error: _load_dag_failure_completion(
+            source_name=key,
             source_by_name=source_by_name,
             error=error,
         ),
@@ -191,7 +193,7 @@ def load_dag_worker(
 
 
 def _load_dag_success_completion(
-    source_name: str, *, result: LoadExecutionResult
+    *, source_name: str, result: LoadExecutionResult
 ) -> tuple[str, LoadExecutionResult]:
     return (source_name, result)
 

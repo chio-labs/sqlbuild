@@ -267,21 +267,21 @@ def build_known_ref_names(discovered_inputs: DiscoveredProjectInputs) -> set[str
 def build_known_seed_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
     """Build the set of names valid as __seed() targets."""
 
-    return {
-        seed_entry.name
-        for schema_file in discovered_inputs.schema_files
-        for seed_entry in schema_file.seed_entries
-    }
+    seed_names: set[str] = set()
+    for schema_file in discovered_inputs.schema_files:
+        for seed_entry in schema_file.seed_entries:
+            seed_names.add(seed_entry.name)
+    return seed_names
 
 
 def build_known_source_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:
     """Build the set of names valid as __source() targets."""
 
-    return {
-        source_entry.name
-        for source_file in discovered_inputs.source_files
-        for source_entry in source_file.source_entries
-    }
+    source_names: set[str] = set()
+    for source_file in discovered_inputs.source_files:
+        for source_entry in source_file.source_entries:
+            source_names.add(source_entry.name)
+    return source_names
 
 
 def build_known_function_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:

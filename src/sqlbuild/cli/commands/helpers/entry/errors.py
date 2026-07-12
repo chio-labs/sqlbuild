@@ -32,7 +32,7 @@ def build_argument_parser_class(*, use_color: bool) -> type[SqlbuildArgumentPars
     return ColorAwareSqlbuildArgumentParser
 
 
-def format_expected_error(error: Exception, *, fallback_code: str, use_color: bool) -> str:
+def format_expected_error(*, error: Exception, fallback_code: str, use_color: bool) -> str:
     code: str = str(getattr(error, "code", fallback_code))
     message: str = str(getattr(error, "message", str(error)))
     help_text: str | None = getattr(error, "help", None)
@@ -42,8 +42,8 @@ def format_expected_error(error: Exception, *, fallback_code: str, use_color: bo
 
 
 def cli_error_use_color(
-    argv: Sequence[str] | None,
     *,
+    argv: Sequence[str] | None,
     supports_color: Callable[[], bool],
 ) -> bool:
     raw_args: Sequence[str] = sys.argv[1:] if argv is None else argv

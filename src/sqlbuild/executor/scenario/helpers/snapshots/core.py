@@ -173,7 +173,7 @@ def read_scenario_snapshot_manifest(*, manifest_path: Path) -> ScenarioSnapshotM
     except (KeyError, TypeError, ValueError) as exc:
         raise ExecutorInputError(
             f"Invalid scenario snapshot manifest: {error_message(exc)}",
-            code=error_code(exc, fallback_code=SCENARIO_LOCAL_MANIFEST_INVALID),
+            code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_MANIFEST_INVALID),
         ) from exc
 
 
@@ -205,7 +205,7 @@ def classify_scenario_snapshot_state(
         return ScenarioSnapshotStateResult(
             state=ScenarioSnapshotState.INVALID,
             manifest_path=manifest_path,
-            error_code=error_code(exc, fallback_code=SCENARIO_LOCAL_MANIFEST_INVALID),
+            error_code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_MANIFEST_INVALID),
             error_message=str(exc),
         )
 
@@ -433,6 +433,27 @@ def _normalize_sql(sql: str) -> str:
 
 
 def _manifest_to_json_data(manifest: ScenarioSnapshotManifest) -> dict[str, object]:
+    relations: list[dict[str, object]] = []
+    for relation in manifest.relations:
+        columns: list[dict[str, str]] = []
+        for column in relation.columns:
+            columns.append(
+                {
+                    "name": column.name,
+                    "warehouse_type": column.warehouse_type,
+                    "local_type": column.local_type,
+                }
+            )
+        relations.append(
+            {
+                "kind": relation.kind.value,
+                "logical_name": relation.logical_name,
+                "file": relation.file_path.as_posix(),
+                "row_count": relation.row_count,
+                "bytes": relation.byte_count,
+                "columns": columns,
+            }
+        )
     return {
         "version": manifest.version,
         "scenario_name": manifest.scenario_name,
@@ -444,24 +465,7 @@ def _manifest_to_json_data(manifest: ScenarioSnapshotManifest) -> dict[str, obje
         "format": manifest.format,
         "total_rows": manifest.total_rows,
         "total_bytes": manifest.total_bytes,
-        "relations": [
-            {
-                "kind": relation.kind.value,
-                "logical_name": relation.logical_name,
-                "file": relation.file_path.as_posix(),
-                "row_count": relation.row_count,
-                "bytes": relation.byte_count,
-                "columns": [
-                    {
-                        "name": column.name,
-                        "warehouse_type": column.warehouse_type,
-                        "local_type": column.local_type,
-                    }
-                    for column in relation.columns
-                ],
-            }
-            for relation in manifest.relations
-        ],
+        "relations": relations,
     }
 
 

@@ -9,7 +9,7 @@ import json
 from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
-def encode_json_b64(value: object, *, label: str, node_name: str) -> str:
+def encode_json_b64(*, value: object, label: str, node_name: str) -> str:
     try:
         raw_json: str = json.dumps(value, sort_keys=True, separators=(",", ":"))
     except TypeError as error:
@@ -19,7 +19,7 @@ def encode_json_b64(value: object, *, label: str, node_name: str) -> str:
     return base64.b64encode(raw_json.encode("utf-8")).decode("ascii")
 
 
-def decode_json_b64(value: str, *, label: str, node_name: str) -> object:
+def decode_json_b64(*, value: str, label: str, node_name: str) -> object:
     try:
         raw_json: str = base64.b64decode(value.encode("ascii"), validate=True).decode("utf-8")
         return json.loads(raw_json)

@@ -220,7 +220,7 @@ def _load_current_cursor_value(
     if source_entry.cursor_column is None:
         return None
     target_exists: bool = adapter.relation_exists(
-        connection,
+        connection=connection,
         database=source_entry.database,
         schema=source_entry.schema,
         name=target_name,
@@ -229,7 +229,7 @@ def _load_current_cursor_value(
         return None
     sql: str = f"SELECT MAX({adapter.render_identifier(source_entry.cursor_column)}) FROM {target}"
     statement_recorder.record(sql)
-    cursor: Any = adapter.execute(connection, sql=sql)
+    cursor: Any = adapter.execute(connection=connection, sql=sql)
     row: object | None = cursor.fetchone()
     if row is None:
         return None

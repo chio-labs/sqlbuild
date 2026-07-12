@@ -36,8 +36,8 @@ def build_dbt_combined_graph(
     """Build a downstream-only combined graph from dbt manifest and SQLBuild compile."""
 
     upstream: dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]] = {}
-    _add_dbt_model_edges(upstream=upstream, manifest=manifest)
-    _add_sqlbuild_model_edges(upstream=upstream, manifest=manifest, project=project)
+    upstream = _add_dbt_model_edges(upstream=upstream, manifest=manifest)
+    upstream = _add_sqlbuild_model_edges(upstream=upstream, manifest=manifest, project=project)
 
     normalized_upstream: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]] = {
         key: _sorted_keys(deps) for key, deps in upstream.items()
@@ -121,13 +121,15 @@ def build_combined_downstream_deps(
 ) -> dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]:
     """Return downstream edges keyed by upstream combined graph key."""
 
-    inverted: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]] = invert_edges(upstream)
+    inverted: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]] = invert_edges(
+        edges=upstream
+    )
     return {key: _sorted_keys(list(values)) for key, values in inverted.items()}
 
 
 def expand_combined_upstream(
-    key: DbtCombinedGraphKey,
     *,
+    key: DbtCombinedGraphKey,
     upstream: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
 ) -> frozenset[DbtCombinedGraphKey]:
     """Return all transitive upstream combined graph keys."""
@@ -136,8 +138,8 @@ def expand_combined_upstream(
 
 
 def expand_combined_downstream(
-    key: DbtCombinedGraphKey,
     *,
+    key: DbtCombinedGraphKey,
     downstream: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]],
 ) -> frozenset[DbtCombinedGraphKey]:
     """Return all transitive downstream combined graph keys."""
@@ -147,7 +149,7 @@ def expand_combined_downstream(
 
 def _add_dbt_model_edges(
     *, upstream: dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]], manifest: DbtManifestIndex
-) -> None:
+) -> dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]]:
     model: DbtManifestModel
     for model in manifest.models_by_unique_id.values():
         key: DbtCombinedGraphKey = dbt_model_graph_key(model.unique_id)
@@ -165,6 +167,7 @@ def _add_dbt_model_edges(
                 seed_key: DbtCombinedGraphKey = dbt_source_graph_key(dep_unique_id)
                 upstream.setdefault(seed_key, [])
                 upstream[key].append(seed_key)
+    return upstream
 
 
 def _add_sqlbuild_model_edges(
@@ -172,7 +175,7 @@ def _add_sqlbuild_model_edges(
     upstream: dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]],
     manifest: DbtManifestIndex,
     project: CompiledProject,
-) -> None:
+) -> dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]]:
     sqlbuild_model_names: frozenset[str] = frozenset(model.name for model in project.models)
     dbt_refs_by_model_name: dict[str, list[DbtManifestModel]] = {}
     sqlbuild_model: CompiledModel
@@ -196,6 +199,7 @@ def _add_sqlbuild_model_edges(
 
         for dbt_model in dbt_refs_by_model_name.get(model.name, ()):
             upstream[key].append(dbt_model_graph_key(dbt_model.unique_id))
+    return upstream
 
 
 def _sorted_keys(keys: list[DbtCombinedGraphKey]) -> tuple[DbtCombinedGraphKey, ...]:

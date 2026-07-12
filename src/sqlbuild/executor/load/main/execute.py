@@ -91,7 +91,7 @@ def execute_source_load(
             )
         validate_source_write_strategy(source_entry)
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=source_entry.database,
             schema=source_entry.schema,
             statement_recorder=statement_recorder,
@@ -135,7 +135,7 @@ def execute_source_load(
             staging=staging,
             statement_recorder=statement_recorder,
         )
-        _ = _apply_source_write_strategy(
+        adapter = _apply_source_write_strategy(
             adapter=adapter,
             connection=connection,
             source_entry=source_entry,
@@ -145,7 +145,7 @@ def execute_source_load(
             statement_recorder=statement_recorder,
         )
         adapter.drop(
-            connection,
+            connection=connection,
             destination=staging,
             if_exists=True,
             statement_recorder=statement_recorder,
@@ -153,7 +153,7 @@ def execute_source_load(
     except Exception as error:
         try:
             adapter.drop(
-                connection,
+                connection=connection,
                 destination=staging,
                 if_exists=True,
                 statement_recorder=statement_recorder,
@@ -193,15 +193,15 @@ def _apply_source_write_strategy(
     target_name: str,
     staging: str,
     statement_recorder: StatementRecorder,
-) -> None:
+) -> BaseAdapter:
     target_exists: bool = adapter.relation_exists(
-        connection,
+        connection=connection,
         database=source_entry.database,
         schema=source_entry.schema,
         name=target_name,
     )
     staging_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
-        connection, relation=staging
+        connection=connection, relation=staging
     )
     if target_exists:
         validate_and_evolve_existing_target(
@@ -214,39 +214,39 @@ def _apply_source_write_strategy(
         )
     if source_entry.write_strategy == SourceWriteStrategy.TABLE:
         adapter.replace_table_from_relation(
-            connection,
+            connection=connection,
             destination=target,
             origin=staging,
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     if not target_exists:
         adapter.replace_table_from_relation(
-            connection,
+            connection=connection,
             destination=target,
             origin=staging,
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     staging_sql: str = f"SELECT * FROM {staging}"
     if source_entry.write_strategy == SourceWriteStrategy.APPEND:
         adapter.append(
-            connection,
+            connection=connection,
             destination=target,
             sql=staging_sql,
             columns=tuple(column.name for column in staging_columns),
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     if source_entry.write_strategy == SourceWriteStrategy.MERGE:
         adapter.merge(
-            connection,
+            connection=connection,
             destination=target,
             sql=staging_sql,
             unique_key=source_entry.unique_key,
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     if source_entry.write_strategy == SourceWriteStrategy.DELETE_INSERT:
         if source_entry.cursor_column is None:
             raise ExecutorInputError(
@@ -261,9 +261,9 @@ def _apply_source_write_strategy(
         )
         cursor_start, cursor_max = cursor_bounds
         if cursor_start is None or cursor_max is None:
-            return
+            return adapter
         adapter.delete_insert_cursor(
-            connection,
+            connection=connection,
             destination=target,
             sql=staging_sql,
             cursor_column=source_entry.cursor_column,
@@ -271,5 +271,5 @@ def _apply_source_write_strategy(
             cursor_end=format_cursor_bound(exclusive_cursor_end(cursor_max)),
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     raise ExecutorInputError(f"unsupported source write_strategy: {source_entry.write_strategy}")

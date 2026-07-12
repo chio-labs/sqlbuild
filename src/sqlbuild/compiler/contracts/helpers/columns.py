@@ -23,12 +23,12 @@ _EXTRA_COLUMN_CODE: str = "K005"
 _MISSING_DECLARATIONS_CODE: str = "K006"
 
 
-def validate_model_column_contracts(
-    model: CompiledModel,
+def collect_model_column_contract_diagnostics(
     *,
+    model: CompiledModel,
     dialect: TypeDialect | str | None = None,
 ) -> tuple[CompilerDiagnostic, ...]:
-    """Validate one compiled model's declared column contract."""
+    """Collect diagnostics for one compiled model's declared column contract."""
 
     contract_enforced: bool = model.config.values.get("contract") == "enforced"
     if model.schema_entry is None or not model.schema_entry.columns:
@@ -48,7 +48,7 @@ def validate_model_column_contracts(
     for declared_column in model.schema_entry.columns:
         inferred_column: InferredColumn | None = inferred_by_name.get(declared_column.name)
         if inferred_column is None:
-            diagnostics.append(_missing_column_diagnostic(model, column=declared_column))
+            diagnostics.append(_missing_column_diagnostic(model=model, column=declared_column))
             continue
         diagnostics.extend(
             _nullability_diagnostics(
@@ -150,7 +150,7 @@ def _declares_not_null(column: SchemaColumn) -> bool:
     return any(audit.definition_name == "not_null" for audit in column.audits)
 
 
-def _missing_column_diagnostic(model: CompiledModel, *, column: SchemaColumn) -> CompilerDiagnostic:
+def _missing_column_diagnostic(*, model: CompiledModel, column: SchemaColumn) -> CompilerDiagnostic:
     return CompilerDiagnostic(
         phase=DiagnosticPhase.CONTRACT,
         severity=DiagnosticSeverity.ERROR,

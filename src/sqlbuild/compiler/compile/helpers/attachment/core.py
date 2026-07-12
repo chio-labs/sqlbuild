@@ -94,8 +94,8 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 
 
 def build_model_inputs(
-    discovered_inputs: DiscoveredProjectInputs,
     *,
+    discovered_inputs: DiscoveredProjectInputs,
     context: ModelInputBuildContext,
     no_sql_validation: bool = False,
     defer_model_sql_validation: bool = False,
@@ -347,7 +347,7 @@ def build_effective_connection(
     return cast(
         dict[str, object],
         expand_template_data(
-            connection,
+            value=connection,
             variables=effective_vars,
             context_values={},
             context_label="effective connection",
@@ -782,12 +782,12 @@ def build_layered_model_values(
 
     values: dict[str, object] = project_defaults_to_mapping(defaults)
     if matched_path_default is not None:
-        values = _merged_with_tag_union(values, overlay=path_defaults[matched_path_default])
-    return _merged_with_tag_union(values, overlay=model_header_values)
+        values = _merged_with_tag_union(base=values, overlay=path_defaults[matched_path_default])
+    return _merged_with_tag_union(base=values, overlay=model_header_values)
 
 
 def _merged_with_tag_union(
-    base: dict[str, object], *, overlay: dict[str, object]
+    *, base: dict[str, object], overlay: dict[str, object]
 ) -> dict[str, object]:
     """Merge overlay into a copy of base, preserving special config merge semantics."""
 
@@ -809,19 +809,19 @@ def _merged_with_tag_union(
     if overlay_row_diff_exclude_columns is not None and base_row_diff_exclude_columns is not None:
         result["row_diff_exclude_columns"] = tuple(
             _merge_string_sequence(
-                base_row_diff_exclude_columns,
+                base=base_row_diff_exclude_columns,
                 overlay=overlay_row_diff_exclude_columns,
             )
         )
     if overlay_row_diff_tolerances is not None and base_row_diff_tolerances is not None:
         result["row_diff_tolerances"] = _merge_row_diff_tolerances_mapping(
-            base_row_diff_tolerances,
+            base=base_row_diff_tolerances,
             overlay=overlay_row_diff_tolerances,
         )
     return result
 
 
-def _merge_string_sequence(base: object, *, overlay: object) -> list[str]:
+def _merge_string_sequence(*, base: object, overlay: object) -> list[str]:
     """Merge string sequence-like values while preserving first occurrence order."""
 
     merged: list[str] = list(_as_string_list(base))
@@ -832,7 +832,7 @@ def _merge_string_sequence(base: object, *, overlay: object) -> list[str]:
     return merged
 
 
-def _merge_row_diff_tolerances_mapping(base: object, *, overlay: object) -> object:
+def _merge_row_diff_tolerances_mapping(*, base: object, overlay: object) -> object:
     """Deep merge row diff tolerance mappings by section and rule key."""
 
     if not isinstance(base, dict) or not isinstance(overlay, dict):
@@ -1078,7 +1078,7 @@ def _merge_schema_tags(
     if not schema_entry.tags:
         return config
     merged_values: dict[str, object] = _merged_with_tag_union(
-        dict(config.values),
+        base=dict(config.values),
         overlay={"tags": list(schema_entry.tags)},
     )
     return CompileModelConfig(
@@ -1099,7 +1099,7 @@ def resolve_early_model_templates(
     return cast(
         dict[str, object],
         expand_template_data(
-            values,
+            value=values,
             variables=effective_vars,
             context_values=build_run_context_values(
                 effective_target_name=effective_target_name,
@@ -1125,7 +1125,7 @@ def resolve_model_context_templates(
     return cast(
         dict[str, object],
         expand_template_data(
-            values,
+            value=values,
             variables={},
             context_values=build_model_context_values(
                 values=values,
@@ -1177,7 +1177,7 @@ def resolve_target_context_templates(
     return cast(
         dict[str, object],
         expand_template_data(
-            values,
+            value=values,
             variables={},
             context_values=build_model_context_values(
                 values=values,
@@ -1264,7 +1264,7 @@ def apply_environment_database_schema_overrides(
     overridden: dict[str, object] = dict(values)
     if target_config.database is not None and target_config.database != PRESERVE_TARGET_VALUE:
         overridden["database"] = expand_template_data(
-            target_config.database,
+            value=target_config.database,
             variables=effective_vars,
             context_values=model_context_values,
             context_label="environment database",
@@ -1274,7 +1274,7 @@ def apply_environment_database_schema_overrides(
         )
     if target_config.schema is not None and target_config.schema != PRESERVE_TARGET_VALUE:
         overridden["schema"] = expand_template_data(
-            target_config.schema,
+            value=target_config.schema,
             variables=effective_vars,
             context_values=model_context_values,
             context_label="environment schema",
@@ -1419,14 +1419,14 @@ def validate_declared_schema_models_are_attached(
                 )
 
 
-def _str_from_dict(values: dict[str, object], *, key: str) -> str | None:
+def _str_from_dict(*, values: dict[str, object], key: str) -> str | None:
     """Extract a string value from a dict."""
 
     raw: object | None = values.get(key)
     return raw if isinstance(raw, str) else None
 
 
-def _bool_from_dict(values: dict[str, object], *, key: str) -> bool:
+def _bool_from_dict(*, values: dict[str, object], key: str) -> bool:
     raw: object | None = values.get(key)
     if raw is None:
         return False

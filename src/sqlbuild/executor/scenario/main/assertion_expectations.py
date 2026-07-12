@@ -26,7 +26,7 @@ def execute_scenario_assertion_expectation(
 
     try:
         count_cursor: Any = adapter.execute(
-            connection,
+            connection=connection,
             sql=f"SELECT COUNT(*) FROM ({expectation.sql}) AS __scenario_assertion_failures",
         )
         count_row: Any | None = count_cursor.fetchone()
@@ -34,7 +34,7 @@ def execute_scenario_assertion_expectation(
         sample_rows: tuple[tuple[object, ...], ...] = ()
         if failing_count > 0 and sample_limit > 0:
             sample_cursor: Any = adapter.execute(
-                connection,
+                connection=connection,
                 sql=f"SELECT * FROM ({expectation.sql}) AS __scenario_assertion_failures "
                 f"LIMIT {sample_limit}",
             )

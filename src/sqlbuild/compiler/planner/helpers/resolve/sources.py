@@ -171,17 +171,17 @@ def _is_derived_table_factor(source_sql: str) -> bool:
 
 
 def _consume_source_alias(*, query_sql: str, start: int) -> tuple[int, str | None]:
-    index: int = _skip_whitespace(query_sql, start=start)
+    index: int = _skip_whitespace(query_sql=query_sql, start=start)
     token_end: int
     token: str | None
-    token_end, token = _read_alias_token(query_sql, start=index)
+    token_end, token = _read_alias_token(query_sql=query_sql, start=index)
     if token is None:
         return start, None
     if token.upper() == "AS":
-        alias_start: int = _skip_whitespace(query_sql, start=token_end)
+        alias_start: int = _skip_whitespace(query_sql=query_sql, start=token_end)
         alias_end: int
         alias: str | None
-        alias_end, alias = _read_alias_token(query_sql, start=alias_start)
+        alias_end, alias = _read_alias_token(query_sql=query_sql, start=alias_start)
         if alias is None or _is_alias_keyword(alias):
             return start, None
         return alias_end, alias
@@ -190,14 +190,14 @@ def _consume_source_alias(*, query_sql: str, start: int) -> tuple[int, str | Non
     return token_end, token
 
 
-def _skip_whitespace(query_sql: str, *, start: int) -> int:
+def _skip_whitespace(*, query_sql: str, start: int) -> int:
     index: int = start
     while index < len(query_sql) and query_sql[index].isspace():
         index += 1
     return index
 
 
-def _read_alias_token(query_sql: str, *, start: int) -> tuple[int, str | None]:
+def _read_alias_token(*, query_sql: str, start: int) -> tuple[int, str | None]:
     if start >= len(query_sql):
         return start, None
     first_char: str = query_sql[start]
@@ -232,7 +232,7 @@ def _internal_source_alias(source_name: str) -> str:
 
 def _render_source_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) -> str:
     if source_entry.expression is not None:
-        return render_source_relation(source_entry, adapter=adapter)
+        return render_source_relation(entry=source_entry, adapter=adapter)
     table_name: str = source_entry.table if source_entry.table is not None else source_entry.name
     rendered: str | None = adapter.render_qualified_name(
         database=source_entry.database,
@@ -241,7 +241,7 @@ def _render_source_relation(*, adapter: BaseAdapter, source_entry: SourceEntry) 
     )
     if rendered is not None:
         return rendered
-    return render_source_relation(source_entry)
+    return render_source_relation(entry=source_entry)
 
 
 def _build_relation_cast_subquery(
@@ -416,8 +416,12 @@ def _build_cursor_subquery(
     """Wrap a resolved source relation in a cursor-filtered subquery."""
 
     lower_operator: str = ">=" if lower_bound_inclusive else ">"
-    start_literal: str = adapter.render_cursor_bound_literal(bounds.start, cursor_type=cursor_type)
-    end_literal: str = adapter.render_cursor_bound_literal(bounds.end, cursor_type=cursor_type)
+    start_literal: str = adapter.render_cursor_bound_literal(
+        value=bounds.start, cursor_type=cursor_type
+    )
+    end_literal: str = adapter.render_cursor_bound_literal(
+        value=bounds.end, cursor_type=cursor_type
+    )
     return (
         f"(SELECT * FROM {resolved_source}"
         f" WHERE {cursor_column} {lower_operator} {start_literal}"

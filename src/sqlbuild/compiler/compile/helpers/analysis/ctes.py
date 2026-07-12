@@ -43,7 +43,7 @@ def extract_top_level_ctes_with_sql_analysis(
         analysis: Any = polyglot_module.analyze_query(sql, {"dialect": "generic"})
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="top-level CTE compact extraction failed; falling back",
             sqlbuild_file=file_label,
             sqlbuild_error=str(error),

@@ -271,7 +271,7 @@ def _record_python_hook_identity(
         decorator_config={"description": hook_function.description},
     )
     if python_identity_recorder is not None:
-        python_identity_recorder(identity, _target_name=model_name)
+        python_identity_recorder(identity=identity, _target_name=model_name)
     else:
         try_write_python_node_identity_fingerprint(
             identity=identity,
@@ -294,7 +294,7 @@ def _execute_sql_hook(
     hook_results: list[HookExecutionResult] | None,
 ) -> None:
     try:
-        adapter.execute(connection, sql=statement)
+        adapter.execute(connection=connection, sql=statement)
     except Exception as exc:
         _record_hook_result(
             hook_results=hook_results,
@@ -330,7 +330,8 @@ def _record_hook_result(
 ) -> None:
     if hook_results is None:
         return
-    hook_results.append(  # sc: allow-param-mutation (deliberate optional hook-result accumulator)
+    result_accumulator: list[HookExecutionResult] = hook_results
+    result_accumulator.append(
         HookExecutionResult(
             phase=phase,
             index=hook_index,
@@ -346,7 +347,8 @@ def _record_hook_result(
 
 def _sql_hook_preview(statement: str) -> str:
     normalized: str = " ".join(statement.split())
-    if len(normalized) <= 80:
+    hook_sql_preview_character_limit: int = 80
+    if len(normalized) <= hook_sql_preview_character_limit:
         return normalized
     return normalized[:77] + "..."
 

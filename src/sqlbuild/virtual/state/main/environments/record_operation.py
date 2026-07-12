@@ -11,8 +11,8 @@ from sqlbuild.virtual.state.types import StateOperationStatus, StateOperationTyp
 
 
 def record_state_operation(
-    backend: StateBackend,
     *,
+    backend: StateBackend,
     connection: Any,
     schema: str,
     operation_id: str,
@@ -25,7 +25,7 @@ def record_state_operation(
     """Persist the latest state-operation status plus an append-only event."""
 
     existing: StateOperationRecord | None = backend.get_state_operation(
-        connection,
+        connection=connection,
         schema=schema,
         operation_id=operation_id,
     )
@@ -42,7 +42,7 @@ def record_state_operation(
     if effective_type is None:
         return
     backend.upsert_state_operation(
-        connection,
+        connection=connection,
         schema=schema,
         record=StateOperationRecord(
             operation_id=operation_id,
@@ -52,7 +52,7 @@ def record_state_operation(
         ),
     )
     backend.create_state_operation_event(
-        connection,
+        connection=connection,
         schema=schema,
         record=StateOperationEventRecord(
             event_id=event_id(),

@@ -31,7 +31,7 @@ def get_virtual_environment_checkpoint_model_refs(
     connection: Any = backend.connect(config.connection)
     try:
         return backend.get_virtual_environment_checkpoint_model_refs(
-            connection,
+            connection=connection,
             schema=config.schema,
             checkpoint_id=checkpoint_id,
         )

@@ -8,8 +8,8 @@ from sqlbuild.compiler.compile.helpers.render.templating import (
 
 
 def expand_template_data(
-    value: object,
     *,
+    value: object,
     variables: dict[str, object],
     context_values: dict[str, str | None],
     context_label: str,
@@ -20,7 +20,7 @@ def expand_template_data(
     """Recursively expand template strings inside supported Python container values."""
 
     return _expand_template_data(
-        value,
+        value=value,
         variables=variables,
         context_values=context_values,
         context_label=context_label,

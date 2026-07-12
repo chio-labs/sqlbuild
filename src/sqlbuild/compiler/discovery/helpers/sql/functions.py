@@ -10,7 +10,7 @@ from sqlbuild.compiler.discovery.helpers.sql.constants import FUNCTION_HEADER_PA
 from sqlbuild.compiler.discovery.helpers.sql.model_files import _parse_model_header
 
 
-def parse_function_sql(contents: str, *, file_path: Path) -> tuple[dict[str, object], str]:
+def parse_function_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
     """Parse a raw SQL function file into header values and SQL body."""
 
     header_match: re.Match[str] | None = FUNCTION_HEADER_PATTERN.match(contents)

@@ -39,7 +39,7 @@ class StandardNodeResultStore:
         if self.schema is None:
             return
         self.adapter.ensure_schema(
-            self.connection,
+            connection=self.connection,
             database=self.database,
             schema=self.schema,
             statement_recorder=StatementRecorder(),

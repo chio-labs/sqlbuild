@@ -2150,10 +2150,13 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
     lifecycle_sql: tuple[str, ...] = tuple(
         event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
     )
-    assert all(
-        any(fragment in sql for sql in lifecycle_sql)
-        for fragment in test_case.expected_lifecycle_sql_fragments
-    )
+    fragments_found: list[bool] = []
+    for fragment in test_case.expected_lifecycle_sql_fragments:
+        fragment_found: bool = False
+        for sql in lifecycle_sql:
+            fragment_found = fragment_found or fragment in sql
+        fragments_found.append(fragment_found)
+    assert all(fragments_found)
 
 
 @pytest.mark.parametrize(
@@ -2971,18 +2974,18 @@ def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expe
     second_lifecycle_sql: tuple[str, ...] = tuple(
         event.content for event in second_results[0].lifecycle_events if event.kind.value == "sql"
     )
-    assert all(
-        any(fragment in sql for sql in first_lifecycle_sql)
-        for fragment in test_case.expected_first_run_fragments
-    )
-    assert all(
-        any(fragment in sql for sql in second_lifecycle_sql)
-        for fragment in test_case.expected_second_run_fragments
-    )
-    assert all(
-        all(fragment not in sql for sql in second_lifecycle_sql)
-        for fragment in test_case.absent_second_run_fragments
-    )
+    first_fragments_found: list[bool] = []
+    for fragment in test_case.expected_first_run_fragments:
+        first_fragments_found.append(any(fragment in sql for sql in first_lifecycle_sql))
+    assert all(first_fragments_found)
+    second_fragments_found: list[bool] = []
+    for fragment in test_case.expected_second_run_fragments:
+        second_fragments_found.append(any(fragment in sql for sql in second_lifecycle_sql))
+    assert all(second_fragments_found)
+    second_fragments_absent: list[bool] = []
+    for fragment in test_case.absent_second_run_fragments:
+        second_fragments_absent.append(all(fragment not in sql for sql in second_lifecycle_sql))
+    assert all(second_fragments_absent)
 
 
 @pytest.mark.parametrize(
@@ -3261,14 +3264,14 @@ def test_given_loader_cursor_configuration_when_running_pipeline_then_records_ex
             event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
         )
 
-    assert all(
-        any(fragment in sql for sql in all_lifecycle_sql)
-        for fragment in test_case.expected_lifecycle_sql_fragments
-    )
-    assert all(
-        all(fragment not in sql for sql in all_lifecycle_sql)
-        for fragment in test_case.absent_lifecycle_sql_fragments
-    )
+    fragments_found: list[bool] = []
+    for fragment in test_case.expected_lifecycle_sql_fragments:
+        fragments_found.append(any(fragment in sql for sql in all_lifecycle_sql))
+    assert all(fragments_found)
+    fragments_absent: list[bool] = []
+    for fragment in test_case.absent_lifecycle_sql_fragments:
+        fragments_absent.append(all(fragment not in sql for sql in all_lifecycle_sql))
+    assert all(fragments_absent)
 
 
 @pytest.mark.parametrize(
@@ -3840,10 +3843,10 @@ def test_given_generator_loader_uses_batch_size_when_running_pipeline_then_appen
     expected_column: str
     for expected_column, expected_type in test_case.expected_column_types.items():
         assert column_types[expected_column] == expected_type
-    assert all(
-        any(fragment in sql for sql in lifecycle_sql)
-        for fragment in test_case.expected_lifecycle_sql_fragments
-    )
+    fragments_found: list[bool] = []
+    for fragment in test_case.expected_lifecycle_sql_fragments:
+        fragments_found.append(any(fragment in sql for sql in lifecycle_sql))
+    assert all(fragments_found)
 
 
 @pytest.mark.parametrize(
@@ -4050,14 +4053,14 @@ def test_given_batched_loader_variants_when_running_pipeline_then_writes_expecte
     expected_column: str
     for expected_column, expected_type in test_case.expected_column_types.items():
         assert column_types[expected_column] == expected_type
-    assert all(
-        any(fragment in sql for sql in lifecycle_sql)
-        for fragment in test_case.expected_lifecycle_sql_fragments
-    )
-    assert all(
-        all(fragment not in sql for sql in lifecycle_sql)
-        for fragment in test_case.absent_lifecycle_sql_fragments
-    )
+    fragments_found: list[bool] = []
+    for fragment in test_case.expected_lifecycle_sql_fragments:
+        fragments_found.append(any(fragment in sql for sql in lifecycle_sql))
+    assert all(fragments_found)
+    fragments_absent: list[bool] = []
+    for fragment in test_case.absent_lifecycle_sql_fragments:
+        fragments_absent.append(all(fragment not in sql for sql in lifecycle_sql))
+    assert all(fragments_absent)
 
 
 @pytest.mark.parametrize(

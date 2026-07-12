@@ -56,7 +56,7 @@ class LoaderRelationRef:
 
     def max(self, column: str) -> object | None:
         if not self.adapter.relation_exists(
-            self.connection,
+            connection=self.connection,
             database=self.database,
             schema=self.schema,
             name=self.table_name,
@@ -64,7 +64,7 @@ class LoaderRelationRef:
             return None
         sql: str = f"SELECT MAX({column}) FROM {self.destination}"
         self.statement_recorder.record(sql)
-        cursor: Any = self.adapter.execute(self.connection, sql=sql)
+        cursor: Any = self.adapter.execute(connection=self.connection, sql=sql)
         row: object | None = cursor.fetchone()
         if row is None:
             return None
@@ -120,11 +120,11 @@ class LoaderContext:
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql=sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql=sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
@@ -133,7 +133,7 @@ class LoaderContext:
         if self.on_progress is not None:
             self.on_progress(message)
 
-    def skip(self, reason: str, *, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
+    def skip(self, *, reason: str, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
         """Return a skip signal for the current source loader."""
 
         return LoaderSkipResult(reason=reason, mode=mode)
@@ -155,8 +155,8 @@ class LoaderContext:
 
     def result_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         run_id: str | None = None,
         default: object = MISSING_DEFAULT,
     ) -> NodeResultEnvelope | object:
@@ -176,8 +176,8 @@ class LoaderContext:
 
     def results_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         limit: int,
     ) -> tuple[NodeResultEnvelope, ...]:
         """Return persisted successful upstream result history, newest first."""
@@ -193,8 +193,8 @@ class LoaderContext:
 
     def qualify_name(
         self,
-        name: str,
         *,
+        name: str,
         database: str | None = None,
         schema: str | None = None,
     ) -> str:
@@ -212,7 +212,7 @@ class LoaderContext:
     def qualify_in_destination_schema(self, name: str) -> str:
         """Return a relation name qualified into the destination database/schema."""
 
-        return self.qualify_name(name)
+        return self.qualify_name(name=name)
 
     def loader(self, loader_fn: Callable[..., object]) -> LoaderRelationRef:
         """Return a relation reference for an upstream loader function."""

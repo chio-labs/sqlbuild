@@ -46,8 +46,8 @@ def build_node_source_watermark_staleness_report(
 
 
 def format_node_source_watermark_staleness_report(
-    report: NodeSourceWatermarkStalenessReport,
     *,
+    report: NodeSourceWatermarkStalenessReport,
     section_limit: int = _DEFAULT_SECTION_LIMIT,
 ) -> str:
     """Format one grouped stale-input warning block."""

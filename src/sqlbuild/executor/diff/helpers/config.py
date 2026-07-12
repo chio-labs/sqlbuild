@@ -10,8 +10,8 @@ from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
 def parse_row_diff_tolerances(
-    raw: object,
     *,
+    raw: object,
     label: str = "row_diff_tolerances",
 ) -> RowDiffTolerances:
     """Parse raw model config into typed row diff tolerances."""
@@ -23,12 +23,12 @@ def parse_row_diff_tolerances(
     raw_mapping: dict[str, object] = cast(dict[str, object], raw)
 
     by_type: dict[str, RowDiffTolerance] = _parse_tolerance_section(
-        raw_mapping.get("by_type"),
+        raw=raw_mapping.get("by_type"),
         label=f"{label}.by_type",
         normalize_key=True,
     )
     by_column: dict[str, RowDiffTolerance] = _parse_tolerance_section(
-        raw_mapping.get("by_column"),
+        raw=raw_mapping.get("by_column"),
         label=f"{label}.by_column",
         normalize_key=False,
     )
@@ -36,8 +36,8 @@ def parse_row_diff_tolerances(
 
 
 def _parse_tolerance_section(
-    raw: object,
     *,
+    raw: object,
     label: str,
     normalize_key: bool,
 ) -> dict[str, RowDiffTolerance]:
@@ -54,11 +54,11 @@ def _parse_tolerance_section(
         if not isinstance(key, str) or not key:
             raise ExecutorInputError(f"{label} keys must be non-empty strings", code="X402")
         parsed_key: str = key.lower() if normalize_key else key
-        parsed[parsed_key] = _parse_tolerance_rule(rule, label=f"{label}.{key}")
+        parsed[parsed_key] = _parse_tolerance_rule(raw=rule, label=f"{label}.{key}")
     return parsed
 
 
-def _parse_tolerance_rule(raw: object, *, label: str) -> RowDiffTolerance:
+def _parse_tolerance_rule(*, raw: object, label: str) -> RowDiffTolerance:
     if not isinstance(raw, dict):
         raise ExecutorInputError(f"{label} must be a mapping", code="X401")
     raw_mapping: dict[str, object] = cast(dict[str, object], raw)
@@ -71,11 +71,11 @@ def _parse_tolerance_rule(raw: object, *, label: str) -> RowDiffTolerance:
         raise ExecutorInputError(f"{label} contains unsupported keys: {unsupported}", code="X403")
 
     absolute: Decimal | None = _parse_optional_decimal(
-        raw_mapping.get("absolute"),
+        raw=raw_mapping.get("absolute"),
         label=f"{label}.absolute",
     )
     relative: Decimal | None = _parse_optional_decimal(
-        raw_mapping.get("relative"),
+        raw=raw_mapping.get("relative"),
         label=f"{label}.relative",
     )
     if absolute is None and relative is None:
@@ -83,7 +83,7 @@ def _parse_tolerance_rule(raw: object, *, label: str) -> RowDiffTolerance:
     return RowDiffTolerance(absolute=absolute, relative=relative)
 
 
-def _parse_optional_decimal(raw: object, *, label: str) -> Decimal | None:
+def _parse_optional_decimal(*, raw: object, label: str) -> Decimal | None:
     if raw is None:
         return None
     if isinstance(raw, bool):

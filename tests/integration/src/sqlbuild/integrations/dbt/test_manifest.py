@@ -71,7 +71,7 @@ def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_preserves_dbt_ref(
         project_dir=sqlbuild_project_dir
     )
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         external_sql_reference_resolver=build_external_sql_reference_resolver(
             manifest_source=manifest_source
         ),

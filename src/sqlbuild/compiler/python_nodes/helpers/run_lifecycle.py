@@ -24,14 +24,18 @@ def build_python_sql_run_lifecycle_plan(
         if python_graph.nodes_by_name[name].kind == PythonNodeKind.LOADER
         if not _is_external_loader(node_name=name, python_graph=python_graph)
     )
-    ingress_names: frozenset[str] = selected_loader_names | frozenset(
-        upstream_name
-        for loader_name in selected_loader_names
-        for upstream_name in _upstream_closure(node_name=loader_name, python_graph=python_graph)
-        if upstream_name in selected_python_names
-        if python_graph.nodes_by_name[upstream_name].kind
-        in {PythonNodeKind.TASK, PythonNodeKind.ASSET, PythonNodeKind.LOADER}
-    )
+    ingress_upstream_names: set[str] = set()
+    for loader_name in selected_loader_names:
+        for upstream_name in _upstream_closure(node_name=loader_name, python_graph=python_graph):
+            if upstream_name not in selected_python_names:
+                continue
+            if python_graph.nodes_by_name[upstream_name].kind in {
+                PythonNodeKind.TASK,
+                PythonNodeKind.ASSET,
+                PythonNodeKind.LOADER,
+            }:
+                ingress_upstream_names.add(upstream_name)
+    ingress_names: frozenset[str] = selected_loader_names | frozenset(ingress_upstream_names)
     read_side_names: frozenset[str] = frozenset(
         name
         for name in selected_python_names - ingress_names

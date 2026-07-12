@@ -9,13 +9,13 @@ from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkS
 
 
 def format_node_source_watermark_staleness_report(
-    report: NodeSourceWatermarkStalenessReport,
     *,
+    report: NodeSourceWatermarkStalenessReport,
     section_limit: int = 5,
 ) -> str:
     """Format one grouped stale-input warning block."""
 
     return _format_node_source_watermark_staleness_report(
-        report,
+        report=report,
         section_limit=section_limit,
     )

@@ -39,9 +39,9 @@ def connection(
 ) -> Iterator[Any]:
     config: dict[str, object] = build_motherduck_connection_config()
     conn: Any = adapter.connect(config)
-    adapter.execute(conn, sql=f"CREATE SCHEMA IF NOT EXISTS {motherduck_schema}")
+    adapter.execute(connection=conn, sql=f"CREATE SCHEMA IF NOT EXISTS {motherduck_schema}")
     try:
         yield conn
     finally:
-        adapter.execute(conn, sql=f"DROP SCHEMA IF EXISTS {motherduck_schema} CASCADE")
+        adapter.execute(connection=conn, sql=f"DROP SCHEMA IF EXISTS {motherduck_schema} CASCADE")
         adapter.close(conn)

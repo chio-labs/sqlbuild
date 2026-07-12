@@ -62,17 +62,17 @@ def test_given_snapshot_seed_reuse_when_running_snapshot_then_promotes_seed_and_
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS "
             "SELECT 1 AS account_id, 'pro' AS plan, "
             "TIMESTAMP '2024-01-03 00:00:00' AS updated_at "
@@ -113,13 +113,13 @@ def test_given_snapshot_seed_reuse_when_running_snapshot_then_promotes_seed_and_
         rows: tuple[tuple[object, ...], ...] = tuple(
             tuple(row)
             for row in adapter.execute(
-                connection,
+                connection=connection,
                 sql="SELECT account_id, plan, CAST(valid_from AS VARCHAR), CAST(valid_to AS VARCHAR) "
                 "FROM dev.account_snapshot ORDER BY account_id, valid_from",
             ).fetchall()
         )
         seed_exists: bool = adapter.relation_exists(
-            connection,
+            connection=connection,
             database=None,
             schema="dev",
             name="account_snapshot__reuse_seed",
@@ -155,17 +155,17 @@ def test_given_snapshot_seed_reuse_fingerprint_mismatch_when_running_snapshot_th
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS "
             "SELECT 1 AS account_id, 'pro' AS plan, "
             "TIMESTAMP '2024-01-03 00:00:00' AS updated_at",
@@ -203,7 +203,7 @@ def test_given_snapshot_seed_reuse_fingerprint_mismatch_when_running_snapshot_th
         )
 
         target_exists: bool = adapter.relation_exists(
-            connection,
+            connection=connection,
             database=None,
             schema="dev",
             name="account_snapshot",
@@ -239,17 +239,17 @@ def test_given_cheap_snapshot_seed_reuse_when_running_snapshot_then_materializes
     adapter: ZeroCopyDuckDbAdapter = ZeroCopyDuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
@@ -288,7 +288,7 @@ def test_given_cheap_snapshot_seed_reuse_when_running_snapshot_then_materializes
         rows: tuple[tuple[object, ...], ...] = tuple(
             tuple(row)
             for row in adapter.execute(
-                connection,
+                connection=connection,
                 sql="SELECT account_id, plan FROM dev.account_snapshot ORDER BY account_id",
             ).fetchall()
         )
@@ -326,24 +326,24 @@ def test_given_existing_snapshot_destination_when_running_seed_reuse_then_promot
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.account_snapshot AS "
             "SELECT 99 AS account_id, 'stale-dev' AS plan, "
             "TIMESTAMP '2023-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2023-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS "
             "SELECT 1 AS account_id, 'pro' AS plan, "
             "TIMESTAMP '2024-01-03 00:00:00' AS updated_at",
@@ -382,7 +382,7 @@ def test_given_existing_snapshot_destination_when_running_seed_reuse_then_promot
         rows: tuple[tuple[object, ...], ...] = tuple(
             tuple(row)
             for row in adapter.execute(
-                connection,
+                connection=connection,
                 sql="SELECT account_id, plan, CAST(valid_from AS VARCHAR), CAST(valid_to AS VARCHAR) "
                 "FROM dev.account_snapshot ORDER BY account_id, valid_from",
             ).fetchall()
@@ -413,24 +413,24 @@ def test_given_existing_snapshot_destination_when_seed_reuse_fails_then_destinat
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.account_snapshot AS "
             "SELECT 99 AS account_id, 'keep-dev' AS plan, "
             "TIMESTAMP '2023-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2023-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS "
             "SELECT 1 AS account_id, 'pro' AS plan, "
             "TIMESTAMP '2024-01-03 00:00:00' AS updated_at",
@@ -470,12 +470,12 @@ def test_given_existing_snapshot_destination_when_seed_reuse_fails_then_destinat
         rows: tuple[tuple[object, ...], ...] = tuple(
             tuple(row)
             for row in adapter.execute(
-                connection,
+                connection=connection,
                 sql="SELECT account_id, plan FROM dev.account_snapshot ORDER BY account_id",
             ).fetchall()
         )
         target_exists: bool = adapter.relation_exists(
-            connection,
+            connection=connection,
             database=None,
             schema="dev",
             name="account_snapshot",
@@ -508,16 +508,16 @@ def test_given_check_snapshot_seed_reuse_when_running_snapshot_then_tracks_check
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS SELECT 1 AS account_id, 'pro' AS plan",
         )
         write_matching_reuse_origin_fingerprint(
@@ -557,7 +557,7 @@ def test_given_check_snapshot_seed_reuse_when_running_snapshot_then_tracks_check
         rows: tuple[tuple[object, ...], ...] = tuple(
             tuple(row)
             for row in adapter.execute(
-                connection,
+                connection=connection,
                 sql="SELECT account_id, plan, valid_to IS NULL FROM dev.account_snapshot "
                 "ORDER BY account_id, plan",
             ).fetchall()
@@ -588,17 +588,17 @@ def test_given_snapshot_seed_reuse_with_hooks_audits_and_contract_when_running_t
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
@@ -666,7 +666,7 @@ def test_given_snapshot_seed_reuse_with_hooks_audits_and_contract_when_running_t
         hook_rows: tuple[tuple[object, ...], ...] = tuple(
             tuple(row)
             for row in adapter.execute(
-                connection, sql="SELECT phase FROM dev.snapshot_hook_log ORDER BY phase"
+                connection=connection, sql="SELECT phase FROM dev.snapshot_hook_log ORDER BY phase"
             ).fetchall()
         )
 
@@ -695,17 +695,17 @@ def test_given_snapshot_seed_reuse_with_schema_change_when_running_then_appends_
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS "
             "SELECT 1 AS account_id, 'basic' AS plan, 'gold' AS tier, "
             "TIMESTAMP '2024-01-02 00:00:00' AS updated_at",
@@ -744,7 +744,7 @@ def test_given_snapshot_seed_reuse_with_schema_change_when_running_then_appends_
         rows: tuple[tuple[object, ...], ...] = tuple(
             tuple(row)
             for row in adapter.execute(
-                connection,
+                connection=connection,
                 sql="SELECT account_id, tier FROM dev.account_snapshot WHERE valid_to IS NULL",
             ).fetchall()
         )
@@ -774,17 +774,17 @@ def test_given_snapshot_seed_reuse_with_origin_audit_proof_when_running_then_aud
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="CREATE SCHEMA prod")
-        adapter.execute(connection, sql="CREATE SCHEMA dev")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod.account_snapshot AS "
             "SELECT NULL::INTEGER AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev.raw_accounts AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-02 00:00:00' AS updated_at WHERE 1 = 0",
@@ -865,19 +865,19 @@ def test_given_database_qualified_snapshot_reuse_origin_when_running_then_materi
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, sql="ATTACH ':memory:' AS prod_db")
-        adapter.execute(connection, sql="ATTACH ':memory:' AS dev_db")
-        adapter.execute(connection, sql="CREATE SCHEMA prod_db.staging")
-        adapter.execute(connection, sql="CREATE SCHEMA dev_db.staging")
+        adapter.execute(connection=connection, sql="ATTACH ':memory:' AS prod_db")
+        adapter.execute(connection=connection, sql="ATTACH ':memory:' AS dev_db")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod_db.staging")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev_db.staging")
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE prod_db.staging.account_snapshot AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2024-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE dev_db.staging.raw_accounts AS "
             "SELECT 1 AS account_id, 'basic' AS plan, "
             "TIMESTAMP '2024-01-01 00:00:00' AS updated_at",
@@ -922,7 +922,7 @@ def test_given_database_qualified_snapshot_reuse_origin_when_running_then_materi
         rows: tuple[tuple[object, ...], ...] = tuple(
             tuple(row)
             for row in adapter.execute(
-                connection,
+                connection=connection,
                 sql="SELECT account_id, plan FROM dev_db.staging.account_snapshot ORDER BY account_id",
             ).fetchall()
         )

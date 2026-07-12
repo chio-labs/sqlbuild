@@ -89,7 +89,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         )
     if args.command == CliCommand.DAG:
         return handlers.run_dag(
-            project_dir,
+            project_dir=project_dir,
             no_sql_validation=args.no_sql_validation,
             json_output=args.json,
             cli_vars=args.vars,
@@ -266,7 +266,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         )
     if args.command == CliCommand.LINEAGE:
         return handlers.run_lineage(
-            project_dir,
+            project_dir=project_dir,
             no_sql_validation=args.no_sql_validation,
             target=args.lineage_target,
             output_format=args.lineage_format,
@@ -321,7 +321,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         )
     if args.command == CliCommand.RECONCILE:
         return handlers.run_reconcile(
-            project_dir,
+            project_dir=project_dir,
             no_color=args.no_color,
             virtual_environment=args.virtual_env,
             reconcile_command=args.reconcile_command,
@@ -368,7 +368,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     if args.command == CliCommand.QUERY:
         query_limit: int | None = None if args.query_no_limit else args.query_limit
         return handlers.run_query(
-            project_dir,
+            project_dir=project_dir,
             sql=args.query_sql,
             selected_target=args.target,
             output_format=args.query_format,
@@ -376,7 +376,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         )
     if args.command == CliCommand.DEBUG:
         return handlers.run_debug(
-            project_dir,
+            project_dir=project_dir,
             no_color=args.no_color,
             no_connection=args.no_connection,
             selected_target=args.target,
@@ -396,7 +396,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         if args.state_command is None:
             raise CliUserError("state requires a subcommand such as 'init'", code="C901")
         return handlers.run_state(
-            project_dir,
+            project_dir=project_dir,
             state_command=args.state_command,
             backup_id=args.state_backup_id,
             auto_approve=args.auto_approve,
@@ -419,7 +419,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     if args.command == CliCommand.SKILLS:
         if args.skills_command == "update":
             return handlers.run_skills_update(
-                project_dir,
+                project_dir=project_dir,
                 global_install=args.skills_global,
                 targets=tuple(args.skills_target),
                 force=args.skills_force,

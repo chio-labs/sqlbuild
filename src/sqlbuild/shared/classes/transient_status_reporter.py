@@ -37,6 +37,7 @@ class TransientStatusReporter:
         )
         self._status_context: AbstractContextManager[Status] | None = None
         self._status: Status | None = None
+        self._active: bool = False
         atexit.register(self.close)
 
     def start(self, message: str) -> None:
@@ -47,39 +48,53 @@ class TransientStatusReporter:
                     "status reporter was enabled without an initialized console",
                     code="G001",
                 )
-            self._status_context = self._console.status(message, spinner="dots")
+            self._status_context = self._console.status(status=message, spinner="dots")
             self._status = self._status_context.__enter__()
+            self._active = True
             return
-        self._write_message(message, dim_output=True)
+        self._active = True
+        self._write_message(message=message, dim_output=True)
 
     def update(self, message: str) -> None:
         if self._enabled and self._status is not None:
             self._status.update(message)
             return
-        self._write_message(message, dim_output=True)
+        self._write_message(message=message, dim_output=True)
 
-    def complete(self, message: str, *, blank_line_after: bool = False) -> None:
+    def complete(self, *, message: str, blank_line_after: bool = False) -> None:
         self.close()
-        self._write_message(message, dim_output=True)
+        self._write_message(message=message, dim_output=True)
         if blank_line_after:
             self._stream.write("\n")
             self._stream.flush()
 
     def error(self, message: str) -> None:
         self.close()
-        self._write_message(message, dim_output=False)
+        self._write_message(message=message, dim_output=False)
 
     def close(self) -> None:
         if self._status_context is not None:
             self._status_context.__exit__(None, None, None)
             self._status_context = None
             self._status = None
+        self._active = False
+
+    def report_preflight_progress(self, message: str) -> None:
+        """Render one preflight progress update."""
+
+        if message.startswith("Prepared "):
+            self.complete(message=message, blank_line_after=True)
+            return
+        if not self._active:
+            self.start(message)
+            return
+        self.update(message)
 
     def write_blank_line(self) -> None:
         self._stream.write("\n")
         self._stream.flush()
 
-    def _write_message(self, message: str, *, dim_output: bool) -> None:
+    def _write_message(self, *, message: str, dim_output: bool) -> None:
         formatted_message: str = self._style.muted(message) if dim_output else message
         self._stream.write(f"{formatted_message}\n")
         self._stream.flush()

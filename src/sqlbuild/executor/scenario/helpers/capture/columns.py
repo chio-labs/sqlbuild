@@ -123,7 +123,7 @@ def build_scenario_snapshot_columns(
     """Return local snapshot column metadata for a materialized relation."""
 
     column_infos: tuple[ColumnInfo, ...] = adapter.describe_relation(
-        connection,
+        connection=connection,
         relation=relation_name,
     )
     return tuple(
@@ -131,7 +131,7 @@ def build_scenario_snapshot_columns(
             name=column.name,
             warehouse_type=column.type,
             local_type=local_type_for_warehouse_type(
-                column.type,
+                warehouse_type=column.type,
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
                 local_type_overrides=local_type_overrides,
             ),
@@ -141,8 +141,8 @@ def build_scenario_snapshot_columns(
 
 
 def local_type_for_warehouse_type(
-    warehouse_type: str,
     *,
+    warehouse_type: str,
     sql_analysis_dialect: str | None = None,
     local_type_overrides: dict[str, str] | None = None,
 ) -> str:
@@ -261,7 +261,8 @@ def _dialect_pre_local_type(*, warehouse_type: str, sql_analysis_dialect: str | 
 
 def _snowflake_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
     if base == "NUMBER":
-        if len(args) >= 2:
+        precision_and_scale_count: int = 2
+        if len(args) >= precision_and_scale_count:
             return f"DECIMAL({args[0]}, {args[1]})"
         if len(args) == 1:
             return f"DECIMAL({args[0]})"
@@ -279,7 +280,8 @@ def _snowflake_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None
 
 def _bigquery_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
     if base == "BIGNUMERIC":
-        if len(args) >= 2:
+        precision_and_scale_count: int = 2
+        if len(args) >= precision_and_scale_count:
             return f"DECIMAL({args[0]}, {args[1]})"
         return "DECIMAL(38, 5)"
     if base in {"RANGE", "BYTES"}:
@@ -328,7 +330,7 @@ def _local_type_with_polyglot(
         )
     except Exception as error:
         log_debug_event(
-            _DEBUG_LOGGER,
+            logger=_DEBUG_LOGGER,
             message="scenario snapshot type polyglot conversion failed; falling back",
             warehouse_type=warehouse_type,
             sql_analysis_dialect=sql_analysis_dialect,

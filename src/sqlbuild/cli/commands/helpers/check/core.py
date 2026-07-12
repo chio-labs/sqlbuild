@@ -181,7 +181,8 @@ def run_check_read_side_dependencies(
     )
     sql_refs: tuple[SqlResourceRef, ...] = tuple(
         sorted(
-            _read_side_sql_refs(read_side_names, python_graph=python_graph), key=_sql_ref_sort_key
+            _read_side_sql_refs(read_side_names=read_side_names, python_graph=python_graph),
+            key=_sql_ref_sort_key,
         )
     )
     relation_lookup: RelationLookup = build_relation_lookup(
@@ -370,7 +371,7 @@ def _load_result_to_python_result(
 
 
 def _read_side_sql_refs(
-    read_side_names: frozenset[str], *, python_graph: PythonNodeGraph
+    *, read_side_names: frozenset[str], python_graph: PythonNodeGraph
 ) -> frozenset[SqlResourceRef]:
     refs: set[SqlResourceRef] = set()
     node_name: str
@@ -489,7 +490,7 @@ def _write_check_result_row(
     *, stream: TextIO, result: PythonCheckExecutionResult, style: CliStyle
 ) -> None:
     status: str = "PASS" if result.passed else "WARN" if result.warned else "FAIL"
-    stream.write(f"  {'check':<10}{result.node_name:<50} {style.status(status)}")
+    stream.write(f"  {'check':<10}{result.node_name:<50} {style.status(status=status)}")
     detail: str | None = result.error_message or result.message
     if detail:
         stream.write(f"  {detail}")

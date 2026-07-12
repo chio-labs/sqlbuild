@@ -55,7 +55,7 @@ def test_given_plan_work_inputs_when_checking_executable_work_then_returns_expec
     test_case: PlanWorkTestCase,
 ) -> None:
     result: bool = plan_has_executable_work(
-        test_case.plan_output, python_plan_entries=test_case.python_plan_entries
+        plan=test_case.plan_output, python_plan_entries=test_case.python_plan_entries
     )
 
     assert result is test_case.expected_has_work

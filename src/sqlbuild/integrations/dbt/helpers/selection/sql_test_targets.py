@@ -211,9 +211,11 @@ def adapt_project_for_dbt_scenarios(
         scenarios=project.sql_scenarios,
         sqlbuild_model_names=sqlbuild_model_names,
     )
-    mock_model_names: frozenset[str] = frozenset(
-        name for scenario in project.sql_scenarios for name in scenario.dbt_ref_fixture_names
-    )
+    mock_model_name_items: set[str] = set()
+    for scenario in project.sql_scenarios:
+        for name in scenario.dbt_ref_fixture_names:
+            mock_model_name_items.add(name)
+    mock_model_names: frozenset[str] = frozenset(mock_model_name_items)
     adapted_models: tuple[CompiledModel, ...] = tuple(
         _adapt_dbt_model(
             manifest=manifest,
@@ -349,7 +351,7 @@ def _build_dbt_scenario_model_names(
             dbt_model: DbtManifestModel | None = target_models_by_name.get(expected_name)
             if dbt_model is None:
                 continue
-            _collect_dbt_test_model_names(
+            result = _collect_dbt_test_model_names(
                 manifest=manifest,
                 dbt_model=dbt_model,
                 target_name=expected_name,
@@ -384,7 +386,7 @@ def _build_dbt_test_model_names(
             dbt_model: DbtManifestModel | None = target_models_by_name.get(expected_name)
             if dbt_model is None:
                 continue
-            _collect_dbt_test_model_names(
+            result = _collect_dbt_test_model_names(
                 manifest=manifest,
                 dbt_model=dbt_model,
                 target_name=expected_name,
@@ -450,7 +452,7 @@ def _collect_dbt_test_model_names(
     mock_model_names: frozenset[str],
     sqlbuild_model_names: frozenset[str],
     result: dict[str, str],
-) -> None:
+) -> dict[str, str]:
     result.setdefault(dbt_model.unique_id, target_name)
     for dep_unique_id in dbt_model.depends_on_nodes:
         dep_model: DbtManifestModel | None = manifest.models_by_unique_id.get(dep_unique_id)
@@ -473,7 +475,7 @@ def _collect_dbt_test_model_names(
                 f"dbt model '{dep_model.unique_id}' cannot be added to SQLBuild test chain because "
                 f"SQLBuild model '{dep_target_name}' already exists"
             )
-        _collect_dbt_test_model_names(
+        result = _collect_dbt_test_model_names(
             manifest=manifest,
             dbt_model=dep_model,
             target_name=dep_target_name,
@@ -481,6 +483,7 @@ def _collect_dbt_test_model_names(
             sqlbuild_model_names=sqlbuild_model_names,
             result=result,
         )
+    return result
 
 
 def _dbt_internal_model_name(
@@ -858,7 +861,8 @@ def _relation_variants(*, relation_name: str) -> tuple[str, ...]:
     variants: list[str] = [relation_name, unquoted]
     if parts:
         variants.append(".".join(f'"{part}"' for part in parts))
-    if len(parts) >= 2:
+    package_and_name_part_count: int = 2
+    if len(parts) >= package_and_name_part_count:
         variants.append(".".join(parts[-2:]))
         variants.append(".".join(f'"{part}"' for part in parts[-2:]))
     return tuple(dict.fromkeys(variant for variant in variants if variant))

@@ -77,21 +77,21 @@ def build_function_local_hashes(*, graph: ProjectGraph) -> dict[str, str]:
 def build_expected_seed_version_hashes(*, graph: ProjectGraph) -> dict[str, str]:
     """Derive expected seed version hashes from current compiled seed identities."""
 
-    return {
-        seed.name: seed_version_hash
-        for seed in graph.project.seeds
-        for seed_version_hash, _metadata_json in (build_seed_identity(seed),)
-    }
+    version_hashes: dict[str, str] = {}
+    for seed in graph.project.seeds:
+        seed_version_hash, _metadata_json = build_seed_identity(seed)
+        version_hashes[seed.name] = seed_version_hash
+    return version_hashes
 
 
 def build_seed_identity_metadata_jsons(*, graph: ProjectGraph) -> dict[str, str]:
     """Build deterministic seed identity metadata JSON by seed name."""
 
-    return {
-        seed.name: metadata_json
-        for seed in graph.project.seeds
-        for _seed_version_hash, metadata_json in (build_seed_identity(seed),)
-    }
+    metadata_jsons: dict[str, str] = {}
+    for seed in graph.project.seeds:
+        _seed_version_hash, metadata_json = build_seed_identity(seed)
+        metadata_jsons[seed.name] = metadata_json
+    return metadata_jsons
 
 
 def build_model_fingerprint_metadata_jsons(
@@ -528,10 +528,12 @@ def build_stale_required_upstream_closure(
         for model_name in selected_model_names
         if (key := graph.all_keys.get(model_name)) is not None
     )
+    upstream_start_keys: list[CompiledObjectKey] = []
+    for key in start_keys:
+        for upstream_key in graph.upstream_deps.get(key, ()):
+            upstream_start_keys.append(upstream_key)
     required: frozenset[str] = build_upstream_model_names(
-        start_keys=tuple(
-            upstream_key for key in start_keys for upstream_key in graph.upstream_deps.get(key, ())
-        ),
+        start_keys=tuple(upstream_start_keys),
         upstream_deps=graph.upstream_deps,
     )
     return tuple(sorted(model_name for model_name in required if model_name in stale - selected))

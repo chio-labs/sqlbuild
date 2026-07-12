@@ -145,7 +145,8 @@ def _visit_object(
     key: tuple[str, str] = (str(source_path.resolve()), qualname)
     if key in visited:
         return
-    visited.add(key)  # sc: allow-param-mutation (deliberate recursive DFS accumulator)
+    visited_objects: set[tuple[str, str]] = visited
+    visited_objects.add(key)
 
     if include_current:
         dependency: PythonIdentityDependency | None = _dependency_for_object(
@@ -154,7 +155,8 @@ def _visit_object(
             allowed_roots=allowed_roots,
         )
         if dependency is not None:
-            dependencies[key] = dependency  # sc: allow-param-mutation (deliberate DFS accumulator)
+            collected_dependencies: dict[tuple[str, str], PythonIdentityDependency] = dependencies
+            collected_dependencies[key] = dependency
 
     source: str = _normalized_source(obj)
     module: ModuleType | None = inspect.getmodule(obj)
@@ -240,7 +242,7 @@ def _is_first_party_source(*, source_path: Path, allowed_roots: tuple[Path, ...]
     resolved: Path = source_path.resolve()
     if any(part in _IGNORED_PATH_PARTS for part in resolved.parts):
         return False
-    return any(_is_relative_to(resolved, root=root) for root in allowed_roots)
+    return any(_is_relative_to(path=resolved, root=root) for root in allowed_roots)
 
 
 def _source_path(obj: object) -> Path | None:
@@ -292,12 +294,12 @@ def _display_path(*, source_path: Path | None, roots: Iterable[Path]) -> str:
         key=lambda item: len(item.parts),
         reverse=True,
     ):
-        if _is_relative_to(resolved, root=root):
+        if _is_relative_to(path=resolved, root=root):
             return resolved.relative_to(root).as_posix()
     return resolved.as_posix()
 
 
-def _is_relative_to(path: Path, *, root: Path) -> bool:
+def _is_relative_to(*, path: Path, root: Path) -> bool:
     try:
         path.relative_to(root.resolve())
     except ValueError:

@@ -47,7 +47,7 @@ def read_seed_physical_relations(
     relations: dict[str, PhysicalRelationRecord] = {}
     for ref in refs:
         relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             artifact_type=PhysicalArtifactType.SEED,
             artifact_name=ref.seed_name,
@@ -59,8 +59,8 @@ def read_seed_physical_relations(
 
 
 def read_promote_environment_state(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     from_virtual_environment_name: str,
@@ -70,35 +70,35 @@ def read_promote_environment_state(
 
     source_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         backend.get_virtual_environment_model_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=from_virtual_environment_name,
         )
     )
     target_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         backend.get_virtual_environment_model_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=to_virtual_environment_name,
         )
     )
     source_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
         backend.get_virtual_environment_function_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=from_virtual_environment_name,
         )
     )
     from_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
         backend.get_virtual_environment_seed_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=from_virtual_environment_name,
         )
     )
     to_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
         backend.get_virtual_environment_seed_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=to_virtual_environment_name,
         )
@@ -109,7 +109,7 @@ def read_promote_environment_state(
             code="S011",
         )
     source_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         virtual_environment_name=from_virtual_environment_name,
     )
@@ -122,7 +122,7 @@ def read_promote_environment_state(
             code="S028",
         )
     target_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         virtual_environment_name=to_virtual_environment_name,
     )
@@ -146,8 +146,8 @@ def read_promote_environment_state(
 
 
 def build_promote_semantics(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     graph: ProjectGraph,
@@ -337,8 +337,8 @@ def resolve_promote_final_refs(
 
 
 def build_promote_ref_update(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     from_virtual_environment_name: str,
@@ -384,7 +384,7 @@ def build_promote_ref_update(
         )
         for ref in function_refs:
             function_version: FunctionVersionRecord | None = backend.get_function_version(
-                state_connection,
+                connection=state_connection,
                 schema=schema,
                 function_name=ref.function_name,
                 version_hash=ref.version_hash,
@@ -443,8 +443,8 @@ def build_promote_ref_update(
 
 
 def write_promote_environment_update(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     to_virtual_environment_name: str,
@@ -453,7 +453,7 @@ def write_promote_environment_update(
     """Persist the promoted environment record, ref groups, and checkpoint."""
 
     backend.upsert_virtual_environment_and_replace_node_ref_groups(
-        state_connection,
+        connection=state_connection,
         schema=schema,
         record=update.virtual_environment_record,
         refs_by_node_type=update.refs_by_node_type,
@@ -461,7 +461,7 @@ def write_promote_environment_update(
     finalized: bool = update.virtual_environment_record.status == VirtualEnvironmentStatus.FINALIZED
     if finalized and update.refs:
         create_finalized_virtual_environment_checkpoint(
-            backend,
+            backend=backend,
             connection=state_connection,
             schema=schema,
             virtual_environment_name=to_virtual_environment_name,
@@ -472,8 +472,8 @@ def write_promote_environment_update(
 
 
 def read_promote_physical_relations(
-    backend: Any,
     *,
+    backend: Any,
     state_connection: Any,
     schema: str,
     update: PromoteRefUpdate,
@@ -520,7 +520,7 @@ def _read_model_versions(
 ) -> dict[str, ModelVersionRecord | None]:
     return {
         ref.model_name: backend.get_model_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             model_name=ref.model_name,
             version_hash=ref.version_hash,
@@ -539,7 +539,7 @@ def _read_physical_relations(
     relations: dict[str, PhysicalRelationRecord] = {}
     for ref in refs:
         relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             model_name=ref.model_name,
             version_hash=ref.version_hash,

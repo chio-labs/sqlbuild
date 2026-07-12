@@ -68,8 +68,16 @@ def run_warehouse_scenarios(
         retain=retain,
         connection_hooks=ConnectionHooks(
             on_connection_start=execution_connection_progress.on_connection_start,
-            on_connection_complete=execution_connection_progress.on_connection_complete,
-            on_connection_error=execution_connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
         on_scenario_start=lambda _scenario: (
             scenario_status.start("Running scenarios...") if status_is_tty else None

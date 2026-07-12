@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.planner.types import IncrementalStrategy
 
 
-def get_config_str(model: CompiledModel, *, key: str) -> str | None:
+def get_config_str(*, model: CompiledModel, key: str) -> str | None:
     """Extract a string config value from model config."""
 
     raw: object | None = model.config.values.get(key)
@@ -35,7 +35,7 @@ def get_config_cursor_start(model: CompiledModel) -> str | None:
 def get_config_append_cursor_inclusive(model: CompiledModel) -> bool:
     """Return effective append cursor lower-bound inclusivity."""
 
-    strategy: str | None = get_config_str(model, key="incremental_strategy")
+    strategy: str | None = get_config_str(model=model, key="incremental_strategy")
     if strategy != IncrementalStrategy.APPEND:
         return True
     raw: object | None = model.config.values.get("append_cursor_inclusive")

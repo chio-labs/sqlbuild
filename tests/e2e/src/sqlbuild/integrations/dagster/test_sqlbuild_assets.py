@@ -695,7 +695,7 @@ def test_given_failing_sqlbuild_audits_when_executing_dagster_then_links_checks_
         project_dir=project_dir,
         sqb_command=[str(sqb_executable)],
     )
-    build_resource.cli(["build"]).wait()
+    build_resource.cli(args=["build"]).wait()
     add_failing_daily_revenue_audits(project_dir=project_dir)
     monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
     sqlbuild_project.prepare_if_dev()

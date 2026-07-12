@@ -27,7 +27,7 @@ def query_capture_relation_row_count(
     """Return a preflight row count for one materialized snapshot relation."""
 
     query_result: QueryResult = adapter.query(
-        connection,
+        connection=connection,
         sql=f"SELECT COUNT(*) FROM {source_relation_name}",
         limit=1,
     )

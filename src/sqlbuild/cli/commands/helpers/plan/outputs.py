@@ -22,7 +22,7 @@ def write_plan_command_output(
     if request.json_output:
         print(
             format_plan_json(
-                plan_output,
+                plan=plan_output,
                 python_plan_entries=pipeline_result.python_plan_entries,
             )
         )
@@ -33,7 +33,7 @@ def write_plan_command_output(
     print(
         "\n"
         + format_plan(
-            plan_output,
+            plan=plan_output,
             full_refresh=request.full_refresh,
             use_color=invocation.use_color,
             display_options=display_options,

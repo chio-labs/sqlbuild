@@ -24,19 +24,23 @@ _INCREMENTAL_ACTIONS: frozenset[PlanAction] = frozenset(
 def model_materialization_label(entry: ModelPlanEntry) -> str:
     reuse_label: str = relation_reuse_label(entry)
     if entry.materialization_type == MaterializationType.VIEW:
-        return _append_reuse_label(MaterializationType.VIEW.value, reuse_label=reuse_label)
+        return _append_reuse_label(
+            base_label=MaterializationType.VIEW.value, reuse_label=reuse_label
+        )
     if entry.materialization_type == MaterializationType.TABLE:
-        return _append_reuse_label(MaterializationType.TABLE.value, reuse_label=reuse_label)
+        return _append_reuse_label(
+            base_label=MaterializationType.TABLE.value, reuse_label=reuse_label
+        )
     if entry.materialization_type == MaterializationType.INCREMENTAL:
-        return _append_reuse_label(_incremental_label(entry), reuse_label=reuse_label)
+        return _append_reuse_label(base_label=_incremental_label(entry), reuse_label=reuse_label)
     if entry.materialization_type == MaterializationType.SNAPSHOT:
         return _append_reuse_label(
-            _snapshot_label(entry, include_prefix=True), reuse_label=reuse_label
+            base_label=_snapshot_label(entry=entry, include_prefix=True), reuse_label=reuse_label
         )
     if entry.materialization_type == MaterializationType.CUSTOM:
         custom_name: str = entry.custom_materialization_name or MaterializationType.CUSTOM.value
-        return _append_reuse_label(f"{custom_name} (custom)", reuse_label=reuse_label)
-    return _append_reuse_label(entry.materialization_type.value, reuse_label=reuse_label)
+        return _append_reuse_label(base_label=f"{custom_name} (custom)", reuse_label=reuse_label)
+    return _append_reuse_label(base_label=entry.materialization_type.value, reuse_label=reuse_label)
 
 
 def model_resource_type(entry: ModelPlanEntry | None) -> str:
@@ -60,7 +64,7 @@ def model_execution_annotation(entry: ModelPlanEntry | None) -> str:
         return ""
     reuse_label: str = relation_reuse_label(entry)
     if entry.materialization_type == MaterializationType.SNAPSHOT:
-        snapshot_label: str = _snapshot_label(entry, include_prefix=False)
+        snapshot_label: str = _snapshot_label(entry=entry, include_prefix=False)
         return _join_annotation_parts(snapshot_label, reuse_label)
     is_incremental: bool = (
         entry.action in _INCREMENTAL_ACTIONS
@@ -91,7 +95,7 @@ def relation_reuse_label(entry: ModelPlanEntry | None) -> str:
     )
 
 
-def _append_reuse_label(base_label: str, *, reuse_label: str) -> str:
+def _append_reuse_label(*, base_label: str, reuse_label: str) -> str:
     if not reuse_label:
         return base_label
     return f"{base_label} ({reuse_label})"
@@ -113,7 +117,7 @@ def _incremental_label(entry: ModelPlanEntry) -> str:
     return strategy
 
 
-def _snapshot_label(entry: ModelPlanEntry, *, include_prefix: bool) -> str:
+def _snapshot_label(*, entry: ModelPlanEntry, include_prefix: bool) -> str:
     parts: list[str] = []
     if entry.snapshot_strategy:
         parts.append(entry.snapshot_strategy)

@@ -54,7 +54,9 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     tmp_path: Path,
 ) -> None:
     plan_output: PlanOutput = build_target_writer_plan_output()
-    expected_test_sql: str = build_sql_test_comparison_sql(plan_output.test_entries[0]) + "\n"
+    expected_test_sql: str = (
+        build_sql_test_comparison_sql(test_entry=plan_output.test_entries[0]) + "\n"
+    )
     manifest: dict[str, object] = {"metadata": {"project_name": "demo"}}
 
     expected_files: dict[str, str] = dict(test_case.expected_files)

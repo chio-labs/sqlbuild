@@ -124,9 +124,11 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         local_config=discovered_inputs.local_config,
     )
     adapter_name: str = BuiltinAdapter.DUCKDB.value if local else project_adapter_name
-    adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    adapter: BaseAdapter = resolve_adapter(
+        adapter_name=adapter_name, project_dir=effective_project_dir
+    )
     project_adapter: BaseAdapter = resolve_adapter(
-        project_adapter_name,
+        adapter_name=project_adapter_name,
         project_dir=effective_project_dir,
     )
     local_capture_dialect: str = ""
@@ -178,8 +180,16 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         hooks=ConnectionHooks(
             on_progress=planning_progress.on_progress,
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
@@ -190,7 +200,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
     )
     if local and (sync_snapshots or refresh):
         capture_results: list[ScenarioSnapshotCaptureRunResult] = []
-        capture_exit_code: int = _sync_local_snapshots(
+        capture_exit_code, capture_results = _sync_local_snapshots(
             inputs=LocalSnapshotSyncInputs(
                 project_dir=effective_project_dir,
                 discovered_inputs=discovered_inputs,
@@ -301,8 +311,8 @@ def _sync_local_snapshots(
     inputs: LocalSnapshotSyncInputs,
     limit_inputs: ScenarioSnapshotLimitInputs,
     output_context: ScenarioRunOutputContext,
-    capture_results_out: list[ScenarioSnapshotCaptureRunResult] | None = None,
-) -> int:
+    capture_results_out: list[ScenarioSnapshotCaptureRunResult],
+) -> tuple[int, list[ScenarioSnapshotCaptureRunResult]]:
     project_dir: Path = inputs.project_dir
     discovered_inputs: DiscoveredProjectInputs = inputs.discovered_inputs
     project_adapter: BaseAdapter = inputs.project_adapter
@@ -328,7 +338,7 @@ def _sync_local_snapshots(
     if not capture_names:
         progress_stream.write("\nSnapshots are fresh.\n")
         progress_stream.flush()
-        return 0
+        return 0, capture_results_out
 
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=project_adapter_name,
@@ -354,8 +364,16 @@ def _sync_local_snapshots(
         hooks=ConnectionHooks(
             on_progress=planning_progress.on_progress,
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     capture_scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
@@ -406,8 +424,16 @@ def _sync_local_snapshots(
         ),
         connection_hooks=ConnectionHooks(
             on_connection_start=execution_connection_progress.on_connection_start,
-            on_connection_complete=execution_connection_progress.on_connection_complete,
-            on_connection_error=execution_connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
         on_scenario_start=lambda _scenario: (
             scenario_status.start("Capturing snapshots...") if status_is_tty else None
@@ -440,7 +466,7 @@ def _sync_local_snapshots(
         + "\n"
     )
     progress_stream.flush()
-    return 0 if fail_count == 0 else 1
+    return (0 if fail_count == 0 else 1), capture_results_out
 
 
 def _complete_snapshot_sync(
@@ -458,7 +484,7 @@ def _complete_snapshot_sync(
     success_status_text: str = "REFRESHED" if refresh else "CAPTURED"
     status_text: str = success_status_text if result.status == SUCCESS_STATUS else "FAIL"
     style: CliStyle = CliStyle(use_color=use_color)
-    status: str = style.status(status_text)
+    status: str = style.status(status=status_text)
     detail: str = _snapshot_capture_detail(result)
     progress_stream.write(f"{result.scenario_name:<{_SCENARIO_NAME_WIDTH}} {status}{detail}\n")
     if result.error_message:
@@ -492,7 +518,7 @@ def _write_snapshot_capture_relation_rows(
     for relation_result in result.capture_result.relation_results:
         status_text: str = "PASS" if relation_result.status == SUCCESS_STATUS else "FAIL"
         style: CliStyle = CliStyle(use_color=use_color)
-        status: str = style.status(status_text)
+        status: str = style.status(status=status_text)
         row_label: str = "row" if relation_result.row_count == 1 else "rows"
         detail: str = (
             f"  {relation_result.row_count} {row_label}, "
@@ -521,10 +547,11 @@ def _snapshot_capture_detail(result: ScenarioSnapshotCaptureRunResult) -> str:
 
 
 def _format_snapshot_size(byte_count: int) -> str:
-    if byte_count < 1024:
+    binary_unit_size: int = 1024
+    if byte_count < binary_unit_size:
         return f"{byte_count} B"
     kibibytes: float = byte_count / 1024
-    if kibibytes < 1024:
+    if kibibytes < binary_unit_size:
         return f"{kibibytes:.1f} KB"
     mebibytes: float = kibibytes / 1024
     return f"{mebibytes:.1f} MB"

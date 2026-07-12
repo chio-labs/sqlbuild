@@ -707,4 +707,10 @@ def stringify_warehouse_rows(
 ) -> tuple[tuple[object, ...], ...]:
     """Normalize warehouse driver scalar differences for stable e2e assertions."""
 
-    return tuple(tuple(None if value is None else str(value) for value in row) for row in rows)
+    normalized_rows: list[tuple[object, ...]] = []
+    for row in rows:
+        normalized_row: list[object] = []
+        for value in row:
+            normalized_row.append(None if value is None else str(value))
+        normalized_rows.append(tuple(normalized_row))
+    return tuple(normalized_rows)

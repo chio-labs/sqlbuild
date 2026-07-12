@@ -232,8 +232,12 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
     )
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
     try:
-        adapter.execute(connection, sql="CREATE TABLE main.base_orders AS SELECT 1 AS id")
-        adapter.execute(connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.base_orders AS SELECT 1 AS id"
+        )
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id"
+        )
         for unique_id in test_case.expected_reasons_by_unique_id:
             write_dbt_test_fingerprint(
                 adapter=adapter,
@@ -325,9 +329,13 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
     )
     seed_name: str
     try:
-        adapter.execute(connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id"
+        )
         for seed_name in test_case.existing_seed_names:
-            adapter.execute(connection, sql=f"CREATE TABLE main.{seed_name} AS SELECT 1 AS id")
+            adapter.execute(
+                connection=connection, sql=f"CREATE TABLE main.{seed_name} AS SELECT 1 AS id"
+            )
         for seed_name in test_case.seed_names:
             seed: DbtManifestSeed = manifest.seeds_by_unique_id[f"seed.analytics.{seed_name}"]
             assert seed.identity_hash is not None
@@ -356,9 +364,11 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
         call for call in adapter.relation_exists_calls if call[2] in seed_relation_names
     )
     assert len(seed_existence_calls) == test_case.expected_seed_relation_exists_call_count
-    listed_names: frozenset[str] = frozenset(
-        name for call in adapter.list_relation_calls for name in (call[2] or ())
-    )
+    listed_name_set: set[str] = set()
+    for call in adapter.list_relation_calls:
+        for name in call[2] or ():
+            listed_name_set.add(name)
+    listed_names: frozenset[str] = frozenset(listed_name_set)
     assert not listed_names
     warnings_text: str = "\n".join(result.stale_out_of_selection_warning_messages)
     for seed_name in test_case.expected_changed_seed_names:
@@ -417,7 +427,7 @@ def test_given_successful_dbt_model_when_writing_fingerprint_then_definition_is_
             connection=connection,
             execute=adapter.execute,
             table_exists=adapter.relation_exists(
-                connection,
+                connection=connection,
                 database=None,
                 schema="main",
                 name=FINGERPRINT_TABLE_NAME,
@@ -1349,12 +1359,14 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
     try:
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE main.raw_orders AS "
             "SELECT TIMESTAMP '2000-01-01 00:00:00' AS loaded_at",
         )
-        adapter.execute(connection, sql="CREATE TABLE main.stg_orders AS SELECT 1 AS id")
-        adapter.execute(connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(connection=connection, sql="CREATE TABLE main.stg_orders AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id"
+        )
         write_dbt_test_fingerprint(
             adapter=adapter,
             connection=connection,
@@ -1569,12 +1581,14 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
             ),
         )
         adapter.execute(
-            connection,
+            connection=connection,
             sql="CREATE TABLE main.raw_orders AS "
             "SELECT TIMESTAMP '2026-01-02 00:00:00' AS loaded_at",
         )
-        adapter.execute(connection, sql="CREATE TABLE main.stg_orders AS SELECT 1 AS id")
-        adapter.execute(connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(connection=connection, sql="CREATE TABLE main.stg_orders AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id"
+        )
         write_dbt_test_fingerprint(
             adapter=adapter,
             connection=connection,

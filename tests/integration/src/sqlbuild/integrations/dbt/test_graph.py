@@ -80,12 +80,12 @@ def test_given_real_dbt_manifest_and_sqlbuild_project_when_building_graph_then_e
         project_dir=sqlbuild_project_dir
     )
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         external_sql_reference_resolver=build_external_sql_reference_resolver(
             manifest_source=manifest_source
         ),
     )
-    project: CompiledProject = assemble_compiled_project(compile_inputs)
+    project: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
     manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=json.loads(manifest_source.read_text(encoding="utf-8"))
     )
@@ -95,7 +95,7 @@ def test_given_real_dbt_manifest_and_sqlbuild_project_when_building_graph_then_e
     assert (
         graph_key_stable_ids(
             expand_combined_downstream(
-                dbt_model_graph_key(test_case.expected_downstream_from),
+                key=dbt_model_graph_key(test_case.expected_downstream_from),
                 downstream=graph.downstream_deps,
             )
         )

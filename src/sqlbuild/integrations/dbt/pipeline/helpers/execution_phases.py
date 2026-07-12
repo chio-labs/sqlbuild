@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlbuild.adapter.shared.types import BuiltinAdapter
@@ -102,6 +102,73 @@ from sqlbuild.shared.helpers.output.display import DisplayOptions
 from sqlbuild.shared.models import ConnectionHooks
 
 
+@dataclass
+class _DbtNodeResultRecorder:
+    watermark_context: NodeSourceWatermarkExecutionContext | None
+    manifest: DbtManifestIndex
+    compiled: DbtInteropCompiledProject
+    identities: DbtWriteIdentities
+    query_change_tracking: bool
+    state_connection: object | None
+    buffered_results: list[DbtNodeExecutionResult] = field(default_factory=list)
+    fingerprint_warnings: list[str] = field(default_factory=list)
+
+    def on_result(self, result: DbtNodeExecutionResult) -> None:
+        self.buffered_results, self.fingerprint_warnings = _record_dbt_node_result(
+            result=result,
+            watermark_context=self.watermark_context,
+            manifest=self.manifest,
+            compiled=self.compiled,
+            identities=self.identities,
+            query_change_tracking=self.query_change_tracking,
+            state_connection=self.state_connection,
+            buffered_results=self.buffered_results,
+            fingerprint_warnings=self.fingerprint_warnings,
+        )
+
+
+def _record_dbt_node_result(
+    *,
+    result: DbtNodeExecutionResult,
+    watermark_context: NodeSourceWatermarkExecutionContext | None,
+    manifest: DbtManifestIndex,
+    compiled: DbtInteropCompiledProject,
+    identities: DbtWriteIdentities,
+    query_change_tracking: bool,
+    state_connection: object | None,
+    buffered_results: list[DbtNodeExecutionResult],
+    fingerprint_warnings: list[str],
+) -> tuple[list[DbtNodeExecutionResult], list[str]]:
+    record_dbt_successful_node_source_watermark(
+        context=watermark_context,
+        result=result,
+        manifest=manifest,
+        run_id=compiled.project.run_id,
+        node_version_hash=identities.write_identity_hashes.get(
+            dbt_graph_node_key(result.unique_id)
+        ),
+    )
+    if not query_change_tracking:
+        return buffered_results, fingerprint_warnings
+    if compiled.adapter_name == BuiltinAdapter.DUCKDB:
+        return [*buffered_results, result], fingerprint_warnings
+    if state_connection is None:
+        return buffered_results, fingerprint_warnings
+    fingerprint_warnings = try_write_dbt_node_fingerprint(
+        result=result,
+        adapter=compiled.adapter,
+        connection=state_connection,
+        destination=build_dbt_fingerprint_destination(compiled.project),
+        warnings=fingerprint_warnings,
+        query_sql=identities.query_sql_by_unique_id.get(result.unique_id),
+        seed_identity_hash=identities.seed_identity_by_unique_id.get(result.unique_id),
+        version_hash_override=identities.write_identity_hashes.get(
+            dbt_graph_node_key(result.unique_id)
+        ),
+    )
+    return buffered_results, fingerprint_warnings
+
+
 def resolve_dbt_planned_work(
     *,
     request: DbtInteropExecutionRequest,
@@ -144,8 +211,16 @@ def resolve_dbt_planned_work(
         hooks=ConnectionHooks(
             on_progress=request.on_progress,
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, *, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, *, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     if dbt_model_plan is not None:
@@ -351,8 +426,16 @@ def resolve_dbt_pre_execution_outputs(
         ),
         hooks=ConnectionHooks(
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, *, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, *, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     if sqlbuild_plan_output is not None:
@@ -392,7 +475,7 @@ def write_dbt_execution_plan_text(
             supplemental_dbt_command_argvs=(),
         )
     rendered_plan: str = render_dbt_interop_plan(
-        display_plan,
+        plan=display_plan,
         json_output=False,
         use_color=request.use_color,
         display_options=DisplayOptions(max_entries_per_section=None if request.verbose else 10),
@@ -472,51 +555,29 @@ def execute_dbt_with_state_tracking(
         plan=plan,
         connection_config=connection_config,
     )
-    fingerprint_warnings: list[str] = []
-    buffered_results: list[DbtNodeExecutionResult] = []
     state_connection: object | None = None
     query_change_tracking: bool = compiled.project.settings.query_change_tracking
     if query_change_tracking and compiled.adapter_name != BuiltinAdapter.DUCKDB:
         state_connect_start: float = time.monotonic()
         report_progress(
-            request.on_progress, message="Connecting to warehouse for dbt fingerprint writes..."
+            on_progress=request.on_progress,
+            message="Connecting to warehouse for dbt fingerprint writes...",
         )
         state_connection = compiled.adapter.connect(connection_config)
         report_progress(
-            request.on_progress,
+            on_progress=request.on_progress,
             message="Connected for dbt fingerprint writes. "
             f"({time.monotonic() - state_connect_start:.2f}s)",
         )
 
-    def record_dbt_node_result(result: DbtNodeExecutionResult) -> None:
-        record_dbt_successful_node_source_watermark(
-            context=watermark_context,
-            result=result,
-            manifest=manifest,
-            run_id=compiled.project.run_id,
-            node_version_hash=identities.write_identity_hashes.get(
-                dbt_graph_node_key(result.unique_id)
-            ),
-        )
-        if not query_change_tracking:
-            return
-        if compiled.adapter_name == BuiltinAdapter.DUCKDB:
-            buffered_results.append(result)
-            return
-        if state_connection is None:
-            return
-        _ = try_write_dbt_node_fingerprint(
-            result=result,
-            adapter=compiled.adapter,
-            connection=state_connection,
-            destination=build_dbt_fingerprint_destination(compiled.project),
-            warnings=fingerprint_warnings,
-            query_sql=identities.query_sql_by_unique_id.get(result.unique_id),
-            seed_identity_hash=identities.seed_identity_by_unique_id.get(result.unique_id),
-            version_hash_override=identities.write_identity_hashes.get(
-                dbt_graph_node_key(result.unique_id)
-            ),
-        )
+    recorder: _DbtNodeResultRecorder = _DbtNodeResultRecorder(
+        watermark_context=watermark_context,
+        manifest=manifest,
+        compiled=compiled,
+        identities=identities,
+        query_change_tracking=query_change_tracking,
+        state_connection=state_connection,
+    )
 
     try:
         execution: DbtCommandExecutionResult = execute_dbt_commands(
@@ -532,25 +593,27 @@ def execute_dbt_with_state_tracking(
                 if request.command == DbtInteropCommand.TEST
                 else "Skipping dbt: no dbt work selected."
             ),
-            on_node_result=record_dbt_node_result,
+            on_node_result=recorder.on_result,
             on_progress=request.on_progress,
         )
     finally:
         if state_connection is not None:
             compiled.adapter.close(state_connection)
 
-    if buffered_results and query_change_tracking:
-        write_buffered_dbt_fingerprints(
+    if recorder.buffered_results and query_change_tracking:
+        recorder.fingerprint_warnings = write_buffered_dbt_fingerprints(
             request=request,
             compiled=compiled,
             identities=identities,
             connection_config=connection_config,
-            buffered_results=tuple(buffered_results),
-            fingerprint_warnings=fingerprint_warnings,
+            buffered_results=tuple(recorder.buffered_results),
+            fingerprint_warnings=recorder.fingerprint_warnings,
         )
     if execution.returncode == 0 and watermark_context is not None:
         watermark_start: float = time.monotonic()
-        report_progress(request.on_progress, message="Recording dbt node source watermarks...")
+        report_progress(
+            on_progress=request.on_progress, message="Recording dbt node source watermarks..."
+        )
         watermark_connection: object = compiled.adapter.connect(connection_config)
         try:
             write_dbt_node_source_watermark_records(
@@ -563,14 +626,14 @@ def execute_dbt_with_state_tracking(
         finally:
             compiled.adapter.close(watermark_connection)
         report_progress(
-            request.on_progress,
+            on_progress=request.on_progress,
             message=(
                 f"Recorded dbt node source watermarks. ({time.monotonic() - watermark_start:.2f}s)"
             ),
         )
     return DbtTrackedExecution(
         execution=execution,
-        fingerprint_warnings=tuple(fingerprint_warnings),
+        fingerprint_warnings=tuple(recorder.fingerprint_warnings),
     )
 
 
@@ -582,16 +645,16 @@ def write_buffered_dbt_fingerprints(
     connection_config: dict[str, object],
     buffered_results: tuple[DbtNodeExecutionResult, ...],
     fingerprint_warnings: list[str],
-) -> None:
+) -> list[str]:
     """Write buffered dbt fingerprints on a fresh connection after execution."""
 
     fingerprint_start: float = time.monotonic()
-    report_progress(request.on_progress, message="Recording dbt fingerprints...")
+    report_progress(on_progress=request.on_progress, message="Recording dbt fingerprints...")
     connection: object = compiled.adapter.connect(connection_config)
     try:
         dbt_result: DbtNodeExecutionResult
         for dbt_result in buffered_results:
-            _ = try_write_dbt_node_fingerprint(
+            fingerprint_warnings = try_write_dbt_node_fingerprint(
                 result=dbt_result,
                 adapter=compiled.adapter,
                 connection=connection,
@@ -606,9 +669,10 @@ def write_buffered_dbt_fingerprints(
     finally:
         compiled.adapter.close(connection)
     report_progress(
-        request.on_progress,
+        on_progress=request.on_progress,
         message=f"Recorded dbt fingerprints. ({time.monotonic() - fingerprint_start:.2f}s)",
     )
+    return fingerprint_warnings
 
 
 def write_dbt_execution_summary(
@@ -652,7 +716,9 @@ def _prepare_dbt_watermark_context(
     ):
         return None
     watermark_connect_start: float = time.monotonic()
-    report_progress(request.on_progress, message="Reading dbt node source watermarks...")
+    report_progress(
+        on_progress=request.on_progress, message="Reading dbt node source watermarks..."
+    )
     connection: object = compiled.adapter.connect(connection_config)
     try:
         watermark_context: NodeSourceWatermarkExecutionContext | None = (
@@ -669,7 +735,7 @@ def _prepare_dbt_watermark_context(
     finally:
         compiled.adapter.close(connection)
     report_progress(
-        request.on_progress,
+        on_progress=request.on_progress,
         message=(
             f"Read dbt node source watermarks. ({time.monotonic() - watermark_connect_start:.2f}s)"
         ),
@@ -760,8 +826,16 @@ def resolve_sqlbuild_execution_plan_output(
         ),
         hooks=ConnectionHooks(
             on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=connection_progress.on_connection_complete,
-            on_connection_error=connection_progress.on_connection_error,
+            on_connection_complete=lambda connection_count, *, elapsed_seconds: (
+                connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, *, elapsed_seconds: (
+                connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
         ),
     )
     return DbtSqlbuildReplanResult(
@@ -813,7 +887,7 @@ def write_sqlbuild_skip_notice(
     if skip_reason_message is not None:
         invocation.output_stream.write("\n")
         invocation.output_stream.flush()
-        report_progress(request.on_progress, message=skip_reason_message)
+        report_progress(on_progress=request.on_progress, message=skip_reason_message)
     if current_message is not None:
         style: CliStyle = CliStyle(use_color=request.use_color)
         invocation.output_stream.write(style.muted(current_message) + "\n")

@@ -12,8 +12,8 @@ from sqlbuild.spec.models.types import SourceWriteStrategy
 
 
 def _decorate_loader(
-    function: Callable[..., object],
     *,
+    function: Callable[..., object],
     name: str | None = None,
     depends_on: tuple[Callable[..., object], ...] = (),
     destination: str | None = None,
@@ -39,7 +39,9 @@ def _decorate_loader(
 
 
 @overload
-def loader(function: Callable[..., object], /) -> Callable[..., object]: ...
+def loader(
+    function: Callable[..., object],
+) -> Callable[..., object]: ...
 
 
 @overload
@@ -58,7 +60,6 @@ def loader(
 
 def loader(
     function: Callable[..., object] | None = None,
-    /,
     *,
     name: str | None = None,
     depends_on: tuple[Callable[..., object], ...] | list[Callable[..., object]] = (),
@@ -74,7 +75,7 @@ def loader(
     normalized_deps: tuple[Callable[..., object], ...] = tuple(depends_on)
     if function is not None:
         return _decorate_loader(
-            function,
+            function=function,
             name=name,
             depends_on=normalized_deps,
             destination=destination,
@@ -87,7 +88,7 @@ def loader(
 
     def decorate(inner: Callable[..., object]) -> Callable[..., object]:
         return _decorate_loader(
-            inner,
+            function=inner,
             name=name,
             depends_on=normalized_deps,
             destination=destination,

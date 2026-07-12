@@ -27,7 +27,7 @@ from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models.core import LoadedMacro
-from sqlbuild.compiler.contracts.main.validate import validate_model_contracts
+from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -55,7 +55,7 @@ def analyze_compile_project(
     """Discover, compile, and validate the project into one analysis result."""
 
     discover_start: float = time.monotonic()
-    _ = start_compile_phase(status, message="Discovering project...")
+    _ = start_compile_phase(status=status, message="Discovering project...")
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=project_dir,
         sql_analysis_enabled_override=(
@@ -63,16 +63,18 @@ def analyze_compile_project(
         ),
     )
     discover_ms: int = elapsed_ms(discover_start)
-    _ = complete_compile_phase(status, message=f"Discovered project. ({discover_ms / 1000:.2f}s)")
+    _ = complete_compile_phase(
+        status=status, message=f"Discovered project. ({discover_ms / 1000:.2f}s)"
+    )
     adapter: BaseAdapter = resolve_adapter(
-        resolve_effective_adapter_name(
+        adapter_name=resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
         project_dir=project_dir,
     )
     graph_start: float = time.monotonic()
-    _ = start_compile_phase(status, message="Compiling project graph...")
+    _ = start_compile_phase(status=status, message="Compiling project graph...")
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -83,9 +85,11 @@ def analyze_compile_project(
         cli_vars=cli_vars,
     )
     graph_ms: int = elapsed_ms(graph_start)
-    _ = complete_compile_phase(status, message=f"Compiled project graph. ({graph_ms / 1000:.2f}s)")
+    _ = complete_compile_phase(
+        status=status, message=f"Compiled project graph. ({graph_ms / 1000:.2f}s)"
+    )
     lineage_start: float = time.monotonic()
-    _ = start_compile_phase(status, message="Analyzing column lineage...")
+    _ = start_compile_phase(status=status, message="Analyzing column lineage...")
     lineage: ProjectColumnLineage | None = build_compile_lineage(
         graph=graph,
         dialect=adapter.sql_analysis_dialect(),
@@ -93,22 +97,22 @@ def analyze_compile_project(
     )
     lineage_ms: int = elapsed_ms(lineage_start)
     _ = complete_compile_phase(
-        status, message=f"Analyzed column lineage. ({lineage_ms / 1000:.2f}s)"
+        status=status, message=f"Analyzed column lineage. ({lineage_ms / 1000:.2f}s)"
     )
     contracts_start: float = time.monotonic()
     contract_result: ContractValidationResult
     if profile_flags.skip_contracts:
         contract_result = ContractValidationResult(diagnostics=())
     else:
-        _ = start_compile_phase(status, message="Validating model contracts...")
-        contract_result = validate_model_contracts(
-            graph.project,
+        _ = start_compile_phase(status=status, message="Validating model contracts...")
+        contract_result = evaluate_model_contracts(
+            project=graph.project,
             dialect=adapter.sql_analysis_dialect(),
         )
     contract_ms: int = elapsed_ms(contracts_start)
     if not profile_flags.skip_contracts:
         _ = complete_compile_phase(
-            status, message=f"Validated model contracts. ({contract_ms / 1000:.2f}s)"
+            status=status, message=f"Validated model contracts. ({contract_ms / 1000:.2f}s)"
         )
     return CompileAnalysis(
         discovered_inputs=discovered_inputs,
@@ -134,7 +138,7 @@ def build_compile_manifest_payload(
     if not manifest:
         return None
     manifest_start: float = time.monotonic()
-    _ = start_compile_phase(status, message="Building manifest...")
+    _ = start_compile_phase(status=status, message="Building manifest...")
     loaded_macros: dict[str, LoadedMacro] = load_macros(analysis.discovered_inputs.macro_files)
     manifest_payload: dict[str, object] = build_manifest(
         project=analysis.graph.project,
@@ -148,7 +152,7 @@ def build_compile_manifest_payload(
         downstream_deps=analysis.graph.downstream_deps,
     )
     _ = complete_compile_phase(
-        status, message=f"Built manifest. ({time.monotonic() - manifest_start:.2f}s)"
+        status=status, message=f"Built manifest. ({time.monotonic() - manifest_start:.2f}s)"
     )
     return manifest_payload
 
@@ -165,7 +169,7 @@ def write_compile_dag_artifact(
     if dag_path is None:
         return
     dag_start: float = time.monotonic()
-    _ = start_compile_phase(status, message="Writing DAG artifact...")
+    _ = start_compile_phase(status=status, message="Writing DAG artifact...")
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(
         discovered_inputs=analysis.discovered_inputs
     )
@@ -183,7 +187,7 @@ def write_compile_dag_artifact(
         encoding="utf-8",
     )
     _ = complete_compile_phase(
-        status, message=f"Wrote DAG artifact. ({time.monotonic() - dag_start:.2f}s)"
+        status=status, message=f"Wrote DAG artifact. ({time.monotonic() - dag_start:.2f}s)"
     )
 
 
@@ -210,7 +214,7 @@ def write_compile_artifacts(
             target_dir=target_dir,
         )
     else:
-        _ = start_compile_phase(status, message="Writing compiled artifacts...")
+        _ = start_compile_phase(status=status, message="Writing compiled artifacts...")
         written = write_static_compile_target(
             target_dir=target_dir,
             adapter=analysis.adapter,
@@ -220,6 +224,6 @@ def write_compile_artifacts(
     write_ms: int = elapsed_ms(write_start)
     if not profile_skip_write:
         _ = complete_compile_phase(
-            status, message=f"Wrote compiled artifacts. ({write_ms / 1000:.2f}s)"
+            status=status, message=f"Wrote compiled artifacts. ({write_ms / 1000:.2f}s)"
         )
     return CompileWriteResult(written=written, write_ms=write_ms)

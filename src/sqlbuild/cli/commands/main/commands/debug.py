@@ -12,8 +12,8 @@ from sqlbuild.shared.helpers.output.colors import supports_color
 
 
 def run_debug(
-    project_dir: Path | None,
     *,
+    project_dir: Path | None,
     no_color: bool = False,
     no_connection: bool = False,
     selected_target: str | None = None,
@@ -30,6 +30,8 @@ def run_debug(
     if json_output:
         sys.stdout.write(format_debug_json(result) + "\n")
     else:
-        sys.stdout.write(format_debug_text(result, use_color=(not no_color) and supports_color()))
+        sys.stdout.write(
+            format_debug_text(result=result, use_color=(not no_color) and supports_color())
+        )
     sys.stdout.flush()
     return 0 if result.success else 1

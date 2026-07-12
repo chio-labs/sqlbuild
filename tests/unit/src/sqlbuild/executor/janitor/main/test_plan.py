@@ -243,14 +243,11 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
     assert tuple(candidate.table_name for candidate in plan.virtual_state_prune_candidates) == (
         test_case.expected_virtual_state_table_names
     )
-    assert (
-        tuple(
-            source_name
-            for skipped_schema in plan.skipped_schemas
-            for source_name in skipped_schema.source_names
-        )
-        == test_case.expected_skipped_schema_sources
-    )
+    skipped_schema_sources: list[str] = []
+    for skipped_schema in plan.skipped_schemas:
+        for source_name in skipped_schema.source_names:
+            skipped_schema_sources.append(source_name)
+    assert tuple(skipped_schema_sources) == test_case.expected_skipped_schema_sources
 
 
 @pytest.mark.parametrize(

@@ -33,9 +33,11 @@ def prepare_test_execution(
     """Prepare nested progress reporting and write the test section header."""
 
     test_count: int = len(pipeline_result.plan_output.test_entries)
-    model_count: int = len(
-        {step.model_name for e in pipeline_result.plan_output.test_entries for step in e.chain}
-    )
+    model_names: set[str] = set()
+    for entry in pipeline_result.plan_output.test_entries:
+        for step in entry.chain:
+            model_names.add(step.model_name)
+    model_count: int = len(model_names)
     header: str = f"Test ({test_count} selected, {model_count} models)"
     style: CliStyle = CliStyle(use_color=invocation.use_color)
     styled_header: str = style.success_strong(header)
@@ -75,42 +77,28 @@ def execute_test_plan(
     on_complete: Callable[[SqlTestExecutionResult], None] = _build_on_complete(
         progress=preparation.progress
     )
-    on_test_progress: Callable[[str], None] = _build_on_test_progress(
-        preflight_progress=preparation.preflight_progress
-    )
     return run_test_pipeline(
         plan=pipeline_result.plan_output,
         connection_config=invocation.connection_config,
         adapter=invocation.adapter,
         on_connection_start=preparation.execution_connection_progress.on_connection_start,
-        on_connection_complete=preparation.execution_connection_progress.on_connection_complete,
-        on_connection_error=preparation.execution_connection_progress.on_connection_error,
-        on_progress=on_test_progress,
+        on_connection_complete=lambda connection_count, elapsed_seconds: (
+            preparation.execution_connection_progress.on_connection_complete(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
+        on_connection_error=lambda connection_count, elapsed_seconds: (
+            preparation.execution_connection_progress.on_connection_error(
+                connection_count=connection_count, elapsed_seconds=elapsed_seconds
+            )
+        ),
+        on_progress=preparation.preflight_progress.report_preflight_progress,
         on_test_start=lambda entry: preparation.progress.on_item_start(
             group_name=_test_group_name_from_entry(entry),
             item_name=entry.name,
         ),
         on_test_complete=on_complete,
     )
-
-
-def _build_on_test_progress(
-    *, preflight_progress: TransientStatusReporter
-) -> Callable[[str], None]:
-    preflight_active: list[bool] = [False]
-
-    def _on_test_progress(message: str) -> None:
-        if message.startswith("Prepared "):
-            preflight_progress.complete(message, blank_line_after=True)
-            preflight_active[0] = False
-            return
-        if not preflight_active[0]:
-            preflight_progress.start(message)
-            preflight_active[0] = True
-            return
-        preflight_progress.update(message)
-
-    return _on_test_progress
 
 
 def _build_on_complete(

@@ -252,7 +252,7 @@ def write_matching_reuse_origin_fingerprint(
     """Create reuse origin fingerprint state matching a reuse plan entry."""
 
     adapter.execute(
-        connection,
+        connection=connection,
         sql=build_create_table_sql(
             database=database,
             schema=schema,
@@ -261,7 +261,7 @@ def write_matching_reuse_origin_fingerprint(
         ),
     )
     adapter.execute(
-        connection,
+        connection=connection,
         sql=build_insert_sql(
             database=database,
             schema=schema,
@@ -558,7 +558,7 @@ def _verify_column_types(
         return
     schema: str | None = test_case.target_schema
     columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-        connection, database=None, schema=schema, name=test_case.target_name
+        connection=connection, database=None, schema=schema, name=test_case.target_name
     )
     declared_names: tuple[str, ...] = tuple(col_name for col_name, _ in test_case.declared_columns)
     enforced_types: list[str] = []

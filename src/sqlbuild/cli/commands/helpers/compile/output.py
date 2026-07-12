@@ -49,7 +49,7 @@ def format_compile_text(
     style: CliStyle = CliStyle(use_color=use_color)
     lines: list[str] = [
         style.success_strong(
-            f"Compile ready ({_count_label(len(graph.project.models), singular='model')})"
+            f"Compile ready ({_count_label(count=len(graph.project.models), singular='model')})"
         ),
         "",
     ]
@@ -57,11 +57,11 @@ def format_compile_text(
     model_name_width: int = _model_name_width(visible_models)
     error_models: frozenset[str] = _models_with_error_diagnostics(diagnostics)
     for model in visible_models:
-        model_name: str = _fit(model.name, width=model_name_width)
+        model_name: str = _fit(text=model.name, width=model_name_width)
         status: str = "FAIL" if model.name in error_models else "OK"
         lines.append(
             f"  {style.object_name(model_name)} "
-            f"{style.status(status)} "
+            f"{style.status(status=status)} "
             f"{style.muted(f'{_column_count(model)} columns')}"
         )
     hidden_model_count: int = len(graph.project.models) - len(visible_models)
@@ -76,21 +76,23 @@ def format_compile_text(
     if diagnostics:
         lines.append(
             _format_diagnostics_text(
-                diagnostics,
+                diagnostics=diagnostics,
                 source_texts=_model_source_texts(graph.project.models),
                 style=style,
             )
         )
         lines.append("")
-    error_count: int = _diagnostic_count(diagnostics, severity=DiagnosticSeverity.ERROR)
-    warning_count: int = _diagnostic_count(diagnostics, severity=DiagnosticSeverity.WARNING)
+    error_count: int = _diagnostic_count(diagnostics=diagnostics, severity=DiagnosticSeverity.ERROR)
+    warning_count: int = _diagnostic_count(
+        diagnostics=diagnostics, severity=DiagnosticSeverity.WARNING
+    )
     lines.append(
         f"  {style.success_strong('Compiled:')} "
-        f"{_count_label(len(graph.project.models), singular='model')}, "
-        f"{_count_label(len(graph.project.seeds), singular='seed')}, "
-        f"{_count_label(len(graph.project.functions), singular='function')}, "
-        f"{_count_label(error_count, singular='error')}, "
-        f"{_count_label(warning_count, singular='warning')}"
+        f"{_count_label(count=len(graph.project.models), singular='model')}, "
+        f"{_count_label(count=len(graph.project.seeds), singular='seed')}, "
+        f"{_count_label(count=len(graph.project.functions), singular='function')}, "
+        f"{_count_label(count=error_count, singular='error')}, "
+        f"{_count_label(count=warning_count, singular='warning')}"
     )
     lines.append(f"  {style.muted('Wrote:')} {_relative_target_path(_compiled_sql_dir(written))}/")
     if manifest:
@@ -121,7 +123,7 @@ def format_compile_json(
         "command": "compile",
         "offline": True,
         "has_errors": any(diagnostic.is_error for diagnostic in diagnostics),
-        "summary": _summary(graph, diagnostics=diagnostics),
+        "summary": _summary(graph=graph, diagnostics=diagnostics),
         "diagnostics": [_diagnostic_to_json(diagnostic) for diagnostic in diagnostics],
         "compile_timings": timings_ms,
         "lineage_mode": lineage_mode.value,
@@ -131,7 +133,7 @@ def format_compile_json(
     return json.dumps(result, indent=2)
 
 
-def _summary(graph: ProjectGraph, *, diagnostics: tuple[CompilerDiagnostic, ...]) -> dict[str, int]:
+def _summary(*, graph: ProjectGraph, diagnostics: tuple[CompilerDiagnostic, ...]) -> dict[str, int]:
     project: CompiledProject = graph.project
     return {
         "models": len(project.models),
@@ -142,8 +144,8 @@ def _summary(graph: ProjectGraph, *, diagnostics: tuple[CompilerDiagnostic, ...]
         "audits": len(project.audits),
         "tests": len(project.sql_tests),
         "execution_layers": _execution_layer_count(graph),
-        "errors": _diagnostic_count(diagnostics, severity=DiagnosticSeverity.ERROR),
-        "warnings": _diagnostic_count(diagnostics, severity=DiagnosticSeverity.WARNING),
+        "errors": _diagnostic_count(diagnostics=diagnostics, severity=DiagnosticSeverity.ERROR),
+        "warnings": _diagnostic_count(diagnostics=diagnostics, severity=DiagnosticSeverity.WARNING),
     }
 
 
@@ -295,22 +297,23 @@ def _model_name_width(models: tuple[CompiledModel, ...]) -> int:
     return min(max(longest, _MIN_MODEL_NAME_WIDTH), _MAX_MODEL_NAME_WIDTH)
 
 
-def _fit(text: str, *, width: int) -> str:
+def _fit(*, text: str, width: int) -> str:
     if len(text) > width:
-        if width <= 3:
+        minimum_collapsible_width: int = 3
+        if width <= minimum_collapsible_width:
             return "." * width
         return text[: width - 3] + "..."
     return text.ljust(width)
 
 
-def _count_label(count: int, *, singular: str) -> str:
+def _count_label(*, count: int, singular: str) -> str:
     if count == 1:
         return f"{count} {singular}"
     return f"{count} {singular}s"
 
 
 def _diagnostic_count(
-    diagnostics: tuple[CompilerDiagnostic, ...], *, severity: DiagnosticSeverity
+    *, diagnostics: tuple[CompilerDiagnostic, ...], severity: DiagnosticSeverity
 ) -> int:
     return sum(1 for diagnostic in diagnostics if diagnostic.severity == severity)
 
@@ -374,13 +377,13 @@ def _location_to_json(location: SourceLocation) -> dict[str, object]:
 
 
 def _format_diagnostics_text(
-    diagnostics: tuple[CompilerDiagnostic, ...], *, source_texts: dict[Path, str], style: CliStyle
+    *, diagnostics: tuple[CompilerDiagnostic, ...], source_texts: dict[Path, str], style: CliStyle
 ) -> str:
     lines: list[str] = []
     for diagnostic in diagnostics:
         lines.extend(
             _format_diagnostic_text(
-                diagnostic,
+                diagnostic=diagnostic,
                 source_texts=source_texts,
                 style=style,
             )
@@ -392,10 +395,10 @@ def _format_diagnostics_text(
 
 
 def _format_diagnostic_text(
-    diagnostic: CompilerDiagnostic, *, source_texts: dict[Path, str], style: CliStyle
+    *, diagnostic: CompilerDiagnostic, source_texts: dict[Path, str], style: CliStyle
 ) -> list[str]:
     header: str = f"{diagnostic.severity}[{diagnostic.code}]: {diagnostic.message}"
-    lines: list[str] = [_style_diagnostic(header, diagnostic=diagnostic, style=style)]
+    lines: list[str] = [_style_diagnostic(text=header, diagnostic=diagnostic, style=style)]
     if diagnostic.resource_name is not None:
         label: str = "model"
         resource: str = diagnostic.resource_name
@@ -406,7 +409,7 @@ def _format_diagnostic_text(
     if diagnostic.location is not None:
         lines.extend(
             _format_location_block(
-                diagnostic.location,
+                location=diagnostic.location,
                 source_texts=source_texts,
                 message=None,
             )
@@ -418,7 +421,7 @@ def _format_diagnostic_text(
         lines.append(f"  {related_location.label}:")
         lines.extend(
             _format_related_location_block(
-                related_location,
+                related_location=related_location,
                 source_texts=source_texts,
             )
         )
@@ -428,17 +431,17 @@ def _format_diagnostic_text(
 
 
 def _format_related_location_block(
-    related_location: RelatedLocation, *, source_texts: dict[Path, str]
+    *, related_location: RelatedLocation, source_texts: dict[Path, str]
 ) -> list[str]:
     return _format_location_block(
-        related_location.location,
+        location=related_location.location,
         source_texts=source_texts,
         message=related_location.message,
     )
 
 
 def _format_location_block(
-    location: SourceLocation, *, source_texts: dict[Path, str], message: str | None
+    *, location: SourceLocation, source_texts: dict[Path, str], message: str | None
 ) -> list[str]:
     rendered_location: str = f"{location.path}:{location.line}:{location.column}"
     lines: list[str] = [f"  --> {rendered_location}"]
@@ -473,7 +476,7 @@ def _model_source_texts(models: tuple[CompiledModel, ...]) -> dict[Path, str]:
     return {model.relative_path: model.authored_sql for model in models if model.authored_sql}
 
 
-def _style_diagnostic(text: str, *, diagnostic: CompilerDiagnostic, style: CliStyle) -> str:
+def _style_diagnostic(*, text: str, diagnostic: CompilerDiagnostic, style: CliStyle) -> str:
     if diagnostic.severity == DiagnosticSeverity.ERROR:
         return style.error(text)
     if diagnostic.severity == DiagnosticSeverity.WARNING:
@@ -489,14 +492,19 @@ def _execution_layer_count(graph: ProjectGraph) -> int:
     model_keys: set[CompiledObjectKey] = {model.key for model in graph.project.models}
     if not model_keys:
         return 0
-    remaining_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {
-        key: {dep for dep in graph.upstream_deps.get(key, ()) if dep in model_keys}
-        for key in model_keys
-    }
-    downstream_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {
-        key: {dep for dep in graph.downstream_deps.get(key, ()) if dep in model_keys}
-        for key in model_keys
-    }
+    remaining_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {}
+    downstream_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {}
+    for key in model_keys:
+        upstream_models: set[CompiledObjectKey] = set()
+        for dependency in graph.upstream_deps.get(key, ()):
+            if dependency in model_keys:
+                upstream_models.add(dependency)
+        remaining_model_deps[key] = upstream_models
+        downstream_models: set[CompiledObjectKey] = set()
+        for dependency in graph.downstream_deps.get(key, ()):
+            if dependency in model_keys:
+                downstream_models.add(dependency)
+        downstream_model_deps[key] = downstream_models
     current_layer: set[CompiledObjectKey] = {
         key for key, deps in remaining_model_deps.items() if not deps
     }

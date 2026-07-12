@@ -67,14 +67,16 @@ def build_dbt_scenario_project(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_dbt_interop_adapter(adapter_name, project_dir=project_dir)
+    adapter: BaseAdapter = resolve_dbt_interop_adapter(
+        adapter_name=adapter_name, project_dir=project_dir
+    )
     project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
         external_sql_reference_resolver=DbtCompileReferenceResolver(dbt_manifest=manifest),
     )
-    report_progress(on_progress, message="Compiled SQLBuild project.")
+    report_progress(on_progress=on_progress, message="Compiled SQLBuild project.")
     target_names: tuple[str, ...] = resolve_dbt_scenario_target_names(
         project=project,
         manifest=manifest,

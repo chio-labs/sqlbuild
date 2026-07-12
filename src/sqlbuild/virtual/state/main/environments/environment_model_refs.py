@@ -25,7 +25,7 @@ def get_virtual_environment_model_refs(
     connection: Any = backend.connect(config.connection)
     try:
         return backend.get_virtual_environment_model_refs(
-            connection,
+            connection=connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
         )

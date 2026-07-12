@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -42,6 +43,42 @@ from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
+
+
+def node_source_hashes_by_name(
+    records: dict[str, NodeSourceWatermarkRecord], names: Collection[str]
+) -> dict[str, tuple[str, ...]]:
+    hashes_by_name: dict[str, tuple[str, ...]] = {}
+    for name in names:
+        hashes: list[str] = []
+        for entry in records[name].payload.sources:
+            hashes.append(entry.data_version_hash)
+        hashes_by_name[name] = tuple(hashes)
+    return hashes_by_name
+
+
+def node_source_kinds_by_name(
+    records: dict[str, NodeSourceWatermarkRecord], names: Collection[str]
+) -> dict[str, tuple[str, ...]]:
+    kinds_by_name: dict[str, tuple[str, ...]] = {}
+    for name in names:
+        kinds: list[str] = []
+        for entry in records[name].payload.sources:
+            kinds.append(entry.watermark_kind)
+        kinds_by_name[name] = tuple(kinds)
+    return kinds_by_name
+
+
+def node_source_unknown_reasons_by_name(
+    records: dict[str, NodeSourceWatermarkRecord], names: Collection[str]
+) -> dict[str, tuple[str, ...]]:
+    reasons_by_name: dict[str, tuple[str, ...]] = {}
+    for name in names:
+        reasons: list[str] = []
+        for entry in records[name].payload.unknown_sources:
+            reasons.append(entry.reason)
+        reasons_by_name[name] = tuple(reasons)
+    return reasons_by_name
 
 
 @dataclass(frozen=True)

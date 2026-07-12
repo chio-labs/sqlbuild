@@ -80,8 +80,11 @@ def execute_dbt_commands(
     style: CliStyle = CliStyle(use_color=use_color)
     dbt_execution_label: str = style.dbt_execution_label("dbt execution")
     dbt_command_name: str = Path(argv[0]).name
+    command_and_subcommand_argument_count: int = 2
     dbt_execution_detail_text: str = (
-        f"{dbt_command_name} {argv[1]}" if len(argv) >= 2 else dbt_command_name
+        f"{dbt_command_name} {argv[1]}"
+        if len(argv) >= command_and_subcommand_argument_count
+        else dbt_command_name
     )
     dbt_execution_detail: str = style.muted(dbt_execution_detail_text)
     progress_stream.write(f"{dbt_execution_label}  {dbt_execution_detail}\n\n")
@@ -147,7 +150,9 @@ def _dbt_execution_expected_total(
         result: DbtCommandResult = runner.invoke(argv=ls_argv, cwd=options.project_dir)
     finally:
         if status is not None:
-            status.complete(f"Resolved dbt execution selection. ({time.monotonic() - start:.2f}s)")
+            status.complete(
+                message=f"Resolved dbt execution selection. ({time.monotonic() - start:.2f}s)"
+            )
     if result.returncode != 0:
         return None
     return len(parse_dbt_ls_json_lines(stdout=result.stdout))
@@ -162,7 +167,8 @@ def _start_dbt_execution_selection_status(
 
 
 def _dbt_ls_argv_from_execution_argv(argv: tuple[str, ...]) -> tuple[str, ...] | None:
-    if len(argv) < 2:
+    command_and_subcommand_argument_count: int = 2
+    if len(argv) < command_and_subcommand_argument_count:
         return None
     execution_only_flags: frozenset[str] = frozenset({"--full-refresh", "--fail-fast"})
     converted: list[str] = [argv[0], "ls", "--output", "json"]

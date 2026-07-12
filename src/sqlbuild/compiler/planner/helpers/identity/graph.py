@@ -16,28 +16,34 @@ def build_expected_graph_identity_hashes(
 ) -> dict[GraphNodeKey, str | None]:
     hashes: dict[GraphNodeKey, str | None] = {}
 
-    def resolve(key: GraphNodeKey, *, visiting: frozenset[GraphNodeKey]) -> str | None:
-        if key in hashes:
-            return hashes[key]
+    def resolve(
+        *,
+        key: GraphNodeKey,
+        visiting: frozenset[GraphNodeKey],
+        cache: dict[GraphNodeKey, str | None],
+    ) -> tuple[str | None, dict[GraphNodeKey, str | None]]:
+        if key in cache:
+            return cache[key], cache
         node: GraphIdentityNode | None = nodes.get(key)
         if node is None or node.local_hash is None:
-            hashes[key] = None
-            return None
+            return None, {**cache, key: None}
         if key in visiting:
-            hashes[key] = node.local_hash
-            return node.local_hash
+            return node.local_hash, {**cache, key: node.local_hash}
         upstream_hashes: list[tuple[GraphNodeKey, str]] = []
         upstream_key: GraphNodeKey
         for upstream_key in node.upstream_keys:
-            upstream_hash: str | None = resolve(upstream_key, visiting=visiting | {key})
+            upstream_hash, cache = resolve(key=upstream_key, visiting=visiting | {key}, cache=cache)
             if upstream_hash is not None:
                 upstream_hashes.append((upstream_key, upstream_hash))
-        hashes[key] = compose_identity(node.local_hash, upstream_hashes=tuple(upstream_hashes))
-        return hashes[key]
+        composed: str = compose_identity(
+            local_hash=node.local_hash,
+            upstream_hashes=tuple(upstream_hashes),
+        )
+        return composed, {**cache, key: composed}
 
     key: GraphNodeKey
     for key in execution_order:
-        resolve(key, visiting=frozenset())
+        _, hashes = resolve(key=key, visiting=frozenset(), cache=hashes)
     return hashes
 
 
@@ -52,28 +58,45 @@ def build_graph_write_identity_hashes(
     hashes: dict[GraphNodeKey, str] = dict(base_identity_hashes)
     resolved_selected: dict[GraphNodeKey, str] = {}
 
-    def resolve(key: GraphNodeKey, *, visiting: frozenset[GraphNodeKey]) -> str | None:
+    def resolve(
+        *,
+        key: GraphNodeKey,
+        visiting: frozenset[GraphNodeKey],
+        cache: dict[GraphNodeKey, str],
+        selected_cache: dict[GraphNodeKey, str],
+    ) -> tuple[str | None, dict[GraphNodeKey, str], dict[GraphNodeKey, str]]:
         if key not in selected_keys:
-            return hashes.get(key)
-        if key in resolved_selected:
-            return resolved_selected[key]
+            return cache.get(key), cache, selected_cache
+        if key in selected_cache:
+            return selected_cache[key], cache, selected_cache
         node: GraphIdentityNode | None = nodes.get(key)
         if node is None or node.local_hash is None:
-            return hashes.get(key)
+            return cache.get(key), cache, selected_cache
         if key in visiting:
-            return node.local_hash
+            return node.local_hash, cache, selected_cache
         upstream_hashes: list[tuple[GraphNodeKey, str]] = []
         upstream_key: GraphNodeKey
         for upstream_key in node.upstream_keys:
-            upstream_hash: str | None = resolve(upstream_key, visiting=visiting | {key})
+            upstream_hash, cache, selected_cache = resolve(
+                key=upstream_key,
+                visiting=visiting | {key},
+                cache=cache,
+                selected_cache=selected_cache,
+            )
             if upstream_hash is not None:
                 upstream_hashes.append((upstream_key, upstream_hash))
-        composed: str = compose_identity(node.local_hash, upstream_hashes=tuple(upstream_hashes))
-        resolved_selected[key] = composed
-        hashes[key] = composed
-        return composed
+        composed: str = compose_identity(
+            local_hash=node.local_hash,
+            upstream_hashes=tuple(upstream_hashes),
+        )
+        return composed, {**cache, key: composed}, {**selected_cache, key: composed}
 
     key: GraphNodeKey
     for key in execution_order:
-        resolve(key, visiting=frozenset())
+        _, hashes, resolved_selected = resolve(
+            key=key,
+            visiting=frozenset(),
+            cache=hashes,
+            selected_cache=resolved_selected,
+        )
     return hashes

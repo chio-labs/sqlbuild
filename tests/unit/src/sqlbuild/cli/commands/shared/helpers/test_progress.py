@@ -87,7 +87,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared.helpers.helpers import (
 def test_given_name_and_width_when_truncating_then_returns_expected_result(
     test_case: TruncateNameTestCase,
 ) -> None:
-    result: str = _truncate_name(test_case.name, width=test_case.width)
+    result: str = _truncate_name(name=test_case.name, width=test_case.width)
 
     assert result == test_case.expected_result
 
@@ -921,7 +921,7 @@ def test_given_active_top_level_node_when_reporting_progress_then_uses_spinner_g
         use_color=False,
     )
 
-    callbacks.on_node_start(test_case.node_name, resource_kind=test_case.node_type)
+    callbacks.on_node_start(name=test_case.node_name, resource_kind=test_case.node_type)
     output: str = stream.getvalue()
 
     expected_fragment: str
@@ -958,7 +958,7 @@ def test_given_active_top_level_node_when_waiting_then_spinner_advances_frames(
         use_color=False,
     )
 
-    callbacks.on_node_start(test_case.node_name, resource_kind=test_case.node_type)
+    callbacks.on_node_start(name=test_case.node_name, resource_kind=test_case.node_type)
     time.sleep(test_case.sleep_seconds)
     callbacks.on_node_complete(
         ModelExecutionResult(

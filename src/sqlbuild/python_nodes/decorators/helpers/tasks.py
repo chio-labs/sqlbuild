@@ -10,8 +10,8 @@ from sqlbuild.shared.models import RetryPolicy, SqlResourceRef, TaskDefinition
 
 
 def _decorate_task(
-    function: Callable[..., object],
     *,
+    function: Callable[..., object],
     name: str | None = None,
     depends_on: tuple[Callable[..., object] | SqlResourceRef, ...] = (),
     tags: Sequence[str] = (),
@@ -35,7 +35,9 @@ def _decorate_task(
 
 
 @overload
-def task(function: Callable[..., object], /) -> Callable[..., object]: ...
+def task(
+    function: Callable[..., object],
+) -> Callable[..., object]: ...
 
 
 @overload
@@ -56,7 +58,6 @@ def task(
 
 def task(
     function: Callable[..., object] | None = None,
-    /,
     *,
     name: str | None = None,
     depends_on: Callable[..., object]
@@ -76,7 +77,7 @@ def task(
     )
     if function is not None:
         return _decorate_task(
-            function,
+            function=function,
             name=name,
             depends_on=normalized_deps,
             tags=tags,
@@ -88,7 +89,7 @@ def task(
 
     def decorate(inner: Callable[..., object]) -> Callable[..., object]:
         return _decorate_task(
-            inner,
+            function=inner,
             name=name,
             depends_on=normalized_deps,
             tags=tags,

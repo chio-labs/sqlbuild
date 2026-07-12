@@ -31,7 +31,7 @@ def try_record_virtual_python_node_identity(
     resolved_logger: logging.Logger = logger or logging.getLogger("sqlbuild.python_identity")
     try:
         backend.upsert_python_node_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             record=PythonNodeVersionRecord(
                 node_type=identity.node_type,
@@ -47,7 +47,7 @@ def try_record_virtual_python_node_identity(
             ),
         )
         backend.upsert_virtual_environment_python_node_ref(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             ref=VirtualEnvironmentPythonNodeRefRecord(
                 virtual_environment_name=virtual_environment_name,

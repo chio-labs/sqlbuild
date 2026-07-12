@@ -105,7 +105,7 @@ def test_given_expression_rule_when_querying_then_snowflake_matches_nullability_
     assert rule is not None
 
     result: QueryResult = adapter.query(
-        connection,
+        connection=connection,
         sql=f"SELECT {test_case.sql_expression} IS NULL AS is_null",
         limit=None,
     )
@@ -146,7 +146,9 @@ def test_given_sql_when_querying_then_returns_expected_result(
     adapter: SnowflakeAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, sql=test_case.sql, limit=test_case.limit)
+    result: QueryResult = adapter.query(
+        connection=connection, sql=test_case.sql, limit=test_case.limit
+    )
 
     assert result == test_case.expected_result
 
@@ -204,42 +206,42 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
     execute_statements(adapter=adapter, connection=connection, statements=rewritten_statements)
 
     relation_exists: bool = adapter.relation_exists(
-        connection,
+        connection=connection,
         database=snowflake_database,
         schema=snowflake_schema,
         name="orders",
     )
     schema_exists: bool = adapter.schema_exists(
-        connection,
+        connection=connection,
         database=snowflake_database,
         schema=snowflake_schema,
     )
     relation_names: tuple[str, ...] = tuple(
         relation.name
         for relation in adapter.list_relations(
-            connection,
+            connection=connection,
             database=snowflake_database,
             schemas=(snowflake_schema,),
         )
     )
     columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-        connection,
+        connection=connection,
         database=snowflake_database,
         schema=snowflake_schema,
         name="orders",
     )
     all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-        connection,
+        connection=connection,
         database=snowflake_database,
         schemas=(snowflake_schema,),
         names=("orders",),
     )
     query_column_names: tuple[str, ...] = adapter.query_column_names(
-        connection,
+        connection=connection,
         sql="SELECT * FROM (SELECT 1 AS order_id, 'ok' AS status) AS named_rows",
     )
     described_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
-        connection, relation=orders_relation
+        connection=connection, relation=orders_relation
     )
 
     assert relation_exists == test_case.expected_relation_exists
@@ -285,16 +287,16 @@ def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advan
         ),
     )
     initial_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
-        connection,
+        connection=connection,
         database=snowflake_database,
         schema=snowflake_schema,
         name=table_name,
     )
     time.sleep(1)
 
-    adapter.execute(connection, sql=f"INSERT INTO {table_target} VALUES (2)")
+    adapter.execute(connection=connection, sql=f"INSERT INTO {table_target} VALUES (2)")
     changed_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
-        connection,
+        connection=connection,
         database=snowflake_database,
         schema=snowflake_schema,
         name=table_name,
@@ -305,7 +307,7 @@ def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advan
         name=table_name,
     )
     batch_metadata: TableFreshnessMetadata = adapter.get_tables_freshness_metadata(
-        connection,
+        connection=connection,
         requests=(batch_request,),
     )[batch_request]
 
@@ -318,7 +320,7 @@ def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advan
     assert isinstance(batch_metadata.data_version, test_case.expected_data_version_type)
     assert changed_metadata.data_version > initial_metadata.data_version
     initial_hash: str = source_freshness_record_from_observation(
-        SourceFreshnessObservation(
+        observation=SourceFreshnessObservation(
             source_name="raw_orders",
             strategy=SourceFreshnessStrategy.ADAPTER,
             data_version=initial_metadata.data_version,
@@ -328,7 +330,7 @@ def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advan
         virtual_environment_name="dev",
     ).data_version_hash
     repeated_initial_hash: str = source_freshness_record_from_observation(
-        SourceFreshnessObservation(
+        observation=SourceFreshnessObservation(
             source_name="raw_orders",
             strategy=SourceFreshnessStrategy.ADAPTER,
             data_version=initial_metadata.data_version,
@@ -338,7 +340,7 @@ def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advan
         virtual_environment_name="dev",
     ).data_version_hash
     changed_hash: str = source_freshness_record_from_observation(
-        SourceFreshnessObservation(
+        observation=SourceFreshnessObservation(
             source_name="raw_orders",
             strategy=SourceFreshnessStrategy.ADAPTER,
             data_version=changed_metadata.data_version,
@@ -417,7 +419,9 @@ def test_given_relations_when_diffing_schema_then_returns_expected_result(
         ),
     )
 
-    result: SchemaDiffResult = adapter.diff_schema(connection, left=left_name, right=right_name)
+    result: SchemaDiffResult = adapter.diff_schema(
+        connection=connection, left=left_name, right=right_name
+    )
 
     assert result == test_case.expected_result
 
@@ -499,7 +503,7 @@ def test_given_relations_when_diffing_rows_then_returns_expected_result(
     )
 
     result: RowDiffResult = adapter.diff_rows(
-        connection,
+        connection=connection,
         left=left_name,
         right=right_name,
         unique_key=test_case.unique_key,
@@ -562,7 +566,7 @@ def test_given_relations_when_sampling_unequal_rows_then_returns_expected_exampl
     )
 
     unequal_samples: tuple[RowDiffSampleRow, ...] = adapter.sample_unequal_rows(
-        connection,
+        connection=connection,
         left=left_name,
         right=right_name,
         unique_key=test_case.unique_key,
@@ -615,7 +619,7 @@ def test_given_relations_when_sampling_side_only_rows_then_returns_expected_exam
     )
 
     side_only_samples: tuple[tuple[tuple[str, object], ...], ...] = adapter.sample_side_only_rows(
-        connection,
+        connection=connection,
         left=left_name,
         right=right_name,
         unique_key=test_case.unique_key,
@@ -658,14 +662,14 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
     recorder: StatementRecorder = build_statement_recorder()
 
     adapter.load_seed(
-        connection,
+        connection=connection,
         destination=seed_target,
         file_path=seed_path,
         columns=(ColumnInfo(name="id", type="INTEGER"), ColumnInfo(name="name", type="VARCHAR")),
         statement_recorder=recorder,
     )
     adapter.create_table_as(
-        connection,
+        connection=connection,
         destination=table_target,
         sql=f"SELECT id, name FROM {seed_target} ORDER BY id",
         statement_recorder=recorder,
@@ -716,7 +720,7 @@ def test_given_reuse_origin_when_creating_relation_then_snowflake_uses_expected_
     )
     recorder: StatementRecorder = build_statement_recorder()
     adapter.execute(
-        connection,
+        connection=connection,
         sql=f"CREATE OR REPLACE TABLE {origin} AS "
         "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
     )
@@ -778,7 +782,7 @@ def test_given_merge_source_when_merging_then_target_matches_expected_rows(
     execute_statements(adapter=adapter, connection=connection, statements=setup_sql)
 
     adapter.merge(
-        connection,
+        connection=connection,
         destination=target_name,
         sql=test_case.source_sql,
         unique_key=test_case.unique_key,

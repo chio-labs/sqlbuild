@@ -699,7 +699,7 @@ def test_given_warehouse_type_when_mapping_to_local_type_then_returns_expected_d
     test_case: ScenarioSnapshotLocalTypeMappingTestCase,
 ) -> None:
     local_type: str = local_type_for_warehouse_type(
-        test_case.warehouse_type,
+        warehouse_type=test_case.warehouse_type,
         sql_analysis_dialect=test_case.sql_analysis_dialect,
         local_type_overrides=test_case.local_type_overrides,
     )
@@ -1397,7 +1397,7 @@ def test_given_mapped_local_type_when_creating_duckdb_table_then_type_is_accepte
     test_case: ScenarioSnapshotLocalTypeMappingTestCase,
 ) -> None:
     local_type: str = local_type_for_warehouse_type(
-        test_case.warehouse_type,
+        warehouse_type=test_case.warehouse_type,
         sql_analysis_dialect=test_case.sql_analysis_dialect,
         local_type_overrides=test_case.local_type_overrides,
     )

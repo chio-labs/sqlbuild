@@ -47,7 +47,7 @@ class MaterializationContext:
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql=sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""
@@ -55,8 +55,8 @@ class MaterializationContext:
 
     def qualify_name(
         self,
-        name: str,
         *,
+        name: str,
         database: str | None = None,
         schema: str | None = None,
     ) -> str:
@@ -74,7 +74,7 @@ class MaterializationContext:
     def qualify_in_destination_schema(self, name: str) -> str:
         """Return a relation name qualified into the destination database/schema."""
 
-        return self.qualify_name(name)
+        return self.qualify_name(name=name)
 
 
 @dataclass(frozen=True)
@@ -100,7 +100,7 @@ class PrepareVersionContext:
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql=sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""
@@ -108,8 +108,8 @@ class PrepareVersionContext:
 
     def qualify_name(
         self,
-        name: str,
         *,
+        name: str,
         database: str | None = None,
         schema: str | None = None,
     ) -> str:
@@ -127,7 +127,7 @@ class PrepareVersionContext:
     def qualify_in_destination_schema(self, name: str) -> str:
         """Return a relation name qualified into the destination database/schema."""
 
-        return self.qualify_name(name)
+        return self.qualify_name(name=name)
 
 
 @dataclass(frozen=True)

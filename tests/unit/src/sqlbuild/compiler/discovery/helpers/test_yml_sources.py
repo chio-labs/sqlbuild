@@ -301,16 +301,29 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
     test_case: ParseSourcesYamlTestCase,
 ) -> None:
     source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
-        test_case.contents, file_path=Path("sources/raw.yml")
+        contents=test_case.contents, file_path=Path("sources/raw.yml")
     )
 
     assert tuple(entry.name for entry in source_entries) == test_case.expected_source_names
-    assert (
-        tuple(tuple(column.name for column in entry.columns) for entry in source_entries)
-        == test_case.expected_column_names
-    )
+    actual_column_names: list[tuple[str, ...]] = []
+    actual_column_nullables_list: list[tuple[bool | None, ...]] = []
+    actual_source_audit_names: list[tuple[str, ...]] = []
+    actual_column_audit_names: list[tuple[tuple[str, ...], ...]] = []
+    for entry in source_entries:
+        column_names: list[str] = []
+        column_nullables: list[bool | None] = []
+        column_audit_names: list[tuple[str, ...]] = []
+        for column in entry.columns:
+            column_names.append(column.name)
+            column_nullables.append(column.nullable)
+            column_audit_names.append(tuple(audit.definition_name for audit in column.audits))
+        actual_column_names.append(tuple(column_names))
+        actual_column_nullables_list.append(tuple(column_nullables))
+        actual_source_audit_names.append(tuple(audit.definition_name for audit in entry.audits))
+        actual_column_audit_names.append(tuple(column_audit_names))
+    assert tuple(actual_column_names) == test_case.expected_column_names
     actual_column_nullables: tuple[tuple[bool | None, ...], ...] = tuple(
-        tuple(column.nullable for column in entry.columns) for entry in source_entries
+        actual_column_nullables_list
     )
     assert actual_column_nullables == expected_or_actual(
         test_case.expected_column_nullables, actual_column_nullables
@@ -408,19 +421,8 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
         test_case.expected_freshness_age_policy_error_afters,
         actual_freshness_age_policy_error_afters,
     )
-    assert (
-        tuple(tuple(audit.definition_name for audit in entry.audits) for entry in source_entries)
-        == test_case.expected_source_audit_names
-    )
-    assert (
-        tuple(
-            tuple(
-                tuple(audit.definition_name for audit in column.audits) for column in entry.columns
-            )
-            for entry in source_entries
-        )
-        == test_case.expected_column_audit_names
-    )
+    assert tuple(actual_source_audit_names) == test_case.expected_source_audit_names
+    assert tuple(actual_column_audit_names) == test_case.expected_column_audit_names
 
 
 @pytest.mark.parametrize(
@@ -453,7 +455,7 @@ def test_given_ingestr_source_yaml_when_parsing_then_stores_typed_integration_co
     test_case: ParseSourcesYamlIngestrTestCase,
 ) -> None:
     source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
-        test_case.contents,
+        contents=test_case.contents,
         file_path=Path("sources/raw.yml"),
     )
 
@@ -505,7 +507,7 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
     test_case: ParseSourcesYamlDltTestCase,
 ) -> None:
     source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
-        test_case.contents,
+        contents=test_case.contents,
         file_path=Path("sources/raw.yml"),
     )
 
@@ -1205,4 +1207,4 @@ def test_given_invalid_sources_yaml_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSourcesYamlErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        parse_sources_yml(test_case.contents, file_path=Path("sources/raw.yml"))
+        parse_sources_yml(contents=test_case.contents, file_path=Path("sources/raw.yml"))

@@ -34,13 +34,13 @@ def write_loader_rows_to_staging(
     column_names: tuple[str, ...] = tuple(column.name for column in source_entry.columns)
     inferred_types: dict[str, LoaderLogicalType] = {}
     adapter.drop(
-        connection,
+        connection=connection,
         destination=staging,
         if_exists=True,
         statement_recorder=statement_recorder,
     )
     batch: tuple[dict[str, object], ...]
-    for batch in iter_loader_row_batches(loader_return_value, batch_size=batch_size):
+    for batch in iter_loader_row_batches(value=loader_return_value, batch_size=batch_size):
         schema: LoaderRowsSchema = update_loader_rows_schema(
             adapter=adapter,
             rows=batch,
@@ -53,7 +53,7 @@ def write_loader_rows_to_staging(
         inferred_types = schema.inferred_types
         if staging_created and schema.added_columns:
             adapter.add_columns(
-                connection,
+                connection=connection,
                 destination=staging,
                 columns=schema.added_columns,
                 statement_recorder=statement_recorder,
@@ -66,8 +66,9 @@ def write_loader_rows_to_staging(
             inferred_types=inferred_types,
         )
         if staging_created:
-            adapter.append(  # sc: allow-param-mutation (adapter SQL APPEND, not container mutation)
-                connection,
+            staging_adapter: BaseAdapter = adapter
+            staging_adapter.append(
+                connection=connection,
                 destination=staging,
                 sql=sql,
                 columns=column_names,
@@ -75,7 +76,7 @@ def write_loader_rows_to_staging(
             )
         else:
             adapter.create_table_as(
-                connection,
+                connection=connection,
                 destination=staging,
                 sql=sql,
                 statement_recorder=statement_recorder,
@@ -91,7 +92,7 @@ def write_loader_rows_to_staging(
             inferred_types=inferred_types,
         )
         adapter.create_table_as(
-            connection,
+            connection=connection,
             destination=staging,
             sql=sql,
             statement_recorder=statement_recorder,

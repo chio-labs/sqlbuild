@@ -162,7 +162,7 @@ def build_janitor_execution_plan(
         direct_state_history_versions=settings.direct_state_history_versions,
     )
     status.complete(
-        f"Inspected warehouse state. ({time.perf_counter() - inspect_start:.2f}s)",
+        message=f"Inspected warehouse state. ({time.perf_counter() - inspect_start:.2f}s)",
         blank_line_after=True,
     )
     return JanitorPlanningResult(plan=plan)

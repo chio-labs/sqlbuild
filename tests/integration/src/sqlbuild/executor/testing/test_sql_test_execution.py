@@ -82,7 +82,7 @@ def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ct
     test_case: SqlTestComparisonSqlTestCase,
 ) -> None:
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_sql_test_plan_entry(
+        test_entry=build_sql_test_plan_entry(
             name="test_model",
             chain_steps=test_case.chain_steps,
         )

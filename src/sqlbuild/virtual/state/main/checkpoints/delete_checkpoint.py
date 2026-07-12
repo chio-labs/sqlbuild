@@ -24,7 +24,7 @@ def delete_virtual_environment_checkpoint(
     connection: Any = backend.connect(config.connection)
     try:
         backend.delete_virtual_environment_checkpoint(
-            connection,
+            connection=connection,
             schema=config.schema,
             checkpoint_id=checkpoint_id,
         )

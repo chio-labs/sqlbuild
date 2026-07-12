@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-def resolve_name_column_width(names: list[str] | tuple[str, ...], *, min_width: int = 20) -> int:
+def resolve_name_column_width(*, names: list[str] | tuple[str, ...], min_width: int = 20) -> int:
     """Resolve a left-column width from the longest visible name."""
 
     if not names:

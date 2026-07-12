@@ -22,7 +22,7 @@ def enforce_types_staged(
     """Inspect staging columns and rebuild with casts for declared types."""
 
     produced_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-        connection,
+        connection=connection,
         database=staging_database,
         schema=staging_schema,
         name=staging_table,
@@ -59,19 +59,19 @@ def enforce_types_staged(
     projection_sql: str = ", ".join(projection_parts)
     enforced_qualified: str = f"{staging_qualified}__enforced"
     adapter.create_table_as(
-        connection,
+        connection=connection,
         destination=enforced_qualified,
         sql=f"SELECT {projection_sql} FROM {staging_qualified}",
         statement_recorder=statement_recorder,
     )
     adapter.drop(
-        connection,
+        connection=connection,
         destination=staging_qualified,
         if_exists=True,
         statement_recorder=statement_recorder,
     )
     adapter.rename(
-        connection,
+        connection=connection,
         origin=enforced_qualified,
         destination=staging_qualified,
         statement_recorder=statement_recorder,

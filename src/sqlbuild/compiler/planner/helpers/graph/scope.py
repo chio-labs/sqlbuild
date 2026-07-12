@@ -92,7 +92,7 @@ def build_planner_scope(
         models_by_name={model.name: model for model in project.models},
         selected_keys=resolved_selected_keys,
         execution_order=topologically_order_keys(
-            upstream_deps,
+            upstream=upstream_deps,
             injected_edge_origins=build_execution_edge_origins(project),
         ),
         user_selected_keys=resolved_selected_keys,

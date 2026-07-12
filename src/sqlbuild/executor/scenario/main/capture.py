@@ -117,7 +117,7 @@ def execute_scenario_snapshot_capture(
             )
         except Exception as exc:
             captured_error_code: str = error_code(
-                exc,
+                error=exc,
                 fallback_code=SCENARIO_EXEC_CAPTURE_FAILED,
             )
             result = ScenarioSnapshotCaptureRelationResult(
@@ -176,7 +176,7 @@ def _query_relation_rows(
     relation_plan: ScenarioSnapshotCaptureRelationPlan,
 ) -> tuple[dict[str, object], ...]:
     query_result: QueryResult = adapter.query(
-        connection,
+        connection=connection,
         sql=f"SELECT * FROM {_source_relation_name(adapter=adapter, relation_plan=relation_plan)}",
         limit=None,
     )

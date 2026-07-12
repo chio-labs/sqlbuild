@@ -75,8 +75,8 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 
 
 def build_sql_function_inputs(
-    discovered_inputs: DiscoveredProjectInputs,
     *,
+    discovered_inputs: DiscoveredProjectInputs,
     effective_vars: dict[str, object],
     effective_settings: SettingsConfig,
     target_config: TargetConfig | None,
@@ -158,7 +158,7 @@ def build_sql_function_inputs(
             argument: FunctionArgument
             for argument in arguments:
                 validate_native_type(
-                    argument.type,
+                    type_sql=argument.type,
                     adapter_name=adapter_name,
                     context=(
                         f"SQL function {function_file.relative_path} argument '{argument.name}'"
@@ -168,7 +168,7 @@ def build_sql_function_inputs(
                 return_column: FunctionReturnColumn
                 for return_column in return_columns:
                     validate_native_type(
-                        return_column.type,
+                        type_sql=return_column.type,
                         adapter_name=adapter_name,
                         context=(
                             f"SQL function {function_file.relative_path} return column "
@@ -177,7 +177,7 @@ def build_sql_function_inputs(
                     )
             else:
                 validate_native_type(
-                    returns,
+                    type_sql=returns,
                     adapter_name=adapter_name,
                     context=f"SQL function {function_file.relative_path} return type",
                 )
@@ -256,7 +256,7 @@ def _build_python_function_input(
             f"Python function file {python_function_file.relative_path} must declare returns"
         )
     arguments: tuple[FunctionArgument, ...] = _parse_python_function_arguments(
-        python_function_file, effective_vars=effective_vars
+        function_file=python_function_file, effective_vars=effective_vars
     )
     returns: str = _expand_function_header_value(
         raw_value=raw_returns.strip(),
@@ -314,7 +314,7 @@ def _build_python_function_input(
         argument: FunctionArgument
         for argument in arguments:
             validate_native_type(
-                argument.type,
+                type_sql=argument.type,
                 adapter_name=context.adapter_name,
                 context=(
                     f"Python function {python_function_file.relative_path} "
@@ -322,7 +322,7 @@ def _build_python_function_input(
                 ),
             )
         validate_native_type(
-            returns,
+            type_sql=returns,
             adapter_name=context.adapter_name,
             context=f"Python function {python_function_file.relative_path} return type",
         )
@@ -387,7 +387,7 @@ def _parse_function_arguments(
 
 
 def _parse_python_function_arguments(
-    function_file: DiscoveredPythonFunctionFile, *, effective_vars: dict[str, object]
+    *, function_file: DiscoveredPythonFunctionFile, effective_vars: dict[str, object]
 ) -> tuple[FunctionArgument, ...]:
     raw_arguments: object | None = function_file.header_values.get("arguments")
     if raw_arguments is None:
@@ -520,7 +520,7 @@ def _expand_function_header_value(
 ) -> str:
     return str(
         expand_template_data(
-            raw_value,
+            value=raw_value,
             variables=effective_vars,
             context_values={},
             context_label=context_label,
@@ -531,7 +531,7 @@ def _expand_function_header_value(
     )
 
 
-def validate_native_type(type_sql: str, *, adapter_name: str, context: str) -> None:
+def validate_native_type(*, type_sql: str, adapter_name: str, context: str) -> None:
     """Validate an adapter-native type string with SQL analysis when a dialect is known."""
 
     dialect_by_adapter: dict[str, str] = {
@@ -586,7 +586,7 @@ def _expand_function_environment_value(
         return None
     return str(
         expand_template_data(
-            raw_value,
+            value=raw_value,
             variables=effective_vars,
             context_values={},
             context_label=context_label,

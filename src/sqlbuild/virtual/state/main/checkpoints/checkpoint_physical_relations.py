@@ -30,7 +30,7 @@ def list_checkpoint_physical_relations(
     try:
         checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...] = (
             backend.list_virtual_environment_checkpoints(
-                connection,
+                connection=connection,
                 schema=config.schema,
                 virtual_environment_name=virtual_environment_name,
             )
@@ -40,7 +40,7 @@ def list_checkpoint_physical_relations(
         for checkpoint in checkpoints:
             refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
                 backend.get_virtual_environment_checkpoint_model_refs(
-                    connection,
+                    connection=connection,
                     schema=config.schema,
                     checkpoint_id=checkpoint.checkpoint_id,
                 )
@@ -48,7 +48,7 @@ def list_checkpoint_physical_relations(
             ref: VirtualEnvironmentCheckpointModelRefRecord
             for ref in refs:
                 relation: PhysicalRelationRecord | None = backend.get_physical_relation(
-                    connection,
+                    connection=connection,
                     schema=config.schema,
                     model_name=ref.model_name,
                     version_hash=ref.version_hash,

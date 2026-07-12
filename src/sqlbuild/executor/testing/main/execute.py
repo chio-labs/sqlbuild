@@ -28,7 +28,7 @@ def execute_sql_test(
     """Execute one SQL unit test as a single comparison query."""
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry,
+        test_entry=test_entry,
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
@@ -64,7 +64,7 @@ def execute_sql_test(
         )
 
     try:
-        cursor: Any = adapter.execute(connection, sql=comparison_sql)
+        cursor: Any = adapter.execute(connection=connection, sql=comparison_sql)
         rows: list[Any] = cursor.fetchall()
     except Exception as error:
         error_message = (

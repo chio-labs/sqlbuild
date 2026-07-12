@@ -141,9 +141,13 @@ def test_given_terminal_source_when_expanding_loader_deps_then_adds_intermediate
     )
 
     assert frozenset(key.name for key in expanded_selected) == test_case.expected_selected_names
-    assert {
-        key.name: tuple(dep.name for dep in deps) for key, deps in upstream_deps.items()
-    } == test_case.expected_upstream_names
+    actual_upstream_names: dict[str, tuple[str, ...]] = {}
+    for key, deps in upstream_deps.items():
+        dep_names: list[str] = []
+        for dep in deps:
+            dep_names.append(dep.name)
+        actual_upstream_names[key.name] = tuple(dep_names)
+    assert actual_upstream_names == test_case.expected_upstream_names
     assert tuple(intermediate_sources) == test_case.expected_intermediate_source_names
     assert (
         tuple(

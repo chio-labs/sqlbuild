@@ -29,12 +29,13 @@ def sql_attached_python_names(
 ) -> frozenset[str]:
     """Return read-side Python names attached to selected SQL resources."""
 
-    direct_names: frozenset[str] = frozenset(
-        node.name
-        for node in python_graph.nodes
-        if node.kind in {PythonNodeKind.TASK, PythonNodeKind.ASSET}
-        and any(sql_dep.name in selected_sql_names for sql_dep in node.sql_deps)
-    )
+    mutable_direct_names: set[str] = set()
+    for node in python_graph.nodes:
+        if node.kind not in {PythonNodeKind.TASK, PythonNodeKind.ASSET}:
+            continue
+        if any(sql_dep.name in selected_sql_names for sql_dep in node.sql_deps):
+            mutable_direct_names.add(node.name)
+    direct_names: frozenset[str] = frozenset(mutable_direct_names)
     downstream_names: frozenset[str] = python_downstream_closure(
         selected_python_names=direct_names,
         python_graph=python_graph,
@@ -48,11 +49,9 @@ def python_upstream_closure(
     """Return all Python upstreams for selected Python nodes."""
 
     names: set[str] = set()
-    pending: list[str] = [
-        upstream_name
-        for node_name in selected_python_names
-        for upstream_name in python_graph.upstream_deps.get(node_name, ())
-    ]
+    pending: list[str] = []
+    for node_name in selected_python_names:
+        pending.extend(python_graph.upstream_deps.get(node_name, ()))
     while pending:
         current: str = pending.pop(0)
         if current in names:
@@ -68,11 +67,9 @@ def python_downstream_closure(
     """Return task/asset downstreams for selected Python nodes."""
 
     names: set[str] = set()
-    pending: list[str] = [
-        downstream_name
-        for node_name in selected_python_names
-        for downstream_name in python_graph.downstream_deps.get(node_name, ())
-    ]
+    pending: list[str] = []
+    for node_name in selected_python_names:
+        pending.extend(python_graph.downstream_deps.get(node_name, ()))
     while pending:
         current: str = pending.pop(0)
         if current in names:

@@ -19,10 +19,10 @@ def resolve_bounded_cursors(
 
     if bounded is None:
         return None, None, None, False
-    cursor_column: str | None = _get_config_str(model, key="cursor")
+    cursor_column: str | None = _get_config_str(model=model, key="cursor")
     if cursor_column is None:
         return None, None, None, True
-    cursor_type: str | None = _get_config_str(model, key="cursor_type")
+    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
     if cursor_type == CursorKind.INTEGER:
         return (
             cursor_column,
@@ -42,7 +42,7 @@ def resolve_bounded_cursors(
     raise ExecutorInputError(f"model '{model.name}' bounded diff requires cursor_type", code="X101")
 
 
-def _get_config_str(model: Any, *, key: str) -> str | None:
+def _get_config_str(*, model: Any, key: str) -> str | None:
     raw: object | None = model.config.values.get(key)
     return raw if isinstance(raw, str) and raw else None
 
@@ -58,7 +58,8 @@ def _parse_integer_bound(raw: str) -> int:
 
 
 def _parse_duration_bound(raw: str) -> timedelta:
-    if len(raw) < 2:
+    bounded_value_part_count: int = 2
+    if len(raw) < bounded_value_part_count:
         raise ExecutorInputError(
             "timestamp cursor bounded diff requires duration like 30d, 12h, or 15m",
             code="X103",

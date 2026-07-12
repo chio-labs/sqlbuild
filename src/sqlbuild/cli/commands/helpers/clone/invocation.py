@@ -43,7 +43,9 @@ def resolve_clone_invocation(*, request: CloneCommandRequest) -> CloneInvocation
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
-    adapter: BaseAdapter = resolve_adapter(adapter_name, project_dir=effective_project_dir)
+    adapter: BaseAdapter = resolve_adapter(
+        adapter_name=adapter_name, project_dir=effective_project_dir
+    )
     return CloneInvocation(
         effective_project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,

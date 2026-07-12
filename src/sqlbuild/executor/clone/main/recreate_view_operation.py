@@ -36,7 +36,7 @@ def recreate_view_by_names(
     start: float = time.monotonic()
     try:
         adapter.create_view_as(
-            connection,
+            connection=connection,
             destination=destination_relation,
             sql=view_sql,
             statement_recorder=recorder,

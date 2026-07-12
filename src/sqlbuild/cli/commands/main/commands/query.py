@@ -19,8 +19,8 @@ from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 
 def run_query(
-    project_dir: Path | None,
     *,
+    project_dir: Path | None,
     sql: str | None,
     selected_target: str | None = None,
     output_format: str = "long",
@@ -41,7 +41,7 @@ def run_query(
         project_dir=effective_project_dir
     )
     adapter: BaseAdapter = resolve_adapter(
-        resolve_effective_adapter_name(
+        adapter_name=resolve_effective_adapter_name(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
         ),
@@ -54,11 +54,11 @@ def run_query(
     )
     connection: object = adapter.connect(connection_config)
     try:
-        result: QueryResult = adapter.query(connection, sql=query_sql, limit=limit)
+        result: QueryResult = adapter.query(connection=connection, sql=query_sql, limit=limit)
     finally:
         adapter.close(connection)
 
-    sys.stdout.write(render_query_result(result, output_format=output_format, limit=limit))
+    sys.stdout.write(render_query_result(result=result, output_format=output_format, limit=limit))
     sys.stdout.flush()
     return 0
 

@@ -19,13 +19,13 @@ class DiagnosticsFileFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         prefix: str = _format_prefix(
-            record, date_text=self.formatTime(record, FILE_LOG_DATE_FORMAT)
+            record=record, date_text=self.formatTime(record, FILE_LOG_DATE_FORMAT)
         )
         sql: str | None = _get_record_sql(record)
         if sql is None:
-            return _append_exception(record, rendered=f"{prefix} {record.getMessage()}")
+            return _append_exception(record=record, rendered=f"{prefix} {record.getMessage()}")
         return _append_exception(
-            record,
+            record=record,
             rendered=(
                 f"{prefix} {record.getMessage()}\n{SQL_SEPARATOR}\n{sql.rstrip()}\n{SQL_SEPARATOR}"
             ),
@@ -40,21 +40,21 @@ class DiagnosticsConsoleFormatter(logging.Formatter):
         self._use_color: bool = use_color
 
     def format(self, record: logging.LogRecord) -> str:
-        header: str = _format_console_header(record, use_color=self._use_color)
+        header: str = _format_console_header(record=record, use_color=self._use_color)
         sql: str | None = _get_record_sql(record)
         if sql is None:
-            return _append_exception(record, rendered=header)
+            return _append_exception(record=record, rendered=header)
         if _render_sql_inline(sql):
-            return _append_exception(record, rendered=f"{header}  {sql.strip()}")
+            return _append_exception(record=record, rendered=f"{header}  {sql.strip()}")
         style: CliStyle = CliStyle(use_color=self._use_color)
         separator: str = style.muted(SQL_SEPARATOR)
         return _append_exception(
-            record,
+            record=record,
             rendered=f"{header}\n{separator}\n{sql.rstrip()}\n{separator}",
         )
 
 
-def _format_prefix(record: logging.LogRecord, *, date_text: str) -> str:
+def _format_prefix(*, record: logging.LogRecord, date_text: str) -> str:
     return (
         f"{date_text}.{int(record.msecs):03d} {record.levelname} {_short_logger_name(record.name)}"
     )
@@ -67,10 +67,10 @@ def _short_logger_name(name: str) -> str:
     return name
 
 
-def _format_console_header(record: logging.LogRecord, *, use_color: bool) -> str:
+def _format_console_header(*, record: logging.LogRecord, use_color: bool) -> str:
     style: CliStyle = CliStyle(use_color=use_color)
     level_tag: str = f"[{record.levelname.lower()}]"
-    context_message: str | None = _format_context_message(record, use_color=use_color)
+    context_message: str | None = _format_context_message(record=record, use_color=use_color)
     if context_message is None:
         scope: str = _short_logger_name(record.name)
         colored_scope: str = style.object_name(scope)
@@ -89,7 +89,7 @@ def _render_sql_inline(sql: str) -> bool:
     return normalized in {"BEGIN", "COMMIT", "ROLLBACK"}
 
 
-def _format_context_message(record: logging.LogRecord, *, use_color: bool) -> str | None:
+def _format_context_message(*, record: logging.LogRecord, use_color: bool) -> str | None:
     subject: object = getattr(record, "sqlbuild_subject", None)
     if not isinstance(subject, str):
         return None
@@ -141,7 +141,7 @@ def _get_record_sql(record: logging.LogRecord) -> str | None:
     return None
 
 
-def _append_exception(record: logging.LogRecord, *, rendered: str) -> str:
+def _append_exception(*, record: logging.LogRecord, rendered: str) -> str:
     if record.exc_info is None:
         return rendered
     exception_text: str = logging.Formatter().formatException(record.exc_info)

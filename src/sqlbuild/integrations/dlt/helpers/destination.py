@@ -38,7 +38,7 @@ def build_dlt_destination(
         return DltDestinationConfig(
             destination=cast(Any, destinations.duckdb)(
                 credentials=_required_string(
-                    connection_config,
+                    config=connection_config,
                     key="database",
                     adapter_name=BuiltinAdapter.DUCKDB.value,
                 ),
@@ -48,8 +48,8 @@ def build_dlt_destination(
         )
     _require_dataset_name(adapter_name=adapter_name, dataset_name=dataset_name)
     if adapter_name == BuiltinAdapter.MOTHERDUCK.value:
-        database: str = _optional_string(connection_config, key="database") or ""
-        token: str | None = _optional_string(connection_config, key="token")
+        database: str = _optional_string(config=connection_config, key="database") or ""
+        token: str | None = _optional_string(config=connection_config, key="token")
         credentials: str = database if database.startswith("md:") else f"md:{database}"
         if token is not None:
             credentials = f"{credentials}?motherduck_token={token}"
@@ -113,42 +113,46 @@ def _destination_options(
 
 
 def _postgres_connection_string(config: dict[str, object]) -> str:
-    host: str = _optional_string(config, key="host") or "localhost"
+    host: str = _optional_string(config=config, key="host") or "localhost"
     port: object = config.get("port", 5432)
-    user: str = _required_string(config, key="user", adapter_name=BuiltinAdapter.POSTGRES.value)
-    password: str = _optional_string(config, key="password") or ""
-    database: str = _optional_string(config, key="dbname") or _required_string(
-        config, key="database", adapter_name=BuiltinAdapter.POSTGRES.value
+    user: str = _required_string(
+        config=config, key="user", adapter_name=BuiltinAdapter.POSTGRES.value
+    )
+    password: str = _optional_string(config=config, key="password") or ""
+    database: str = _optional_string(config=config, key="dbname") or _required_string(
+        config=config, key="database", adapter_name=BuiltinAdapter.POSTGRES.value
     )
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 
 def _snowflake_credentials(config: dict[str, object]) -> dict[str, object]:
     account: str = _required_string(
-        config, key="account", adapter_name=BuiltinAdapter.SNOWFLAKE.value
+        config=config, key="account", adapter_name=BuiltinAdapter.SNOWFLAKE.value
     )
     credentials: dict[str, object] = {
         "account": _snowflake_account(account),
-        "host": _snowflake_account(_optional_string(config, key="host") or account),
-        "user": _required_string(config, key="user", adapter_name=BuiltinAdapter.SNOWFLAKE.value),
+        "host": _snowflake_account(_optional_string(config=config, key="host") or account),
+        "user": _required_string(
+            config=config, key="user", adapter_name=BuiltinAdapter.SNOWFLAKE.value
+        ),
         "database": _required_string(
-            config, key="database", adapter_name=BuiltinAdapter.SNOWFLAKE.value
+            config=config, key="database", adapter_name=BuiltinAdapter.SNOWFLAKE.value
         ),
         "warehouse": _required_string(
-            config, key="warehouse", adapter_name=BuiltinAdapter.SNOWFLAKE.value
+            config=config, key="warehouse", adapter_name=BuiltinAdapter.SNOWFLAKE.value
         ),
     }
-    _copy_optional(config, destination=credentials, key="password")
-    _copy_optional(config, destination=credentials, key="role")
-    _copy_optional(config, destination=credentials, key="authenticator")
-    _copy_optional(config, destination=credentials, key="token")
+    credentials = _copy_optional(source=config, destination=credentials, key="password")
+    credentials = _copy_optional(source=config, destination=credentials, key="role")
+    credentials = _copy_optional(source=config, destination=credentials, key="authenticator")
+    credentials = _copy_optional(source=config, destination=credentials, key="token")
     return credentials
 
 
 def _bigquery_config(config: dict[str, object]) -> dict[str, object]:
     options: dict[str, object] = {}
-    project_id: str | None = _optional_string(config, key="project")
-    location: str | None = _optional_string(config, key="location")
+    project_id: str | None = _optional_string(config=config, key="project")
+    location: str | None = _optional_string(config=config, key="location")
     if project_id is not None:
         options["project_id"] = project_id
     if location is not None:
@@ -163,16 +167,16 @@ def _snowflake_account(account: str) -> str:
 def _databricks_credentials(config: dict[str, object]) -> dict[str, object]:
     credentials: dict[str, object] = {
         "server_hostname": _required_string(
-            config, key="server_hostname", adapter_name=BuiltinAdapter.DATABRICKS.value
+            config=config, key="server_hostname", adapter_name=BuiltinAdapter.DATABRICKS.value
         ),
         "http_path": _required_string(
-            config, key="http_path", adapter_name=BuiltinAdapter.DATABRICKS.value
+            config=config, key="http_path", adapter_name=BuiltinAdapter.DATABRICKS.value
         ),
         "access_token": _required_string(
-            config, key="token", adapter_name=BuiltinAdapter.DATABRICKS.value
+            config=config, key="token", adapter_name=BuiltinAdapter.DATABRICKS.value
         ),
     }
-    catalog: str | None = _optional_string(config, key="catalog")
+    catalog: str | None = _optional_string(config=config, key="catalog")
     if catalog is not None:
         credentials["catalog"] = catalog
     return credentials
@@ -180,15 +184,15 @@ def _databricks_credentials(config: dict[str, object]) -> dict[str, object]:
 
 def _sqlserver_credentials(config: dict[str, object]) -> dict[str, object]:
     return {
-        "host": _optional_string(config, key="host") or "localhost",
+        "host": _optional_string(config=config, key="host") or "localhost",
         "port": config.get("port", 1433),
         "database": _required_string(
-            config, key="database", adapter_name=BuiltinAdapter.SQLSERVER.value
+            config=config, key="database", adapter_name=BuiltinAdapter.SQLSERVER.value
         ),
         "username": _required_string(
-            config, key="user", adapter_name=BuiltinAdapter.SQLSERVER.value
+            config=config, key="user", adapter_name=BuiltinAdapter.SQLSERVER.value
         ),
-        "password": _optional_string(config, key="password") or "",
+        "password": _optional_string(config=config, key="password") or "",
         "query": {"TrustServerCertificate": "yes"},
     }
 
@@ -200,13 +204,16 @@ def _require_dataset_name(*, adapter_name: str, dataset_name: str | None) -> Non
         )
 
 
-def _copy_optional(source: dict[str, object], *, destination: dict[str, object], key: str) -> None:
-    value: str | None = _optional_string(source, key=key)
+def _copy_optional(
+    *, source: dict[str, object], destination: dict[str, object], key: str
+) -> dict[str, object]:
+    value: str | None = _optional_string(config=source, key=key)
     if value is not None:
         destination[key] = value
+    return destination
 
 
-def _required_string(config: dict[str, object], *, key: str, adapter_name: str) -> str:
+def _required_string(*, config: dict[str, object], key: str, adapter_name: str) -> str:
     value: object | None = config.get(key)
     if not isinstance(value, str) or not value.strip():
         raise DltIntegrationError(
@@ -215,7 +222,7 @@ def _required_string(config: dict[str, object], *, key: str, adapter_name: str) 
     return value.strip()
 
 
-def _optional_string(config: dict[str, object], *, key: str) -> str | None:
+def _optional_string(*, config: dict[str, object], key: str) -> str | None:
     value: object | None = config.get(key)
     if not isinstance(value, str) or not value.strip():
         return None

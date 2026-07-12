@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import sys
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from scripts.testing.test_conventions.rules import (
 )
 
 
-def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Violation]:
+def check_paths(*, paths: list[Path], repo_root: Path | None = None) -> list[Violation]:
     """Run test convention checks for the provided paths."""
 
     target_paths: list[Path] = (
@@ -38,14 +39,14 @@ def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Vio
 
     violations: list[Violation] = []
     local_test_types_by_directory: dict[Path, LocalTestTypesInfo] = {}
-    parsed_modules: dict[Path, object] = {}
+    parsed_modules: dict[Path, ast.Module] = {}
 
     for file_path in python_files:
         parsed_modules[file_path] = parse_python_module(file_path)
 
     for test_directory in test_directories:
         violations.extend(
-            check_test_directory_path(actual_repo_root, test_directory=test_directory)
+            check_test_directory_path(repo_root=actual_repo_root, test_directory=test_directory)
         )
 
         test_types_path: Path = test_directory / "_test_types.py"
@@ -62,13 +63,13 @@ def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Vio
             )
             continue
 
-        module: object | None = parsed_modules.get(test_types_path)
+        module: ast.Module | None = parsed_modules.get(test_types_path)
         if module is None:
             module = parse_python_module(test_types_path)
             parsed_modules[test_types_path] = module
 
         test_types_info, test_types_violations = check_test_types_file(
-            actual_repo_root,
+            repo_root=actual_repo_root,
             file_path=test_types_path,
             module=module,
         )
@@ -76,14 +77,14 @@ def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Vio
         violations.extend(test_types_violations)
 
     for file_path, module in parsed_modules.items():
-        if not _is_in_test_directory(file_path, test_directories=test_directories):
+        if not _is_in_test_directory(file_path=file_path, test_directories=test_directories):
             continue
 
-        violations.extend(check_no_relative_imports(file_path, module=module))
+        violations.extend(check_no_relative_imports(file_path=file_path, module=module))
 
         if file_path.name == "__init__.py":
             violations.extend(
-                check_init_module(actual_repo_root, file_path=file_path, module=module)
+                check_init_module(repo_root=actual_repo_root, file_path=file_path, module=module)
             )
             continue
 
@@ -91,7 +92,7 @@ def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Vio
             continue
 
         if file_path.name == "scenario_models.py":
-            violations.extend(check_scenario_models_file(file_path, module=module))
+            violations.extend(check_scenario_models_file(file_path=file_path, module=module))
             continue
 
         if not file_path.name.endswith(".py") or not file_path.name.startswith("test_"):
@@ -104,7 +105,7 @@ def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Vio
             continue
 
         context, context_violations = build_module_context(
-            actual_repo_root,
+            repo_root=actual_repo_root,
             file_path=file_path,
             module=module,
             local_test_types=local_test_types,
@@ -112,7 +113,7 @@ def check_paths(paths: list[Path], *, repo_root: Path | None = None) -> list[Vio
         violations.extend(context_violations)
         violations.extend(
             check_test_file(
-                file_path,
+                file_path=file_path,
                 module=module,
                 local_test_types=local_test_types,
                 context=context,
@@ -132,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("paths", nargs="*", type=Path, default=[Path("tests")])
     args: argparse.Namespace = parser.parse_args(argv)
 
-    violations: list[Violation] = check_paths(args.paths)
+    violations: list[Violation] = check_paths(paths=args.paths)
     repo_root: Path = resolve_repo_root([path.resolve() for path in args.paths])
 
     for violation in violations:
@@ -141,5 +142,5 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if violations else 0
 
 
-def _is_in_test_directory(file_path: Path, *, test_directories: list[Path]) -> bool:
+def _is_in_test_directory(*, file_path: Path, test_directories: list[Path]) -> bool:
     return any(parent == file_path.parent for parent in test_directories)

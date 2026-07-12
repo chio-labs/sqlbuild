@@ -88,12 +88,12 @@ def _translate_age_policy(
     *, freshness: dict[str, object], unique_id: str
 ) -> SourceFreshnessAgePolicy | None:
     warn_after: str | None = _translate_duration(
-        freshness.get("warn_after"),
+        value=freshness.get("warn_after"),
         unique_id=unique_id,
         field_name="warn_after",
     )
     error_after: str | None = _translate_duration(
-        freshness.get("error_after"),
+        value=freshness.get("error_after"),
         unique_id=unique_id,
         field_name="error_after",
     )
@@ -102,7 +102,7 @@ def _translate_age_policy(
     return SourceFreshnessAgePolicy(warn_after=warn_after, error_after=error_after)
 
 
-def _translate_duration(value: object, *, unique_id: str, field_name: str) -> str | None:
+def _translate_duration(*, value: object, unique_id: str, field_name: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, dict):

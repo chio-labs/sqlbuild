@@ -164,7 +164,7 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
         ),
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project)
+    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
@@ -299,7 +299,7 @@ def test_given_compiled_project_when_building_fast_column_lineage_then_infers_ex
     )
 
     result: ProjectColumnLineage | None = build_project_column_lineage(
-        project,
+        project=project,
         mode=ColumnLineageMode.FAST,
     )
 
@@ -355,7 +355,7 @@ def test_given_select_star_when_building_column_lineage_then_expands_known_schem
         )
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project)
+    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
@@ -394,7 +394,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
         )
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project)
+    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert result is not None
     trace: tuple[str, ...] = tuple(
@@ -404,7 +404,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.trace_column("c", column_name="id")
+        for edge in result.trace_column(model_name="c", column_name="id")
     )
     consumers: tuple[str, ...] = tuple(
         edge_label(
@@ -413,7 +413,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.column_consumers("a", column_name="id")
+        for edge in result.column_consumers(resource_name="a", column_name="id")
     )
     downstream_trace: tuple[str, ...] = tuple(
         edge_label(
@@ -422,7 +422,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.trace_column_downstream("a", column_name="id")
+        for edge in result.trace_column_downstream(resource_name="a", column_name="id")
     )
     assert trace == test_case.expected_trace
     assert consumers == test_case.expected_consumers
@@ -505,7 +505,7 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
     )
 
     result: ProjectColumnLineage | None = build_project_column_lineage(
-        project,
+        project=project,
         mode=ColumnLineageMode.RICH,
     )
 
@@ -564,7 +564,7 @@ def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_poly
     project: CompiledProject = make_compiled_project(models=upstream_models + (target_model,))
 
     result: ProjectColumnLineage | None = build_project_column_lineage(
-        project,
+        project=project,
         dialect="postgres",
         mode=ColumnLineageMode.RICH,
     )
@@ -611,6 +611,6 @@ def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_n
         sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project)
+    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert (result is None) is test_case.expected_result_is_none

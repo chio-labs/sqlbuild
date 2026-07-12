@@ -65,7 +65,7 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
         ),
     )
 
-    invocation: SqlBuildCliInvocation = resource.cli(["build"], raise_on_error=False).wait()
+    invocation: SqlBuildCliInvocation = resource.cli(args=["build"], raise_on_error=False).wait()
 
     assert invocation.is_successful() is test_case.expected_success
     assert invocation.stdout == test_case.expected_stdout
@@ -108,7 +108,7 @@ def test_given_sqlbuild_cli_resource_with_dag_when_streaming_then_yields_asset_r
         dag_path=str(write_dagster_test_dag(root=tmp_path)),
     )
 
-    results: list[Any] = list(resource.cli(["build"]).stream())
+    results: list[Any] = list(resource.cli(args=["build"]).stream())
 
     assert (
         tuple(tuple(result.asset_key.path) for result in results) == test_case.expected_asset_keys
@@ -159,7 +159,7 @@ def test_given_execution_json_when_streaming_then_yields_structured_dagster_even
         dag_path=str(write_dagster_test_dag(root=tmp_path)),
     )
 
-    results: list[Any] = list(resource.cli(["build"], context=context).stream())
+    results: list[Any] = list(resource.cli(args=["build"], context=context).stream())
 
     materialize_results: list[Any] = [
         result for result in results if isinstance(result, dg.MaterializeResult)
@@ -204,7 +204,7 @@ def test_given_sqlbuild_cli_resource_when_waiting_failed_invocation_then_raises_
     )
 
     with pytest.raises(dg.Failure) as error:
-        resource.cli(["build"]).wait()
+        resource.cli(args=["build"]).wait()
 
     assert test_case.expected_error_fragment in str(error.value)
 
@@ -285,7 +285,7 @@ def test_given_selected_dagster_assets_when_invoking_cli_then_applies_sqlbuild_s
     )
 
     invocation: SqlBuildCliInvocation = resource.cli(
-        test_case.command_args,
+        args=test_case.command_args,
         context=context,
     ).wait()
 

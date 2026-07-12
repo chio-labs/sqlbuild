@@ -16,8 +16,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def create_table_as(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         config: dict[str, Any] | None = None,
@@ -29,8 +29,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def create_view_as(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         statement_recorder: StatementRecorder,
@@ -41,8 +41,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def create_function(
         self,
-        connection: Any,
         *,
+        connection: Any,
         definition: FunctionDefinition,
         statement_recorder: StatementRecorder,
     ) -> None:
@@ -52,8 +52,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def drop(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         if_exists: bool = True,
         statement_recorder: StatementRecorder,
@@ -64,8 +64,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def rename(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         statement_recorder: StatementRecorder,
@@ -76,8 +76,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def swap(
         self,
-        connection: Any,
         *,
+        connection: Any,
         left: str,
         right: str,
         statement_recorder: StatementRecorder,
@@ -88,8 +88,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def clone(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         hard_copy: bool = False,
@@ -102,8 +102,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def durable_clone(
         self,
-        connection: Any,
         *,
+        connection: Any,
         origin: str,
         destination: str,
         origin_is_transient: bool = False,
@@ -115,8 +115,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def load_seed(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
@@ -131,8 +131,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def append(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         columns: tuple[str, ...] | None = None,
@@ -144,8 +144,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def delete_insert(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
@@ -158,8 +158,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def delete_insert_cursor(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         cursor_column: str,
@@ -174,8 +174,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def merge(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         sql: str,
         unique_key: str | tuple[str, ...],
@@ -187,8 +187,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def add_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
@@ -199,8 +199,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def drop_columns(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         column_names: tuple[str, ...],
         statement_recorder: StatementRecorder,
@@ -211,8 +211,8 @@ class MaterializationMixin(ABC):
     @abstractmethod
     def alter_column_types(
         self,
-        connection: Any,
         *,
+        connection: Any,
         destination: str,
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,

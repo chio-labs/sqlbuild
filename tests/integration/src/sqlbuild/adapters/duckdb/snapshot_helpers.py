@@ -14,4 +14,4 @@ class InsertFaultDuckDbAdapter(DuckDbAdapter):
     def execute(self, connection: Any, sql: str) -> Any:
         if sql.startswith(f"INSERT INTO {self.fault_target} "):
             raise RuntimeError("injected snapshot insert failure")
-        return super().execute(connection, sql=sql)
+        return super().execute(connection=connection, sql=sql)
