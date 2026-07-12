@@ -7,9 +7,9 @@ from sqlbuild.cli.commands.helpers.playground.models import (
     PlaygroundTarget,
 )
 from sqlbuild.cli.commands.helpers.playground.types import PlaygroundTemplate
-from sqlbuild.shared.classes.cli_document import CliDocument
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.classes.cli_document import CliDocument
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def render_playground_completion_text(

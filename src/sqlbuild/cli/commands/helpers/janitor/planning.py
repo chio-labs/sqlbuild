@@ -46,7 +46,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorRelationScope,
     JanitorStateCandidates,
 )
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.spec.models.targets import resolve_target_config
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,

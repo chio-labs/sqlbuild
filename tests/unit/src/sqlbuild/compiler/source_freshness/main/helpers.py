@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.adapter.types import FrameworkType
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
@@ -20,7 +21,6 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
 )
-from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 

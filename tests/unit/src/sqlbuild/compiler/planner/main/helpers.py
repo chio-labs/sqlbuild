@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
@@ -30,7 +31,6 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     StandardModelVersionIdentities,
 )
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
 

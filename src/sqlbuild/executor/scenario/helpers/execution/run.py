@@ -8,6 +8,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
 from sqlbuild.executor.scenario.helpers.execution.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario.helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
@@ -28,7 +29,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioStepResults,
 )
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
 
 
 def execute_scenario_run_steps(

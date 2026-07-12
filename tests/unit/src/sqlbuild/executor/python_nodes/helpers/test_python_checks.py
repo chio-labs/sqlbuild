@@ -20,7 +20,7 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonCheckExecutorTestCase,
 )

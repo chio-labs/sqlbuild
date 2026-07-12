@@ -6,7 +6,7 @@ from typing import TextIO
 
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def write_python_node_results(

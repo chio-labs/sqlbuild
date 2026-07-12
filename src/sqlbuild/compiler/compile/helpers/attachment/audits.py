@@ -39,7 +39,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.models.project import (
     SettingsConfig,
 )

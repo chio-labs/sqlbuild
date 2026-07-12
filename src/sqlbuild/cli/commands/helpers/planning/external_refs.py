@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def resolve_external_sql_reference_resolver(

@@ -6,7 +6,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 
 @dataclass(frozen=True)

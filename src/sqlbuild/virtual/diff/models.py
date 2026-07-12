@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,

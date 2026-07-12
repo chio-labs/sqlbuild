@@ -1,5 +1,5 @@
 """Public retry policy API for SQLBuild Python nodes."""
 
-from sqlbuild.shared.models import RetryPolicy
+from sqlbuild.python_nodes.models import RetryPolicy
 
 __all__ = ("RetryPolicy",)

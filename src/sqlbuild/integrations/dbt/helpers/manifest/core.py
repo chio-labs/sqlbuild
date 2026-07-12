@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.integrations.dbt.constants import (
     DBT_DEFINITION_FINGERPRINT_EXCLUDED_CONFIG_KEYS,
     DBT_MANIFEST_CONFIG_KEY,
@@ -21,7 +22,6 @@ from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestSource,
 )
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
-from sqlbuild.shared.types import SqlReferenceKind
 
 _INDEXED_NODE_RESOURCE_TYPES: frozenset[DbtSupportedResourceType] = frozenset(
     {DbtSupportedResourceType.MODEL, DbtSupportedResourceType.SNAPSHOT}

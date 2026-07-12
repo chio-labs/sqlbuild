@@ -9,7 +9,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
 from sqlbuild.virtual.executor.models import VirtualProjectContext
 

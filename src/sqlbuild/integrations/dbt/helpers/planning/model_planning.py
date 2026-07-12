@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
@@ -31,8 +32,11 @@ from sqlbuild.compiler.planner.models import (
     GraphChangesOnlyPropagationResult,
     GraphIdentityNode,
     GraphNodeKey,
+    LocalNodePlanInput,
+    LocalNodePlanOutcome,
     SelectionStalenessGraph,
 )
+from sqlbuild.compiler.planner.types import LocalNodePlanAction, LocalNodePlanReason
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.planning import (
     build_standard_source_freshness_planning_result,
@@ -78,8 +82,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.shared.models import LocalNodePlanInput, LocalNodePlanOutcome, RelationLookup
-from sqlbuild.shared.types import LocalNodePlanAction, LocalNodePlanReason
 from sqlbuild.spec.models.source import SourceEntry
 
 

@@ -35,10 +35,10 @@ from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResu
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.main.coded_error_text import format_coded_error
-from sqlbuild.shared.main.summary_footer import format_summary_footer
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.coded_error_text import format_coded_error
+from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 _TYPE_WIDTH: int = 10
 _MAX_NAME_WIDTH: int = 60

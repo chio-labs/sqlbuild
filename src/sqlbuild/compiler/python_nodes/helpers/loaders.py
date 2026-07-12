@@ -11,7 +11,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeDependencyEdge,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.shared.models import SqlResourceRef
+from sqlbuild.python_nodes.models import SqlResourceRef
 
 
 def build_python_loader_node(*, loader: DiscoveredLoaderFunction) -> DiscoveredPythonNode:

@@ -3,10 +3,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def build_sqlbuild_project_with_manifest(

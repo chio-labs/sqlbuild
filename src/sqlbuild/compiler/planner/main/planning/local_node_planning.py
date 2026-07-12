@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.models import LocalNodePlanInput, LocalNodePlanOutcome
-from sqlbuild.shared.types import LocalNodePlanAction, LocalNodePlanReason
+from sqlbuild.compiler.planner.models import LocalNodePlanInput, LocalNodePlanOutcome
+from sqlbuild.compiler.planner.types import LocalNodePlanAction, LocalNodePlanReason
 
 
 def classify_local_node_plan(input: LocalNodePlanInput) -> LocalNodePlanOutcome:

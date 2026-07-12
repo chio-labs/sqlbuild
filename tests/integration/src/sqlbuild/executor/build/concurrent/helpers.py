@@ -22,7 +22,7 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
-from sqlbuild.shared.types import ExecutionResourceKind, NodeStartCallback
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
 from tests.integration.src.sqlbuild.executor.build.concurrent._test_types import (
     ConcurrentBuildTestCase,
 )

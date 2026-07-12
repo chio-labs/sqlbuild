@@ -37,7 +37,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, IncrementalMode, MaterializationType
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.source import SourceEntry
 
 

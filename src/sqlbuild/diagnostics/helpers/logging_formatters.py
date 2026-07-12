@@ -9,7 +9,7 @@ from sqlbuild.diagnostics.helpers.constants import (
     LOGGER_ROOT_NAME,
     SQL_SEPARATOR,
 )
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 _SQL_EVENT_FIELD: str = "sqlbuild_sql"
 

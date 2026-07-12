@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TextIO
 
 from sqlbuild.cli.progress.main.execution_header import format_execution_header
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def write_execution_header(

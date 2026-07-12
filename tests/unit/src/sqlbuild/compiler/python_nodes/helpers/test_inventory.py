@@ -17,8 +17,8 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.python_nodes.helpers.inventory import build_python_node_graph
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.shared.models import RetryPolicy
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.models import RetryPolicy
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.source import SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.python_nodes.helpers._test_types import (

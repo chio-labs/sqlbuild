@@ -7,8 +7,8 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.main.commands.debug import run_debug as run_sqlbuild_debug
 from sqlbuild.integrations.dbt.pipeline.main.debug import debug_dbt_from_project
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_dbt_debug_command(

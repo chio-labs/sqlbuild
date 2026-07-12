@@ -18,7 +18,7 @@ from sqlbuild.cli.progress.main.write_execution_header import write_execution_he
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.shared.helpers.output.display import DisplayOptions
+from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.virtual.executor.models import VirtualBuildExecutionHooks
 
 

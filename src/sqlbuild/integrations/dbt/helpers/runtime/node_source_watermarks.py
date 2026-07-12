@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.node_source_watermarks.constants import NODE_SOURCE_WATERMARK_TABLE_NAME
 from sqlbuild.compiler.node_source_watermarks.main.build_report import (
@@ -63,7 +64,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtSupportedResourceType,
 )
-from sqlbuild.shared.models import RelationLookup
 
 
 def build_dbt_node_source_watermark_context(

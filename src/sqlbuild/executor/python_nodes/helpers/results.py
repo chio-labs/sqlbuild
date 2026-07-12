@@ -16,7 +16,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeResult,
     PythonNodeSkipResult,
 )
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 
 
 def normalize_python_check_return(

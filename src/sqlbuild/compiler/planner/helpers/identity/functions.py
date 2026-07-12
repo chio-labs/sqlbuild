@@ -7,11 +7,11 @@ from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,
     FunctionReturnColumn,
 )
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.helpers.changes.policy import resolve_replay_on_change
 from sqlbuild.compiler.planner.models import BackfillResult, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import BackfillAction, PlanReason
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 
 
 def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:

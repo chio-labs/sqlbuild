@@ -9,6 +9,9 @@ from typing import Any, cast
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
@@ -45,7 +48,6 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.spec.models.source import SourceEntry
 
 

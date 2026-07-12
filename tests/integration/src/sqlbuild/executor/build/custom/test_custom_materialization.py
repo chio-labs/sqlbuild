@@ -13,6 +13,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
 from sqlbuild.executor.custom.models import (
@@ -22,7 +23,6 @@ from sqlbuild.executor.custom.models import (
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     CleanupTestCase,
     ContextVerificationTestCase,

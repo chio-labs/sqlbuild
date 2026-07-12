@@ -6,8 +6,13 @@ import inspect
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, cast, overload
 
-from sqlbuild.shared.models import AssetDefinition, ColumnLineageRef, RetryPolicy, SqlResourceRef
-from sqlbuild.shared.types import ColumnLineageRefSpec, PythonNodeColumnSpec
+from sqlbuild.python_nodes.models import (
+    AssetDefinition,
+    ColumnLineageRef,
+    RetryPolicy,
+    SqlResourceRef,
+)
+from sqlbuild.python_nodes.types import ColumnLineageRefSpec, PythonNodeColumnSpec
 from sqlbuild.spec.models.source import SourceColumnEntry
 
 

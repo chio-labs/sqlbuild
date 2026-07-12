@@ -12,6 +12,7 @@ from typing import Any, TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
@@ -22,6 +23,12 @@ from sqlbuild.compiler.node_source_watermarks.models import (
     NodeSourceWatermarkIdentity,
     NodeSourceWatermarkRecord,
     NodeSourceWatermarkSet,
+)
+from sqlbuild.compiler.planner.main.planning.resolve_clone_boundary import (
+    resolve_clone_boundary,
+)
+from sqlbuild.compiler.planner.main.planning.resolve_skipped_view_chain import (
+    resolve_skipped_view_chain,
 )
 from sqlbuild.compiler.planner.models import GraphNodeKey
 from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
@@ -65,11 +72,6 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.pipeline.helpers.clone import execute_dbt_clone
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtSupportedResourceType
-from sqlbuild.shared.helpers.graph.algorithms import (
-    resolve_clone_boundary,
-    resolve_skipped_view_chain,
-)
-from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.project import DbtProductionRefConfig
 
 

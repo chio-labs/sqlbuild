@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 
 
 @dataclass(frozen=True)

@@ -23,8 +23,8 @@ from sqlbuild.cli.commands.helpers.compile.pipeline import (
 )
 from sqlbuild.cli.commands.helpers.compile.status import elapsed_ms, start_compile_status
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_compile(request: CompileCommandRequest) -> int:

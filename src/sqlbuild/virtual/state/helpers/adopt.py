@@ -7,13 +7,15 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.models import RelationLookup
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_destination
 from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_destination

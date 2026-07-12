@@ -8,8 +8,8 @@ from typing import TextIO
 from sqlbuild.adapter.models import LifeCycleEvent
 from sqlbuild.adapter.types import LifeCycleEventKind
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.spec.models.source import SourceEntry
 
 _SPINNER_TICK_SECONDS: float = 0.1

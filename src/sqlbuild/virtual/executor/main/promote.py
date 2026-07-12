@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.executor.helpers.environment_views import write_virtual_environment_views
 from sqlbuild.virtual.executor.helpers.project_context import resolve_virtual_project_context
 from sqlbuild.virtual.executor.helpers.promote import (

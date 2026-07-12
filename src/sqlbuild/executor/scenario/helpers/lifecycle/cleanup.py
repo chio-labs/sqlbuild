@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
@@ -12,7 +15,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifactKind
 from sqlbuild.executor.scenario.models import ScenarioCleanupTarget
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def collect_scenario_cleanup_targets(

@@ -8,6 +8,11 @@ import pytest
 
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_LOCAL_MANIFEST_INVALID,
+    SCENARIO_LOCAL_SNAPSHOT_MISSING,
+    SCENARIO_LOCAL_SNAPSHOT_STALE,
+)
 from sqlbuild.executor.scenario.helpers.snapshots.core import (
     build_scenario_snapshot_capture_plan,
     build_scenario_snapshot_input_fingerprint,
@@ -33,11 +38,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
-from sqlbuild.shared.constants import (
-    SCENARIO_LOCAL_MANIFEST_INVALID,
-    SCENARIO_LOCAL_SNAPSHOT_MISSING,
-    SCENARIO_LOCAL_SNAPSHOT_STALE,
-)
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ScenarioSnapshotCapturePlanTestCase,
     ScenarioSnapshotDialectFingerprintTestCase,

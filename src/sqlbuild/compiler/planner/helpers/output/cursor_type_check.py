@@ -8,8 +8,8 @@ from typing import Any
 from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.compiler.planner.models import PlanWarning
 from sqlbuild.compiler.planner.types import CursorType, WarningSeverity
+from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 _TIMESTAMP_SUBSTRINGS: frozenset[str] = frozenset(

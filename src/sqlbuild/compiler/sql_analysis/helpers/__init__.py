@@ -1,0 +1,1 @@
+"""Internal SQL analysis helpers."""

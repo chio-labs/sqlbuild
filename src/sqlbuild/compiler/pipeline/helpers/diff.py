@@ -19,7 +19,7 @@ from sqlbuild.compiler.helpers.selector_indexes import (
 )
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
 def compile_project_for_diff_environment(

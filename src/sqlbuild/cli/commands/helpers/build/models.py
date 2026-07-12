@@ -17,10 +17,11 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import (
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.types import ExternalSqlReferenceResolver, NodeStartCallback
+from sqlbuild.runtime.contracts.types import NodeStartCallback
 from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
 
 

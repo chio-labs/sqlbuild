@@ -8,6 +8,17 @@ from sqlbuild.compiler.planner.types import StandardScopePruning
 
 
 @dataclass(frozen=True)
+class CloneBoundaryTestCase:
+    description: str
+    upstream: dict[str, tuple[str, ...]]
+    selected: frozenset[str]
+    clonable_nodes: frozenset[str]
+    view_nodes: frozenset[str]
+    expected_boundary_nodes: frozenset[str]
+    expected_view_chain_nodes: frozenset[str]
+
+
+@dataclass(frozen=True)
 class StandardSourceFreshnessPlanOutputTestCase:
     description: str
     standard_scope_pruning: StandardScopePruning

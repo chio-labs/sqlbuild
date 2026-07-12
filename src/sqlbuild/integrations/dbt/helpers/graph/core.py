@@ -8,6 +8,8 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.invert_edges import invert_edges
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.integrations.dbt.constants import DBT_MATERIALIZATION_VIEW
 from sqlbuild.integrations.dbt.helpers.manifest.core import (
     dbt_manifest_model_materialization,
@@ -25,7 +27,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraphKey,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
-from sqlbuild.shared.helpers.graph.algorithms import invert_edges, transitive_closure
 
 _SQLBUILD_VIEW_MATERIALIZATION: str = "view"
 

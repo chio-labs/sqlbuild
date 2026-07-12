@@ -48,3 +48,25 @@ class WriteFingerprintRetryExhaustionTestCase:
     expected_create_attempts: int
     expected_insert_count: int
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class NormalizeQuerySqlTestCase:
+    description: str
+    query_sql: str
+    expected_normalized: str
+
+
+@dataclass(frozen=True)
+class ComputeQueryHashTestCase:
+    description: str
+    query_sql: str
+    expected_hash: str
+
+
+@dataclass(frozen=True)
+class ComputeQueryHashStabilityTestCase:
+    description: str
+    query_a: str
+    query_b: str
+    expected_same_hash: bool

@@ -6,7 +6,7 @@ import time
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.executor.helpers.rollback import publish_function_versions
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.executor.models import VirtualEnvironmentPhysicalRelations

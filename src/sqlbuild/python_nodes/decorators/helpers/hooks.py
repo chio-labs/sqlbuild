@@ -6,7 +6,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any, cast, overload
 
-from sqlbuild.shared.models import HookDefinition
+from sqlbuild.python_nodes.models import HookDefinition
 
 
 def _decorate_hook(

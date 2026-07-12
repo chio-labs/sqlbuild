@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def qualified_name(*, adapter: BaseAdapter, model: Any) -> str:

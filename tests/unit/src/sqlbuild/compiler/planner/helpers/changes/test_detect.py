@@ -5,7 +5,9 @@ from datetime import datetime
 import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledModel
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.hooks.models import SqlHookEntry
 from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes, detect_model_changes
 from sqlbuild.compiler.planner.main.planning.version_identity_metadata import (
     build_version_identity_metadata_json,
@@ -18,8 +20,6 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
-from sqlbuild.shared.models import SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_helpers import (
     build_metadata_json_with_audit_gate,
     build_model_from_metadata_test_case,

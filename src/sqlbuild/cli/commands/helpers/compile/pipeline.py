@@ -38,7 +38,7 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 
 

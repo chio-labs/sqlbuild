@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any, cast, overload
 
-from sqlbuild.shared.models import LoaderDefinition
-from sqlbuild.shared.types import LoaderColumnSpec
+from sqlbuild.python_nodes.models import LoaderDefinition
+from sqlbuild.python_nodes.types import LoaderColumnSpec
 from sqlbuild.spec.models.source import SourceColumnEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 

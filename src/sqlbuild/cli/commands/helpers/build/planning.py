@@ -11,7 +11,7 @@ from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
 )
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 
 
 def compile_build_plan(

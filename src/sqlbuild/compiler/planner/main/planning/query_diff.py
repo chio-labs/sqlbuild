@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import difflib
 
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def format_query_diff(*, previous: str, current: str) -> list[str]:

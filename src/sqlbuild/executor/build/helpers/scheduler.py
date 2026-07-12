@@ -94,7 +94,7 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.types import ExecutionResourceKind, NodeStartCallback
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
 from sqlbuild.spec.models.project import SnapshotsConfig
 from sqlbuild.spec.models.source import SourceEntry
 

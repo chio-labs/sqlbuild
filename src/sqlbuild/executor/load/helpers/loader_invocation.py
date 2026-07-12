@@ -30,7 +30,7 @@ from sqlbuild.executor.load.models import (
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 

@@ -14,6 +14,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, DiscoveredLoaderFunction
+from sqlbuild.compiler.hooks.models import PythonHookEntry
 from sqlbuild.compiler.node_source_watermarks.constants import NODE_SOURCE_WATERMARK_TABLE_NAME
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SourceLoadPlanEntry
@@ -32,7 +33,6 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import HookContext
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.models import PythonHookEntry
 from sqlbuild.spec.models.source import SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build.helpers._test_types import (

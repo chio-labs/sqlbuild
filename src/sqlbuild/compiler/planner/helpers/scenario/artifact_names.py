@@ -5,14 +5,14 @@ from __future__ import annotations
 import hashlib
 import re
 
-from sqlbuild.shared.constants import (
+from sqlbuild.compiler.planner.constants import (
     SCENARIO_ARTIFACT_KINDS,
     SCENARIO_ARTIFACT_PREFIX,
     SCENARIO_HASH_PREFIX_LENGTH,
     SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH,
 )
-from sqlbuild.shared.exceptions.errors import SharedInputError
-from sqlbuild.shared.models import ParsedScenarioArtifactName
+from sqlbuild.compiler.planner.models import ParsedScenarioArtifactName
+from sqlbuild.errors.contracts.exceptions import SharedInputError
 
 _SCENARIO_ARTIFACT_NAME_RE: re.Pattern[str] = re.compile(
     rf"^{re.escape(SCENARIO_ARTIFACT_PREFIX)}"

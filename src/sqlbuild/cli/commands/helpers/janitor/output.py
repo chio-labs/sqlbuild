@@ -15,7 +15,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorSkippedSchema,
     JanitorStateBackupCandidate,
 )
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def write_disabled(*, stream: TextIO, use_color: bool = False) -> None:

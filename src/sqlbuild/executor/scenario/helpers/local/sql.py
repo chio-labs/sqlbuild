@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any, NoReturn
 
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.shared.constants import SCENARIO_LOCAL_SQL_TRANSPILE_FAILED
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
+from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_SQL_TRANSPILE_FAILED
 
 
 def transpile_sql_for_local_duckdb(

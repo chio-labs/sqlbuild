@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
@@ -14,13 +15,12 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.models import RelationLookup
-from sqlbuild.shared.types import (
+from sqlbuild.runtime.contracts.types import (
     ConnectionElapsedCallback,
-    ExternalSqlReferenceResolver,
     NodeStartCallback,
 )
 from sqlbuild.spec.models.project import SnapshotsConfig

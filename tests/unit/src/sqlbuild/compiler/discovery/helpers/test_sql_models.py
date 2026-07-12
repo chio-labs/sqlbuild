@@ -9,7 +9,7 @@ from sqlbuild.compiler.discovery.helpers.sql.model_files import (
     model_output_column_locations,
     parse_model_sql,
 )
-from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.spec.models.schema import SourceLocation
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ModelHeaderColumnLocationTestCase,

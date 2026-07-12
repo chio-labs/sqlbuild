@@ -14,6 +14,13 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.planning.scenario import build_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.errors.contracts.main.error_code import error_code
+from sqlbuild.errors.contracts.main.error_help import error_help
+from sqlbuild.errors.contracts.main.error_message import error_message
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_EXEC_INTERNAL,
+    SCENARIO_LOCAL_INTERNAL,
+)
 from sqlbuild.executor.scenario.main.capture_steps import (
     execute_scenario_snapshot_capture_run,
 )
@@ -28,14 +35,7 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import (
-    SCENARIO_EXEC_INTERNAL,
-    SCENARIO_LOCAL_INTERNAL,
-)
-from sqlbuild.shared.main.error_code import error_code
-from sqlbuild.shared.main.error_help import error_help
-from sqlbuild.shared.main.error_message import error_message
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")

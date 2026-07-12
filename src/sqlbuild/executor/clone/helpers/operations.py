@@ -5,12 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.models import RelationLookup
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneItemResult
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.models import RelationLookup
 
 
 def clone_relation(

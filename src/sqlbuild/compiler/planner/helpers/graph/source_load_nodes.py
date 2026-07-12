@@ -9,7 +9,7 @@ from sqlbuild.compiler.planner.helpers.graph.loader_dag import (
     build_upstream_intermediate_source_map,
 )
 from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 

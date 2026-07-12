@@ -15,7 +15,7 @@ from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
 )
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 
 
 @dataclass(frozen=True)

@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledProject,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.source_freshness.main.propagation import (
     build_standard_source_freshness_propagation_result,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
-from sqlbuild.shared.models import RelationLookup
 
 
 def build_planner_source_freshness_result(

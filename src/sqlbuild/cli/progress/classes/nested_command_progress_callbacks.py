@@ -6,8 +6,8 @@ import threading
 from typing import TextIO
 
 from sqlbuild.cli.progress.models import NestedProgressChildRow
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.main.coded_error_text import format_coded_error
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.coded_error_text import format_coded_error
 
 _LABEL_WIDTH: int = 10
 _NAME_WIDTH: int = 50

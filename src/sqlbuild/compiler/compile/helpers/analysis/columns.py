@@ -22,181 +22,183 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.shared.constants import (
-    POLYGLOT_AGGREGATE_KINDS as _POLYGLOT_AGGREGATE_KINDS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_BASE_TABLES as _POLYGLOT_ANALYSIS_BASE_TABLES,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_CAST_TYPE as _POLYGLOT_ANALYSIS_CAST_TYPE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_IS_STAR as _POLYGLOT_ANALYSIS_IS_STAR,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_NULLABILITY as _POLYGLOT_ANALYSIS_NULLABILITY,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL as _POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE as _POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_PROJECTIONS as _POLYGLOT_ANALYSIS_PROJECTIONS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_RELATIONS as _POLYGLOT_ANALYSIS_RELATIONS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_SHAPE as _POLYGLOT_ANALYSIS_SHAPE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_SHAPE_SELECT as _POLYGLOT_ANALYSIS_SHAPE_SELECT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION as _POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_SOURCE_ALIAS as _POLYGLOT_ANALYSIS_SOURCE_ALIAS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE as _POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_SOURCE_NAME as _POLYGLOT_ANALYSIS_SOURCE_NAME,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_STAR_PROJECTIONS as _POLYGLOT_ANALYSIS_STAR_PROJECTIONS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_TABLE as _POLYGLOT_ANALYSIS_TABLE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION as _POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_CAST as _POLYGLOT_ANALYSIS_TRANSFORM_CAST,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT as _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_DIRECT as _POLYGLOT_ANALYSIS_TRANSFORM_DIRECT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_KIND as _POLYGLOT_ANALYSIS_TRANSFORM_KIND,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_STAR as _POLYGLOT_ANALYSIS_TRANSFORM_STAR,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_TYPE_HINT as _POLYGLOT_ANALYSIS_TYPE_HINT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS as _POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_CAST_KINDS as _POLYGLOT_CAST_KINDS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_JOIN_FULL as _POLYGLOT_JOIN_FULL,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_JOIN_LEFT as _POLYGLOT_JOIN_LEFT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_JOIN_RIGHT as _POLYGLOT_JOIN_RIGHT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_ALIAS as _POLYGLOT_KIND_ALIAS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_CAST as _POLYGLOT_KIND_CAST,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_COALESCE as _POLYGLOT_KIND_COALESCE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_COLUMN as _POLYGLOT_KIND_COLUMN,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_COUNT as _POLYGLOT_KIND_COUNT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_LITERAL as _POLYGLOT_KIND_LITERAL,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_NULL as _POLYGLOT_KIND_NULL,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_SELECT as _POLYGLOT_KIND_SELECT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_TABLE as _POLYGLOT_KIND_TABLE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_KIND_TRY_CAST as _POLYGLOT_KIND_TRY_CAST,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_ALIAS as _POLYGLOT_PAYLOAD_ALIAS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_COLUMN as _POLYGLOT_PAYLOAD_COLUMN,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_DATA_TYPE as _POLYGLOT_PAYLOAD_DATA_TYPE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_EXPRESSIONS as _POLYGLOT_PAYLOAD_EXPRESSIONS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_FROM as _POLYGLOT_PAYLOAD_FROM,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_JOINS as _POLYGLOT_PAYLOAD_JOINS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_KIND as _POLYGLOT_PAYLOAD_KIND,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_NAME as _POLYGLOT_PAYLOAD_NAME,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_PRECISION as _POLYGLOT_PAYLOAD_PRECISION,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_SCALE as _POLYGLOT_PAYLOAD_SCALE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_SELECT as _POLYGLOT_PAYLOAD_SELECT,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_TABLE as _POLYGLOT_PAYLOAD_TABLE,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_THIS as _POLYGLOT_PAYLOAD_THIS,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_PAYLOAD_TO as _POLYGLOT_PAYLOAD_TO,
-)
-from sqlbuild.shared.constants import (
-    POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
-)
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
-from sqlbuild.shared.helpers.sql.reference_patterns import (
+from sqlbuild.compiler.references.main.quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
+)
+from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_AGGREGATE_KINDS as _POLYGLOT_AGGREGATE_KINDS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_BASE_TABLES as _POLYGLOT_ANALYSIS_BASE_TABLES,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_CAST_TYPE as _POLYGLOT_ANALYSIS_CAST_TYPE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_IS_STAR as _POLYGLOT_ANALYSIS_IS_STAR,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_NULLABILITY as _POLYGLOT_ANALYSIS_NULLABILITY,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL as _POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE as _POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_PROJECTIONS as _POLYGLOT_ANALYSIS_PROJECTIONS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_RELATIONS as _POLYGLOT_ANALYSIS_RELATIONS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_SHAPE as _POLYGLOT_ANALYSIS_SHAPE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_SHAPE_SELECT as _POLYGLOT_ANALYSIS_SHAPE_SELECT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION as _POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_SOURCE_ALIAS as _POLYGLOT_ANALYSIS_SOURCE_ALIAS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE as _POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_SOURCE_NAME as _POLYGLOT_ANALYSIS_SOURCE_NAME,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_STAR_PROJECTIONS as _POLYGLOT_ANALYSIS_STAR_PROJECTIONS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TABLE as _POLYGLOT_ANALYSIS_TABLE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION as _POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_CAST as _POLYGLOT_ANALYSIS_TRANSFORM_CAST,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT as _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_DIRECT as _POLYGLOT_ANALYSIS_TRANSFORM_DIRECT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_KIND as _POLYGLOT_ANALYSIS_TRANSFORM_KIND,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_STAR as _POLYGLOT_ANALYSIS_TRANSFORM_STAR,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TYPE_HINT as _POLYGLOT_ANALYSIS_TYPE_HINT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS as _POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_CAST_KINDS as _POLYGLOT_CAST_KINDS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_JOIN_FULL as _POLYGLOT_JOIN_FULL,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_JOIN_LEFT as _POLYGLOT_JOIN_LEFT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_JOIN_RIGHT as _POLYGLOT_JOIN_RIGHT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_ALIAS as _POLYGLOT_KIND_ALIAS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_CAST as _POLYGLOT_KIND_CAST,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_COALESCE as _POLYGLOT_KIND_COALESCE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_COLUMN as _POLYGLOT_KIND_COLUMN,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_COUNT as _POLYGLOT_KIND_COUNT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_LITERAL as _POLYGLOT_KIND_LITERAL,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_NULL as _POLYGLOT_KIND_NULL,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_SELECT as _POLYGLOT_KIND_SELECT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_TABLE as _POLYGLOT_KIND_TABLE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_TRY_CAST as _POLYGLOT_KIND_TRY_CAST,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_ALIAS as _POLYGLOT_PAYLOAD_ALIAS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_COLUMN as _POLYGLOT_PAYLOAD_COLUMN,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_DATA_TYPE as _POLYGLOT_PAYLOAD_DATA_TYPE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_EXPRESSIONS as _POLYGLOT_PAYLOAD_EXPRESSIONS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_FROM as _POLYGLOT_PAYLOAD_FROM,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_JOINS as _POLYGLOT_PAYLOAD_JOINS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_KIND as _POLYGLOT_PAYLOAD_KIND,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_NAME as _POLYGLOT_PAYLOAD_NAME,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_PRECISION as _POLYGLOT_PAYLOAD_PRECISION,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_SCALE as _POLYGLOT_PAYLOAD_SCALE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_SELECT as _POLYGLOT_PAYLOAD_SELECT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_TABLE as _POLYGLOT_PAYLOAD_TABLE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_THIS as _POLYGLOT_PAYLOAD_THIS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_TO as _POLYGLOT_PAYLOAD_TO,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
+)
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)

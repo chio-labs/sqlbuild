@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.helpers.diff.output import has_diff_failures, render_
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.integrations.dbt.models import DbtDiffRun
 from sqlbuild.integrations.dbt.pipeline.main.diff import run_dbt_diff_from_project
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_dbt_diff_command(*, project_dir: Path | None, args: tuple[str, ...], no_color: bool) -> int:

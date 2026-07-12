@@ -43,29 +43,29 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=("SC001",),
         ),
         CheckPathsTestCase(
-            description="reports raw color helper import outside style layer",
+            description="reports direct color capability implementation import",
             repo_files=compliant_repo_files()
             | {
                 "src/sqlbuild/example/widget/main/load.py": dedent(
                     """
-                from sqlbuild.shared.helpers.output.colors import green_bold, supports_color
+                from sqlbuild.presentation.helpers.terminal_capabilities import supports_color
 
 
                 def load_example() -> str:
-                    return green_bold(str(supports_color()))
+                    return str(supports_color())
                 """
                 ).strip()
                 + "\n"
             },
-            expected_violation_codes=("SC041",),
+            expected_violation_codes=("SC033", "SC041"),
         ),
         CheckPathsTestCase(
-            description="allows supports color helper import",
+            description="allows supports color public entry import",
             repo_files=compliant_repo_files()
             | {
                 "src/sqlbuild/example/widget/main/load.py": dedent(
                     """
-                from sqlbuild.shared.helpers.output.colors import supports_color
+                from sqlbuild.presentation.main.supports_color import supports_color
 
 
                 def load_example() -> bool:
@@ -120,7 +120,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                     """
                 from __future__ import annotations
 
-                from sqlbuild.shared.models import RetryPolicy
+                from sqlbuild.python_nodes.models import RetryPolicy
 
                 __all__ = ("RetryPolicy",)
                 """
@@ -135,7 +135,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/retries.py": dedent(
                     """
-                from sqlbuild.shared.models import RetryPolicy
+                from sqlbuild.python_nodes.models import RetryPolicy
 
                 __all__ = ("RetryPolicy",)
                 """
@@ -152,7 +152,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                     """
                 from __future__ import annotations
 
-                from sqlbuild.shared.models import RetryPolicy
+                from sqlbuild.python_nodes.models import RetryPolicy
 
                 __all__ = ["RetryPolicy"]
                 """
@@ -167,7 +167,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/example/widget/helpers/formatting.py": dedent(
                     """
-                from sqlbuild.shared.models import RetryPolicy
+                from sqlbuild.python_nodes.models import RetryPolicy
 
                 __all__ = ("RetryPolicy", "format_name")
 
@@ -459,6 +459,32 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             repo_files=compliant_repo_files()
             | {"src/sqlbuild/example/models.py": "class Example: ...\n"},
             expected_violation_codes=("SC017", "SC008"),
+        ),
+        CheckPathsTestCase(
+            description="allows Python-node authoring role files",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/python_nodes/models.py": dedent(
+                    """
+                from dataclasses import dataclass
+
+                @dataclass(frozen=True)
+                class RetryPolicy:
+                    max_attempts: int
+                """
+                ).strip()
+                + "\n",
+                "src/sqlbuild/python_nodes/types.py": dedent(
+                    """
+                from enum import StrEnum
+
+                class PythonCheckSeverity(StrEnum):
+                    ERROR = "error"
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
         ),
         CheckPathsTestCase(
             description="reports top-level direct module under runtime domain",
@@ -1605,12 +1631,12 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=(),
         ),
         CheckPathsTestCase(
-            description="allows imports from top-level shared boundary",
+            description="allows imports from presentation class boundary",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/shared/__init__.py": '"""Shared."""\n',
-                "src/sqlbuild/shared/helpers/__init__.py": '"""Shared helpers."""\n',
-                "src/sqlbuild/shared/helpers/cli_style.py": dedent(
+                "src/sqlbuild/presentation/__init__.py": '"""Presentation."""\n',
+                "src/sqlbuild/presentation/classes/__init__.py": '"""Presentation classes."""\n',
+                "src/sqlbuild/presentation/classes/cli_style.py": dedent(
                     """
                 class CliStyle:
                     def __init__(self, *, use_color: bool) -> None:
@@ -1625,7 +1651,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
                 "src/sqlbuild/example/discovery/main/discover.py": dedent(
                     """
-                from sqlbuild.shared.helpers.output.cli_style import CliStyle
+                from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
                 def discover_name() -> str:
@@ -2106,7 +2132,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/integrations/dbt/helpers/planning/ref_scan.py": dedent(
                     """
-                from sqlbuild.shared.types import SqlReferenceKind
+                from sqlbuild.compiler.references.types import SqlReferenceKind
 
 
                 def is_dbt_ref(reference) -> bool:
@@ -2123,7 +2149,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/integrations/dbt/helpers/manifest/sqlbuild_refs.py": dedent(
                     """
-                from sqlbuild.shared.types import SqlReferenceKind
+                from sqlbuild.compiler.references.types import SqlReferenceKind
 
 
                 def is_dbt_ref(reference) -> bool:

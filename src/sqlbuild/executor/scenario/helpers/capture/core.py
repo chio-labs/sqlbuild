@@ -8,6 +8,7 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
 from sqlbuild.executor.scenario.helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
@@ -29,7 +30,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
 
 
 def execute_scenario_snapshot_capture_steps(

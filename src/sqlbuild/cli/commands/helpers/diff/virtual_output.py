@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands.helpers.diff.models import VirtualDiffRunOutcome
-from sqlbuild.shared.classes.cli_document import CliDocument
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_document import CliDocument
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def format_virtual_diff_header(

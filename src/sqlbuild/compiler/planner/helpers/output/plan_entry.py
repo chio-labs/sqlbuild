@@ -85,7 +85,7 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
     StandardReuseDecisionKind,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaColumn
 from sqlbuild.spec.models.source import SourceEntry

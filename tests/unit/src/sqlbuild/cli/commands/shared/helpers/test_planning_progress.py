@@ -10,7 +10,7 @@ from sqlbuild.cli.progress.classes.planning_progress_reporter import (
     PlanningProgressReporter,
     _is_planning_completion_message,
 )
-from sqlbuild.shared.helpers.output.colors import dim
+from sqlbuild.presentation.classes.cli_style import CliStyle
 from tests.unit.src.sqlbuild.cli.commands.shared.helpers._test_types import (
     PlanningCompletionMessageTestCase,
     PlanningFinishTestCase,
@@ -42,7 +42,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared.helpers._test_types import (
         PlanningProgressTestCase(
             description="dims planning messages when color is enabled",
             messages=("Inspecting warehouse state...",),
-            expected_output=f"{dim('Inspecting warehouse state...')}\n",
+            expected_output=f"{CliStyle(use_color=True).muted('Inspecting warehouse state...')}\n",
             use_color=True,
         ),
         PlanningProgressTestCase(

@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.models import RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -79,8 +79,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
 )
-from sqlbuild.shared.models import ConnectionHooks, RelationLookup
-from sqlbuild.shared.types import ConnectionElapsedCallback
+from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 
 
 def dbt_failure_detail(result: DbtCommandResult) -> str | None:

@@ -15,7 +15,7 @@ from sqlbuild.compiler.planner.models import (
     SourceLoadPlanEntry,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.models.schema import default_seed_csv_settings
 from sqlbuild.spec.models.source import SourceEntry
 

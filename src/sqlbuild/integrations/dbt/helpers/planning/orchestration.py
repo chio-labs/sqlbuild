@@ -11,6 +11,7 @@ from sqlbuild.compiler.planner.main.planning.selector_expansion import split_sel
 from sqlbuild.compiler.planner.main.planning.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
+from sqlbuild.compiler.planner.models import SelectorExpansion
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.manifest.sqlbuild_refs import (
@@ -32,7 +33,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsResult,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
-from sqlbuild.shared.models import SelectorExpansion
 
 
 def plan_dbt_interop_command(

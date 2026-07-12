@@ -23,8 +23,8 @@ from sqlbuild.integrations.dbt.pipeline.main.render_plan import (
     render_dbt_interop_plan,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.shared.helpers.output.colors import supports_color
-from sqlbuild.shared.helpers.output.display import DisplayOptions
+from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.presentation.models import DisplayOptions
 
 
 def run_dbt_command(

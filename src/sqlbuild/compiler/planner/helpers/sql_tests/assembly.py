@@ -42,11 +42,13 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
-from sqlbuild.shared.helpers.sql.reference_patterns import (
+from sqlbuild.compiler.references.main.quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
+)
+from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)

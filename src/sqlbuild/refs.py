@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import SqlResourceRefKind
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 
 def model(name: str) -> SqlResourceRef:

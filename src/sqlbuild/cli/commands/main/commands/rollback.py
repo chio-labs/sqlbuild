@@ -20,8 +20,8 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import Connectio
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.helpers.output.colors import supports_color
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.models.project import resolve_effective_adapter_name
 from sqlbuild.spec.models.targets import resolve_target_name
 from sqlbuild.virtual.executor.main.rollback import run_virtual_rollback

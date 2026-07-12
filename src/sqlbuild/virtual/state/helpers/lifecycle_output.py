@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.virtual.state.constants import STATE_TABLE_COLUMNS
 from sqlbuild.virtual.state.models import StateBackendConfig
 

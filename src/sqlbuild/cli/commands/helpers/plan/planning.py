@@ -11,7 +11,7 @@ from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
 )
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.planner.main.plan import run_virtual_plan_pipeline
 from sqlbuild.virtual.planner.models import VirtualPlanOptions
 

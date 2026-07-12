@@ -9,13 +9,13 @@ from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.diagnostics.helpers.logging import diagnostics_context
+from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
 from sqlbuild.executor.scenario.helpers.lifecycle.cleanup import collect_scenario_cleanup_targets
 from sqlbuild.executor.scenario.models import (
     ScenarioCleanupExecutionResult,
     ScenarioCleanupTarget,
 )
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
 
 
 def execute_scenario_cleanup(

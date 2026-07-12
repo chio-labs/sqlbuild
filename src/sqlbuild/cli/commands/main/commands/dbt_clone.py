@@ -17,7 +17,7 @@ from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningPro
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.integrations.dbt.models import DbtCloneRun
 from sqlbuild.integrations.dbt.pipeline.main.clone import run_dbt_clone_from_project
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 @dataclass

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.exceptions.errors import SharedInputError
-from sqlbuild.shared.models import SelectorExpansion
+from sqlbuild.compiler.planner.models import SelectorExpansion
+from sqlbuild.errors.contracts.exceptions import SharedInputError
 
 
 def split_selector_expansion(raw: str) -> SelectorExpansion:

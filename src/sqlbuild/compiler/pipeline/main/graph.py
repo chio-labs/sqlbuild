@@ -23,7 +23,7 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
 def build_project_graph(

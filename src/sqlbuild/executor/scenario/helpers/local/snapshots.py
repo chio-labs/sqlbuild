@@ -6,7 +6,17 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.errors.contracts.main.error_code import error_code
+from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_LOCAL_JSONL_INVALID,
+    SCENARIO_LOCAL_LOAD_FAILED,
+    SCENARIO_LOCAL_MANIFEST_INVALID,
+    SCENARIO_LOCAL_SNAPSHOT_MISSING,
+    SCENARIO_LOCAL_SNAPSHOT_STALE,
+    SCENARIO_LOCAL_TYPE_INVALID,
+)
 from sqlbuild.executor.scenario.helpers.snapshots.core import (
     is_scenario_snapshot_fresh,
     read_scenario_snapshot_jsonl,
@@ -22,16 +32,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
 )
-from sqlbuild.shared.constants import (
-    SCENARIO_LOCAL_JSONL_INVALID,
-    SCENARIO_LOCAL_LOAD_FAILED,
-    SCENARIO_LOCAL_MANIFEST_INVALID,
-    SCENARIO_LOCAL_SNAPSHOT_MISSING,
-    SCENARIO_LOCAL_SNAPSHOT_STALE,
-    SCENARIO_LOCAL_TYPE_INVALID,
-)
-from sqlbuild.shared.main.error_code import error_code
-from sqlbuild.shared.main.error_message import error_message
 
 
 def load_scenario_snapshot_into_duckdb(

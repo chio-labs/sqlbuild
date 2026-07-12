@@ -14,7 +14,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.planner.helpers.bound_state import (
     open_planning_connection,
     read_virtual_bound_state,

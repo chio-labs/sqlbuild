@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     RelationReuseKind,
 )
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 _INCREMENTAL_ACTIONS: frozenset[PlanAction] = frozenset(
     {

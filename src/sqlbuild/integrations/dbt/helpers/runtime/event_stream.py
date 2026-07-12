@@ -13,9 +13,9 @@ from typing import TextIO, cast
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.shared.helpers.output.alignment import format_aligned_name_value
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 
 _RESULT_EVENT_NAMES: frozenset[str] = frozenset(
     {

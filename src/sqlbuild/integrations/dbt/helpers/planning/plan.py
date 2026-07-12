@@ -24,16 +24,12 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanReason,
     DbtSupportedResourceType,
 )
-from sqlbuild.shared.helpers.output.alignment import (
-    format_aligned_name_value,
-    resolve_name_column_width,
-)
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.helpers.output.display import (
-    DisplayOptions,
-    append_overflow_line,
-    visible_entries,
-)
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
+from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
+from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
+from sqlbuild.presentation.main.visible_entries import visible_entries
+from sqlbuild.presentation.models import DisplayOptions
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
 

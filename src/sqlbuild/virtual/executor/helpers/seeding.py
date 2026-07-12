@@ -6,14 +6,16 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, PlanAction
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
-from sqlbuild.shared.helpers.identity.naming import (
-    resolve_qualified_name_parts,
-    resolve_relation_location_qualified_name,
-)
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
 
 

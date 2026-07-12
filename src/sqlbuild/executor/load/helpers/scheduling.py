@@ -34,7 +34,7 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.load.types import LoadProgressCallback
-from sqlbuild.shared.types import ConnectionElapsedCallback
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 from sqlbuild.spec.models.source import SourceEntry
 
 

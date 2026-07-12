@@ -45,7 +45,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,
 )
-from sqlbuild.shared.helpers.sql.polyglot import import_polyglot
+from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
     SettingsConfig,

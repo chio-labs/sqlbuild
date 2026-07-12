@@ -18,6 +18,23 @@ class GraphIdentityComposer(Protocol):
     ) -> str: ...
 
 
+class LocalNodePlanAction(StrEnum):
+    """Action for one locally classified planner graph node."""
+
+    RUN = "run"
+    CURRENT = "current"
+
+
+class LocalNodePlanReason(StrEnum):
+    """Reason for one locally classified planner graph node."""
+
+    FIRST_RUN = "first_run"
+    FULL_REFRESH = "full_refresh"
+    RELATION_MISSING = "relation_missing"
+    LOCAL_CHANGED = "local_changed"
+    NO_CHANGE = "no_change"
+
+
 class RelationMarkerTargetResolver(Protocol):
     def __call__(self, *, function_name: str, referenced_name: str) -> str | None: ...
 

@@ -9,7 +9,7 @@ from sqlbuild.cli.commands.helpers.state.checkpoints import (
     _format_checkpoint_list,
     _format_checkpoint_show,
 )
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
+from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,

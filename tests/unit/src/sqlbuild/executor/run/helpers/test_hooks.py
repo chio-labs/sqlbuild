@@ -10,6 +10,7 @@ from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
@@ -24,7 +25,6 @@ from sqlbuild.executor.run.models import (
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.hooks import HookContext as PublicHookContext
-from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     ExecuteHooksTestCase,
     PublicHookContextExportTestCase,

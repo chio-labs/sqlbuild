@@ -54,7 +54,7 @@ from sqlbuild.compiler.python_nodes.main.run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
-from sqlbuild.shared.models import ConnectionHooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.models.project import TargetConfig
 
 

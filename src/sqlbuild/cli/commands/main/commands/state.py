@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.helpers.state.interactive_operation import (
     run_interactive_state_operation,
 )
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.shared.helpers.output.colors import supports_color
+from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.virtual.state.main.environments.adopt import run_state_adopt
 from sqlbuild.virtual.state.main.environments.detach import run_state_detach
 from sqlbuild.virtual.state.main.environments.lifecycle import run_state_lifecycle

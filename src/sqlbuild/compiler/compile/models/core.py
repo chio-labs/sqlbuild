@@ -33,7 +33,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import (
     LocalConfig,
     ProjectConfig,

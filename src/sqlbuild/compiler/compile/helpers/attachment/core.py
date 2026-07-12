@@ -68,8 +68,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
 )
 from sqlbuild.compiler.helpers.schema_audits import parse_audit_instance
-from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.models.project import (
     DefaultsConfig,
     LocalConfig,

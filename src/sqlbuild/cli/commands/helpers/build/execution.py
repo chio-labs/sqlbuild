@@ -36,7 +36,7 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
 )
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
-from sqlbuild.shared.models import CursorWindow
+from sqlbuild.executor.python_nodes.models import CursorWindow
 
 
 def prepare_build_execution(

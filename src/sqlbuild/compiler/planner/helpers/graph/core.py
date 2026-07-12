@@ -13,12 +13,10 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     SqlTestMode,
 )
+from sqlbuild.compiler.graph.main.invert_edges import invert_edges
+from sqlbuild.compiler.graph.main.path_nodes import path_nodes
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.shared.helpers.graph.algorithms import (
-    invert_edges,
-    path_nodes,
-    transitive_closure,
-)
 
 
 def _key_sort_key(key: CompiledObjectKey) -> tuple[str, str]:

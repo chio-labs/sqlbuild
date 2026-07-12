@@ -13,7 +13,7 @@ from sqlbuild.cli.target_artifacts.main.write_python_check_runtime_target import
     write_python_check_runtime_target,
 )
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
-from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.summary_footer import format_summary_footer
 
 
 def write_check_completion_output(

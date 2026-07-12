@@ -24,7 +24,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
-from sqlbuild.shared.types import SqlReferenceKind
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.models.source import SourceEntry
 
 

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.cli.commands.helpers.janitor.models import (
     JanitorCompileContext,
     JanitorConnectionContext,
@@ -13,7 +16,6 @@ from sqlbuild.cli.commands.helpers.janitor.models import (
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.models import JanitorExecutionResult
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 from sqlbuild.virtual.executor.main.virtual_target import build_virtual_destination
 from sqlbuild.virtual.state.main.checkpoints.delete_checkpoint import (
     delete_virtual_environment_checkpoint,

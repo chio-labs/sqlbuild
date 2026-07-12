@@ -22,7 +22,7 @@ from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.shared.types import ConnectionElapsedCallback
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 
 
 def run_test_pipeline(

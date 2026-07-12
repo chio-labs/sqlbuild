@@ -6,8 +6,8 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import SqlResourceRefKind
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 
 def filter_python_node_names_for_selected_sql(

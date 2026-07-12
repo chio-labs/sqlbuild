@@ -14,8 +14,8 @@ from sqlbuild.compiler.planner.models import PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.dbt.types import DbtInteropSqlbuildTestAction
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.types import ConnectionElapsedCallback
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 from tests.unit.src.sqlbuild.cli.commands.helpers._test_types import (
     DbtSqlbuildWorkOutputTestCase,
 )

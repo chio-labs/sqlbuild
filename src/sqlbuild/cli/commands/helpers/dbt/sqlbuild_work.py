@@ -45,9 +45,9 @@ from sqlbuild.executor.pipeline.main.run import (
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
-from sqlbuild.shared.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.shared.helpers.output.cli_style import CliStyle
-from sqlbuild.shared.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.main.summary_footer import format_summary_footer
 
 
 def execute_sqlbuild_build_work(

@@ -10,6 +10,9 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.compiler.python_nodes.types import (
     PythonNodeFanInAction,
     PythonNodeKind,
@@ -22,9 +25,9 @@ from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import NodeStartCallback, PythonCheckSeverity
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import PythonCheckSeverity
+from sqlbuild.runtime.contracts.types import NodeStartCallback
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,16 @@ class PythonNodeFanInDecision:
     action: PythonNodeFanInAction
     reason: str | None = None
     skip_mode: SkipMode | None = None
+
+
+@dataclass(frozen=True)
+class CursorWindow:
+    """Resolved cursor bounds for one Python execution run."""
+
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
 
 
 from sqlbuild.executor.python_nodes.classes.run_state import PythonNodeRunState  # noqa: E402

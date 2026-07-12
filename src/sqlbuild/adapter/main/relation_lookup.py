@@ -6,8 +6,7 @@ from collections import defaultdict
 from typing import Any
 
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.shared.models import RelationLookup
+from sqlbuild.adapter.models import RelationInfo, RelationLookup
 
 
 def build_relation_lookup(

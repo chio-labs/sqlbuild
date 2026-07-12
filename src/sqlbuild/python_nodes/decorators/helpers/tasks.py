@@ -6,7 +6,7 @@ import inspect
 from collections.abc import Callable, Sequence
 from typing import Any, cast, overload
 
-from sqlbuild.shared.models import RetryPolicy, SqlResourceRef, TaskDefinition
+from sqlbuild.python_nodes.models import RetryPolicy, SqlResourceRef, TaskDefinition
 
 
 def _decorate_task(
