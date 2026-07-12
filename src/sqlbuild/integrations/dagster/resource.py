@@ -45,8 +45,8 @@ class SqlBuildCliResource(load_dagster().ConfigurableResource):  # type: ignore[
 
     def cli(
         self,
-        *,
         args: Sequence[str],
+        *,
         context: Any = None,
         raise_on_error: bool = True,
     ) -> SqlBuildCliInvocation:

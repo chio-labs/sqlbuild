@@ -1039,7 +1039,7 @@ def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
                 "        statement_recorder: StatementRecorder,\n"
                 "    ) -> None:\n"
                 "        super().move_or_copy_relation(\n"
-                "            connection,\n"
+                "            connection=connection,\n"
                 "            origin=origin,\n"
                 "            destination=destination,\n"
                 "            remove_origin=remove_origin,\n"

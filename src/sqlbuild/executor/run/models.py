@@ -65,7 +65,7 @@ class HookContext:
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
 
-    def skip(self, *, reason: str, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
+    def skip(self, reason: str, *, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
         """Return a skip signal for the current hook."""
 
         return HookSkipResult(reason=reason, mode=SkipMode(mode))

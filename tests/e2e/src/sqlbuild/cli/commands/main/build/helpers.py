@@ -937,7 +937,7 @@ def prepare_direct_custom_reuse_from_project(*, tmp_path: Path, project_name: st
 
                 def materialize(ctx: MaterializationContext) -> MaterializationResult:
                     exists = ctx.adapter.relation_exists(
-                        ctx.connection,
+                        connection=ctx.connection,
                         database=ctx.destination_database,
                         schema=ctx.destination_schema,
                         name=ctx.destination_name,

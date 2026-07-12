@@ -344,13 +344,13 @@ def test_given_context_with_result_store_when_reading_upstream_outputs_then_retu
         ),
     )
 
-    result: object = context.result_of(node_function=upstream_task)
+    result: object = context.result_of(upstream_task)
     assert result == expected_result
-    assert context.result_of(
-        node_function=skipped_upstream_task, default=test_case.expected_default
-    ) == (test_case.expected_default)
+    assert context.result_of(skipped_upstream_task, default=test_case.expected_default) == (
+        test_case.expected_default
+    )
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        context.result_of(node_function=skipped_upstream_task)
+        context.result_of(skipped_upstream_task)
 
 
 @pytest.mark.parametrize(
@@ -375,8 +375,8 @@ def test_given_context_without_result_store_when_reading_result_then_raises_or_r
         logger_name="sqlbuild.task.fetch_orders",
     )
 
-    assert context.result_of(node_function=upstream_task, default=test_case.expected_default) == (
+    assert context.result_of(upstream_task, default=test_case.expected_default) == (
         test_case.expected_default
     )
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        context.result_of(node_function=upstream_task)
+        context.result_of(upstream_task)

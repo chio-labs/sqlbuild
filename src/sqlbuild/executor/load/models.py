@@ -133,7 +133,7 @@ class LoaderContext:
         if self.on_progress is not None:
             self.on_progress(message)
 
-    def skip(self, *, reason: str, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
+    def skip(self, reason: str, *, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
         """Return a skip signal for the current source loader."""
 
         return LoaderSkipResult(reason=reason, mode=mode)
@@ -155,8 +155,8 @@ class LoaderContext:
 
     def result_of(
         self,
-        *,
         node_function: Callable[..., object],
+        *,
         run_id: str | None = None,
         default: object = MISSING_DEFAULT,
     ) -> NodeResultEnvelope | object:
@@ -176,8 +176,8 @@ class LoaderContext:
 
     def results_of(
         self,
-        *,
         node_function: Callable[..., object],
+        *,
         limit: int,
     ) -> tuple[NodeResultEnvelope, ...]:
         """Return persisted successful upstream result history, newest first."""

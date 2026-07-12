@@ -232,8 +232,8 @@ class BasePythonNodeContext:
 
     def skip(
         self,
-        *,
         reason: str,
+        *,
         mode: SkipMode | str = SkipMode.SOFT,
         metadata: dict[str, object] | None = None,
     ) -> PythonNodeSkipResult:
@@ -247,8 +247,8 @@ class BasePythonNodeContext:
 
     def result_of(
         self,
-        *,
         node_function: Callable[..., object],
+        *,
         run_id: str | None = None,
         default: object = MISSING_DEFAULT,
     ) -> NodeResultEnvelope | object:
@@ -268,8 +268,8 @@ class BasePythonNodeContext:
 
     def results_of(
         self,
-        *,
         node_function: Callable[..., object],
+        *,
         limit: int,
     ) -> tuple[NodeResultEnvelope, ...]:
         """Return persisted successful upstream result history, newest first."""
@@ -346,8 +346,8 @@ class CheckContext(BasePythonNodeContext):
 
     def pass_(
         self,
-        *,
         message: str | None = None,
+        *,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a passing check result."""
@@ -360,8 +360,8 @@ class CheckContext(BasePythonNodeContext):
 
     def fail(
         self,
-        *,
         message: str,
+        *,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a failing check result using the check's configured severity."""
@@ -374,8 +374,8 @@ class CheckContext(BasePythonNodeContext):
 
     def warn(
         self,
-        *,
         message: str,
+        *,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a warning check result regardless of decorator severity."""

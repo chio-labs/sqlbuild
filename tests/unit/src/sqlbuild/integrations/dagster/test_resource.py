@@ -65,7 +65,7 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
         ),
     )
 
-    invocation: SqlBuildCliInvocation = resource.cli(args=["build"], raise_on_error=False).wait()
+    invocation: SqlBuildCliInvocation = resource.cli(["build"], raise_on_error=False).wait()
 
     assert invocation.is_successful() is test_case.expected_success
     assert invocation.stdout == test_case.expected_stdout

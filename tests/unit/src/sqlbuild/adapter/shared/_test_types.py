@@ -5,6 +5,15 @@ from sqlbuild.adapter.shared.types import LoaderLogicalType
 
 
 @dataclass(frozen=True)
+class AdapterUserErrorTestCase:
+    description: str
+    message: str
+    code: str
+    help: str
+    expected_args: tuple[str]
+
+
+@dataclass(frozen=True)
 class TypeNormalizationTestCase:
     description: str
     dialect: str | None
