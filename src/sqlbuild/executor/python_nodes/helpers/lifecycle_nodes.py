@@ -7,7 +7,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
 )
-from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
+from sqlbuild.executor.models.lifecycle_scheduler import LifecycleExecutionNode
 
 
 def build_ingress_lifecycle_nodes(

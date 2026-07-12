@@ -14,11 +14,11 @@ from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent, Statement
 from sqlbuild.adapter.shared.types import LoaderLogicalType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 from sqlbuild.shared.types import ConnectionElapsedCallback, ExecutionResourceKind

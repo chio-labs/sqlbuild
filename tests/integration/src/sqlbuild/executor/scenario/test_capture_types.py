@@ -21,7 +21,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioSnapshotCaptureTypesIntegrationTestCase,
 )

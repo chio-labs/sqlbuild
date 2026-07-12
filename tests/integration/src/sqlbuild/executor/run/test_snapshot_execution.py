@@ -12,7 +12,7 @@ from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.run.main.execute import execute_snapshot_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     SnapshotReuseExecutionTestCase,

@@ -9,6 +9,7 @@ import duckdb
 import pytest
 
 from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.load.helpers.rows import (
     build_rows_sql,
     iter_loader_row_batches,
@@ -16,7 +17,6 @@ from sqlbuild.executor.load.helpers.rows import (
     update_loader_rows_schema,
 )
 from sqlbuild.executor.load.models import LoaderRowsSchema
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.spec.models.source import SourceColumnEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     LoaderRowsBatchTestCase,

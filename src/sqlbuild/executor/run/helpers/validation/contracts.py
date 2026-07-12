@@ -6,13 +6,13 @@ from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.adapter.shared.type_normalization import types_equal
 from sqlbuild.adapter.shared.types import TypeDialect
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.constants import (
     RUNTIME_CONTRACT_EXTRA_COLUMN_CODE,
     RUNTIME_CONTRACT_MISSING_COLUMN_CODE,
     RUNTIME_CONTRACT_MISSING_DECLARATIONS_CODE,
     RUNTIME_CONTRACT_TYPE_MISMATCH_CODE,
 )
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
 def validate_runtime_contract(

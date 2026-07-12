@@ -16,13 +16,13 @@ from sqlbuild.integrations.dbt.helpers.lineage.output import (
 )
 from sqlbuild.integrations.dbt.helpers.lineage.preparation import prepare_dbt_lineage_inputs
 from sqlbuild.integrations.dbt.helpers.lineage.selection import select_dbt_lineage_target
+from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.models import (
     DbtColumnLineageTrace,
     DbtCombinedGraphKey,
     DbtLineageGraph,
     DbtLineagePreparation,
 )
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 
 
 def build_dbt_lineage_output(

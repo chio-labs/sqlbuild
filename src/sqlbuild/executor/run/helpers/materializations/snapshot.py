@@ -21,7 +21,9 @@ from sqlbuild.compiler.planner.types import (
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
+from sqlbuild.diagnostics.helpers.logging import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.helpers.execution.final_audits import (
     run_delta_scope_audits,
     run_final_scope_audits,
@@ -45,9 +47,7 @@ from sqlbuild.executor.run.models import (
     ModelMaterializationContext,
     PostHookPhaseOutcome,
 )
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.helpers.identity.naming import (
     resolve_qualified_name_parts,
     resolve_relation_location_qualified_name,

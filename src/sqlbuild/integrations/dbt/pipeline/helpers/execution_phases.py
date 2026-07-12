@@ -29,11 +29,13 @@ from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
     build_expected_dbt_model_version_hashes,
 )
 from sqlbuild.integrations.dbt.helpers.planning.orchestration import resolve_sqlbuild_test_actions
+from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.helpers.runtime.node_source_watermarks import (
     build_dbt_node_source_watermark_context,
     record_dbt_successful_node_source_watermark,
     write_dbt_node_source_watermark_records,
 )
+from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
@@ -90,8 +92,6 @@ from sqlbuild.integrations.dbt.pipeline.helpers.source_freshness import (
     append_dbt_source_freshness_records,
 )
 from sqlbuild.integrations.dbt.pipeline.main.render_plan import render_dbt_interop_plan
-from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.shared.helpers.progress import report_progress
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,

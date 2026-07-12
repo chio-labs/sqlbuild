@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.shared.change_policy import resolve_replay_on_change
+from sqlbuild.compiler.planner.helpers.changes.policy import resolve_replay_on_change
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CascadeCause,

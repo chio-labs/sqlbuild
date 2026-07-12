@@ -5,6 +5,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.scenario.helpers.local.snapshots import (
     load_scenario_snapshot_into_duckdb,
 )
@@ -12,7 +13,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadResult,
     ScenarioSnapshotManifest,
 )
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.shared.constants import (
     SCENARIO_LOCAL_JSONL_INVALID,
     SCENARIO_LOCAL_LOAD_FAILED,

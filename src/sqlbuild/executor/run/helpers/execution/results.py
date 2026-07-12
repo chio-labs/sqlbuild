@@ -20,7 +20,7 @@ from sqlbuild.executor.run.constants import (
     RUN_UNKNOWN_FAILED_CODE,
 )
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.main.error_code import error_code
 from sqlbuild.shared.main.error_help import error_help
 from sqlbuild.shared.main.error_message import error_message

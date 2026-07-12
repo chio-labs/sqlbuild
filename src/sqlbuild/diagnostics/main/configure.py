@@ -5,17 +5,15 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from sqlbuild.diagnostics.helpers.logging_handlers import DynamicStderrHandler
-from sqlbuild.diagnostics.shared.constants import (
-    LOG_FILE_NAME,
+from sqlbuild.diagnostics.helpers.constants import LOG_FILE_NAME
+from sqlbuild.diagnostics.helpers.logging import (
+    get_diagnostics_logger,
 )
-from sqlbuild.diagnostics.shared.helpers.logging import (
+from sqlbuild.diagnostics.helpers.logging_formatters import (
     DiagnosticsConsoleFormatter,
     DiagnosticsFileFormatter,
 )
-from sqlbuild.shared.helpers.diagnostics.logging import (
-    get_diagnostics_logger,
-)
+from sqlbuild.diagnostics.helpers.logging_handlers import DynamicStderrHandler
 
 
 def configure_diagnostics(*, target_dir: Path, debug: bool, use_color: bool = False) -> None:

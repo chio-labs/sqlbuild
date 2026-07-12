@@ -16,7 +16,7 @@ from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionRe
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands.main.plan.helpers.helpers import (
     build_model_entry,
     build_plan_output,

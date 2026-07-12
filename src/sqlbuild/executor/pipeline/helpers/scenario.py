@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.planning.scenario import build_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.executor.scenario.main.capture_steps import (
     execute_scenario_snapshot_capture_run,
 )
@@ -26,12 +27,11 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.constants import (
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_INTERNAL,
 )
-from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
 from sqlbuild.shared.main.error_code import error_code
 from sqlbuild.shared.main.error_help import error_help
 from sqlbuild.shared.main.error_message import error_message

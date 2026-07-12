@@ -12,7 +12,7 @@ from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.seed.main.execute import execute_seed
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_SEED_FAILED
 
 

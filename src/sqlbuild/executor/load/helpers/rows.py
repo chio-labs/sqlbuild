@@ -9,8 +9,8 @@ from decimal import Decimal
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import ColumnInfo
 from sqlbuild.adapter.shared.types import LoaderLogicalType
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoaderRowsSchema
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.spec.models.source import SourceColumnEntry
 
 

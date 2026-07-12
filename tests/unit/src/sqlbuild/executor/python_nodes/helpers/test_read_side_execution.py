@@ -11,7 +11,7 @@ from sqlbuild.executor.python_nodes.helpers.read_side_execution import (
 )
 from sqlbuild.executor.python_nodes.models import PythonNodeRuntime
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     ReadSidePythonTrackerTestCase,
 )

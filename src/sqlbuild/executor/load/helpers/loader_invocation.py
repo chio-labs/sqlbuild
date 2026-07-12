@@ -10,6 +10,10 @@ from typing import Any
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.adapter.shared.models import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.helpers.load_execution import (
+    is_untargeted_self_managed_intermediate,
+)
 from sqlbuild.executor.load.helpers.relation_refs import (
     build_loader_relation_refs,
     build_source_relation_refs,
@@ -24,11 +28,7 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.helpers.load_execution import (
-    is_untargeted_self_managed_intermediate,
-)
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container
 from sqlbuild.shared.types import ExecutionResourceKind
 from sqlbuild.spec.models.source import SourceEntry

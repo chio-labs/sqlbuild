@@ -27,7 +27,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
 )
-from sqlbuild.compiler.shared.helpers.sql_scanning import find_matching_paren
+from sqlbuild.compiler.helpers.sql_scanning import find_matching_paren
 
 _CONTEXT: str = "SQL scenario"
 

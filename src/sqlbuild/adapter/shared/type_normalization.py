@@ -16,7 +16,7 @@ from sqlbuild.adapter.shared.constants import (
 )
 from sqlbuild.adapter.shared.models import NormalizedType
 from sqlbuild.adapter.shared.types import TypeDialect, TypeFamily
-from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.shared.helpers.sql.polyglot import import_polyglot
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.adapter")

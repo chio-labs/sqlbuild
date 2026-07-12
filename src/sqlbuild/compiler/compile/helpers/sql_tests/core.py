@@ -36,7 +36,7 @@ from sqlbuild.compiler.compile.models.sql_tests import (
     CompileSqlTestCtes,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.shared.helpers.sql_scanning import (
+from sqlbuild.compiler.helpers.sql_scanning import (
     find_matching_paren,
     is_identifier_character,
     is_identifier_start,

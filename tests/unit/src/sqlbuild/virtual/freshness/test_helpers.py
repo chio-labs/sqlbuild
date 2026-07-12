@@ -17,7 +17,7 @@ from sqlbuild.compiler.source_freshness.main.observation import (
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.helpers.state import (

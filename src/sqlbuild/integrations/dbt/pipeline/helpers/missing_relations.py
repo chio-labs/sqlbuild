@@ -9,11 +9,11 @@ from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_connection_config
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
     find_sqlbuild_models_with_missing_dbt_relations,
 )
-from sqlbuild.integrations.dbt.shared.helpers.connection import resolve_connection_config
 
 
 def find_and_report_missing_dbt_relation_blocks(

@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
-from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.shared.helpers.lineage_graph import (
+from sqlbuild.compiler.helpers.lineage_graph import (
     build_lineage_downstream_deps,
     build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.shared.helpers.selector_indexes import (
+from sqlbuild.compiler.helpers.selector_indexes import (
     build_model_path_index,
     build_model_tag_index,
 )
+from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 
 
 def build_project_graph_from_compiled_project(*, project: CompiledProject) -> ProjectGraph:

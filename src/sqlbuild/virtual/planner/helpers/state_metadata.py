@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.virtual.shared.helpers.encoding import decode_state_text
+from sqlbuild.virtual.helpers.encoding import decode_state_text
 from sqlbuild.virtual.state.models import FunctionVersionRecord, ModelVersionRecord
 
 

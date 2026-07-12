@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
+from sqlbuild.compiler.discovery.constants import RESERVED_MODEL_NAMES
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedDiscoveryError
 from sqlbuild.compiler.discovery.helpers.integrations.loaders import integration_loader_name
 from sqlbuild.compiler.discovery.models import (
@@ -23,7 +24,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredTaskFunction,
 )
-from sqlbuild.compiler.shared.constants import RESERVED_MODEL_NAMES
 from sqlbuild.loaders import get_loader_definition
 from sqlbuild.shared.models import (
     AssetDefinition,

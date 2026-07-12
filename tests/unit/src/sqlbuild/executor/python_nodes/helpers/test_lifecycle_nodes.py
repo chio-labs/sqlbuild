@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
+from sqlbuild.executor.models.lifecycle_scheduler import LifecycleExecutionNode
 from sqlbuild.executor.python_nodes.helpers.lifecycle_nodes import (
     build_ingress_lifecycle_nodes,
     build_read_side_python_lifecycle_nodes,
 )
-from sqlbuild.executor.shared.models.lifecycle_scheduler import LifecycleExecutionNode
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonNodeLifecycleNodeBuildTestCase,
 )

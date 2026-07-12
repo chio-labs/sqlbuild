@@ -12,12 +12,12 @@ from sqlbuild.adapter.shared.models import LifeCycleEvent, StatementRecorder
 from sqlbuild.assets import AssetContext
 from sqlbuild.assets import SkipMode as AssetSkipMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.models import (
     PythonNodeResult,
     PythonNodeSkipResult,
 )
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.refs import model, source
 from sqlbuild.shared.models import SqlResourceRef
 from sqlbuild.tasks import SkipMode as TaskSkipMode

@@ -13,7 +13,7 @@ from sqlbuild.cli.commands.helpers.build.models import (
 from sqlbuild.cli.commands.helpers.freshness.source_freshness import (
     append_eligible_standard_source_freshness_records,
 )
-from sqlbuild.cli.commands.shared.helpers.config.parsers import (
+from sqlbuild.cli.commands.helpers.input.parsing import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )

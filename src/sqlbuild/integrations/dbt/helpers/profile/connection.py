@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
+from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.helpers.profile.load import (
     default_profiles_dir,
@@ -21,6 +24,48 @@ from sqlbuild.integrations.dbt.models import (
     SelectedDbtProfileOutput,
 )
 from sqlbuild.spec.models.project import DbtConfig, ProjectConfig
+
+_DBT_PROFILE_CONNECTION_ROUTING_KEYS: frozenset[str] = frozenset(
+    {"source", "profile", "target", "project_dir", "profiles_dir"}
+)
+
+
+def resolve_connection_config(
+    *,
+    raw_config: dict[str, object],
+    project_dir: Path,
+    adapter_name: str,
+    discovered_inputs: DiscoveredProjectInputs,
+) -> dict[str, object]:
+    """Resolve dbt interop connection config."""
+
+    config: dict[str, object] = dict(raw_config)
+    resolved_dbt_profile: NormalizedDbtProfileConnection | None = (
+        resolve_dbt_profile_raw_connection(
+            raw_config=config,
+            project_dir=project_dir,
+            adapter_name=adapter_name,
+            project_config=discovered_inputs.project_config,
+        )
+    )
+    if resolved_dbt_profile is not None:
+        for warning in resolved_dbt_profile.warnings:
+            print(f"Warning: {warning}", file=sys.stderr)
+        user_overrides: dict[str, object] = {
+            key: value
+            for key, value in raw_config.items()
+            if key not in _DBT_PROFILE_CONNECTION_ROUTING_KEYS
+        }
+        config = {**resolved_dbt_profile.connection, **user_overrides}
+    database: object | None = config.get("database")
+    if (
+        adapter_name == BuiltinAdapter.DUCKDB
+        and isinstance(database, str)
+        and not Path(database).is_absolute()
+        and database != ":memory:"
+    ):
+        config["database"] = str(project_dir / database)
+    return config
 
 
 def resolve_dbt_profile_connection(

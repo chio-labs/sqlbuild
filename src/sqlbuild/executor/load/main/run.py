@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.base.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
+from sqlbuild.executor.helpers.load_execution import build_load_execution_indexes
 from sqlbuild.executor.load.helpers.scheduling import (
     open_load_connections,
     run_external_source_loads,
@@ -19,7 +20,6 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.executor.shared.helpers.load_execution import build_load_execution_indexes
 from sqlbuild.spec.models.source import SourceEntry
 
 

@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.planner.constants import (
     METADATA_NAME_FILTER_LIMIT,
     MICROBATCH_END_SENTINEL,
@@ -84,7 +85,6 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
     StandardReuseDecisionKind,
 )
-from sqlbuild.compiler.shared.helpers.sources import render_source_relation
 from sqlbuild.shared.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
 from sqlbuild.spec.models.schema import SchemaColumn

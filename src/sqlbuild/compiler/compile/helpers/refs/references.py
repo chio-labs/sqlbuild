@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import CompileSqlReference
-from sqlbuild.compiler.shared.helpers.sql_scanning import (
+from sqlbuild.compiler.helpers.sql_scanning import (
     find_matching_paren,
     skip_block_comment,
     skip_line_comment,

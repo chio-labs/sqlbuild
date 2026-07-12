@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPl
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction
 from sqlbuild.executor.run.main.execute import execute_table_entry, execute_view_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.constants import SCENARIO_EXEC_MODEL_FAILED
 
 

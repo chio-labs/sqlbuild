@@ -27,10 +27,6 @@ from sqlbuild.cli.commands.helpers.scenario.snapshot_limits import (
 from sqlbuild.cli.commands.helpers.scenario.warehouse_run import run_warehouse_scenarios
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
 from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.config.parsers import (
-    add_execution_json_output_arg,
-    add_select_args,
-)
 from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
@@ -59,8 +55,10 @@ def run_dbt_scenario_test(
     )
     parser.add_argument("--refresh", action="store_true", default=False)
     parser.add_argument("--json", action="store_true", default=False)
-    add_execution_json_output_arg(parser)
-    add_select_args(parser)
+    parser.add_argument("--json-output", type=Path, default=None)
+    parser.add_argument("--select", "-s", nargs="+", action="extend", default=[])
+    parser.add_argument("--select-file", action="append", default=[])
+    parser.add_argument("--exclude", nargs="+", action="extend", default=[])
     parsed: argparse.Namespace = parser.parse_args(list(args))
     json_output: bool = bool(parsed.json)
     retain: bool = bool(parsed.retain)
@@ -176,7 +174,9 @@ def run_dbt_scenario_capture(
     parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     parser.add_argument("--retain", action="store_true", default=False)
     parser.add_argument("--force", action="store_true", default=False)
-    add_select_args(parser)
+    parser.add_argument("--select", "-s", nargs="+", action="extend", default=[])
+    parser.add_argument("--select-file", action="append", default=[])
+    parser.add_argument("--exclude", nargs="+", action="extend", default=[])
     parsed: argparse.Namespace = parser.parse_args(list(args))
     selectors: tuple[str, ...] = (*parsed.scenario_selector, *parsed.select)
     exclude: tuple[str, ...] = tuple(parsed.exclude)

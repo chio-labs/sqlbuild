@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 
 
 @dataclass(frozen=True)

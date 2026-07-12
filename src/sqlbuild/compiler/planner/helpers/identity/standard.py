@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledFunction, CompiledModel, CompiledSeed
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.helpers.identity.seed import build_seed_identity
-from sqlbuild.compiler.planner.helpers.shared.identity_hashing import (
+from sqlbuild.compiler.planner.helpers.identity.hashing import (
     compose_native_graph_identity,
     graph_key_for_compiled_resource,
 )
+from sqlbuild.compiler.planner.helpers.identity.seed import build_seed_identity
 from sqlbuild.compiler.planner.main.planning.graph_identity import (
     build_expected_graph_identity_hashes,
 )

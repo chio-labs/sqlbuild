@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_BODY_SQL as _POLYGLOT_ANALYSIS_BODY_SQL
 from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_CTE_FACTS as _POLYGLOT_ANALYSIS_CTE_FACTS
 from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME
@@ -24,7 +25,6 @@ from sqlbuild.shared.constants import (
     POLYGLOT_ANALYSIS_TRANSFORM_KIND as _POLYGLOT_ANALYSIS_TRANSFORM_KIND,
 )
 from sqlbuild.shared.constants import POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM
-from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
 from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")

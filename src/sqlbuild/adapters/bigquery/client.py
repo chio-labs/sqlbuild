@@ -55,7 +55,7 @@ from sqlbuild.adapters.shared.helpers.source_freshness import (
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.shared.helpers.diagnostics.logging import log_sql
+from sqlbuild.diagnostics.helpers.logging import log_sql
 from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
 
 

@@ -39,7 +39,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.spec.models.schema import SeedCsvSettings
 from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 from sqlbuild.spec.models.types import SourceWriteStrategy

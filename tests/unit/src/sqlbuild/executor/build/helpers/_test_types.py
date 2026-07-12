@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.executor.build.helpers.helpers import ModelPlanOverride
 

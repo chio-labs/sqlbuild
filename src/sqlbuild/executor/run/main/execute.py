@@ -10,7 +10,9 @@ from sqlbuild.adapter.shared.types import TablePromotionMode
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import RelationReuseKind
+from sqlbuild.diagnostics.helpers.logging import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.helpers.execution.final_audits import run_final_model_audits
 from sqlbuild.executor.run.helpers.execution.hook_phases import run_post_hook_phase
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
@@ -59,9 +61,7 @@ from sqlbuild.executor.run.models import (
     TableTargets,
 )
 from sqlbuild.executor.run.types import HookPhase
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 
 
 def execute_table_entry(

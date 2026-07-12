@@ -29,6 +29,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.diagnostics.helpers.logging import log_debug_event
 from sqlbuild.shared.constants import (
     POLYGLOT_AGGREGATE_KINDS,
     POLYGLOT_CAST_KINDS,
@@ -39,7 +40,6 @@ from sqlbuild.shared.constants import (
     POLYGLOT_KIND_UNION,
     POLYGLOT_SET_OPERATION_KINDS,
 )
-from sqlbuild.shared.helpers.diagnostics.logging import log_debug_event
 from sqlbuild.shared.helpers.sql.polyglot import import_polyglot_sql
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.lineage")

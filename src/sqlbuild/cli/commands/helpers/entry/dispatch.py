@@ -18,6 +18,8 @@ from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
 from sqlbuild.cli.commands.helpers.diff.validation import parse_diff_name_range
 from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers, CliNamespace
+from sqlbuild.cli.commands.helpers.entry.parsing import read_selector_files
+from sqlbuild.cli.commands.helpers.entry.types import CliCommand
 from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandRequest
 from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
 from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
@@ -33,8 +35,6 @@ from sqlbuild.cli.commands.helpers.scenario.models import (
 from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.config.parsers import read_selector_files
-from sqlbuild.cli.commands.shared.types import CliCommand
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides

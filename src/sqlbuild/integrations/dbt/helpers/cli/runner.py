@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.integrations.dbt.constants import DBT_EXECUTABLE_ENV_VAR, DEFAULT_DBT_EXECUTABLE
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -15,8 +17,16 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
     DbtLsResult,
 )
-from sqlbuild.integrations.dbt.shared.helpers.executable import resolve_dbt_executable
 from sqlbuild.integrations.dbt.types import DbtInvoker
+
+
+def resolve_dbt_executable() -> str:
+    """Return the dbt executable, honoring the DBT_EXECUTABLE override."""
+
+    override: str | None = os.environ.get(DBT_EXECUTABLE_ENV_VAR)
+    if override is not None and override.strip():
+        return override.strip()
+    return DEFAULT_DBT_EXECUTABLE
 
 
 def build_dbt_compile_argv(

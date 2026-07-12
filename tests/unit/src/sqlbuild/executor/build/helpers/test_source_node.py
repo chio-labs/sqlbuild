@@ -13,7 +13,7 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.helpers.source_node import execute_build_source_node
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.shared.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.executor.build.helpers._test_types import (
     BuildSourceNodeExecutionTestCase,

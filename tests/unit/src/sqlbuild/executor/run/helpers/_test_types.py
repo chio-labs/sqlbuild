@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent
 from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus
-from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.executor.types import ExecutionPhase
 
 
 @dataclass(frozen=True)

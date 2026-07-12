@@ -16,7 +16,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, Rel
 from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
 from sqlbuild.executor.run.helpers.materializations.incremental import execute_incremental_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     build_test_audit_gate_metadata,

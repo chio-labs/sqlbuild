@@ -9,7 +9,6 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.shared.types import ExecutionResourceKind
-from sqlbuild.spec.models.project import SnapshotsConfig
 
 
 @dataclass(frozen=True)
@@ -237,16 +236,3 @@ class ResolveDbtProfileConnectionConfigTestCase:
     raw_config: dict[str, object]
     profile_connection: dict[str, object]
     expected_connection: dict[str, object]
-
-
-@dataclass(frozen=True)
-class SnapshotFullRefreshPolicyTestCase:
-    description: str
-    plan_output: PlanOutput
-    snapshots_config: SnapshotsConfig
-    allow_snapshot_full_refresh: bool
-    expected_error_fragment: str | None = None
-    expected_help_fragment: str = ""
-    expected_output: str = ""
-    input_text: str = ""
-    input_is_tty: bool = False

@@ -10,7 +10,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

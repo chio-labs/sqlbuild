@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.shared.models import CursorValue
 from sqlbuild.adapter.shared.types import CursorKind
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.executor.exceptions import ExecutorInputError
 
 
 def resolve_bounded_cursors(

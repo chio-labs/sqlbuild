@@ -12,7 +12,7 @@ from sqlbuild.adapters.duckdb.client import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.seed.main.execute import execute_seed
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.seed.main._test_types import (
     SeedFingerprintFailureTestCase,
 )

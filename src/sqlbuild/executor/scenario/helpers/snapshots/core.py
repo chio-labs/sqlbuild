@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
 )
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.exceptions import ExecutorInputError, ExecutorJsonTypeError
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotCaptureRelationPlan,
@@ -28,7 +29,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
-from sqlbuild.executor.shared.exceptions import ExecutorInputError, ExecutorJsonTypeError
 from sqlbuild.shared.constants import (
     SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
     SCENARIO_EXEC_INTERNAL,

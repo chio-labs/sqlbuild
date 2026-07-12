@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.helpers.shared.version_staleness import (
+from sqlbuild.compiler.planner.helpers.pruning.version_staleness import (
     build_stale_model_names_from_version_identities,
 )
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import VersionStalenessTestCase
