@@ -9,7 +9,7 @@ from sqlbuild.cli.commands.helpers.janitor.models import (
     JanitorInvocation,
     JanitorSettings,
 )
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.shared.helpers.output.colors import supports_color

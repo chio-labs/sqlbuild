@@ -14,13 +14,13 @@ from sqlbuild.cli.commands.helpers.build.models import (
     DeferClonePrephaseOutcome,
     DeferClonePrephaseOutputContext,
 )
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.connection.core import (
-    resolve_target_connection_config,
-)
-from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
+from sqlbuild.cli.commands.helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.helpers.runtime.connection import (
+    resolve_target_connection_config,
+)
+from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,

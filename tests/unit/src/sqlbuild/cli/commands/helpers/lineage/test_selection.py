@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.helpers.lineage.selection import (
     select_selector_lineage,
     select_target_lineage,
 )
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,

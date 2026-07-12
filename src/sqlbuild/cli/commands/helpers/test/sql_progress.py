@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.shared.models import NestedProgressChildRow
+from sqlbuild.cli.progress.main.expectation_detail import format_expectation_detail
+from sqlbuild.cli.progress.main.expectation_name import format_expectation_name
+from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
@@ -40,22 +42,3 @@ def build_test_expectation_rows(
             )
         )
     return tuple(rows)
-
-
-def format_expectation_name(model_name: str) -> str:
-    """Format a comparison result name as a user-facing expectation name."""
-
-    if model_name.startswith("assertion "):
-        return model_name
-    return f"expected {model_name}"
-
-
-def format_expectation_detail(step_result: StepResult) -> str:
-    """Format failing row count detail for an expectation row."""
-
-    if step_result.outcome == SqlTestOutcome.PASS:
-        return ""
-    if step_result.model_name.startswith("assertion "):
-        row_label: str = "row" if step_result.actual_row_count == 1 else "rows"
-        return f"  {step_result.actual_row_count} {row_label}"
-    return f"  {step_result.mismatched_row_count} mismatched"

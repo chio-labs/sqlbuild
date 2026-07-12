@@ -9,16 +9,18 @@ import pytest
 
 from sqlbuild.adapter.models import LifeCycleEvent
 from sqlbuild.adapter.types import LifeCycleEventKind
-from sqlbuild.cli.commands.shared.helpers.progress.core import (
+from sqlbuild.cli.commands.helpers.build.progress import (
     BuildProgressCallbacks,
     _aggregate_audit_results,
     _AuditDisplayEntry,
     _truncate_name,
     format_build_footer,
-    write_execution_header,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.nested import NestedCommandProgressCallbacks
-from sqlbuild.cli.commands.shared.models import NestedProgressChildRow
+from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
+    NestedCommandProgressCallbacks,
+)
+from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
+from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import SkipMode

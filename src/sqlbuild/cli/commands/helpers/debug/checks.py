@@ -10,8 +10,8 @@ from pathlib import Path
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.debug.models import DebugLine, DebugResult
 from sqlbuild.cli.commands.helpers.debug.types import DebugCheckStatus
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.helpers.runtime.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.compiler.discovery.constants import (

@@ -8,11 +8,11 @@ from pathlib import Path
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import QueryResult
 from sqlbuild.cli.commands.helpers.query.output import render_query_result
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.helpers.runtime.connection import (
     resolve_project_connection_config,
 )
+from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.models.project import resolve_effective_adapter_name

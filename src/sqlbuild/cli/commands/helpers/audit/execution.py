@@ -8,10 +8,12 @@ from sqlbuild.cli.commands.helpers.audit.models import (
     AuditExecutionPreparation,
     AuditInvocation,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.connection import (
+from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.nested import NestedCommandProgressCallbacks
+from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
+    NestedCommandProgressCallbacks,
+)
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import AuditPlanEntry

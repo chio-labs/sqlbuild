@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
+from sqlbuild.cli.commands.helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
 from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

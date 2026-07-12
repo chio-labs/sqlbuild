@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.helpers.janitor.models import (
     JanitorConnectionContext,
     JanitorInvocation,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 
 
 def connect_janitor_warehouse(

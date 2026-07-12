@@ -9,6 +9,11 @@ from sqlbuild.cli.commands.helpers.build.models import (
     BuildExecutionPreparation,
     BuildInvocation,
     BuildRunOutcome,
+    StandardLifecycleCallbacks,
+)
+from sqlbuild.cli.commands.helpers.build.progress import BuildProgressCallbacks
+from sqlbuild.cli.commands.helpers.build.python_lifecycle import (
+    prepare_standard_python_lifecycle,
 )
 from sqlbuild.cli.commands.helpers.freshness.source_freshness import (
     append_eligible_standard_source_freshness_records,
@@ -17,17 +22,10 @@ from sqlbuild.cli.commands.helpers.input.parsing import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.connection import (
+from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.core import (
-    BuildProgressCallbacks,
-    write_execution_header,
-)
-from sqlbuild.cli.commands.shared.helpers.python_nodes.standard_lifecycle import (
-    prepare_standard_python_lifecycle,
-)
-from sqlbuild.cli.commands.shared.models import StandardLifecycleCallbacks
+from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.build.models import (

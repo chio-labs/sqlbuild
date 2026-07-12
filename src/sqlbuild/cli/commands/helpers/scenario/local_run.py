@@ -8,10 +8,10 @@ from typing import TextIO
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.scenario.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands.helpers.scenario.result_output import complete_scenario_run
-from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
+from sqlbuild.cli.output.main.scenario_execution_json import (
     format_scenario_execution_json,
-    write_execution_json_output,
 )
+from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.pipeline.main.run import run_scenario_local_test_pipeline

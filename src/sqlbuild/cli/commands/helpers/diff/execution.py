@@ -13,17 +13,17 @@ from sqlbuild.cli.commands.helpers.diff.models import (
     VirtualDiffPreparation,
     VirtualDiffRunOutcome,
 )
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.helpers.planning.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
+from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.helpers.runtime.connection import (
     resolve_project_connection_config,
     resolve_target_connection_config,
 )
-from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
-    resolve_external_sql_reference_resolver,
-)
-from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
-from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
+from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult

@@ -17,10 +17,8 @@ from sqlbuild.cli.commands.helpers.test.outputs import (
     write_test_completion_output,
 )
 from sqlbuild.cli.commands.helpers.test.planning import compile_test_plan
-from sqlbuild.cli.commands.shared.helpers.progress.core import write_execution_header
-from sqlbuild.cli.commands.shared.helpers.targets.runtime import (
-    write_test_runtime_target,
-)
+from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
+from sqlbuild.cli.target_artifacts.main.write_test_runtime_target import write_test_runtime_target
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 

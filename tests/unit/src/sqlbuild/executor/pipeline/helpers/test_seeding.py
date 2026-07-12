@@ -7,9 +7,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
-    format_seed_execution_json,
-)
+from sqlbuild.cli.output.main.seed_execution_json import format_seed_execution_json
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.pipeline.helpers.seeding import run_seed_pipeline
 from tests.unit.src.sqlbuild.executor.pipeline.helpers._test_types import (

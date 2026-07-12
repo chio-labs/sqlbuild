@@ -18,7 +18,7 @@ def run_init(project_dir: Path | None) -> int:
     project_file: Path = base_dir / "sqlbuild_project.toml"
 
     if project_file.exists():
-        from sqlbuild.cli.commands.shared.exceptions import CliUserError
+        from sqlbuild.cli.exceptions import CliUserError
 
         raise CliUserError(
             "sqlbuild_project.toml already exists in this directory",

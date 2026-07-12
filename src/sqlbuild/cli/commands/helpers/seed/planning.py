@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from sqlbuild.cli.commands.helpers.planning.external_refs import (
+    resolve_external_sql_reference_resolver,
+)
 from sqlbuild.cli.commands.helpers.seed.models import (
     SeedCommandRequest,
     SeedExecutionPreparation,
     SeedInvocation,
 )
-from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
-    resolve_external_sql_reference_resolver,
-)
-from sqlbuild.cli.commands.shared.helpers.progress.connection import ConnectionProgressReporter
+from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,

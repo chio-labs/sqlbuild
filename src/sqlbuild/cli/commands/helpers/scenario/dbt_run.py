@@ -9,6 +9,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.helpers.scenario.capture_run import (
     build_scenario_capture_settings,
     run_scenario_capture_run,
@@ -25,9 +26,8 @@ from sqlbuild.cli.commands.helpers.scenario.snapshot_limits import (
     scenario_snapshot_capture_warning,
 )
 from sqlbuild.cli.commands.helpers.scenario.warehouse_run import run_warehouse_scenarios
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput

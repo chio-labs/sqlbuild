@@ -10,10 +10,10 @@ from sqlbuild.cli.commands.helpers.clone.models import (
     CloneConnectionContext,
     CloneInvocation,
 )
-from sqlbuild.cli.commands.shared.helpers.connection.core import (
+from sqlbuild.cli.commands.helpers.runtime.connection import (
     resolve_target_connection_config,
 )
-from sqlbuild.cli.commands.shared.helpers.progress.planning import PlanningProgressReporter
+from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 
 
 def connect_clone_targets(

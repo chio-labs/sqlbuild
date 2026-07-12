@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands.helpers.build.models import VirtualBuildCliRequest
-from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest, SeedInvocation
-from sqlbuild.cli.commands.main.commands.virtual_build import run_virtual_build
-from sqlbuild.cli.commands.shared.helpers.connection.external_refs import (
+from sqlbuild.cli.commands.helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
+from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest, SeedInvocation
+from sqlbuild.cli.commands.main.commands.virtual_build import run_virtual_build
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.provider.main.session import build_provider_session
 
