@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
-from sqlbuild.virtual.planner.helpers.planning import resolve_virtual_model_selection
+from sqlbuild.virtual.planner._helpers.planning import resolve_virtual_model_selection
 
 
 def resolve_virtual_plan_model_selection(

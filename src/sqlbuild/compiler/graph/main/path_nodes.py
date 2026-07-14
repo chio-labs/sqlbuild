@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild.compiler.graph.helpers.algorithms import path_nodes_impl
+from sqlbuild.compiler.graph._helpers.algorithms import path_nodes_impl
 
 
 def path_nodes[K](

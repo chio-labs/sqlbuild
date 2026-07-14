@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.integrations.dbt.helpers.planning.runtime import (
+from sqlbuild.integrations.dbt._helpers.planning.runtime import (
     resolve_dbt_interop_adapter as _resolve,
 )
 

@@ -7,13 +7,13 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
-from sqlbuild.compiler.planner.helpers.output.plan_entry import (
+from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
+from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     build_plan_entries,
     build_planner_relations_context,
 )
-from sqlbuild.compiler.planner.helpers.output.plan_output import build_plan_output
-from sqlbuild.compiler.planner.helpers.pruning.cascade import resolve_cascades
+from sqlbuild.compiler.planner._helpers.output.plan_output import build_plan_output
+from sqlbuild.compiler.planner._helpers.pruning.cascade import resolve_cascades
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     DeferralInputs,

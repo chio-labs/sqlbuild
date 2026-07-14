@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
-from sqlbuild.compiler.planner.helpers.graph.core import expand_upstream
+from sqlbuild.compiler.planner._helpers.graph.core import expand_upstream
 
 
 def expand_project_upstream_keys(

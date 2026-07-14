@@ -1,6 +1,6 @@
 """Public adapter safe-cast nullability inference operation."""
 
-from sqlbuild.adapter.helpers.inference_rules import (
+from sqlbuild.adapter._helpers.inference_rules import (
     safe_cast_nullability as _safe_cast_nullability,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability

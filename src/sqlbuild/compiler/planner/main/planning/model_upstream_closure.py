@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
-from sqlbuild.compiler.planner.helpers.graph.model_closure import build_upstream_model_name_closure
+from sqlbuild.compiler.planner._helpers.graph.model_closure import build_upstream_model_name_closure
 
 
 def build_upstream_model_names(

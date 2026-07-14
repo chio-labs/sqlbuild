@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.node_source_watermarks.helpers.report import (
+from sqlbuild.compiler.node_source_watermarks._helpers.report import (
     format_node_source_watermark_staleness_report as _format_node_source_watermark_staleness_report,
 )
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkStalenessReport

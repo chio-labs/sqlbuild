@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.presentation.helpers.alignment import (
+from sqlbuild.presentation._helpers.alignment import (
     resolve_name_column_width as _resolve_name_column_width,
 )
 

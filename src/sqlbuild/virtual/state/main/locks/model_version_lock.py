@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+from sqlbuild.virtual.state._helpers.locks import acquire_model_version_lock
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.helpers.locks import acquire_model_version_lock
 from sqlbuild.virtual.state.models import StateLockLease
 
 

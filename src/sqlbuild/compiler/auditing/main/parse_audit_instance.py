@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from sqlbuild.compiler.auditing.helpers.schema_audits import parse_audit_instance_impl
+from sqlbuild.compiler.auditing._helpers.schema_audits import parse_audit_instance_impl
 from sqlbuild.spec.contracts.models import SchemaAuditInstance
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from sqlbuild.compiler.python_nodes.helpers.identity import build_python_identity
+from sqlbuild.compiler.python_nodes._helpers.identity import build_python_identity
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 
 

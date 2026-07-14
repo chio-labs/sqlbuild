@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+from sqlbuild.integrations.dbt._helpers.planning.model_planning import (
     build_dbt_model_planning_result as _build,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

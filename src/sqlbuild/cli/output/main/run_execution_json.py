@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.output.helpers.execution_protocol_v1 import (
+from sqlbuild.cli.output._helpers.execution_protocol_v1 import (
     format_run_execution_json as _format_run_execution_json,
 )
 from sqlbuild.compiler.planner.models import PlanOutput

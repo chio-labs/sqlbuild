@@ -6,7 +6,7 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneStatus
-from tests.unit.src.sqlbuild.executor.clone.helpers.helpers import (
+from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
     FakeCloneAdapter,
     build_clone_model_entry,
 )

@@ -10,16 +10,16 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.fingerprints.helpers.sql import (
+from sqlbuild.compiler.fingerprints._helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.identity.standard import (
+from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner._helpers.identity.standard import (
     build_standard_model_version_identities,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     DependencyBaselinePlanEntry,
     ModelPlanEntry,
@@ -33,7 +33,7 @@ from sqlbuild.compiler.planner.types import (
     StandardScopePruning,
 )
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
-from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_standard_reuse_from_target_project,
     build_standard_reuse_from_target_scope,
 )

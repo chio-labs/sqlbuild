@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.executor.load.helpers.execution import (
+from sqlbuild.executor.load._helpers.execution import (
     build_load_execution_indexes as _build_load_execution_indexes,
 )
 from sqlbuild.executor.load.models import LoadExecutionIndexes

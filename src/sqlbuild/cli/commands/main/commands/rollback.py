@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.planning.external_refs import (
+from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands.helpers.rollback.models import RollbackCommandRequest
-from sqlbuild.cli.commands.helpers.rollback.output import format_rollback_output
-from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands.helpers.runtime.connection import (
+from sqlbuild.cli.commands._helpers.rollback.models import RollbackCommandRequest
+from sqlbuild.cli.commands._helpers.rollback.output import format_rollback_output
+from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.cli.exceptions import CliUserError

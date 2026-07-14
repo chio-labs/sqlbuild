@@ -10,16 +10,16 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.virtual.executor.helpers.environment_views import write_virtual_environment_views
-from sqlbuild.virtual.executor.helpers.project_context import resolve_virtual_project_context
-from sqlbuild.virtual.executor.helpers.rollback import (
+from sqlbuild.virtual.executor._helpers.environment_views import write_virtual_environment_views
+from sqlbuild.virtual.executor._helpers.project_context import resolve_virtual_project_context
+from sqlbuild.virtual.executor._helpers.rollback import (
     build_rollback_ref_update,
     read_rollback_checkpoint_state,
     read_rollback_physical_relations,
     resolve_rollback_final_refs,
     validate_physical_relations_exist,
 )
-from sqlbuild.virtual.executor.helpers.state_operations import (
+from sqlbuild.virtual.executor._helpers.state_operations import (
     acquire_virtual_environment_lease_or_raise,
 )
 from sqlbuild.virtual.executor.models import (

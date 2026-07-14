@@ -18,9 +18,9 @@ from sqlbuild.adapter.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.helpers.diff.output import has_diff_failures
-from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
+from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures
+from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
@@ -59,19 +59,19 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
-    DbtCompileReferenceResolver,
-)
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.cli.runner import build_dbt_ls_argv
-from sqlbuild.integrations.dbt.helpers.graph.core import (
+from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
+from sqlbuild.integrations.dbt._helpers.graph.core import (
     build_dbt_combined_graph,
     dbt_model_graph_key,
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt.helpers.lineage.selection import select_dbt_lineage_target
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.lineage.selection import select_dbt_lineage_target
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
+    DbtCompileReferenceResolver,
+)
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
@@ -83,7 +83,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineageGraph,
     DbtLsNode,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
+from sqlbuild.integrations.dbt.pipeline._helpers.diff import (
     DbtDiffOptions,
     parse_dbt_diff_options,
 )

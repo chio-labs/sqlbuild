@@ -8,12 +8,12 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.helpers.node_source_watermarks import (
+from sqlbuild.executor.build._helpers.node_source_watermarks import (
     build_native_node_source_watermark_context,
     write_native_node_source_watermark_records,
 )
-from sqlbuild.executor.build.helpers.output import aggregate_build_result
-from sqlbuild.executor.build.helpers.scheduler import BuildScheduler
+from sqlbuild.executor.build._helpers.output import aggregate_build_result
+from sqlbuild.executor.build._helpers.scheduler import BuildScheduler
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,

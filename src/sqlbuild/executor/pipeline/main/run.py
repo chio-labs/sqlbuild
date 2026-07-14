@@ -22,26 +22,26 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
     ExternalSourceLoadResults,
 )
-from sqlbuild.executor.pipeline.helpers.auditing import (
+from sqlbuild.executor.pipeline._helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.scenario import (
+from sqlbuild.executor.pipeline._helpers.scenario import (
     run_scenario_capture_pipeline as run_scenario_capture_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.scenario import (
+from sqlbuild.executor.pipeline._helpers.scenario import (
     run_scenario_local_test_pipeline as run_scenario_local_test_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.scenario import (
+from sqlbuild.executor.pipeline._helpers.scenario import (
     run_scenario_test_pipeline as run_scenario_test_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.scenario import (
+from sqlbuild.executor.pipeline._helpers.scenario import (
     select_scenario_snapshot_capture_candidates as select_scenario_snapshot_capture_candidates,
 )
-from sqlbuild.executor.pipeline.helpers.seeding import (
+from sqlbuild.executor.pipeline._helpers.seeding import (
     run_seed_pipeline as run_seed_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.settings import resolve_build_inputs
-from sqlbuild.executor.pipeline.helpers.testing import (
+from sqlbuild.executor.pipeline._helpers.settings import resolve_build_inputs
+from sqlbuild.executor.pipeline._helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
 from sqlbuild.executor.pipeline.models import ResolvedBuildInputs

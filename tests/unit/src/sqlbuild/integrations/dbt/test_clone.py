@@ -7,11 +7,11 @@ import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCloneOptions
-from sqlbuild.integrations.dbt.pipeline.helpers.clone import (
+from sqlbuild.integrations.dbt.pipeline._helpers.clone import (
     execute_dbt_clone,
     parse_dbt_clone_options,
 )

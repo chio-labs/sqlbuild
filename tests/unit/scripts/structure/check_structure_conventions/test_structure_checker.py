@@ -48,7 +48,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/example/widget/main/load.py": dedent(
                     """
-                from sqlbuild.presentation.helpers.terminal_capabilities import supports_color
+                from sqlbuild.presentation._helpers.terminal_capabilities import supports_color
 
 
                 def load_example() -> str:
@@ -116,7 +116,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports internal pure re-export module",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/bridge.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/bridge.py": dedent(
                     """
                 from __future__ import annotations
 
@@ -165,7 +165,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports internal helper __all__ export surface",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/formatting.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/formatting.py": dedent(
                     """
                 from sqlbuild.python_nodes.models import RetryPolicy
 
@@ -218,11 +218,11 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports mixed flat helper modules and concern subfolders",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/build.py": (
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/build.py": (
                     "def build() -> str:\n    return 'demo'\n"
                 ),
-                "src/sqlbuild/example/widget/helpers/render/name.py": (
+                "src/sqlbuild/example/widget/_helpers/render/name.py": (
                     "def render() -> str:\n    return 'demo'\n"
                 ),
             },
@@ -232,10 +232,10 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports mixed helper layout without init module",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/build.py": (
+                "src/sqlbuild/example/widget/_helpers/build.py": (
                     "def build() -> str:\n    return 'demo'\n"
                 ),
-                "src/sqlbuild/example/widget/helpers/render/name.py": (
+                "src/sqlbuild/example/widget/_helpers/render/name.py": (
                     "def render() -> str:\n    return 'demo'\n"
                 ),
             },
@@ -245,11 +245,11 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports shared subfolder mixed with flat helper modules",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/build.py": (
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/build.py": (
                     "def build() -> str:\n    return 'demo'\n"
                 ),
-                "src/sqlbuild/example/widget/helpers/shared/name.py": (
+                "src/sqlbuild/example/widget/_helpers/shared/name.py": (
                     "def render() -> str:\n    return 'demo'\n"
                 ),
             },
@@ -259,11 +259,11 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows shared subfolder when helpers are fully subfoldered",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/build/core.py": (
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/build/core.py": (
                     "def build() -> str:\n    return 'demo'\n"
                 ),
-                "src/sqlbuild/example/widget/helpers/shared/name.py": (
+                "src/sqlbuild/example/widget/_helpers/shared/name.py": (
                     "def render() -> str:\n    return 'demo'\n"
                 ),
             },
@@ -273,9 +273,9 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports helpers package with too many flat modules",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
                 **{
-                    f"src/sqlbuild/example/widget/helpers/module_{index}.py": (
+                    f"src/sqlbuild/example/widget/_helpers/module_{index}.py": (
                         f"def build_{index}() -> int:\n    return {index}\n"
                     )
                     for index in range(12)
@@ -288,7 +288,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             repo_files=compliant_repo_files()
             | {
                 **{
-                    f"src/sqlbuild/example/widget/helpers/module_{index}.py": (
+                    f"src/sqlbuild/example/widget/_helpers/module_{index}.py": (
                         f"def build_{index}() -> int:\n    return {index}\n"
                     )
                     for index in range(12)
@@ -346,7 +346,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports ambiguous target reuse source terminology",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/compiler/planner/helpers/standard_reuse_example.py": (
+                "src/sqlbuild/compiler/planner/_helpers/standard_reuse_example.py": (
                     "def build_origin() -> str:\n"
                     "    source"
                     '_relation = "prod.orders"\n'
@@ -360,7 +360,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports ambiguous dbt reuse source terminology",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/integrations/dbt/helpers/reuse_candidates.py": (
+                "src/sqlbuild/integrations/dbt/_helpers/reuse_candidates.py": (
                     "def build_origin() -> str:\n"
                     "    source_relation = 'prod.orders'\n"
                     "    return source_relation\n"
@@ -372,7 +372,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports globally banned reuse source terminology",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/planning.py": (
+                "src/sqlbuild/example/widget/_helpers/planning.py": (
                     "def build_origin() -> str:\n"
                     "    source_fingerprint = 'abc'\n"
                     "    return source_fingerprint\n"
@@ -396,7 +396,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows source target terminology in source deferral logic",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/compiler/planner/helpers/warehouse/source_deferral.py": (
+                "src/sqlbuild/compiler/planner/_helpers/warehouse/source_deferral.py": (
                     "def resolve() -> str | None:\n"
                     "    source_target_name = 'prod'\n"
                     "    return source_target_name\n"
@@ -420,7 +420,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows real adapter source relation terminology outside reuse modules",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/planning.py": (
+                "src/sqlbuild/example/widget/_helpers/planning.py": (
                     "def render(source_relation: str) -> str:\n    return source_relation\n"
                 )
             },
@@ -495,8 +495,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports top-level helpers package under runtime domain",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/helpers/build.py": "def build() -> str:\n    return 'demo'\n",
+                "src/sqlbuild/example/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/_helpers/build.py": "def build() -> str:\n    return 'demo'\n",
             },
             expected_violation_codes=("SC017",),
         ),
@@ -504,8 +504,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports the compiler top-level helpers package",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/compiler/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/compiler/helpers/sources.py": (
+                "src/sqlbuild/compiler/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/compiler/_helpers/sources.py": (
                     "def render_source() -> str:\n    return 'source'\n"
                 ),
             },
@@ -656,7 +656,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows private enum inside helpers module",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/worker.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/worker.py": dedent(
                     """
                 from enum import StrEnum
 
@@ -677,7 +677,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows private type alias outside types module",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/worker.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/worker.py": dedent(
                     """
                 type _WorkerResult = str | int
 
@@ -694,7 +694,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports public type alias outside types module",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/worker.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/worker.py": dedent(
                     """
                 type WorkerResult = str | int
 
@@ -738,8 +738,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows nested support module under helpers package",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/service.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/service.py": dedent(
                     """
                 def build_service() -> str:
                     return "demo"
@@ -924,7 +924,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/compiler/__init__.py": '"""Compiler domain."""\n',
                 "src/sqlbuild/compiler/planner/__init__.py": '"""Planner package."""\n',
-                "src/sqlbuild/compiler/planner/helpers/phase.py": dedent(
+                "src/sqlbuild/compiler/planner/_helpers/phase.py": dedent(
                     """
                 def merge_values(values: list[str]) -> list[str]:
                     values.append("demo")
@@ -941,7 +941,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/executor/__init__.py": '"""Executor domain."""\n',
                 "src/sqlbuild/executor/load/__init__.py": '"""Load package."""\n',
-                "src/sqlbuild/executor/load/helpers/phase.py": dedent(
+                "src/sqlbuild/executor/load/_helpers/phase.py": dedent(
                     """
                 def merge_values(values: list[str]) -> list[str]:
                     values.append("demo")  # sc: allow-param-mutation
@@ -958,7 +958,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/compiler/__init__.py": '"""Compiler domain."""\n',
                 "src/sqlbuild/compiler/planner/__init__.py": '"""Planner package."""\n',
-                "src/sqlbuild/compiler/planner/helpers/phase.py": dedent(
+                "src/sqlbuild/compiler/planner/_helpers/phase.py": dedent(
                     """
                 class _PhaseState:
                     def __init__(self, values: list[str]) -> None:
@@ -1089,7 +1089,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 "src/sqlbuild/example/widget/main/__init__.py": '"""Main entry modules."""\n',
                 "src/sqlbuild/example/widget/main/plan.py": dedent(
                     """
-                from sqlbuild.example.widget.helpers.backfill.run import run_backfill
+                from sqlbuild.example.widget._helpers.backfill.run import run_backfill
 
 
                 def run_plan() -> str:
@@ -1097,8 +1097,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 """
                 ).strip()
                 + "\n",
-                "src/sqlbuild/example/widget/helpers/backfill/__init__.py": '"""Backfill helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/backfill/run.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/backfill/__init__.py": '"""Backfill helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/backfill/run.py": dedent(
                     """
                 def run_backfill() -> str:
                     return "demo"
@@ -1115,7 +1115,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 "src/sqlbuild/example/widget/classes/__init__.py": '"""Widget classes."""\n',
                 "src/sqlbuild/example/widget/classes/runner.py": dedent(
                     """
-                from sqlbuild.example.widget.helpers.backfill.run import run_backfill
+                from sqlbuild.example.widget._helpers.backfill.run import run_backfill
 
 
                 class WidgetRunner:
@@ -1124,8 +1124,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 """
                 ).strip()
                 + "\n",
-                "src/sqlbuild/example/widget/helpers/backfill/__init__.py": '"""Backfill helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/backfill/run.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/backfill/__init__.py": '"""Backfill helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/backfill/run.py": dedent(
                     """
                 def run_backfill() -> str:
                     return "demo"
@@ -1191,8 +1191,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows helpers import from same package classes",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/build.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/build.py": dedent(
                     """
                 from sqlbuild.example.widget.classes.runner import WidgetRunner
 
@@ -1252,7 +1252,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports exceptions module nested under helpers package",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/exceptions.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/exceptions.py": dedent(
                     """
                 class ExampleError(Exception):
                     pass
@@ -1335,8 +1335,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports main module inside helpers package",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/main.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/main.py": dedent(
                     """
                 def main() -> int:
                     return 0
@@ -1350,9 +1350,9 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows direct role modules inside helper subpackages",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/diff/__init__.py": '"""Diff helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/diff/parse.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/diff/__init__.py": '"""Diff helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/diff/parse.py": dedent(
                     """
                 def parse_diff() -> str:
                     return "demo"
@@ -1366,10 +1366,10 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows conventional files inside helper subpackages",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/diff/__init__.py": '"""Diff helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/diff/constants.py": 'DEFAULT_KIND = "demo"\n',
-                "src/sqlbuild/example/widget/helpers/diff/models.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/diff/__init__.py": '"""Diff helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/diff/constants.py": 'DEFAULT_KIND = "demo"\n',
+                "src/sqlbuild/example/widget/_helpers/diff/models.py": dedent(
                     """
                 from dataclasses import dataclass
 
@@ -1387,9 +1387,9 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports main module inside helper subpackages",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/diff/__init__.py": '"""Diff helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/diff/main.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/diff/__init__.py": '"""Diff helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/diff/main.py": dedent(
                     """
                 def parse_diff() -> str:
                     return "demo"
@@ -1403,9 +1403,9 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports nested package inside helper subpackages",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/__init__.py": '"""Helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/diff/__init__.py": '"""Diff helpers."""\n',
-                "src/sqlbuild/example/widget/helpers/diff/parsing/__init__.py": '"""Parsing."""\n',
+                "src/sqlbuild/example/widget/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/diff/__init__.py": '"""Diff helpers."""\n',
+                "src/sqlbuild/example/widget/_helpers/diff/parsing/__init__.py": '"""Parsing."""\n',
             },
             expected_violation_codes=("SC022", "SC030"),
         ),
@@ -1473,7 +1473,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 "src/sqlbuild/example/discovery/main/__init__.py": '"""Discovery entries."""\n',
                 "src/sqlbuild/example/discovery/main/discover.py": dedent(
                     """
-                from sqlbuild.example.refs.helpers.parse import parse_ref
+                from sqlbuild.example.refs._helpers.parse import parse_ref
 
 
                 def discover_name() -> str:
@@ -1482,8 +1482,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 ).strip()
                 + "\n",
                 "src/sqlbuild/example/refs/__init__.py": '"""Refs."""\n',
-                "src/sqlbuild/example/refs/helpers/__init__.py": '"""Ref helpers."""\n',
-                "src/sqlbuild/example/refs/helpers/parse.py": dedent(
+                "src/sqlbuild/example/refs/_helpers/__init__.py": '"""Ref helpers."""\n',
+                "src/sqlbuild/example/refs/_helpers/parse.py": dedent(
                     """
                 def parse_ref() -> str:
                     return "demo"
@@ -1514,10 +1514,10 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows sibling helper subpackage import",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/changes/__init__.py": '"""Changes."""\n',
-                "src/sqlbuild/example/widget/helpers/changes/detect.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/changes/__init__.py": '"""Changes."""\n',
+                "src/sqlbuild/example/widget/_helpers/changes/detect.py": dedent(
                     """
-                from sqlbuild.example.widget.helpers.identity.hashing import hash_value
+                from sqlbuild.example.widget._helpers.identity.hashing import hash_value
 
 
                 def detect() -> str:
@@ -1525,8 +1525,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 """
                 ).strip()
                 + "\n",
-                "src/sqlbuild/example/widget/helpers/identity/__init__.py": '"""Identity."""\n',
-                "src/sqlbuild/example/widget/helpers/identity/hashing.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/identity/__init__.py": '"""Identity."""\n',
+                "src/sqlbuild/example/widget/_helpers/identity/hashing.py": dedent(
                     """
                 def hash_value(value: str) -> str:
                     return value
@@ -1589,7 +1589,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 "src/sqlbuild/example/shared/__init__.py": '"""Shared."""\n',
                 "src/sqlbuild/example/shared/types.py": dedent(
                     """
-                from sqlbuild.example.refs.helpers.parse import parse_ref
+                from sqlbuild.example.refs._helpers.parse import parse_ref
 
 
                 ExampleName = str
@@ -1598,8 +1598,8 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 ).strip()
                 + "\n",
                 "src/sqlbuild/example/refs/__init__.py": '"""Refs."""\n',
-                "src/sqlbuild/example/refs/helpers/__init__.py": '"""Ref helpers."""\n',
-                "src/sqlbuild/example/refs/helpers/parse.py": dedent(
+                "src/sqlbuild/example/refs/_helpers/__init__.py": '"""Ref helpers."""\n',
+                "src/sqlbuild/example/refs/_helpers/parse.py": dedent(
                     """
                 def parse_ref() -> str:
                     return "demo"
@@ -1770,7 +1770,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports private dataclass after function definition",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/build.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/build.py": dedent(
                     """
                 from __future__ import annotations
 
@@ -1794,7 +1794,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="reports private constant after function definition",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/example/widget/helpers/build.py": dedent(
+                "src/sqlbuild/example/widget/_helpers/build.py": dedent(
                     """
                 from __future__ import annotations
 
@@ -2130,7 +2130,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="flags ad hoc dbt ref-kind scans outside centralized resolver",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/integrations/dbt/helpers/planning/ref_scan.py": dedent(
+                "src/sqlbuild/integrations/dbt/_helpers/planning/ref_scan.py": dedent(
                     """
                 from sqlbuild.compiler.references.types import SqlReferenceKind
 
@@ -2147,7 +2147,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="allows dbt ref-kind scan in centralized resolver",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/integrations/dbt/helpers/manifest/sqlbuild_refs.py": dedent(
+                "src/sqlbuild/integrations/dbt/_helpers/manifest/sqlbuild_refs.py": dedent(
                     """
                 from sqlbuild.compiler.references.types import SqlReferenceKind
 
@@ -2164,7 +2164,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="flags ad hoc dbt neutral graph key construction",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/integrations/dbt/helpers/planning/projection.py": dedent(
+                "src/sqlbuild/integrations/dbt/_helpers/planning/projection.py": dedent(
                     """
                 from sqlbuild.compiler.planner.models import GraphNodeKey
 
@@ -2181,7 +2181,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             description="flags ad hoc selector plus parsing in dbt code",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/integrations/dbt/helpers/selection/core.py": dedent(
+                "src/sqlbuild/integrations/dbt/_helpers/selection/core.py": dedent(
                     """
                 def parse(raw: str) -> tuple[bool, str]:
                     return raw.startswith("+"), raw.lstrip("+")
@@ -2197,7 +2197,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             | {
                 "src/sqlbuild/example/widget/main/load.py": dedent(
                     """
-                from sqlbuild.compiler.compile.helpers.render.macros import load_project_macros
+                from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 
 
                 def load_example(macro_files: tuple) -> dict:
@@ -2217,7 +2217,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                 "src/sqlbuild/compiler/compile/main/__init__.py": '"""Compile entries."""\n',
                 "src/sqlbuild/compiler/compile/main/build_compile_inputs.py": dedent(
                     """
-                from sqlbuild.compiler.compile.helpers.render.macros import load_project_macros
+                from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 
 
                 def build_compile_inputs(macro_files: tuple) -> dict:

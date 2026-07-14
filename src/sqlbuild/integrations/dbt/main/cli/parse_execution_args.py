@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args as _parse
+from sqlbuild.integrations.dbt._helpers.cli.arg_parser import parse_dbt_execution_args as _parse
 from sqlbuild.integrations.dbt.models import DbtInteropParsedArgs
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 

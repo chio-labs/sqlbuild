@@ -15,7 +15,7 @@ else_branch_key: str = "__else__"
 skill_name: str = "sqlbuild-structure"
 skill_description: str = (
     "Use when modifying SQLBuild Python package structure, imports, boundaries, main/ "
-    "entry modules, helpers/, shared/, classes/, models.py, types.py, constants.py, "
+    "entry modules, _helpers/, shared/, classes/, models.py, types.py, constants.py, "
     "exceptions.py, adapter/integration modules, or fixing make check structure convention "
     "violations SC001-SC068."
 )
@@ -66,7 +66,7 @@ Use this before changing Python files under `src/sqlbuild/` or `scripts/`, espec
 
 - moving code between packages
 - adding imports across subpackages or domains
-- creating or changing `main/`, `helpers/`, `shared/`, `classes/`, `models/`, `types/`,
+- creating or changing `main/`, `_helpers/`, `shared/`, `classes/`, `models/`, `types/`,
   `constants/`, or `exceptions/`
 - touching adapter or integration package boundaries
 - fixing `make check` structure convention failures
@@ -76,13 +76,13 @@ Use this before changing Python files under `src/sqlbuild/` or `scripts/`, espec
 - Do not import sibling package internals. Promote shared code to the parent `shared/` boundary.
 - Treat `main/` as a focused entry boundary, not a place to reach casually into sibling internals.
 - Keep `main/` public functions as ordered lists of named phases; extract cohesive stages
-  into `helpers/` functions that return frozen result models instead of mutating arguments.
+  into `_helpers/` functions that return frozen result models instead of mutating arguments.
 - Keep nested runtime packages role-oriented; avoid arbitrary buckets and put support code
-  under `helpers/`.
+  under `_helpers/`.
 - Keep `shared/` dependency-neutral; it must not import sibling package internals.
 - Put structured runtime models in `models.py` or `models/`.
 - Put type-layer declarations in `types.py` or `types/`.
-- Put custom exceptions in `exceptions.py` or `exceptions/`, not under `helpers/`.
+- Put custom exceptions in `exceptions.py` or `exceptions/`, not under `_helpers/`.
 - Keep adapter and integration `client.py` files as focused single-class surfaces.
 
 ## Workflow
@@ -111,7 +111,7 @@ Use this before changing Python files under `src/sqlbuild/` or `scripts/`, espec
   functions and must hand results back as values, never by mutating shared objects.
 - `SC063`, `SC064`, and `SC065` cap statements, distinct calls, and locals for every
   top-level function in main/ modules, private helpers included; private functions in
-  main/ are small glue, so phase-sized logic belongs in `helpers/`. `SC066` rejects
+  main/ are small glue, so phase-sized logic belongs in `_helpers/`. `SC066` rejects
   discarded phase function call results in all main/ top-level functions. `SC067` rejects
   helpers mutating their parameters (`self`/`cls` exempt) unless a deliberate builder is
   marked with `# sc: allow-param-mutation`. `SC068` requires frozen dataclass result

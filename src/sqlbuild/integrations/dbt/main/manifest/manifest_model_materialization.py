@@ -1,6 +1,6 @@
 """Resolve dbt manifest model materialization."""
 
-from sqlbuild.integrations.dbt.helpers.manifest.core import (
+from sqlbuild.integrations.dbt._helpers.manifest.core import (
     dbt_manifest_model_materialization as _resolve,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestModel

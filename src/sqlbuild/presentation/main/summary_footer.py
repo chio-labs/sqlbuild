@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.presentation.helpers.summary_footer import (
+from sqlbuild.presentation._helpers.summary_footer import (
     format_summary_footer as _format_summary_footer,
 )
 

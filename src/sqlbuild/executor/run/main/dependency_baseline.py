@@ -11,7 +11,7 @@ from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_n
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry
-from sqlbuild.executor.run.helpers.reuse.core import (
+from sqlbuild.executor.run._helpers.reuse.core import (
     create_relation_from_reuse_origin,
     create_relation_from_reuse_plan,
 )

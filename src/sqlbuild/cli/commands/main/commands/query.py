@@ -7,9 +7,9 @@ from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import QueryResult
-from sqlbuild.cli.commands.helpers.query.output import render_query_result
-from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands.helpers.runtime.connection import (
+from sqlbuild.cli.commands._helpers.query.output import render_query_result
+from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.cli.exceptions import CliUserError

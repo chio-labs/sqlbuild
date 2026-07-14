@@ -15,17 +15,17 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.virtual.planner.helpers.bound_state import (
+from sqlbuild.virtual.planner._helpers.bound_state import (
     open_planning_connection,
     read_virtual_bound_state,
     resolve_virtual_environment_name,
 )
-from sqlbuild.virtual.planner.helpers.output import (
+from sqlbuild.virtual.planner._helpers.output import (
     attach_virtual_plan_metadata,
     build_virtual_plan_output,
     rewrite_virtual_plan_entries,
 )
-from sqlbuild.virtual.planner.helpers.planning import resolve_virtual_model_selection
+from sqlbuild.virtual.planner._helpers.planning import resolve_virtual_model_selection
 from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_python_identities
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection

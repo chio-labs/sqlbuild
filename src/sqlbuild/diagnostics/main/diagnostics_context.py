@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlbuild.diagnostics.helpers.logging import (
+from sqlbuild.diagnostics._helpers.logging import (
     diagnostics_context as _diagnostics_context,
 )
 

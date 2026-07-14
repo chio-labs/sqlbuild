@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.integrations.dagster import SqlBuildCliResource
-from sqlbuild.integrations.dagster.helpers.invocation import SqlBuildCliInvocation
+from sqlbuild.integrations.dagster._helpers.invocation import SqlBuildCliInvocation
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliFailureTestCase,
     DagsterCliInvocationTestCase,

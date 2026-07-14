@@ -6,20 +6,20 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
-from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest
-from sqlbuild.cli.commands.helpers.compile.models import CompileCommandRequest
-from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
-from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
-from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandRequest
-from sqlbuild.cli.commands.helpers.janitor.models import JanitorCommandRequest
-from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
-from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
-from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
-from sqlbuild.cli.commands.helpers.promote.models import PromoteCommandRequest
-from sqlbuild.cli.commands.helpers.rollback.models import RollbackCommandRequest
-from sqlbuild.cli.commands.helpers.scenario.models import (
+from sqlbuild.cli.commands._helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands._helpers.clone.models import CloneCommandRequest
+from sqlbuild.cli.commands._helpers.compile.models import CompileCommandRequest
+from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands._helpers.dbt_init.models import DbtInitCommandRequest
+from sqlbuild.cli.commands._helpers.diff.models import DiffCommandRequest
+from sqlbuild.cli.commands._helpers.freshness.models import FreshnessCommandRequest
+from sqlbuild.cli.commands._helpers.janitor.models import JanitorCommandRequest
+from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
+from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest
+from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands._helpers.promote.models import PromoteCommandRequest
+from sqlbuild.cli.commands._helpers.rollback.models import RollbackCommandRequest
+from sqlbuild.cli.commands._helpers.scenario.models import (
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
 )

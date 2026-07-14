@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sqlbuild.compiler.node_source_watermarks.helpers.report import (
+from sqlbuild.compiler.node_source_watermarks._helpers.report import (
     build_node_source_watermark_staleness_report as _build_node_source_watermark_staleness_report,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

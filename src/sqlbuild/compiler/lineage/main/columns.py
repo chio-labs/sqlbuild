@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.lineage.helpers.fast_columns import (
+from sqlbuild.compiler.lineage._helpers.fast_columns import (
     build_fast_project_column_lineage,
 )
-from sqlbuild.compiler.lineage.helpers.rich_columns import (
+from sqlbuild.compiler.lineage._helpers.rich_columns import (
     build_rich_project_column_lineage,
 )
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage

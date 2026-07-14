@@ -15,7 +15,7 @@ from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
-from tests.unit.src.sqlbuild.cli.commands.shared.helpers.helpers import build_audit_result
+from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import build_audit_result
 from tests.unit.src.sqlbuild.cli.output.main.build_execution_json._test_types import (
     ExecutionJsonRelationReuseTestCase,
     ExecutionJsonSeedReasonTestCase,

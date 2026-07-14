@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.profile.init import build_dbt_init_project
+from sqlbuild.integrations.dbt._helpers.profile.init import build_dbt_init_project
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
 from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
     DbtProfileInitDiscoveryTestCase,

@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.virtual.state._helpers.adopt import adopt_into_virtual_state
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.helpers.adopt import adopt_into_virtual_state
 from sqlbuild.virtual.state.models import StateBackendConfig
 
 

@@ -1,7 +1,7 @@
 """Public effective adapter name resolution operation."""
 
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
-from sqlbuild.spec.resolution.helpers.project_config import (
+from sqlbuild.spec.resolution._helpers.project_config import (
     resolve_effective_adapter_name as _resolve_effective_adapter_name,
 )
 

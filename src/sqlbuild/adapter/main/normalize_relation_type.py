@@ -1,6 +1,6 @@
 """Public adapter relation type normalization operation."""
 
-from sqlbuild.adapter.helpers.relation_type import (
+from sqlbuild.adapter._helpers.relation_type import (
     normalize_relation_type as _normalize_relation_type,
 )
 from sqlbuild.adapter.types import RelationType

@@ -10,7 +10,7 @@ from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.executor.clone.helpers.operations import clone_relation, recreate_view
+from sqlbuild.executor.clone._helpers.operations import clone_relation, recreate_view
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneItemCallback
 

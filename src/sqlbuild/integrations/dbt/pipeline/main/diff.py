@@ -16,12 +16,12 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropConnection,
     DbtLsNode,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
+from sqlbuild.integrations.dbt.pipeline._helpers.diff import (
     execute_dbt_diff,
     mode_label,
     parse_dbt_diff_options,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.interop_prologue import (
+from sqlbuild.integrations.dbt.pipeline._helpers.interop_prologue import (
     connect_dbt_interop_warehouse,
     prepare_dbt_comparison_manifests,
     resolve_selected_dbt_model_nodes,

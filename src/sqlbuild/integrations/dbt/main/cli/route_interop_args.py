@@ -1,6 +1,6 @@
 """Route dbt interop arguments."""
 
-from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args as _route
+from sqlbuild.integrations.dbt._helpers.cli.args import route_dbt_interop_args as _route
 from sqlbuild.integrations.dbt.models import DbtInteropParsedArgs, DbtInteropRoutedArgs
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 

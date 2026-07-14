@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.presentation.helpers.terminal_capabilities import supports_color as _supports_color
+from sqlbuild.presentation._helpers.terminal_capabilities import supports_color as _supports_color
 
 
 def supports_color() -> bool:

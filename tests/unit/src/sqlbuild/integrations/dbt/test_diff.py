@@ -9,7 +9,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropConfigError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
+from sqlbuild.integrations.dbt.pipeline._helpers.diff import (
     DbtDiffOptions,
     execute_dbt_diff,
     parse_dbt_diff_options,

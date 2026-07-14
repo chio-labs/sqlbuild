@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCombinedGraph
-from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
+from sqlbuild.integrations.dbt.pipeline._helpers.defer_clone import (
     resolve_defer_clone_unique_ids,
     resolve_defer_clone_view_chain_terms,
     resolve_defer_clone_view_chain_unique_ids,

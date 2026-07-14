@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.discovery.helpers.project_adapters import (
+from sqlbuild.adapter.discovery._helpers.project_adapters import (
     discover_project_adapters as _discover_project_adapters,
 )
 

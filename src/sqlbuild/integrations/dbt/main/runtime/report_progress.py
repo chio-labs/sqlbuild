@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress as _report
+from sqlbuild.integrations.dbt._helpers.runtime.progress import report_progress as _report
 
 
 def report_progress(*, on_progress: Callable[[str], None] | None, message: str) -> None:

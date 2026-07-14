@@ -2,7 +2,7 @@
 
 import logging
 
-from sqlbuild.diagnostics.helpers.logging import log_sql as _log_sql
+from sqlbuild.diagnostics._helpers.logging import log_sql as _log_sql
 
 
 def log_sql(*, logger: logging.Logger, sql: str, action: str = "execute") -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TextIO
 
-from sqlbuild.executor.clone.helpers.prephase_progress import (
+from sqlbuild.executor.clone._helpers.prephase_progress import (
     run_prephase_clone_stream as _run_prephase_clone_stream,
 )
 from sqlbuild.executor.clone.types import CloneItemCallback

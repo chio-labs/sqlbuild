@@ -21,14 +21,14 @@ from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
 from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
+from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
     gather_deferred_relations,
     resolve_deferred_target_config,
 )
-from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
-from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline.helpers.python_plan_entries import build_python_run_plan_outputs
+from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
+from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
+from sqlbuild.compiler.pipeline._helpers.python_plan_entries import build_python_run_plan_outputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.prepare_versions import (
     load_custom_prepare_version_functions,

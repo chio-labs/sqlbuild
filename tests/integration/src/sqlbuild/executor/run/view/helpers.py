@@ -24,7 +24,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.executor.run.helpers.materializations.view import execute_view_entry
+from sqlbuild.executor.run._helpers.materializations.view import execute_view_entry
 from sqlbuild.executor.run.models import (
     HookContext,
     ModelExecutionResult,

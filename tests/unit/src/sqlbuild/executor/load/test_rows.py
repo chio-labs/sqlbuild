@@ -10,7 +10,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.load.helpers.rows import (
+from sqlbuild.executor.load._helpers.rows import (
     build_rows_sql,
     iter_loader_row_batches,
     normalize_loader_rows,

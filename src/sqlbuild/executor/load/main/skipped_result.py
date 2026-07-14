@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.load.helpers.execution import skipped_load_result as _skipped_load_result
+from sqlbuild.executor.load._helpers.execution import skipped_load_result as _skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.spec.contracts.models import SourceEntry
 

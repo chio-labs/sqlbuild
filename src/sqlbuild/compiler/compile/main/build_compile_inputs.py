@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.auditing.main.builtins import build_builtin_audit_resolution
-from sqlbuild.compiler.compile.helpers.attachment.audits import (
+from sqlbuild.compiler.compile._helpers.attachment.audits import (
     build_audit_inputs,
     index_generic_audit_definitions,
 )
-from sqlbuild.compiler.compile.helpers.attachment.core import (
+from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_effective_connection,
     build_effective_settings,
     build_effective_vars,
@@ -15,13 +15,13 @@ from sqlbuild.compiler.compile.helpers.attachment.core import (
     build_seed_inputs,
     resolve_run_id,
 )
-from sqlbuild.compiler.compile.helpers.attachment.functions import build_sql_function_inputs
-from sqlbuild.compiler.compile.helpers.attachment.sources import build_source_inputs
-from sqlbuild.compiler.compile.helpers.attachment.sql_tests import (
+from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
+from sqlbuild.compiler.compile._helpers.attachment.sources import build_source_inputs
+from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_scenario_inputs,
     build_test_inputs,
 )
-from sqlbuild.compiler.compile.helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models.core import (
     CompileAuditInput,
     CompileModelInput,

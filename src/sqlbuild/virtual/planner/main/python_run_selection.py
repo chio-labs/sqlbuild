@@ -16,7 +16,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunSelection,
     PythonSqlSelection,
 )
-from sqlbuild.virtual.planner.helpers.python_node_closure import (
+from sqlbuild.virtual.planner._helpers.python_node_closure import (
     planned_source_loader_python_names,
     python_upstream_closure,
     sql_attached_python_names,

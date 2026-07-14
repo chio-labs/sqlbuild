@@ -5,11 +5,11 @@ import pytest
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.compile.models.sql_tests import CompiledModelSqlTestPayload
-from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
+from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
     adapt_project_for_dbt_sql_tests,
     resolve_dbt_sql_test_target_names,
 )
+from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtSqlTestFixtureNameTestCase,

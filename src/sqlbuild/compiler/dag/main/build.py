@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.dag.helpers.artifact import build_dag_artifact, format_dag_json
+from sqlbuild.compiler.dag._helpers.artifact import build_dag_artifact, format_dag_json
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 

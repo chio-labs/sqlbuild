@@ -1,6 +1,6 @@
 """SQL identifier start classification entrypoint."""
 
-from sqlbuild.compiler.sql_analysis.helpers.scanning import is_identifier_start_impl
+from sqlbuild.compiler.sql_analysis._helpers.scanning import is_identifier_start_impl
 
 
 def is_identifier_start(character: str) -> bool:

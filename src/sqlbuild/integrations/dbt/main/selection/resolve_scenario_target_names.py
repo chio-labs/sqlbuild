@@ -1,7 +1,7 @@
 """Resolve dbt scenario target names."""
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
+from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
     resolve_dbt_scenario_target_names as _resolve,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

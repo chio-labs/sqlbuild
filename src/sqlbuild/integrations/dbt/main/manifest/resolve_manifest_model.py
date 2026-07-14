@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.integrations.dbt.helpers.manifest.core import (
+from sqlbuild.integrations.dbt._helpers.manifest.core import (
     resolve_dbt_manifest_model as _resolve_dbt_manifest_model,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel

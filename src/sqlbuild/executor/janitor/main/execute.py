@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.executor.janitor.helpers.deletion import apply_janitor_deletions
+from sqlbuild.executor.janitor._helpers.deletion import apply_janitor_deletions
 from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,

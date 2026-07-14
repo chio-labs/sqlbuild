@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.executor.scheduling.helpers.python_nodes import (
+from sqlbuild.executor.scheduling._helpers.python_nodes import (
     build_python_node_ready_queue as _build_python_node_ready_queue,
 )
 

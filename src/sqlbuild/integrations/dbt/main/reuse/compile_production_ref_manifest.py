@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.integrations.dbt._helpers.reuse.production_ref import compile_production_ref_manifest
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.reuse.production_ref import compile_production_ref_manifest
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtProductionRefCompileResult
 from sqlbuild.spec.contracts.models import DbtProductionRefConfig
 

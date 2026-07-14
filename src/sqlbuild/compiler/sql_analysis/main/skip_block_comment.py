@@ -1,6 +1,6 @@
 """SQL block comment scanning entrypoint."""
 
-from sqlbuild.compiler.sql_analysis.helpers.scanning import skip_block_comment_impl
+from sqlbuild.compiler.sql_analysis._helpers.scanning import skip_block_comment_impl
 
 
 def skip_block_comment(*, sql: str, start: int, context: str = "SQL") -> int:

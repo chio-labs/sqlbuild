@@ -6,8 +6,8 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from sqlbuild.presentation._helpers.progress import progress_spinners_disabled
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.helpers.progress import progress_spinners_disabled
 
 
 @contextmanager

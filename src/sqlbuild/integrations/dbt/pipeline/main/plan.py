@@ -20,19 +20,19 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropPlanResolution,
 )
-from sqlbuild.integrations.dbt.pipeline.constants import DBT_FULL_REFRESH_FLAG
-from sqlbuild.integrations.dbt.pipeline.helpers.execute import append_manifest_seed_warnings
-from sqlbuild.integrations.dbt.pipeline.helpers.interop_prologue import (
+from sqlbuild.integrations.dbt.pipeline._helpers.execute import append_manifest_seed_warnings
+from sqlbuild.integrations.dbt.pipeline._helpers.interop_prologue import (
     compile_dbt_interop_project,
     load_compiled_dbt_manifest,
     resolve_dbt_execution_invocation,
     resolve_dbt_interop_plan,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import (
+from sqlbuild.integrations.dbt.pipeline._helpers.plan_output import (
     apply_dbt_build_pruning,
     attach_dbt_model_plan,
     attach_sqlbuild_plan_output,
 )
+from sqlbuild.integrations.dbt.pipeline.constants import DBT_FULL_REFRESH_FLAG
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 

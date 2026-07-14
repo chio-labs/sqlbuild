@@ -8,24 +8,24 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.freshness.models import (
+from sqlbuild.cli.commands._helpers.freshness.models import (
     FreshnessCommandRequest,
     FreshnessCommandResult,
 )
-from sqlbuild.cli.commands.helpers.freshness.observe import (
+from sqlbuild.cli.commands._helpers.freshness.observe import (
     observe_source_freshness_for_command,
 )
-from sqlbuild.cli.commands.helpers.freshness.output import (
+from sqlbuild.cli.commands._helpers.freshness.output import (
     format_freshness_json,
     format_freshness_text,
 )
-from sqlbuild.cli.commands.helpers.freshness.selection import resolve_freshness_source_names
-from sqlbuild.cli.commands.helpers.freshness.state import (
+from sqlbuild.cli.commands._helpers.freshness.selection import resolve_freshness_source_names
+from sqlbuild.cli.commands._helpers.freshness.state import (
     read_standard_freshness_state_for_command,
     read_virtual_freshness_state_for_command,
 )
-from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands.helpers.runtime.connection import (
+from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.cli.exceptions import CliUserError

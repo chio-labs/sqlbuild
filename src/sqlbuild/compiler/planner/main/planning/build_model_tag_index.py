@@ -1,7 +1,7 @@
 """Model tag selector index entrypoint."""
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.planner.helpers.graph.selector_indexes import build_model_tag_index_impl
+from sqlbuild.compiler.planner._helpers.graph.selector_indexes import build_model_tag_index_impl
 
 
 def build_model_tag_index(project: CompiledProject) -> dict[str, frozenset[CompiledObjectKey]]:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.executor.node_results.helpers.serialization import decode_json_b64
+from sqlbuild.executor.node_results._helpers.serialization import decode_json_b64
 
 
 def decode_node_result_json(*, value: str, label: str, node_name: str) -> object:

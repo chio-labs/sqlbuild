@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from sqlbuild.cli.commands.helpers.compile.models import WrittenTarget
-from sqlbuild.cli.commands.helpers.compile.output import (
+from sqlbuild.cli.commands._helpers.compile.models import WrittenTarget
+from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
 )

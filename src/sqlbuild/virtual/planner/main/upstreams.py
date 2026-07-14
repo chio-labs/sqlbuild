@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.virtual.planner.helpers.planning import build_stale_required_upstream_closure
+from sqlbuild.virtual.planner._helpers.planning import build_stale_required_upstream_closure
 
 
 def build_virtual_stale_required_upstream_closure(

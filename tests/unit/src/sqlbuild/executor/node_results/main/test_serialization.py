@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.node_results.helpers.serialization import encode_json_b64
+from sqlbuild.executor.node_results._helpers.serialization import encode_json_b64
 from tests.unit.src.sqlbuild.executor.node_results.main._test_types import (
     NodeResultSerializationErrorTestCase,
     NodeResultSerializationTestCase,

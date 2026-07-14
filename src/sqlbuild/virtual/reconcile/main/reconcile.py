@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.reconcile.helpers.reconcile import (
+from sqlbuild.virtual.reconcile._helpers.reconcile import (
     run_virtual_reconcile as _run_virtual_reconcile,
 )
 

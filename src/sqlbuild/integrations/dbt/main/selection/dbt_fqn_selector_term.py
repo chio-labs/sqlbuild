@@ -1,6 +1,6 @@
 """Build a dbt FQN selector term."""
 
-from sqlbuild.integrations.dbt.helpers.selection.selector_terms import (
+from sqlbuild.integrations.dbt._helpers.selection.selector_terms import (
     dbt_fqn_selector_term as _build,
 )
 

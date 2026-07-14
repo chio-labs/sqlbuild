@@ -33,7 +33,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.executor.run.helpers.materializations.microbatch import execute_microbatch_entry
+from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
 from sqlbuild.executor.run.models import (
     HookContext,
     ModelExecutionResult,

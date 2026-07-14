@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild.cli.commands._helpers.dbt.auto_init import (
+    ensure_sqlbuild_project_for_dbt_command,
+)
 from sqlbuild.cli.commands.constants import (
     DBT_CLI_OUTPUT_OPTIONS,
     DBT_JSON_OUTPUT_OPTION,
     DBT_VERBOSE_OPTIONS,
-)
-from sqlbuild.cli.commands.helpers.dbt.auto_init import (
-    ensure_sqlbuild_project_for_dbt_command,
 )
 from sqlbuild.cli.commands.main.commands.dbt_clone import run_dbt_clone_command
 from sqlbuild.cli.commands.main.commands.dbt_debug import run_dbt_debug_command

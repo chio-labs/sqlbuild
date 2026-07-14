@@ -1,7 +1,7 @@
 """Build dbt write identity hashes."""
 
 from sqlbuild.compiler.planner.models import GraphNodeKey
-from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
+from sqlbuild.integrations.dbt._helpers.planning.model_identity import (
     build_dbt_write_identity_hashes as _build,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

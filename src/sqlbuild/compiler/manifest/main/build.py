@@ -12,19 +12,19 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSource,
     LoadedMacro,
 )
-from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
-from sqlbuild.compiler.manifest.helpers.graph_maps import (
+from sqlbuild.compiler.manifest._helpers.graph_maps import (
     build_child_map,
     build_parent_map,
 )
-from sqlbuild.compiler.manifest.helpers.macros import build_macro_node
-from sqlbuild.compiler.manifest.helpers.model_nodes import build_model_node
-from sqlbuild.compiler.manifest.helpers.seeds import build_seed_node
-from sqlbuild.compiler.manifest.helpers.sources import build_source_node
-from sqlbuild.compiler.manifest.helpers.tests import (
+from sqlbuild.compiler.manifest._helpers.macros import build_macro_node
+from sqlbuild.compiler.manifest._helpers.model_nodes import build_model_node
+from sqlbuild.compiler.manifest._helpers.seeds import build_seed_node
+from sqlbuild.compiler.manifest._helpers.sources import build_source_node
+from sqlbuild.compiler.manifest._helpers.tests import (
     build_audit_test_nodes,
     build_sql_test_nodes,
 )
+from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     ModelPlanEntry,

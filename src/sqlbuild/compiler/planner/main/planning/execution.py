@@ -8,32 +8,32 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.planner.helpers.changes.detect import detect_changes
-from sqlbuild.compiler.planner.helpers.planning.buildability import (
+from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
+from sqlbuild.compiler.planner._helpers.planning.buildability import (
     check_selected_scope_buildability,
 )
-from sqlbuild.compiler.planner.helpers.planning.entries import build_planner_entry_results
-from sqlbuild.compiler.planner.helpers.planning.identities import (
+from sqlbuild.compiler.planner._helpers.planning.entries import build_planner_entry_results
+from sqlbuild.compiler.planner._helpers.planning.identities import (
     build_planner_identity_context,
     detect_stale_warning_changes,
 )
-from sqlbuild.compiler.planner.helpers.planning.output_assembly import (
+from sqlbuild.compiler.planner._helpers.planning.output_assembly import (
     assemble_base_plan_output,
     with_plan_metadata,
     with_plan_warnings,
 )
-from sqlbuild.compiler.planner.helpers.planning.reconciliation import reconcile_execution_changes
-from sqlbuild.compiler.planner.helpers.planning.reuse_resolution import resolve_standard_reuse
-from sqlbuild.compiler.planner.helpers.planning.scope_pruning import prune_planner_execution_scope
-from sqlbuild.compiler.planner.helpers.planning.scopes import resolve_planner_scopes
-from sqlbuild.compiler.planner.helpers.planning.warehouse_state import (
+from sqlbuild.compiler.planner._helpers.planning.reconciliation import reconcile_execution_changes
+from sqlbuild.compiler.planner._helpers.planning.reuse_resolution import resolve_standard_reuse
+from sqlbuild.compiler.planner._helpers.planning.scope_pruning import prune_planner_execution_scope
+from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
+from sqlbuild.compiler.planner._helpers.planning.warehouse_state import (
     gather_planner_warehouse_state,
 )
-from sqlbuild.compiler.planner.helpers.pruning.cascade import resolve_cascades
-from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_from_target import (
+from sqlbuild.compiler.planner._helpers.pruning.cascade import resolve_cascades
+from sqlbuild.compiler.planner._helpers.reuse.standard_reuse_from_target import (
     enforce_standard_reuse_from_source_deferral_conflict,
 )
-from sqlbuild.compiler.planner.helpers.warehouse.source_freshness import (
+from sqlbuild.compiler.planner._helpers.warehouse.source_freshness import (
     build_planner_source_freshness_result,
 )
 from sqlbuild.compiler.planner.models import (

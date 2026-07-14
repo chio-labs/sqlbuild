@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import (
+from sqlbuild.integrations.dbt._helpers.manifest.compile_refs import (
     resolve_compile_dbt_ref_references,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.references.helpers.resolution import (
+from sqlbuild.compiler.references._helpers.resolution import (
     assert_no_unresolved_sql_markers as _assert_no_unresolved_sql_markers,
 )
 

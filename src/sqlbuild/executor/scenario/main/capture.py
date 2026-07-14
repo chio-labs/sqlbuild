@@ -10,20 +10,20 @@ from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.errors.contracts.main.error_code import error_code
-from sqlbuild.executor.scenario.constants import (
-    SCENARIO_EXEC_CAPTURE_FAILED,
-    SCENARIO_EXEC_CAPTURE_INTERNAL,
-)
-from sqlbuild.executor.scenario.helpers.capture.columns import build_scenario_snapshot_columns
-from sqlbuild.executor.scenario.helpers.capture.safety import (
+from sqlbuild.executor.scenario._helpers.capture.columns import build_scenario_snapshot_columns
+from sqlbuild.executor.scenario._helpers.capture.safety import (
     capture_error_help,
     max_relation_write_bytes,
     query_capture_relation_row_count,
     validate_capture_row_limits,
 )
-from sqlbuild.executor.scenario.helpers.snapshots.core import (
+from sqlbuild.executor.scenario._helpers.snapshots.core import (
     write_scenario_snapshot_jsonl,
     write_scenario_snapshot_manifest,
+)
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_EXEC_CAPTURE_FAILED,
+    SCENARIO_EXEC_CAPTURE_INTERNAL,
 )
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureLimits,

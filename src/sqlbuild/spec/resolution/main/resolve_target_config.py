@@ -1,7 +1,7 @@
 """Public target configuration resolution operation."""
 
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
-from sqlbuild.spec.resolution.helpers.targets import (
+from sqlbuild.spec.resolution._helpers.targets import (
     resolve_target_config as _resolve_target_config,
 )
 

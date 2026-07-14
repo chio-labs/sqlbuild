@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_SETTING_KEY
-from sqlbuild.compiler.discovery.helpers.filesystem.aggregation import (
+from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
     build_discovered_project_inputs,
 )
-from sqlbuild.compiler.discovery.helpers.validation.discovery import validate_discovered_inputs
-from sqlbuild.compiler.discovery.helpers.yml.project import (
+from sqlbuild.compiler.discovery._helpers.validation.discovery import validate_discovered_inputs
+from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
 )
+from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_SETTING_KEY
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 

@@ -6,9 +6,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.integrations.dagster.helpers.dag import load_sqlbuild_dag
-from sqlbuild.integrations.dagster.helpers.imports import load_dagster
-from sqlbuild.integrations.dagster.helpers.invocation import (
+from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag
+from sqlbuild.integrations.dagster._helpers.imports import load_dagster
+from sqlbuild.integrations.dagster._helpers.invocation import (
     SqlBuildCliInvocation,
     start_sqlbuild_cli_invocation,
 )

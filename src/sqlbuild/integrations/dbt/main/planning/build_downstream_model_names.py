@@ -1,6 +1,6 @@
 """Build downstream SQLBuild model names."""
 
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+from sqlbuild.integrations.dbt._helpers.planning.model_planning import (
     build_downstream_sqlbuild_model_names as _build,
 )
 from sqlbuild.integrations.dbt.models import DbtCombinedGraph

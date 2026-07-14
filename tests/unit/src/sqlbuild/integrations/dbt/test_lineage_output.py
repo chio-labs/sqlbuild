@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.lineage.output import (
+from sqlbuild.integrations.dbt._helpers.lineage.output import (
     format_dbt_lineage_json,
     format_dbt_lineage_list,
     format_dbt_lineage_tree,

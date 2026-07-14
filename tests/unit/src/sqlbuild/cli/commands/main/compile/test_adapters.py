@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (

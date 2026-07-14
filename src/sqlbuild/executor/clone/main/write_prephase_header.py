@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TextIO
 
-from sqlbuild.executor.clone.helpers.prephase_progress import (
+from sqlbuild.executor.clone._helpers.prephase_progress import (
     write_prephase_header as _write_prephase_header,
 )
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 _DEFAULT_VALUES: dict[str, object] = {

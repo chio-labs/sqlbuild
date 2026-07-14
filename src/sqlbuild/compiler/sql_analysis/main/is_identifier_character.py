@@ -1,6 +1,6 @@
 """SQL identifier character classification entrypoint."""
 
-from sqlbuild.compiler.sql_analysis.helpers.scanning import is_identifier_character_impl
+from sqlbuild.compiler.sql_analysis._helpers.scanning import is_identifier_character_impl
 
 
 def is_identifier_character(character: str) -> bool:

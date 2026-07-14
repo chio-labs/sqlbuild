@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.presentation.helpers.alignment import (
+from sqlbuild.presentation._helpers.alignment import (
     format_aligned_name_value as _format_aligned_name_value,
 )
 

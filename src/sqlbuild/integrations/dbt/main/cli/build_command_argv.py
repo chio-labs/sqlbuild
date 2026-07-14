@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlbuild.integrations.dbt.helpers.cli.runner import build_dbt_command_argv as _build
+from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_command_argv as _build
 from sqlbuild.integrations.dbt.models import DbtCliOptions
 
 

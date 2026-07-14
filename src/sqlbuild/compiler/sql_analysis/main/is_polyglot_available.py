@@ -1,6 +1,6 @@
 """Public Polyglot availability entry."""
 
-from sqlbuild.compiler.sql_analysis.helpers.polyglot import (
+from sqlbuild.compiler.sql_analysis._helpers.polyglot import (
     is_polyglot_available as _is_polyglot_available,
 )
 

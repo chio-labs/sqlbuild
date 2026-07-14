@@ -1,7 +1,7 @@
 """Relation location qualification entrypoint."""
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.relation_naming.helpers.naming import (
+from sqlbuild.adapter.relation_naming._helpers.naming import (
     resolve_relation_location_qualified_name_impl,
 )
 from sqlbuild.adapter.relation_naming.types import RelationLocation

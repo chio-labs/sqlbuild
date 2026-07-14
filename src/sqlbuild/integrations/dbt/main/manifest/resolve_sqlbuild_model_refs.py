@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
-from sqlbuild.integrations.dbt.helpers.manifest.sqlbuild_refs import (
+from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
     resolve_sqlbuild_model_dbt_refs as _resolve,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel

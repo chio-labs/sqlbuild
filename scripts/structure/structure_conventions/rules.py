@@ -115,24 +115,24 @@ _WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
 )
 _SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
     "src/sqlbuild/adapter/main/relation_lookup.py": "single-query lookup capability",
-    "src/sqlbuild/executor/janitor/helpers/plan.py": "one list_relations per database",
-    "src/sqlbuild/integrations/dbt/helpers/planning/model_planning.py": (
+    "src/sqlbuild/executor/janitor/_helpers/plan.py": "one list_relations per database",
+    "src/sqlbuild/integrations/dbt/_helpers/planning/model_planning.py": (
         "one list_relations per database"
     ),
-    "src/sqlbuild/compiler/planner/helpers/output/plan_entry.py": (
+    "src/sqlbuild/compiler/planner/_helpers/output/plan_entry.py": (
         "one get_all_columns per database"
     ),
-    "src/sqlbuild/integrations/dbt/helpers/lineage/columns.py": (
+    "src/sqlbuild/integrations/dbt/_helpers/lineage/columns.py": (
         "one get_all_columns per selected dbt source/seed database-schema group"
     ),
-    "src/sqlbuild/executor/pipeline/helpers/testing.py": (
+    "src/sqlbuild/executor/pipeline/_helpers/testing.py": (
         "list_functions grouped per database, schema, and name batch"
     ),
-    "src/sqlbuild/executor/run/helpers/materializations/microbatch.py": (
+    "src/sqlbuild/executor/run/_helpers/materializations/microbatch.py": (
         "schema-change get_columns gated to the first batch by schema_checked (delta is "
         "staged inside the loop); DML get_columns is per window by design"
     ),
-    "src/sqlbuild/virtual/executor/helpers/clone.py": (
+    "src/sqlbuild/virtual/executor/_helpers/clone.py": (
         "destination existence is checked just-in-time under the per-model lease "
         "(concurrent hydrators); transient probe runs only on actual clones"
     ),
@@ -155,9 +155,9 @@ _TARGET_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "target_cursor",
 )
 _SC045_ALLOWED_PATH_MARKERS_BY_TERM: dict[str, tuple[str, ...]] = {
-    "source_target_name": ("src/sqlbuild/compiler/planner/helpers/warehouse/source_deferral.py",),
+    "source_target_name": ("src/sqlbuild/compiler/planner/_helpers/warehouse/source_deferral.py",),
     "source_connection": (
-        "src/sqlbuild/virtual/executor/helpers/build.py",
+        "src/sqlbuild/virtual/executor/_helpers/build.py",
         "src/sqlbuild/virtual/planner/main/plan.py",
     ),
 }
@@ -179,12 +179,12 @@ _PARAMETER_MUTATION_EXEMPT_PARAMETERS: frozenset[str] = frozenset({"cls", "self"
 _PARAMETER_MUTATION_ALLOW_COMMENT: str = "# sc: allow-param-mutation"
 _MAIN_PHASE_REMEDIATION_MESSAGE: str = (
     "main/ public functions are orchestrators: they should read as an ordered list of "
-    "named phases. Extract cohesive stages into helpers/ functions that each accept "
+    "named phases. Extract cohesive stages into _helpers/ functions that each accept "
     "explicit inputs and RETURN a named result model (no mutable threading), then call "
     "them in sequence. Do not create '_part_one'-style splits; name each phase after "
     "the result it produces (e.g. 'resolve_planner_scopes', 'detect_staleness')."
 )
-_MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "helpers", "shared"})
+_MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "_helpers", "shared"})
 _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
     {
         ("adapter", "constants.py"),
@@ -201,10 +201,10 @@ _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
 _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
     {
         ("adapter", "classes"),
-        ("adapter", "helpers"),
-        ("executor", "helpers"),
-        ("spec", "helpers"),
-        ("virtual", "helpers"),
+        ("adapter", "_helpers"),
+        ("executor", "_helpers"),
+        ("spec", "_helpers"),
+        ("virtual", "_helpers"),
     }
 )
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
@@ -214,8 +214,8 @@ _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/virtual/state/classes/*.py",
 )
 _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
-    "src/sqlbuild/integrations/dbt/helpers/manifest/sqlbuild_refs.py",
-    "src/sqlbuild/integrations/dbt/helpers/manifest/compile_refs.py",
+    "src/sqlbuild/integrations/dbt/_helpers/manifest/sqlbuild_refs.py",
+    "src/sqlbuild/integrations/dbt/_helpers/manifest/compile_refs.py",
 )
 _SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS: tuple[str, ...] = (
     "src/sqlbuild/compiler/planner/main/planning/selector_expansion.py",
@@ -223,7 +223,7 @@ _SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS: tuple[str, ...] = (
 _SC062_MACRO_LOAD_ALLOWED_PATHS: tuple[str, ...] = (
     "src/sqlbuild/compiler/compile/main/build_compile_inputs.py",
     "src/sqlbuild/compiler/compile/main/load_macros.py",
-    "src/sqlbuild/compiler/compile/helpers/render/macros.py",
+    "src/sqlbuild/compiler/compile/_helpers/render/macros.py",
 )
 _SC056_COMMENT_ALLOWED_PREFIXES: tuple[str, ...] = (
     "#!",
@@ -522,14 +522,16 @@ def check_source_file_line_count(*, repo_root: Path, file_path: Path) -> list[Vi
 def check_helpers_package_layout(*, repo_root: Path, file_path: Path) -> list[Violation]:
     """Enforce consistent flat-or-subfolder helper package layout."""
 
-    package_dir: Path | None = _role_package_layout_dir(file_path=file_path, package_name="helpers")
+    package_dir: Path | None = _role_package_layout_dir(
+        file_path=file_path, package_name="_helpers"
+    )
     if package_dir is None:
         return []
 
     return _role_package_layout_violations(
         package_dir=package_dir,
         file_path=file_path,
-        package_name="helpers",
+        package_name="_helpers",
         mixed_code="SC049",
         too_many_code="SC050",
         module_label="helper",
@@ -579,7 +581,7 @@ def _main_support_folder_violation(*, repo_root: Path, file_path: Path) -> Viola
                 path=file_path,
                 line=None,
                 message=(
-                    "main package must not contain support folders like helpers/, shared/, "
+                    "main package must not contain support folders like _helpers/, shared/, "
                     "or classes/; move support code beside main/"
                 ),
             )
@@ -723,7 +725,7 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
                 path=file_path,
                 line=None,
                 message=(
-                    "top-level runtime domains must not contain direct helpers/ or classes/; "
+                    "top-level runtime domains must not contain direct _helpers/ or classes/; "
                     "move them into a subpackage or shared/"
                 ),
             )
@@ -809,7 +811,7 @@ def check_public_provider_module_shape(
 def check_nested_runtime_package_direct_modules(
     *, repo_root: Path, file_path: Path
 ) -> list[Violation]:
-    """Reject ad hoc direct modules in nested runtime packages outside helpers/."""
+    """Reject ad hoc direct modules in nested runtime packages outside _helpers/."""
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     nested_runtime_module_part_count: int = 5
@@ -853,7 +855,7 @@ def check_nested_runtime_package_direct_modules(
             line=None,
             message=(
                 "nested runtime packages must keep direct files to role-oriented modules; "
-                "move additional support code under helpers/"
+                "move additional support code under _helpers/"
             ),
         )
     ]
@@ -894,8 +896,8 @@ def check_nested_runtime_package_direct_subpackages(
             line=1,
             message=(
                 "nested runtime packages must use direct subpackages only for explicit "
-                "support boundaries like helpers/, shared/, classes/, or main/; move "
-                "feature buckets under helpers/ or flatten them into role files"
+                "support boundaries like _helpers/, shared/, classes/, or main/; move "
+                "feature buckets under _helpers/ or flatten them into role files"
             ),
         )
     ]
@@ -975,7 +977,7 @@ def check_dev_tooling_location(*, repo_root: Path, file_path: Path) -> list[Viol
 
 
 def check_helpers_module_name(file_path: Path) -> list[Violation]:
-    """Reject helpers.py in favor of a helpers/ package."""
+    """Reject helpers.py in favor of a _helpers/ package."""
 
     if file_path.name != HELPERS_MODULE_NAME:
         return []
@@ -985,7 +987,7 @@ def check_helpers_module_name(file_path: Path) -> list[Violation]:
             code="SC004",
             path=file_path,
             line=None,
-            message="use a helpers/ package instead of helpers.py",
+            message="use a _helpers/ package instead of helpers.py",
         )
     ]
 
@@ -1467,7 +1469,7 @@ def check_no_ad_hoc_dbt_ref_scans(*, file_path: Path, module: ast.Module) -> lis
                     line=node.lineno,
                     message=(
                         "dbt integration code must resolve SQLBuild __dbt_ref references through "
-                        "helpers/manifest/sqlbuild_refs.py instead of scanning ref_kind locally"
+                        "_helpers/manifest/sqlbuild_refs.py instead of scanning ref_kind locally"
                     ),
                 )
             )
@@ -1480,7 +1482,7 @@ def check_no_ad_hoc_dbt_graph_projection(*, file_path: Path, module: ast.Module)
     path_text: str = file_path.as_posix()
     if DBT_INTEGRATION_PATH_MARKER not in path_text:
         return []
-    if path_text.endswith("src/sqlbuild/integrations/dbt/helpers/planning/graph_projection.py"):
+    if path_text.endswith("src/sqlbuild/integrations/dbt/_helpers/planning/graph_projection.py"):
         return []
 
     violations: list[Violation] = []
@@ -1498,7 +1500,8 @@ def check_no_ad_hoc_dbt_graph_projection(*, file_path: Path, module: ast.Module)
                 line=node.lineno,
                 message=(
                     "dbt code must construct neutral planner graph keys through "
-                    "helpers/planning/graph_projection.py so model/seed/source mapping cannot drift"
+                    "_helpers/planning/graph_projection.py so model/seed/source mapping "
+                    "cannot drift"
                 ),
             )
         )
@@ -1926,7 +1929,7 @@ def check_exception_declarations_outside_exceptions(
                     path=file_path,
                     line=1,
                     message=(
-                        "custom exceptions must not live under helpers/; "
+                        "custom exceptions must not live under _helpers/; "
                         "define them in a top-level exceptions.py or exceptions/ boundary"
                     ),
                 )
@@ -1979,7 +1982,7 @@ def check_constants_outside_constants(*, file_path: Path, module: ast.Module) ->
 
 
 def check_helpers_package_shape(*, repo_root: Path, file_path: Path) -> list[Violation]:
-    """Keep helpers/ shallow and free of generic entrypoints."""
+    """Keep _helpers/ shallow and free of generic entrypoints."""
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     if HELPERS_PACKAGE_NAME not in relative_parts[:-1]:
@@ -1993,7 +1996,7 @@ def check_helpers_package_shape(*, repo_root: Path, file_path: Path) -> list[Vio
 
     code: str = "SC010" if len(relative_parts) == helpers_index + 2 else "SC022"
     message: str = (
-        "helpers/ must not contain main.py; keep orchestration outside helper packages"
+        "_helpers/ must not contain main.py; keep orchestration outside helper packages"
         if code == SC010_CODE
         else (
             "helper subpackages must stay shallow and use direct role-oriented files; "
@@ -2523,7 +2526,7 @@ def check_cross_package_internal_imports(
                             f"'{'.'.join(imported_parts[:3])}'; import from its public "
                             f"surface (classes, models, types, constants, exceptions, or a thin "
                             f"main/ entry module). If the code is helper logic rather than "
-                            f"an entrypoint, move it to helpers/ or, if broadly reused "
+                            f"an entrypoint, move it to _helpers/ or, if broadly reused "
                             f"across domains, shared/"
                         ),
                     )
@@ -2550,7 +2553,7 @@ def check_cross_package_internal_imports(
                             f"'{'.'.join(imported_parts[:2])}'; import from its public "
                             f"surface (classes, models, types, constants, exceptions, or a thin "
                             f"main/ entry module). If the code is helper logic rather than "
-                            f"an entrypoint, move it to helpers/ or, if broadly reused "
+                            f"an entrypoint, move it to _helpers/ or, if broadly reused "
                             f"across domains, shared/"
                         ),
                     )
@@ -2762,7 +2765,7 @@ def check_entry_module_shape(*, file_path: Path, module: ast.Module) -> list[Vio
                 line=private_function_nodes[2].lineno,
                 message=(
                     "entry modules must define at most two private top-level functions; "
-                    "extract additional behavior to sibling modules under main/ or helpers/ "
+                    "extract additional behavior to sibling modules under main/ or _helpers/ "
                     "support code"
                 ),
             )

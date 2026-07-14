@@ -17,11 +17,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropConnection,
     DbtLsNode,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.clone import (
+from sqlbuild.integrations.dbt.pipeline._helpers.clone import (
     execute_dbt_clone,
     parse_dbt_clone_options,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.interop_prologue import (
+from sqlbuild.integrations.dbt.pipeline._helpers.interop_prologue import (
     connect_dbt_interop_warehouse,
     prepare_dbt_comparison_manifests,
     resolve_selected_dbt_model_nodes,

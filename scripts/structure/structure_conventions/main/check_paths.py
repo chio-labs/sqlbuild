@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from scripts.structure.structure_conventions.helpers.convention_checks import (
+from scripts.structure.structure_conventions._helpers.convention_checks import (
     collect_violations,
 )
 from scripts.structure.structure_conventions.models import Violation

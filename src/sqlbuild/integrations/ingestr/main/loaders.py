@@ -10,11 +10,11 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.models import LoaderContext
+from sqlbuild.integrations.ingestr._helpers.command import build_ingestr_command
+from sqlbuild.integrations.ingestr._helpers.output import record_ingestr_output
+from sqlbuild.integrations.ingestr._helpers.runner import run_ingestr_command
 from sqlbuild.integrations.ingestr.constants import INGESTR_INTEGRATION_KIND
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
-from sqlbuild.integrations.ingestr.helpers.command import build_ingestr_command
-from sqlbuild.integrations.ingestr.helpers.output import record_ingestr_output
-from sqlbuild.integrations.ingestr.helpers.runner import run_ingestr_command
 from sqlbuild.integrations.ingestr.models import IngestrCommandResult
 from sqlbuild.spec.contracts.models import SourceEntry
 

@@ -12,8 +12,8 @@ from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_n
 )
 from sqlbuild.compiler.planner.models import SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.seed._helpers.fingerprinting import try_write_seed_fingerprint
 from sqlbuild.executor.seed.constants import SEED_LOAD_FAILED_CODE
-from sqlbuild.executor.seed.helpers.fingerprinting import try_write_seed_fingerprint
 from sqlbuild.executor.types import ExecutionStatus
 
 
