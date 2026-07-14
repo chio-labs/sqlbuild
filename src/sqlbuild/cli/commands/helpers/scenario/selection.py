@@ -5,9 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.cli.commands.helpers.scenario.constants import (
+    GRAPH_SELECTOR_EXPANSION_MARKER,
+    GRAPH_SELECTOR_PATH_MARKER,
     SCENARIO_CLI_NONE_DISCOVERED,
     SCENARIO_CLI_UNKNOWN_SELECTOR,
     SCENARIO_CLI_UNSUPPORTED_GRAPH_SELECTOR,
+    SQL_FILE_SUFFIX,
 )
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.compile.models.core import (
@@ -81,7 +84,7 @@ def _select_scenarios_for_selector(
         scenario_path: Path = scenario.scenario_file.file_path
         scenario_relative_path: Path = scenario.scenario_file.relative_path
         scenario_root_relative_path: Path = _scenario_root_relative_path(scenario_relative_path)
-        if selector_path.suffix == ".sql" and _scenario_file_matches_selector(
+        if selector_path.suffix == SQL_FILE_SUFFIX and _scenario_file_matches_selector(
             selector_path=selector_path,
             project_dir=project_dir,
             scenario_path=scenario_path,
@@ -90,7 +93,7 @@ def _select_scenarios_for_selector(
         ):
             matches.append(scenario)
             continue
-        if selector_path.suffix != ".sql" and _scenario_path_is_under_selector(
+        if selector_path.suffix != SQL_FILE_SUFFIX and _scenario_path_is_under_selector(
             selector_path=selector_path,
             project_dir=project_dir,
             scenario_path=scenario_path,
@@ -107,7 +110,11 @@ def _select_scenarios_for_selector(
 
 
 def _validate_scenario_selector(selector: str) -> None:
-    if selector.startswith("+") or selector.endswith("+") or "~" in selector:
+    if (
+        selector.startswith(GRAPH_SELECTOR_EXPANSION_MARKER)
+        or selector.endswith(GRAPH_SELECTOR_EXPANSION_MARKER)
+        or GRAPH_SELECTOR_PATH_MARKER in selector
+    ):
         raise CliUserError(
             f"Scenario selector '{selector}' uses graph operators, which are not supported",
             code=SCENARIO_CLI_UNSUPPORTED_GRAPH_SELECTOR,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
 from sqlbuild.cli.commands.helpers.build.models import (
     BuildCommandRequest,
     BuildExecutionPreparation,
@@ -11,7 +12,6 @@ from sqlbuild.cli.commands.helpers.build.models import (
     BuildRunOutcome,
     StandardLifecycleCallbacks,
 )
-from sqlbuild.cli.commands.helpers.build.progress import BuildProgressCallbacks
 from sqlbuild.cli.commands.helpers.build.python_lifecycle import (
     prepare_standard_python_lifecycle,
 )

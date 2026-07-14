@@ -7,6 +7,10 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
+from sqlbuild.compiler.python_nodes.constants import (
+    EMPTY_SELECTOR_FOLDER,
+    UNIFIED_PATH_ROOTS,
+)
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 
@@ -108,14 +112,14 @@ def _resolve_path(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozense
 
 
 def _path_matches(*, indexed_folder: str, selector_folder: str) -> bool:
-    if selector_folder == "":
+    if selector_folder == EMPTY_SELECTOR_FOLDER:
         return True
     return indexed_folder == selector_folder or indexed_folder.startswith(f"{selector_folder}/")
 
 
 def _validate_python_path_root(folder: str) -> None:
     root: str = folder.split("/", 1)[0]
-    if root in {"tasks", "assets", "checks", "loaders", "models"}:
+    if root in UNIFIED_PATH_ROOTS:
         return
     raise PlannerInputError(
         PATH_SELECTOR_EXPLICIT_ROOT_ERROR,

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapter.types import TablePromotionMode
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, DiscoveredLoaderFunction
@@ -33,8 +33,8 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import HookContext
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build.helpers._test_types import (
     BuildSchedulerMergedUpstreamWatermarkTestCase,
     BuildSchedulerModelHookTestCase,

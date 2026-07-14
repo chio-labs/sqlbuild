@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
@@ -23,7 +23,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.spec.models.project import SettingsConfig
+from sqlbuild.spec.contracts.models import SettingsConfig
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 from sqlbuild.virtual.state.types import PhysicalArtifactType
 

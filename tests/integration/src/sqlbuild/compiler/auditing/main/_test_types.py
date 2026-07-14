@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

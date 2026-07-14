@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 
 _ENV_KEYS: tuple[str, ...] = (
     "SQB_TEST_DATABRICKS_SERVER_HOSTNAME",

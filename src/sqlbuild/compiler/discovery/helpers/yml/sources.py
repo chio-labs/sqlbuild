@@ -8,6 +8,14 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
+from sqlbuild.compiler.discovery.constants import (
+    NOT_NULL_AUDIT_NAME,
+    SOURCE_AGE_POLICY_CONFIG_KEY,
+    SOURCE_FRESHNESS_DAY_UNIT,
+    SOURCE_FRESHNESS_DURATION_UNITS,
+    SOURCE_FRESHNESS_HOUR_UNIT,
+    SOURCE_LOADER_CONFIG_KEY,
+)
 from sqlbuild.compiler.discovery.exceptions import SourceParseError
 from sqlbuild.compiler.discovery.helpers.integrations.loaders import (
     integration_loader_name,
@@ -21,15 +29,16 @@ from sqlbuild.compiler.discovery.helpers.yml.primitives import (
     parse_audit_instances,
     require_non_empty_string,
 )
-from sqlbuild.spec.models.schema import SchemaAuditInstance
-from sqlbuild.spec.models.source import (
+from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.spec.contracts.models import (
     IntegrationLoaderConfig,
+    SchemaAuditInstance,
     SourceColumnEntry,
     SourceEntry,
     SourceFreshnessAgePolicy,
     SourceFreshnessConfig,
 )
-from sqlbuild.spec.models.types import (
+from sqlbuild.spec.contracts.types import (
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     SourceWriteStrategy,
@@ -95,7 +104,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
         label="source",
         error_class=SourceParseError,
     )
-    if contract is not None and contract not in {"enforced", "none"}:
+    if contract is not None and contract not in ContractPolicy:
         raise SourceParseError(f"{file_path} source 'contract' must be one of: enforced, none")
     expression: str | None = optional_non_empty_string(
         entry=entry,
@@ -107,7 +116,7 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
     if type_enforcement is None and any(column.type is not None for column in columns):
         type_enforcement = True
 
-    if "loader" in entry:
+    if SOURCE_LOADER_CONFIG_KEY in entry:
         raise SourceParseError(
             f"{file_path} source 'loader' is not supported; use managed: true and name "
             "the terminal loader after the source"
@@ -460,7 +469,7 @@ def _validate_freshness_config(*, config: SourceFreshnessConfig, file_path: Path
 def _optional_freshness_age_policy(
     *, freshness: dict[str, object], file_path: Path
 ) -> SourceFreshnessAgePolicy | None:
-    if "age_policy" not in freshness:
+    if SOURCE_AGE_POLICY_CONFIG_KEY not in freshness:
         return None
     age_policy: dict[str, object] = optional_mapping(
         entry=freshness,
@@ -538,15 +547,15 @@ def _is_valid_source_freshness_duration(value: str) -> bool:
         return False
     unit: str = value[-1]
     amount: str = value[:-1]
-    return unit in {"m", "h", "d"} and amount.isdigit() and int(amount) > 0
+    return unit in SOURCE_FRESHNESS_DURATION_UNITS and amount.isdigit() and int(amount) > 0
 
 
 def _source_freshness_duration_minutes(value: str) -> int:
     amount: int = int(value[:-1])
     unit: str = value[-1]
-    if unit == "d":
+    if unit == SOURCE_FRESHNESS_DAY_UNIT:
         return amount * 24 * 60
-    if unit == "h":
+    if unit == SOURCE_FRESHNESS_HOUR_UNIT:
         return amount * 60
     return amount
 
@@ -632,7 +641,7 @@ def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[Source
 def _validate_nullable_audits(
     *, file_path: Path, column_name: str, nullable: bool | None, audit_names: tuple[str, ...]
 ) -> None:
-    if nullable is True and "not_null" in audit_names:
+    if nullable is True and NOT_NULL_AUDIT_NAME in audit_names:
         raise SourceParseError(
             f"{file_path} column '{column_name}' cannot set nullable = true and audit not_null"
         )

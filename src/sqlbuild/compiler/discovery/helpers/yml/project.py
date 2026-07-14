@@ -12,13 +12,21 @@ import yaml
 from yaml import YAMLError
 
 from sqlbuild.compiler.discovery.constants import (
+    CONFIG_CONCURRENCY_KEY,
+    DBT_LEGACY_REUSE_FROM_CONFIG_KEY,
+    DBT_MACRO_PATH_PREFIX,
+    LEGACY_CONFIG_CONCURRENCY_KEY,
     LEGACY_LOCAL_CONFIG_FILENAME,
     LEGACY_PROJECT_CONFIG_FILENAME,
     LOCAL_CONFIG_FILENAME,
+    MODELS_DIRECTORY_NAME,
+    PARENT_DIRECTORY_PATH_PART,
     PROJECT_CONFIG_FILENAME,
+    TOML_FILE_SUFFIX,
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
-from sqlbuild.spec.models.project import (
+from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.spec.contracts.models import (
     ClonePolicy,
     DbtConfig,
     DbtProductionRefConfig,
@@ -167,7 +175,7 @@ def _resolve_local_config_path(*, project_dir: Path) -> Path:
 
 
 def _load_config_mapping(*, file_path: Path) -> dict[str, object]:
-    if file_path.suffix == ".toml":
+    if file_path.suffix == TOML_FILE_SUFFIX:
         return _load_toml_mapping(file_path=file_path)
     return _load_yaml_mapping(file_path=file_path)
 
@@ -240,11 +248,11 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=canonical_setting_names | {"max_concurrency"},
+        allowed_keys=canonical_setting_names | {LEGACY_CONFIG_CONCURRENCY_KEY},
         label="settings",
         file_path=file_path,
     )
-    if "concurrency" in mapping and "max_concurrency" in mapping:
+    if CONFIG_CONCURRENCY_KEY in mapping and LEGACY_CONFIG_CONCURRENCY_KEY in mapping:
         raise ProjectConfigError(
             "settings cannot define both 'concurrency' and legacy 'max_concurrency'"
         )
@@ -262,7 +270,11 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         default=False,
     )
     force: bool = _optional_bool(mapping=mapping, key="force", default=False)
-    concurrency_key: str = "max_concurrency" if "max_concurrency" in mapping else "concurrency"
+    concurrency_key: str = (
+        LEGACY_CONFIG_CONCURRENCY_KEY
+        if LEGACY_CONFIG_CONCURRENCY_KEY in mapping
+        else CONFIG_CONCURRENCY_KEY
+    )
     concurrency: int = _optional_int(mapping=mapping, key=concurrency_key, default=1)
     table_promotion_mode: str | None = _optional_str(payload=mapping, key="table_promotion_mode")
     default_audit_severity: str | None = _optional_str(
@@ -295,8 +307,8 @@ def _load_local_settings(
     normalized_overrides: set[str] = set()
     key: str
     for key in mapping:
-        if key == "max_concurrency":
-            normalized_overrides.add("concurrency")
+        if key == LEGACY_CONFIG_CONCURRENCY_KEY:
+            normalized_overrides.add(CONFIG_CONCURRENCY_KEY)
         elif key in setting_names:
             normalized_overrides.add(key)
     return (
@@ -342,7 +354,7 @@ def _normalize_path_default_key(*, path_key: str, file_path: Path) -> str:
             f"{file_path} path_defaults['{path_key}'] is invalid. Path defaults cannot contain "
             "empty path segments."
         )
-    if path_parts[0] == "models":
+    if path_parts[0] == MODELS_DIRECTORY_NAME:
         raise ProjectConfigError(
             f"{file_path} path_defaults['{path_key}'] uses redundant 'models/' prefix. "
             "Use a model-relative path such as 'staging' or 'staging/nested'."
@@ -670,7 +682,7 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
     """Load optional dbt interop configuration."""
 
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
-    if "reuse_from" in mapping:
+    if DBT_LEGACY_REUSE_FROM_CONFIG_KEY in mapping:
         raise ProjectConfigError(
             f"{file_path} [dbt.reuse_from] was renamed to [dbt.production_ref]; "
             "rename the table and its keys accordingly"
@@ -772,15 +784,15 @@ def _load_dbt_production_ref(*, payload: object, file_path: Path) -> DbtProducti
 
 def _validate_dbt_production_ref_macro_path(*, value: str, file_path: Path) -> None:
     macro_path: Path = Path(value)
-    if macro_path.is_absolute() or ".." in macro_path.parts:
+    if macro_path.is_absolute() or PARENT_DIRECTORY_PATH_PART in macro_path.parts:
         raise ProjectConfigError(
             f"{file_path} dbt.production_ref.generate_schema_name_override must be a relative "
             "path under dbt/macros/"
         )
     dbt_macro_path_part_count: int = 3
-    if len(macro_path.parts) < dbt_macro_path_part_count or macro_path.parts[:2] != (
-        "dbt",
-        "macros",
+    if (
+        len(macro_path.parts) < dbt_macro_path_part_count
+        or macro_path.parts[:2] != DBT_MACRO_PATH_PREFIX
     ):
         raise ProjectConfigError(
             f"{file_path} dbt.production_ref.generate_schema_name_override must be under "
@@ -968,7 +980,7 @@ def _optional_contract_policy(*, mapping: dict[str, object], key: str) -> str | 
         return None
     if not isinstance(value, str):
         raise ProjectConfigError(f"Expected '{key}' to be a string when provided")
-    if value not in {"enforced", "none"}:
+    if value not in ContractPolicy:
         raise ProjectConfigError("Expected 'contract' to be one of: enforced, none")
     return value
 

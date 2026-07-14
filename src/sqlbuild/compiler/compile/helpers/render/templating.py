@@ -7,7 +7,22 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.constants import TEMPLATE_PATTERN
+from sqlbuild.compiler.compile.constants import (
+    MISSING_TEMPLATE_CONTEXT_MESSAGE_PART,
+    MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART,
+    MISSING_TEMPLATE_VALUE_MESSAGE_PARTS,
+    TEMPLATE_COALESCE_FUNCTION_NAME,
+    TEMPLATE_EQ_FUNCTION_NAME,
+    TEMPLATE_ESCAPE_TOKEN,
+    TEMPLATE_FALSE_LITERAL,
+    TEMPLATE_FALSE_VALUES,
+    TEMPLATE_IF_FUNCTION_NAME,
+    TEMPLATE_NAMESPACE_SEPARATOR,
+    TEMPLATE_NE_FUNCTION_NAME,
+    TEMPLATE_NULL_LITERAL,
+    TEMPLATE_PATTERN,
+    TEMPLATE_TRUE_LITERAL,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.types import TemplateNamespace
@@ -231,13 +246,13 @@ class _TemplateResolver:
         raise CompileInputError(f"{self.context_label} contains unsupported template expression")
 
     def _evaluate_reference(self, value: str) -> object:
-        if value == "true":
+        if value == TEMPLATE_TRUE_LITERAL:
             return True
-        if value == "false":
+        if value == TEMPLATE_FALSE_LITERAL:
             return False
-        if value == "null":
+        if value == TEMPLATE_NULL_LITERAL:
             return None
-        if ":" not in value:
+        if TEMPLATE_NAMESPACE_SEPARATOR not in value:
             return self.resolve_variable(value)
 
         namespace: str
@@ -264,14 +279,14 @@ class _TemplateResolver:
         function_name: str = expression.name
         conditional_argument_count: int = 3
         comparison_argument_count: int = 2
-        if function_name == "if":
+        if function_name == TEMPLATE_IF_FUNCTION_NAME:
             if len(expression.arguments) != conditional_argument_count:
                 raise CompileInputError(f"{self.context_label} if(...) expects 3 arguments")
             condition_value: object = self._evaluate_expression(expression.arguments[0])
             if _is_truthy_template_value(condition_value):
                 return self._evaluate_expression(expression.arguments[1])
             return self._evaluate_expression(expression.arguments[2])
-        if function_name == "eq":
+        if function_name == TEMPLATE_EQ_FUNCTION_NAME:
             if len(expression.arguments) != comparison_argument_count:
                 raise CompileInputError(f"{self.context_label} eq(...) expects 2 arguments")
             left: object = self._evaluate_expression(expression.arguments[0])
@@ -279,7 +294,7 @@ class _TemplateResolver:
             return _normalize_template_comparison_value(
                 left
             ) == _normalize_template_comparison_value(right)
-        if function_name == "ne":
+        if function_name == TEMPLATE_NE_FUNCTION_NAME:
             if len(expression.arguments) != comparison_argument_count:
                 raise CompileInputError(f"{self.context_label} ne(...) expects 2 arguments")
             left = self._evaluate_expression(expression.arguments[0])
@@ -287,7 +302,7 @@ class _TemplateResolver:
             return _normalize_template_comparison_value(
                 left
             ) != _normalize_template_comparison_value(right)
-        if function_name == "coalesce":
+        if function_name == TEMPLATE_COALESCE_FUNCTION_NAME:
             if not expression.arguments:
                 raise CompileInputError(
                     f"{self.context_label} coalesce(...) expects at least 1 argument"
@@ -433,7 +448,7 @@ def _read_template_quoted_string(*, value: str, start: int) -> tuple[str, int]:
     index: int = start + 1
     while index < len(value):
         character: str = value[index]
-        if character == "\\":
+        if character == TEMPLATE_ESCAPE_TOKEN:
             if index + 1 >= len(value):
                 raise CompileInputError(
                     f"template expression has unterminated escape at position {index}"
@@ -464,7 +479,7 @@ def _is_truthy_template_value(value: object) -> bool:
     if isinstance(value, bool):
         return value
     normalized: str = str(value).strip().lower()
-    if normalized in {"", "0", "false"}:
+    if normalized in TEMPLATE_FALSE_VALUES:
         return False
     return True
 
@@ -478,11 +493,9 @@ def _stringify_template_value(*, value: object, label: str) -> str:
 
 def _is_missing_template_value_error(message: str) -> bool:
     return (
-        "references missing ENV variable" in message
-        or "references unknown variable" in message
-        or "references unknown CTX key" in message
-        or "references CTX key" in message
-        and "no value is available" in message
+        any(part in message for part in MISSING_TEMPLATE_VALUE_MESSAGE_PARTS)
+        or MISSING_TEMPLATE_CONTEXT_MESSAGE_PART in message
+        and MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART in message
     )
 
 

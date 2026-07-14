@@ -11,8 +11,12 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
+from sqlbuild.compiler.auditing.main.parse_audit_instance import parse_audit_instance
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
+    MODEL_AUDIT_OVERRIDE_KEYS,
+    MODEL_HEADER_METADATA_KEYS,
+    NOT_NULL_AUDIT_NAME,
     PRESERVE_TARGET_VALUE,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -67,22 +71,19 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSqlModelFile,
 )
-from sqlbuild.compiler.helpers.schema_audits import parse_audit_instance
 from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
     ProjectConfig,
-    SettingsConfig,
-    TargetConfig,
-)
-from sqlbuild.spec.models.schema import (
     SchemaAuditInstance,
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
+    SettingsConfig,
     SourceLocation,
+    TargetConfig,
 )
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
@@ -854,7 +855,7 @@ def _merge_row_diff_tolerances_mapping(*, base: object, overlay: object) -> obje
     key: object
     value: object
     for key, value in overlay_mapping.items():
-        if isinstance(key, str) and key not in {"by_type", "by_column"}:
+        if isinstance(key, str) and key not in MODEL_AUDIT_OVERRIDE_KEYS:
             merged[key] = value
     return merged
 
@@ -934,9 +935,7 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
     """Remove model metadata keys after they have been attached as schema metadata."""
 
     filtered_values: dict[str, object] = {
-        key: value
-        for key, value in config.values.items()
-        if key not in {"description", "columns", "audits"}
+        key: value for key, value in config.values.items() if key not in MODEL_HEADER_METADATA_KEYS
     }
     if len(filtered_values) == len(config.values):
         return config
@@ -1062,7 +1061,7 @@ def _optional_model_header_bool(
 def _validate_nullable_audits(
     *, file_path: Path, column_name: str, nullable: bool | None, audit_names: tuple[str, ...]
 ) -> None:
-    if nullable is True and "not_null" in audit_names:
+    if nullable is True and NOT_NULL_AUDIT_NAME in audit_names:
         raise CompileInputError(
             f"{file_path} column '{column_name}' cannot set nullable = true and audit not_null",
             code="P002",

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.integrations.dbt.helpers.planning.plan import (
-    format_dbt_interop_plan,
+from sqlbuild.integrations.dbt.main.planning.render_interop_plan_json import (
     format_dbt_interop_plan_json,
+)
+from sqlbuild.integrations.dbt.main.planning.render_interop_plan_text import (
+    format_dbt_interop_plan,
 )
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.presentation.models import DisplayOptions

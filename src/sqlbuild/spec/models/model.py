@@ -1,1 +1,0 @@
-"""Placeholder model spec module."""

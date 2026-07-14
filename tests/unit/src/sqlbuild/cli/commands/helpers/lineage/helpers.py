@@ -25,9 +25,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.spec.models.project import SettingsConfig
-from sqlbuild.spec.models.schema import SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SchemaSeedEntry, SettingsConfig, SourceEntry
 
 
 def build_lineage_test_graph() -> ProjectGraph:

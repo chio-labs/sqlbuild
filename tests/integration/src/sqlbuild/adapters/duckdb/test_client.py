@@ -20,9 +20,9 @@ from sqlbuild.adapter.models import (
     SchemaDiffResult,
 )
 from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.models.schema import SeedCsvSettings
+from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     ConnectSettingsTestCase,
     ConnectTestCase,

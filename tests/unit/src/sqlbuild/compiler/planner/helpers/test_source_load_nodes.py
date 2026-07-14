@@ -16,8 +16,8 @@ from sqlbuild.compiler.planner.helpers.graph.source_load_nodes import (
 )
 from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     LoaderDagExpansionTestCase,
     SourceLoadNodesTestCase,

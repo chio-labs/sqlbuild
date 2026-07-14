@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.types import CursorKind
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -19,7 +19,9 @@ from sqlbuild.compiler.planner.helpers.resolve.refs import (
     resolve_udf_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
-from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
+from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
+    DbtCompileReferenceResolver,
+)
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (

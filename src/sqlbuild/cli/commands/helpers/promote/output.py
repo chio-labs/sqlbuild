@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 _MODEL_SET_CAP: int = 20
 
@@ -23,10 +24,14 @@ def format_promote_output(
     style: CliStyle = CliStyle(use_color=use_color)
     from_label: str = style.object_name(from_virtual_environment)
     to_label: str = style.object_name(to_virtual_environment)
-    status_label: str = "finalized" if status == "finalized" else "working"
+    status_label: str = (
+        VirtualEnvironmentStatus.FINALIZED
+        if status == VirtualEnvironmentStatus.FINALIZED
+        else "working"
+    )
     status_value: str = (
         style.success_strong(status_label)
-        if status_label == "finalized"
+        if status_label == VirtualEnvironmentStatus.FINALIZED
         else style.warning_strong(status_label)
     )
     promoted_count: str = style.value(f"{len(promoted_models):,}")

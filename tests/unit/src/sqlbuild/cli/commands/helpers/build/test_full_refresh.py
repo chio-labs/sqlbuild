@@ -11,7 +11,7 @@ from sqlbuild.cli.commands.helpers.build.full_refresh import (
 )
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.contracts.models import SnapshotsConfig
 from tests.unit.src.sqlbuild.cli.commands.helpers.build._test_types import (
     SnapshotFullRefreshPolicyTestCase,
 )

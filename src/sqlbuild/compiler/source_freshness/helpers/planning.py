@@ -8,6 +8,10 @@ from typing import Any
 
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.exceptions import AdapterUserError
+from sqlbuild.compiler.source_freshness.constants import (
+    INCOMPLETE_CONFIGURATION_ERROR_FRAGMENT,
+    PHYSICAL_TABLE_SOURCE_ERROR_FRAGMENT,
+)
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.helpers.age_policy import (
     evaluate_source_freshness_age_policy,
@@ -36,8 +40,8 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
-from sqlbuild.spec.models.types import SourceFreshnessStrategy
+from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
 
 
 def build_standard_source_freshness_planning_result(
@@ -170,7 +174,10 @@ def _source_freshness_error_is_configuration_error(
     *, error: SourceFreshnessObservationError
 ) -> bool:
     message: str = str(error)
-    return "requires a physical table source" in message or "incomplete" in message
+    return (
+        PHYSICAL_TABLE_SOURCE_ERROR_FRAGMENT in message
+        or INCOMPLETE_CONFIGURATION_ERROR_FRAGMENT in message
+    )
 
 
 def source_freshness_record_from_observation(

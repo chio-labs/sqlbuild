@@ -11,6 +11,26 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import IO, Any, TextIO
 
+from sqlbuild.integrations.dagster.constants import (
+    ASSET_SELECTION_COMMANDS,
+    CHECK_METADATA_EXCLUDED_KEYS,
+    CHECK_NAME_SEPARATOR_CHARACTER,
+    COMPLETED_EXECUTION_STATUSES,
+    DEFAULT_SELECTABLE_NODE_KINDS,
+    EXPLICIT_SELECTION_FLAGS,
+    JSON_OUTPUT_FLAG,
+    JSON_OUTPUT_FLAGS,
+    LOAD_COMMAND,
+    LOAD_SELECTABLE_NODE_KINDS,
+    LOADER_NODE_KIND,
+    MATERIALIZABLE_NODE_KINDS,
+    SCENARIO_CHECK_KIND,
+    SCENARIO_TEST_COMMAND,
+    SCENARIO_VALUE_FLAGS,
+    SELECT_FILE_FLAG,
+    SOURCE_NODE_KIND,
+    WARNING_CHECK_SEVERITY,
+)
 from sqlbuild.integrations.dagster.helpers.imports import load_dagster
 
 
@@ -246,11 +266,11 @@ def _with_selected_asset_args(
     if dag is None or context is None or not args:
         return args, (), None
     scenario_test_argument_count: int = 2
-    if len(args) >= scenario_test_argument_count and args[0] == "scenario" and args[1] == "test":
+    if len(args) >= scenario_test_argument_count and args[:2] == SCENARIO_TEST_COMMAND:
         return _with_selected_scenario_args(args=args, context=context, dag=dag)
-    if args[0] not in {"build", "run", "test", "audit", "seed", "load"}:
+    if args[0] not in ASSET_SELECTION_COMMANDS:
         return args, (), None
-    if "--select" in args or "-s" in args or "--select-file" in args:
+    if not EXPLICIT_SELECTION_FLAGS.isdisjoint(args):
         return args, (), None
     selected_keys: object = getattr(context, "selected_asset_keys", None)
     if selected_keys is None:
@@ -268,7 +288,7 @@ def _with_selected_asset_args(
     if not selectors:
         return args, (), None
     selector_file: Path = _write_selector_file(tuple(selectors))
-    return (*args, "--select-file", str(selector_file)), tuple(selectors), selector_file
+    return (*args, SELECT_FILE_FLAG, str(selector_file)), tuple(selectors), selector_file
 
 
 def _with_selected_scenario_args(
@@ -297,7 +317,7 @@ def _with_selected_scenario_args(
     selectors: list[str] = []
     check: Mapping[str, Any]
     for check in dag.get("checks", ()):  # type: ignore[assignment]
-        if str(check.get("kind")) != "scenario":
+        if str(check.get("kind")) != SCENARIO_CHECK_KIND:
             continue
         if not selected_asset_ids.intersection(
             str(id_) for id_ in check.get("checked_asset_ids", ())
@@ -320,20 +340,12 @@ def _with_selected_scenario_args(
 
 
 def _has_explicit_scenario_selector(*, args: tuple[str, ...]) -> bool:
-    value_flags: frozenset[str] = frozenset(
-        {
-            "--max-snapshot-rows",
-            "--max-snapshot-total-rows",
-            "--max-snapshot-bytes",
-            "--max-snapshot-total-bytes",
-        }
-    )
     skip_next: bool = False
     for arg in args[2:]:
         if skip_next:
             skip_next = False
             continue
-        if arg in value_flags:
+        if arg in SCENARIO_VALUE_FLAGS:
             skip_next = True
             continue
         if arg.startswith("-"):
@@ -362,15 +374,15 @@ def _scenario_check_is_selected(
 def _with_json_output_args(
     *, args: tuple[str, ...], context: Any, dag: Mapping[str, Any] | None
 ) -> tuple[tuple[str, ...], Path | None]:
-    if dag is None or context is None or not args or "--json" in args or "--json-output" in args:
+    if dag is None or context is None or not args or not JSON_OUTPUT_FLAGS.isdisjoint(args):
         return args, None
-    if args[0] in {"build", "run", "test", "audit", "seed", "load"}:
+    if args[0] in ASSET_SELECTION_COMMANDS:
         path: Path = _create_execution_json_path()
-        return (*args, "--json-output", str(path)), path
+        return (*args, JSON_OUTPUT_FLAG, str(path)), path
     scenario_test_argument_count: int = 2
-    if len(args) >= scenario_test_argument_count and args[0] == "scenario" and args[1] == "test":
+    if len(args) >= scenario_test_argument_count and args[:2] == SCENARIO_TEST_COMMAND:
         path = _create_execution_json_path()
-        return (*args, "--json-output", str(path)), path
+        return (*args, JSON_OUTPUT_FLAG, str(path)), path
     return args, None
 
 
@@ -456,13 +468,13 @@ def _build_results_for_selected_assets(
 
 
 def _selectable_kinds_for_command(command: str) -> frozenset[str]:
-    if command == "load":
-        return frozenset({"source", "loader"})
-    return frozenset({"source", "seed", "model", "udf", "table_fn"})
+    if command == LOAD_COMMAND:
+        return LOAD_SELECTABLE_NODE_KINDS
+    return DEFAULT_SELECTABLE_NODE_KINDS
 
 
 def _is_materializable_node_kind(kind: str) -> bool:
-    return kind in {"source", "loader", "seed", "model", "udf", "table_fn"}
+    return kind in MATERIALIZABLE_NODE_KINDS
 
 
 def _load_execution_payload(stdout: str) -> Mapping[str, Any] | None:
@@ -504,7 +516,7 @@ def _build_results_from_execution_payload(
     asset_results_by_id: dict[str, Mapping[str, Any]] = {}
     payload_asset: Mapping[str, Any]
     for payload_asset in payload.get("assets", ()):  # type: ignore[assignment]
-        if str(payload_asset.get("status")) not in {"success", "skipped"}:
+        if str(payload_asset.get("status")) not in COMPLETED_EXECUTION_STATUSES:
             continue
         node: Mapping[str, Any] | None = nodes_by_name.get(
             (str(payload_asset.get("kind")), str(payload_asset.get("name")))
@@ -512,7 +524,7 @@ def _build_results_from_execution_payload(
         if node is None:
             continue
         asset_results_by_id[str(node.get("id"))] = payload_asset
-        if str(node.get("kind")) == "source":
+        if str(node.get("kind")) == SOURCE_NODE_KIND:
             asset_results_by_id.update(
                 _loader_results_for_source_payload(
                     dag=dag,
@@ -524,7 +536,7 @@ def _build_results_from_execution_payload(
     for node in _sort_nodes_topologically(dag=dag):
         node_id: str = str(node.get("id"))
         execution_asset: Mapping[str, Any] | None = asset_results_by_id.get(node_id)
-        if execution_asset is None and str(node.get("kind")) != "source":
+        if execution_asset is None and str(node.get("kind")) != SOURCE_NODE_KIND:
             continue
         asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
         if selected_paths and tuple(asset_key.path) not in selected_paths:
@@ -621,7 +633,7 @@ def _loader_results_for_source_payload(
         if str(edge.get("to_id")) != source_id:
             continue
         upstream_node: Mapping[str, Any] | None = nodes_by_id.get(str(edge.get("from_id")))
-        if upstream_node is None or str(upstream_node.get("kind")) != "loader":
+        if upstream_node is None or str(upstream_node.get("kind")) != LOADER_NODE_KIND:
             continue
         results[str(upstream_node.get("id"))] = {
             **payload_asset,
@@ -700,7 +712,12 @@ def _dagster_check_name(check: Mapping[str, Any]) -> str:
 
 
 def _normalize_check_name(value: str) -> str:
-    normalized: str = "".join(char if char.isalnum() or char == "_" else "_" for char in value)
+    normalized: str = "".join(
+        char
+        if char.isalnum() or char == CHECK_NAME_SEPARATOR_CHARACTER
+        else CHECK_NAME_SEPARATOR_CHARACTER
+        for char in value
+    )
     return normalized.strip("_") or "check"
 
 
@@ -708,13 +725,12 @@ def _metadata_from_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
     return {
         str(key): item
         for key, item in value.items()
-        if item is not None
-        and key not in {"passed", "steps", "expected_results", "assertion_results"}
+        if item is not None and key not in CHECK_METADATA_EXCLUDED_KEYS
     }
 
 
 def _dagster_check_severity(*, dg: Any, check: Mapping[str, Any]) -> Any:
-    if str(check.get("severity")) == "warn":
+    if str(check.get("severity")) == WARNING_CHECK_SEVERITY:
         return dg.AssetCheckSeverity.WARN
     return dg.AssetCheckSeverity.ERROR
 

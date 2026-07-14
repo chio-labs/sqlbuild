@@ -15,8 +15,9 @@ from sqlbuild.adapter.discovery.main.project_adapters import discover_project_ad
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.helpers.config.core import resolve_dbt_config
+from sqlbuild.integrations.dbt.helpers.planning.constants import DBT_DEFER_FLAG
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, DbtCliOptions, ResolvedDbtConfig
-from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
+from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
 
 def resolve_dbt_plan_options(
@@ -43,7 +44,7 @@ def resolve_dbt_plan_options(
             dbt_args=dbt_args,
         ),
         state=parse_optional_path_flag(args=dbt_args, flag="--state", project_root=project_dir),
-        defer="--defer" in dbt_args,
+        defer=DBT_DEFER_FLAG in dbt_args,
     )
 
 

@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
@@ -18,7 +18,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
 )
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_dbt_node_fingerprint

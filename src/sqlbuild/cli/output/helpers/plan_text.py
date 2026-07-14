@@ -43,6 +43,8 @@ from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
+_DIFF_HEADER_MARKER: str = "# "
+
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
     PlanReason.CONFIG_CHANGED,
@@ -710,7 +712,7 @@ def _dim_python_dependency_headers(lines: list[str]) -> list[str]:
     result: list[str] = []
     line: str
     for line in lines:
-        if "# " in _strip_ansi(line):
+        if _DIFF_HEADER_MARKER in _strip_ansi(line):
             result.append(style.muted(line))
         else:
             result.append(line)

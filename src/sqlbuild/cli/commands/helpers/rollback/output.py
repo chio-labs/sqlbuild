@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 _MODEL_SET_CAP: int = 20
 
@@ -23,7 +24,9 @@ def format_rollback_output(
     environment_label: str = style.object_name(virtual_environment)
     checkpoint_label: str = style.object_name(checkpoint_id)
     status_label: str = (
-        style.success_strong(status) if status == "finalized" else style.warning_strong(status)
+        style.success_strong(status)
+        if status == VirtualEnvironmentStatus.FINALIZED
+        else style.warning_strong(status)
     )
     model_count: str = style.value(f"{len(rolled_back_models):,}")
     doc: CliDocument = CliDocument(style)

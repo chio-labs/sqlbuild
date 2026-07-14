@@ -11,12 +11,13 @@ from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
+from sqlbuild.adapter.types import RelationType
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.spec.models.targets import resolve_target_name
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_destination
 from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_destination
 from sqlbuild.virtual.executor.main.relation_type import resolve_model_relation_type
@@ -117,11 +118,11 @@ def adopt_into_virtual_state(
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=physical_target
                 ),
-                remove_origin=model_relation_type != "view",
+                remove_origin=model_relation_type != RelationType.VIEW,
                 allow_copy_fallback=allow_copy,
                 statement_recorder=recorder,
             )
-            if model_relation_type == "view":
+            if model_relation_type == RelationType.VIEW:
                 adapter.drop_view(
                     connection=connection,
                     destination=resolve_relation_location_qualified_name(

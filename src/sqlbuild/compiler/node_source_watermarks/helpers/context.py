@@ -20,7 +20,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
 )
-from sqlbuild.spec.models.types import SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 
 _PAYLOAD_VERSION: int = 1
 _UNKNOWN_MISSING_UPSTREAM_WATERMARK: str = "missing_upstream_watermark"

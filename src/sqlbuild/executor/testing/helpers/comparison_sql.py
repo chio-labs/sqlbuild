@@ -8,8 +8,10 @@ from collections import OrderedDict
 from copy import deepcopy
 from typing import Any
 
+from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
+from sqlbuild.executor.testing.constants import SQL_TEST_BACKTICK_IDENTIFIER_QUOTE
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
@@ -54,7 +56,9 @@ def format_sql(
         return sql
     protected_sql: str = sql
     protected_identifiers: dict[str, str] = {}
-    if sql_analysis_dialect in {"bigquery", "databricks"} and "`" in sql:
+    if sql_analysis_dialect in {BuiltinAdapter.BIGQUERY, BuiltinAdapter.DATABRICKS} and (
+        SQL_TEST_BACKTICK_IDENTIFIER_QUOTE in sql
+    ):
         protected_sql, protected_identifiers = _protect_backtick_identifiers(sql)
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
@@ -96,7 +100,7 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
         return None
     protected_sql: str = sql
     protected_identifiers: dict[str, str] = {}
-    if "`" in sql:
+    if SQL_TEST_BACKTICK_IDENTIFIER_QUOTE in sql:
         protected_sql, protected_identifiers = _protect_backtick_identifiers(sql)
 
     try:

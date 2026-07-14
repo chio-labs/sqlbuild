@@ -4,18 +4,24 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.adapter.capabilities.type_normalization import types_equal
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.main.types_equal import types_equal
 from sqlbuild.adapter.models import ColumnInfo
-from sqlbuild.compiler.helpers.sources import render_source_relation
+from sqlbuild.compiler.planner.constants import (
+    SOURCE_ALIAS_BOUNDARY_CHARACTERS,
+    SQL_ALIAS_KEYWORD,
+    SQL_BRACKETED_IDENTIFIER_START,
+    SQL_QUOTED_IDENTIFIER_DELIMITERS,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.main.quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 
 _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
 _DERIVED_TABLE_ALIAS_KEYWORDS: frozenset[str] = frozenset(
@@ -179,7 +185,7 @@ def _consume_source_alias(*, query_sql: str, start: int) -> tuple[int, str | Non
     token_end, token = _read_alias_token(query_sql=query_sql, start=index)
     if token is None:
         return start, None
-    if token.upper() == "AS":
+    if token.upper() == SQL_ALIAS_KEYWORD:
         alias_start: int = _skip_whitespace(query_sql=query_sql, start=token_end)
         alias_end: int
         alias: str | None
@@ -203,14 +209,14 @@ def _read_alias_token(*, query_sql: str, start: int) -> tuple[int, str | None]:
     if start >= len(query_sql):
         return start, None
     first_char: str = query_sql[start]
-    if first_char in ",);":
+    if first_char in SOURCE_ALIAS_BOUNDARY_CHARACTERS:
         return start, None
-    if first_char == "[":
+    if first_char == SQL_BRACKETED_IDENTIFIER_START:
         end_bracket: int = query_sql.find("]", start + 1)
         if end_bracket == -1:
             return start, None
         return end_bracket + 1, query_sql[start : end_bracket + 1]
-    if first_char in {'"', "`"}:
+    if first_char in SQL_QUOTED_IDENTIFIER_DELIMITERS:
         end_quote: int = query_sql.find(first_char, start + 1)
         if end_quote == -1:
             return start, None

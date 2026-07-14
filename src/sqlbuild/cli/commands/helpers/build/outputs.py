@@ -5,13 +5,13 @@ from __future__ import annotations
 import sys
 from typing import TextIO
 
+from sqlbuild.cli.commands.classes.build_progress_callbacks import format_build_footer
 from sqlbuild.cli.commands.helpers.build.models import (
     BuildCommandRequest,
     BuildExecutionPreparation,
     BuildInvocation,
     BuildRunOutcome,
 )
-from sqlbuild.cli.commands.helpers.build.progress import format_build_footer
 from sqlbuild.cli.commands.helpers.build.python_node_output import (
     python_node_results_failed,
 )

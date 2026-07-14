@@ -19,7 +19,7 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     LoadDagStateSchedulingTestCase,
     LoadDagWorkerFailureTestCase,

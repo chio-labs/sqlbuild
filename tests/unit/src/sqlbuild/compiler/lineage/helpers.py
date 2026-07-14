@@ -13,8 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
-from sqlbuild.spec.models.project import SettingsConfig
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaSeedEntry
+from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SettingsConfig
 
 
 def make_compiled_project(

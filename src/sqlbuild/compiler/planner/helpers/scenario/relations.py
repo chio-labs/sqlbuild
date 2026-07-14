@@ -28,8 +28,8 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.planner.constants import (
+    POLYGLOT_ALIAS_VALUE_KEY,
     SCENARIO_PLAN_INTERNAL,
     SCENARIO_PLAN_MISSING_FIXTURE_SQL,
     SCENARIO_PLAN_MISSING_RELATION_TARGET,
@@ -69,10 +69,11 @@ from sqlbuild.compiler.planner.types import RelationMarkerTargetResolver, Scenar
 from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
+from sqlbuild.spec.contracts.models import SourceEntry
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 _REF_PATTERN: re.Pattern[str] = re.compile(
@@ -853,11 +854,13 @@ def _replace_relation_markers_in_polyglot_dict(
         if not isinstance(expression, dict):
             return None, cache
         alias_payload: Any | None = expression.get("alias")
-        if isinstance(alias_payload, dict) and "this" in alias_payload:
-            inner_replacement, cache = _replacement(alias_payload.get("this"), cache)
+        if isinstance(alias_payload, dict) and POLYGLOT_ALIAS_VALUE_KEY in alias_payload:
+            inner_replacement, cache = _replacement(
+                alias_payload.get(POLYGLOT_ALIAS_VALUE_KEY), cache
+            )
             if inner_replacement is None:
                 return None, cache
-            alias_payload["this"] = inner_replacement
+            alias_payload[POLYGLOT_ALIAS_VALUE_KEY] = inner_replacement
             return expression, cache
 
         function_payload: Any | None = expression.get("function")

@@ -9,8 +9,8 @@ import pytest
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import ColumnInfo
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_MODEL
 from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
@@ -22,7 +22,7 @@ from sqlbuild.executor.run.helpers.materializations.snapshot import (
 )
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.contracts.models import SnapshotsConfig
 from tests.unit.src.sqlbuild.executor.run.helpers._test_types import (
     SnapshotHookFailureTestCase,
     SnapshotLifecycleTestCase,

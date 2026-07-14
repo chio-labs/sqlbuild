@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
 from sqlbuild.integrations.dbt.models import (
     DbtComparisonPreparation,
     DbtDiffOptions,

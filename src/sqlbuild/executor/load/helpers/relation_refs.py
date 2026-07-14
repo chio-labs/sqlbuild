@@ -11,7 +11,7 @@ from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.executor.load.models import LoaderRelationRef
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_loader_relation_refs(

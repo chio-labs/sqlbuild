@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.dag.constants import REQUIRED_DAG_COLLECTION_KEYS
 from sqlbuild.compiler.dag.models import (
     DagArtifact,
     DagCheck,
@@ -35,8 +36,7 @@ from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNo
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import ColumnLineageRef, SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
-from sqlbuild.spec.models.schema import SchemaColumn
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry, SourceEntry
 
 _DAG_VERSION: int = 1
 
@@ -569,6 +569,6 @@ def _drop_none(value: object) -> object:
 
 
 def _is_empty_optional_field(*, key: object, value: object) -> bool:
-    if key in {"nodes", "edges", "checks"}:
+    if key in REQUIRED_DAG_COLLECTION_KEYS:
         return False
     return value in ({}, [])

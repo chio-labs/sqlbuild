@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.capabilities.type_normalization import normalize_type, types_equal
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.main.normalize_type import normalize_type
+from sqlbuild.adapter.main.types_equal import types_equal
 from sqlbuild.adapter.models import (
     ColumnInfo,
     NormalizedType,
@@ -22,14 +23,16 @@ from sqlbuild.adapter.types import TypeFamily
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     HistoricalInput,
+    InitialValidFrom,
     PlanReason,
     RelationReuseKind,
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
-from sqlbuild.diagnostics.helpers.logging import diagnostics_context
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.run.constants import SNAPSHOT_ALL_CHECK_COLUMNS
 from sqlbuild.executor.run.helpers.execution.final_audits import (
     run_delta_scope_audits,
     run_final_scope_audits,
@@ -54,7 +57,7 @@ from sqlbuild.executor.run.models import (
     PostHookPhaseOutcome,
 )
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 _DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
 _DEFAULT_VALID_TO_COLUMN: str = "valid_to"
@@ -418,9 +421,12 @@ def _validate_delta_columns(
             required_columns = (*required_columns, entry.observed_at_column)
     else:
         required_columns = entry.unique_key
-    if entry.initial_valid_from == "updated_at":
+    if entry.initial_valid_from == InitialValidFrom.UPDATED_AT:
         required_columns = (*required_columns, _require_updated_at(entry))
-    if entry.initial_valid_from == "observed_at" and entry.observed_at_column is not None:
+    if (
+        entry.initial_valid_from == InitialValidFrom.OBSERVED_AT
+        and entry.observed_at_column is not None
+    ):
         required_columns = (*required_columns, entry.observed_at_column)
     missing_columns: list[str] = [
         column for column in required_columns if column.lower() not in column_names
@@ -700,7 +706,10 @@ def _apply_check_snapshot_changes(
 def _expanded_check_columns(
     *, entry: ModelPlanEntry, delta_columns: tuple[ColumnInfo, ...]
 ) -> tuple[str, ...]:
-    if entry.snapshot_strategy != SnapshotStrategy.CHECK or entry.check_columns != ("*",):
+    if (
+        entry.snapshot_strategy != SnapshotStrategy.CHECK
+        or entry.check_columns != SNAPSHOT_ALL_CHECK_COLUMNS
+    ):
         return entry.check_columns
 
     excluded_names: set[str] = {column.lower() for column in entry.unique_key}
@@ -769,7 +778,10 @@ def _apply_snapshot_schema_change(
         policy == SnapshotSchemaChangePolicy.REQUIRE_CONFIRMATION
         and not allow_snapshot_schema_change
     ):
-        if entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.check_columns == ("*",):
+        if (
+            entry.snapshot_strategy == SnapshotStrategy.CHECK
+            and entry.check_columns == SNAPSHOT_ALL_CHECK_COLUMNS
+        ):
             raise ExecutorInputError(
                 f"snapshot model '{entry.name}' check_columns [*] detected new data columns "
                 f"on existing target: {added_names}. These columns would become part of "
@@ -808,7 +820,8 @@ def _effective_snapshot_schema_change_policy(
 ) -> SnapshotSchemaChangePolicy:
     project_policy: SnapshotSchemaChangePolicy = SnapshotSchemaChangePolicy(
         snapshots.wildcard_check_schema_change
-        if entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.check_columns == ("*",)
+        if entry.snapshot_strategy == SnapshotStrategy.CHECK
+        and entry.check_columns == SNAPSHOT_ALL_CHECK_COLUMNS
         else snapshots.schema_change
     )
     if entry.snapshot_schema_change is None:

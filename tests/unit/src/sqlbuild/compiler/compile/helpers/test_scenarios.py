@@ -16,8 +16,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlScenarioFile,
 )
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile.helpers._test_types import (
     BuildScenarioInputsErrorTestCase,
     BuildScenarioInputsTestCase,

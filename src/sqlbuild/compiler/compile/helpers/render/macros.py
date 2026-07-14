@@ -10,25 +10,30 @@ from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
-from sqlbuild.compiler.compile.constants import MACRO_CALL_PATTERN
+from sqlbuild.compiler.compile.constants import (
+    MACRO_CALL_PATTERN,
+    MACRO_CONTEXT_PARAMETER_NAME,
+    MACRO_TOKEN,
+    PYTHON_LITERAL_NAMES,
+    SQL_OPEN_PAREN_TOKEN,
+    SQL_QUOTE_TOKENS,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import (
     LoadedMacro,
     MacroContext,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
-from sqlbuild.compiler.helpers.sql_scanning import (
-    find_matching_paren,
-    skip_block_comment,
-    skip_line_comment,
-    skip_quoted_text,
-)
-from sqlbuild.compiler.helpers.sql_scanning import (
+from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main.is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
 )
-from sqlbuild.compiler.helpers.sql_scanning import (
+from sqlbuild.compiler.sql_analysis.main.is_identifier_start import (
     is_identifier_start as _is_identifier_start,
 )
+from sqlbuild.compiler.sql_analysis.main.skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main.skip_line_comment import skip_line_comment
+from sqlbuild.compiler.sql_analysis.main.skip_quoted_text import skip_quoted_text
 
 _CONTEXT: str = "Macro expansion"
 
@@ -73,7 +78,7 @@ def expand_sql_macros(
 ) -> str:
     """Expand authored Python macros in one executable SQL string."""
 
-    if "@" not in sql:
+    if MACRO_TOKEN not in sql:
         return sql
 
     rendered_sql_parts: list[str] = []
@@ -114,7 +119,7 @@ def expand_sql_macros(
 def find_macro_call_names(sql: str) -> tuple[str, ...]:
     """Return unique authored macro call names in encounter order."""
 
-    if "@" not in sql:
+    if MACRO_TOKEN not in sql:
         return ()
 
     names: list[str] = []
@@ -229,9 +234,9 @@ def _call_loaded_macro(
         parameters
         and parameters[0].kind
         in {inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
-        and parameters[0].name == "ctx"
+        and parameters[0].name == MACRO_CONTEXT_PARAMETER_NAME
     ):
-        if "ctx" in kwargs:
+        if MACRO_CONTEXT_PARAMETER_NAME in kwargs:
             raise CompileInputError(
                 f"Macro '@{loaded_macro.name}' must not be called with keyword argument 'ctx'; "
                 "'ctx' is reserved for injected macro context"
@@ -339,7 +344,7 @@ def _evaluate_literal_ast_node(
     if isinstance(node, ast.Name):
         if node.id in placeholder_values:
             return placeholder_values[node.id]
-        if node.id in {"True", "False", "None"}:
+        if node.id in PYTHON_LITERAL_NAMES:
             return ast.literal_eval(node)
     if isinstance(node, ast.List):
         return [
@@ -405,7 +410,7 @@ def _find_next_macro_start(*, sql: str, start_index: int) -> int | None:
     index: int = start_index
     while index < len(sql):
         character: str = sql[index]
-        if character in {"'", '"', "`"}:
+        if character in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql.startswith("--", index):
@@ -414,7 +419,7 @@ def _find_next_macro_start(*, sql: str, start_index: int) -> int | None:
         if sql.startswith("/*", index):
             index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
-        if character == "@" and _is_macro_call_start(sql=sql, at_index=index):
+        if character == MACRO_TOKEN and _is_macro_call_start(sql=sql, at_index=index):
             return index
         index += 1
     return None
@@ -427,7 +432,7 @@ def _is_macro_call_start(*, sql: str, at_index: int) -> bool:
     while cursor < len(sql) and _is_identifier_continue(sql[cursor]):
         cursor += 1
         cursor = _skip_whitespace(sql=sql, start_index=cursor)
-    return cursor < len(sql) and sql[cursor] == "("
+    return cursor < len(sql) and sql[cursor] == SQL_OPEN_PAREN_TOKEN
 
 
 def _parse_macro_name(*, sql: str, call_start_index: int) -> str:
@@ -438,7 +443,7 @@ def _parse_macro_name(*, sql: str, call_start_index: int) -> str:
 
 
 def _find_matching_paren(*, sql: str, opening_paren_index: int) -> int:
-    if opening_paren_index >= len(sql) or sql[opening_paren_index] != "(":
+    if opening_paren_index >= len(sql) or sql[opening_paren_index] != SQL_OPEN_PAREN_TOKEN:
         raise CompileInputError("expected opening parenthesis")
     return find_matching_paren(sql=sql, open_paren_index=opening_paren_index, context=_CONTEXT)
 

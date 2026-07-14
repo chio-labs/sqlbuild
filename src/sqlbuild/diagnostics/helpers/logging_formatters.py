@@ -6,6 +6,7 @@ import logging
 
 from sqlbuild.diagnostics.helpers.constants import (
     FILE_LOG_DATE_FORMAT,
+    INLINE_SQL_TRANSACTION_STATEMENTS,
     LOGGER_ROOT_NAME,
     SQL_SEPARATOR,
 )
@@ -86,7 +87,7 @@ def _normalize_console_message(message: str) -> str:
 
 def _render_sql_inline(sql: str) -> bool:
     normalized: str = sql.strip().upper()
-    return normalized in {"BEGIN", "COMMIT", "ROLLBACK"}
+    return normalized in INLINE_SQL_TRANSACTION_STATEMENTS
 
 
 def _format_context_message(*, record: logging.LogRecord, use_color: bool) -> str | None:

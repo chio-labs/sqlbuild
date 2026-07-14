@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,
@@ -40,9 +40,8 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.spec.models.schema import SeedCsvSettings
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SeedCsvSettings, SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 def node_source_hashes_by_name(

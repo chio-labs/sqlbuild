@@ -7,8 +7,8 @@ import pytest
 from sqlbuild.compiler.discovery.helpers.yml.sources import parse_sources_yml
 from sqlbuild.integrations.dlt.models import DltSourceConfig
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.discovery.helpers._test_types import (
     ParseSourcesYamlDltTestCase,
     ParseSourcesYamlErrorTestCase,

@@ -14,19 +14,20 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledSource,
 )
+from sqlbuild.compiler.planner.constants import SOURCE_DEFERRAL_CONTEXT_FIELDS
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.references.main.quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.models import (
     ClonePolicy,
     LocalConfig,
     LocalTargetConfig,
     ProjectConfig,
+    SourceEntry,
     TargetConfig,
 )
-from sqlbuild.spec.models.source import SourceEntry
 
 _CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")
 _VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
@@ -249,7 +250,7 @@ def _resolve_target_field(
 
     def _replace_ctx(match: re.Match[str]) -> str:
         ctx_key: str = match.group(1)
-        if ctx_key in ("schema", "database"):
+        if ctx_key in SOURCE_DEFERRAL_CONTEXT_FIELDS:
             return logical_value if logical_value is not None else ""
         return match.group(0)
 

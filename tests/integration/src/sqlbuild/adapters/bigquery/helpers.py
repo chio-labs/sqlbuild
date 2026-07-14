@@ -14,7 +14,7 @@ import pytest
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import TableFreshnessMetadata
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 
 _ENV_KEYS: tuple[str, ...] = ("SQB_TEST_BIGQUERY_PROJECT",)
 _DEFAULT_LOCATION: str = "europe-west2"

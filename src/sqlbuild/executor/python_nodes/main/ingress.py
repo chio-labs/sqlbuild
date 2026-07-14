@@ -14,7 +14,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonIngressLoaderExecutorResult,
     PythonNodeRuntime,
 )
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def run_ingress_python_loader_nodes(

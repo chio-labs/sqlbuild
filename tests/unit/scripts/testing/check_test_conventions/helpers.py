@@ -1,7 +1,7 @@
 from pathlib import Path
 from textwrap import dedent
 
-from scripts.testing.test_conventions.checker import check_paths
+from scripts.testing.test_conventions.main.check_paths import check_paths
 from scripts.testing.test_conventions.models import Violation
 
 

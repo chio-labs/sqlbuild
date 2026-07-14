@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import ast
 
+from scripts.testing.test_conventions.constants import (
+    DATACLASS_DECORATOR_NAME,
+    PYTEST_MARK_ATTRIBUTE_NAME,
+    PYTEST_PARAMETRIZE_ATTRIBUTE_NAME,
+)
+
 
 def is_docstring_only_module(module: ast.Module) -> bool:
     """Return whether the module is empty or docstring-only."""
@@ -24,9 +30,9 @@ def is_dataclass_decorator(decorator: ast.expr) -> bool:
     """Return whether an AST decorator node represents dataclass."""
 
     if isinstance(decorator, ast.Name):
-        return decorator.id == "dataclass"
+        return decorator.id == DATACLASS_DECORATOR_NAME
     if isinstance(decorator, ast.Attribute):
-        return decorator.attr == "dataclass"
+        return decorator.attr == DATACLASS_DECORATOR_NAME
     if isinstance(decorator, ast.Call):
         return is_dataclass_decorator(decorator.func)
     return False
@@ -39,11 +45,14 @@ def is_parametrize_decorator(decorator: ast.expr) -> bool:
         return False
 
     function: ast.expr = decorator.func
-    if not isinstance(function, ast.Attribute) or function.attr != "parametrize":
+    if (
+        not isinstance(function, ast.Attribute)
+        or function.attr != PYTEST_PARAMETRIZE_ATTRIBUTE_NAME
+    ):
         return False
 
     mark: ast.expr = function.value
-    return isinstance(mark, ast.Attribute) and mark.attr == "mark"
+    return isinstance(mark, ast.Attribute) and mark.attr == PYTEST_MARK_ATTRIBUTE_NAME
 
 
 def attribute_chain(expression: ast.expr) -> tuple[str, ...] | None:

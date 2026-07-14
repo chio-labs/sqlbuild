@@ -16,7 +16,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
+from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
 
 @dataclass(frozen=True)

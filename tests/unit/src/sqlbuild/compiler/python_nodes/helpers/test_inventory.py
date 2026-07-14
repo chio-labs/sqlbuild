@@ -19,8 +19,7 @@ from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNo
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import RetryPolicy
 from sqlbuild.python_nodes.types import PythonCheckSeverity
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.python_nodes.helpers._test_types import (
     PythonNodeGraphInventoryTestCase,
 )

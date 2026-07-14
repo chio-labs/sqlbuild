@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
+from sqlbuild.compiler.planner.constants import (
+    EMPTY_SELECTOR_PATH,
+    MODEL_SELECTOR_ROOT,
+    MODEL_SELECTOR_ROOT_PREFIX,
+    PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
+    PATH_SELECTOR_SEPARATOR,
+    SELECTOR_KIND_SEPARATOR,
+    SELECTOR_MISSING_NAME_ERROR_FRAGMENT,
+    SELECTOR_PATH_SEPARATOR,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph.core import (
     expand_downstream,
@@ -41,7 +50,7 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
         expansion: SelectorExpansion = split_selector_expansion(raw)
     except SharedInputError as error:
         code: str = "S001" if not stripped else "S002"
-        if "no name" in str(error):
+        if SELECTOR_MISSING_NAME_ERROR_FRAGMENT in str(error):
             code = "S004"
         raise PlannerInputError(str(error), code=code) from None
 
@@ -49,8 +58,8 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
     downstream: bool = expansion.downstream
     core: str = expansion.core
 
-    if "~" in core:
-        parts: list[str] = core.split("~", 1)
+    if PATH_SELECTOR_SEPARATOR in core:
+        parts: list[str] = core.split(PATH_SELECTOR_SEPARATOR, 1)
         start_name: str = parts[0].strip()
         end_name: str = parts[1].strip()
         if not start_name or not end_name:
@@ -66,10 +75,10 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
         )
 
     name: str = core
-    if ":" in name:
+    if SELECTOR_KIND_SEPARATOR in name:
         prefix: str
         value: str
-        prefix, value = name.split(":", 1)
+        prefix, value = name.split(SELECTOR_KIND_SEPARATOR, 1)
         kind: SelectorKind | None = _SELECTOR_KIND_BY_PREFIX.get(prefix)
         if kind is None:
             raise PlannerInputError(
@@ -79,8 +88,8 @@ def parse_selector(raw: str) -> ParsedSelector | PathSelector:
             raise PlannerInputError(f"selector '{stripped}' has empty value after ':'", code="S006")
         return ParsedSelector(kind=kind, value=value, upstream=upstream, downstream=downstream)
 
-    if "/" in name:
-        folder_value: str = name.strip("/")
+    if SELECTOR_PATH_SEPARATOR in name:
+        folder_value: str = name.strip(SELECTOR_PATH_SEPARATOR)
         return ParsedSelector(
             kind=SelectorKind.PATH, value=folder_value, upstream=upstream, downstream=downstream
         )
@@ -347,10 +356,10 @@ def _normalize_path_selector_value(value: str) -> str:
 
 
 def _model_path_candidate(folder: str) -> str:
-    if folder == "models":
-        return ""
-    if folder.startswith("models/"):
-        return folder[len("models/") :]
+    if folder == MODEL_SELECTOR_ROOT:
+        return EMPTY_SELECTOR_PATH
+    if folder.startswith(MODEL_SELECTOR_ROOT_PREFIX):
+        return folder[len(MODEL_SELECTOR_ROOT_PREFIX) :]
     raise PlannerInputError(
         PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
         code="S012",
@@ -358,7 +367,7 @@ def _model_path_candidate(folder: str) -> str:
 
 
 def _path_matches(*, indexed_folder: str, selector_folder: str) -> bool:
-    if selector_folder == "":
+    if selector_folder == EMPTY_SELECTOR_PATH:
         return True
     return indexed_folder == selector_folder or indexed_folder.startswith(f"{selector_folder}/")
 

@@ -66,7 +66,7 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_local_scenario_load_only_run(

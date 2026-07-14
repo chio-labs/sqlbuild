@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.models import ColumnInfo
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -39,7 +39,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioFixtureExecutionResult,
 )
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.spec.models.schema import default_seed_csv_settings
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioAssertionExpectationIntegrationTestCase,
     ScenarioCleanupIntegrationTestCase,
@@ -209,7 +209,7 @@ def test_given_required_unmocked_seed_when_executing_then_loads_project_seed_to_
             ColumnInfo(name="country_code", type="VARCHAR"),
             ColumnInfo(name="country_name", type="VARCHAR"),
         ),
-        csv_settings=default_seed_csv_settings,
+        csv_settings=DEFAULT_SEED_CSV_SETTINGS,
     )
 
     results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(

@@ -11,7 +11,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.helpers.load_execution import (
+from sqlbuild.executor.load.helpers.execution import (
     is_untargeted_self_managed_intermediate,
 )
 from sqlbuild.executor.load.helpers.relation_refs import (
@@ -31,8 +31,8 @@ from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 _SUPPORTED_WRITE_STRATEGIES: frozenset[SourceWriteStrategy] = frozenset(
     {

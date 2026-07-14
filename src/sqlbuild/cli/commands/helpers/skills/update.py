@@ -16,6 +16,8 @@ skill_name: str = "sqlbuild"
 skill_source_package: str = "sqlbuild"
 skill_source_path: str = ".agents/skills/sqlbuild/SKILL.md"
 valid_skill_targets: tuple[str, ...] = ("opencode", "claude", "agents")
+opencode_skill_target: str = "opencode"
+claude_skill_target: str = "claude"
 
 
 def update_sqlbuild_skills(
@@ -130,11 +132,11 @@ def build_install_targets(
     install_targets: list[SkillInstallTarget] = []
     for target_name in target_names:
         base_path: Path
-        if target_name == "opencode":
+        if target_name == opencode_skill_target:
             base_path = (
                 home_path / ".config/opencode" if global_install else project_dir / ".opencode"
             )
-        elif target_name == "claude":
+        elif target_name == claude_skill_target:
             base_path = home_path / ".claude" if global_install else project_dir / ".claude"
         else:
             base_path = home_path / ".agents" if global_install else project_dir / ".agents"

@@ -8,7 +8,7 @@ from typing import cast
 import pytest
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -30,7 +30,7 @@ from sqlbuild.integrations.dbt.pipeline.main import execute as execute_module
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
 )
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.models import (
     DbtConfig,
     DbtProductionRefConfig,
     LocalConfig,

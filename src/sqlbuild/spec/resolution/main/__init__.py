@@ -1,0 +1,1 @@
+"""Public specification resolution entries."""

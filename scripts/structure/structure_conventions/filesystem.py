@@ -5,6 +5,12 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from scripts.structure.structure_conventions.constants import (
+    PYTHON_FILE_SUFFIX,
+    RUNTIME_ROOT_PARTS,
+    TOOLING_ROOT_NAME,
+)
+
 
 def resolve_repo_root(paths: Iterable[Path]) -> Path:
     """Return the repository root for the given target paths."""
@@ -28,7 +34,7 @@ def iter_scoped_python_files(*, repo_root: Path, paths: Iterable[Path]) -> list[
     files: set[Path] = set()
     for path in paths:
         resolved: Path = path.resolve()
-        if resolved.is_file() and resolved.suffix == ".py":
+        if resolved.is_file() and resolved.suffix == PYTHON_FILE_SUFFIX:
             if is_scoped_python_file(repo_root=repo_root, file_path=resolved):
                 files.add(resolved)
             continue
@@ -53,14 +59,13 @@ def is_scoped_python_file(*, repo_root: Path, file_path: Path) -> bool:
     if not relative_parts:
         return False
 
-    if relative_parts[0] == "scripts":
+    if relative_parts[0] == TOOLING_ROOT_NAME:
         return True
 
     package_path_part_count: int = 2
     return (
         len(relative_parts) >= package_path_part_count
-        and relative_parts[0] == "src"
-        and relative_parts[1] == "sqlbuild"
+        and relative_parts[:package_path_part_count] == RUNTIME_ROOT_PARTS
     )
 
 

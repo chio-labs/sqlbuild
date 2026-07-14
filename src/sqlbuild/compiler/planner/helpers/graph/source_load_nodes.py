@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner.helpers.graph.loader_dag import (
 )
 from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_source_load_map(

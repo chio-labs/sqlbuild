@@ -12,8 +12,8 @@ from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
 from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
-from sqlbuild.spec.models.source import SourceColumnEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceColumnEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)

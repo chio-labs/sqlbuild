@@ -5,12 +5,11 @@ import subprocess
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.virtual.helpers.encoding import encode_state_text
 from sqlbuild.virtual.planner.helpers.planning import (
     build_expected_local_hashes,
     build_expected_version_hashes,
@@ -19,6 +18,7 @@ from sqlbuild.virtual.planner.helpers.planning import (
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.helpers.backend import build_state_backend
 from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
+from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     StateBackendConfig,

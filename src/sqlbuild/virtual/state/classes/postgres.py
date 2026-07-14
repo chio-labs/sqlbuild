@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
 from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
 from sqlbuild.executor.node_results.models import (
@@ -21,10 +22,13 @@ from sqlbuild.virtual.state.constants import (
     NODE_RESULTS_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
+    POSTGRES_INTEGER_TYPES,
+    POSTGRES_TEXT_TYPES,
     PYTHON_NODE_VERSION_TABLE,
     RECONCILE_EVENT_TABLE,
     SEED_VERSION_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
+    STATE_BOOLEAN_TRUE,
     STATE_MIGRATION_EVENTS_TABLE,
     STATE_OPERATION_EVENT_TABLE,
     STATE_OPERATION_TABLE,
@@ -1064,7 +1068,10 @@ class PostgresStateBackend(StateBackend):
     ) -> None:
         ref: VirtualEnvironmentFunctionRefRecord
         for ref in refs:
-            if ref.node_type not in {"udf", "table_fn"}:
+            if ref.node_type not in {
+                CompiledResourceType.UDF,
+                CompiledResourceType.TABLE_FN,
+            }:
                 raise StateBackendConfigError("Function ref node_type must be 'udf' or 'table_fn'")
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]] = {}
         for node_type in ("udf", "table_fn"):
@@ -1874,7 +1881,7 @@ class PostgresStateBackend(StateBackend):
     def _parse_materialized(self, value: object) -> bool | None:
         if value is None:
             return None
-        return str(value).lower() == "true"
+        return str(value).lower() == STATE_BOOLEAN_TRUE
 
     def _quote_identifier(self, identifier: str) -> str:
         return '"' + identifier.replace('"', '""') + '"'
@@ -2005,9 +2012,9 @@ class PostgresStateBackend(StateBackend):
         actual: str = actual_type.lower()
         match expected_type:
             case StateColumnType.INTEGER:
-                return actual in {"integer", "bigint", "smallint"}
+                return actual in POSTGRES_INTEGER_TYPES
             case StateColumnType.TEXT:
-                return actual in {"text", "character varying", "character"}
+                return actual in POSTGRES_TEXT_TYPES
             case StateColumnType.TIMESTAMP:
                 return actual.startswith("timestamp")
         return False

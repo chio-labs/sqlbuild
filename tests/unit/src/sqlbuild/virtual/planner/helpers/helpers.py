@@ -24,9 +24,13 @@ from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
 )
-from sqlbuild.spec.models.project import SettingsConfig
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import (
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SettingsConfig,
+    SourceEntry,
+)
 
 
 def build_virtual_planner_test_project(

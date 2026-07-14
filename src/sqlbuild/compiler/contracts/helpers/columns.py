@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.capabilities.type_normalization import types_equal
+from sqlbuild.adapter.main.types_equal import types_equal
 from sqlbuild.adapter.types import TypeDialect
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import (
@@ -10,10 +10,12 @@ from sqlbuild.compiler.compile.models.core import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.contracts.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLocation
 from sqlbuild.compiler.diagnostics.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.models.schema import SchemaColumn, SourceLocation
+from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.spec.contracts.models import SchemaColumn, SourceLocation
 
 _MISSING_COLUMN_CODE: str = "K001"
 _TYPE_MISMATCH_CODE: str = "K002"
@@ -30,7 +32,7 @@ def collect_model_column_contract_diagnostics(
 ) -> tuple[CompilerDiagnostic, ...]:
     """Collect diagnostics for one compiled model's declared column contract."""
 
-    contract_enforced: bool = model.config.values.get("contract") == "enforced"
+    contract_enforced: bool = model.config.values.get("contract") == ContractPolicy.ENFORCED
     if model.schema_entry is None or not model.schema_entry.columns:
         if contract_enforced:
             return (_missing_declarations_diagnostic(model),)
@@ -147,7 +149,7 @@ def _nullability_diagnostics(
 def _declares_not_null(column: SchemaColumn) -> bool:
     if column.nullable is False:
         return True
-    return any(audit.definition_name == "not_null" for audit in column.audits)
+    return any(audit.definition_name == NOT_NULL_AUDIT_NAME for audit in column.audits)
 
 
 def _missing_column_diagnostic(*, model: CompiledModel, column: SchemaColumn) -> CompilerDiagnostic:

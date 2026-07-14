@@ -34,21 +34,27 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.integrations.dbt.constants import DBT_MATERIALIZATION_VIEW
-from sqlbuild.integrations.dbt.helpers.manifest.core import dbt_manifest_model_materialization
-from sqlbuild.integrations.dbt.helpers.manifest.sqlbuild_refs import (
-    resolve_sqlbuild_model_dbt_refs,
-)
-from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
-    dbt_graph_node_key,
+from sqlbuild.integrations.dbt.main.graph.dbt_graph_node_key import dbt_graph_node_key
+from sqlbuild.integrations.dbt.main.graph.dbt_source_graph_node_key import (
     dbt_source_graph_node_key,
+)
+from sqlbuild.integrations.dbt.main.graph.sqlbuild_model_graph_node_key import (
     sqlbuild_model_graph_node_key,
 )
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+from sqlbuild.integrations.dbt.main.manifest.manifest_model_materialization import (
+    dbt_manifest_model_materialization,
+)
+from sqlbuild.integrations.dbt.main.manifest.resolve_sqlbuild_model_refs import (
+    resolve_sqlbuild_model_dbt_refs,
+)
+from sqlbuild.integrations.dbt.main.planning.build_model_planning_result import (
     build_dbt_model_planning_result,
 )
-from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
-from sqlbuild.integrations.dbt.helpers.selection.sql_test_targets import (
+from sqlbuild.integrations.dbt.main.profile.resolve_connection_config import (
+    resolve_connection_config,
+)
+from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
+from sqlbuild.integrations.dbt.main.selection.adapt_project_for_sql_tests import (
     adapt_project_for_dbt_sql_tests,
 )
 from sqlbuild.integrations.dbt.manifest.models import (
@@ -67,6 +73,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtSqlbuildPlanArtifacts,
     DbtSqlbuildPlanRequest,
 )
+from sqlbuild.integrations.dbt.pipeline.constants import DBT_FORCE_FLAG, DBT_FULL_REFRESH_FLAG
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
     append_stale_out_of_selection_warning,
     build_dbt_non_model_run_unique_ids,
@@ -215,7 +222,7 @@ def build_sqlbuild_plan_output(
                 selection=PlannerSelection(select=selected_model_names),
                 overrides=PlannerOverrides(
                     cursor_overrides=cursor_overrides,
-                    full_refresh="--full-refresh" in sqlbuild_args,
+                    full_refresh=DBT_FULL_REFRESH_FLAG in sqlbuild_args,
                     forced_stale_model_names=forced_stale_model_names,
                     external_blocked_model_names=external_blocked_model_names,
                 ),
@@ -223,7 +230,7 @@ def build_sqlbuild_plan_output(
                 policies=PlannerPolicies(
                     standard_scope_pruning=(
                         StandardScopePruning.PRUNE_UNCHANGED
-                        if "--force" not in sqlbuild_args and not disable_scope_pruning
+                        if DBT_FORCE_FLAG not in sqlbuild_args and not disable_scope_pruning
                         else StandardScopePruning.NONE
                     ),
                 ),
@@ -251,7 +258,7 @@ def build_sqlbuild_plan_output(
             return build_display_only_sqlbuild_plan(
                 project=planning_project,
                 selected_model_names=selected_model_names,
-                full_refresh="--full-refresh" in sqlbuild_args,
+                full_refresh=DBT_FULL_REFRESH_FLAG in sqlbuild_args,
             )
     finally:
         adapter.close(connection)

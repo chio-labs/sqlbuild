@@ -13,7 +13,7 @@ from sqlbuild.cli.commands.helpers.runtime.connection import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.cli.commands.helpers.runtime._test_types import (
     ResolveConnectionConfigWarningTestCase,
     ResolveDbtProfileConnectionConfigTestCase,

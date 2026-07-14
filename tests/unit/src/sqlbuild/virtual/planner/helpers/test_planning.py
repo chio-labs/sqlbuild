@@ -5,14 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.hooks.models import SqlHookEntry
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
-from sqlbuild.spec.models.schema import SchemaColumn
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.models import SchemaColumn, SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.helpers.runtime import (
     build_current_virtual_source_freshness_records,
 )

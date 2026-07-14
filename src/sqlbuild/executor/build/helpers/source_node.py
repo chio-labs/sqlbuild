@@ -19,7 +19,7 @@ from sqlbuild.executor.node_results.classes.standard_store import StandardNodeRe
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_build_source_node(

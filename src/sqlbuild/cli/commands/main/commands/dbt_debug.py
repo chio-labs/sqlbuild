@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from sqlbuild.cli.commands.constants import DBT_NO_CONNECTION_OPTION
 from sqlbuild.cli.commands.main.commands.debug import run_debug as run_sqlbuild_debug
 from sqlbuild.integrations.dbt.pipeline.main.debug import debug_dbt_from_project
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -42,7 +43,7 @@ def run_dbt_debug_command(
         sqlbuild_returncode: int = run_sqlbuild_debug(
             project_dir=project_dir,
             no_color=no_color,
-            no_connection="--no-connection" in args,
+            no_connection=DBT_NO_CONNECTION_OPTION in args,
             json_output=False,
         )
     finally:

@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner.helpers.pruning.run_despite_unchanged import (
 )
 from sqlbuild.compiler.planner.models import PlannerScope, RunDespiteUnchangedPlanningResult
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
-from sqlbuild.spec.models.types import SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     RunDespiteUnchangedPlanningTestCase,
 )

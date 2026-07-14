@@ -15,6 +15,10 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_MATERIALIZED_KEY,
 )
+from sqlbuild.integrations.dbt.helpers.manifest.constants import (
+    DBT_CONFIG_CALL_CLOSE,
+    DBT_CONFIG_CALL_OPEN,
+)
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
     DbtManifestModel,
@@ -487,9 +491,9 @@ def _find_config_expression_close(*, text: str, config_index: int) -> int | None
     cursor: int = paren_open
     while cursor < len(text):
         char: str = text[cursor]
-        if char == "(":
+        if char == DBT_CONFIG_CALL_OPEN:
             depth += 1
-        elif char == ")":
+        elif char == DBT_CONFIG_CALL_CLOSE:
             depth -= 1
             if depth == 0:
                 close: int = text.find("}}", cursor)

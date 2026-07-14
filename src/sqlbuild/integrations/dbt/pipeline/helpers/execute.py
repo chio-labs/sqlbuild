@@ -10,19 +10,17 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.helpers.cli.runner import (
-    DbtRunner,
-    build_dbt_command_argv,
-    parse_dbt_ls_json_lines,
-)
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+from sqlbuild.integrations.dbt.main.cli.build_command_argv import build_dbt_command_argv
+from sqlbuild.integrations.dbt.main.cli.parse_ls_json_lines import parse_dbt_ls_json_lines
+from sqlbuild.integrations.dbt.main.planning.build_downstream_model_names import (
     build_downstream_sqlbuild_model_names,
 )
-from sqlbuild.integrations.dbt.helpers.runtime.event_stream import (
+from sqlbuild.integrations.dbt.main.runtime.execute_json_event_stream import (
     execute_dbt_json_event_stream,
-    render_dbt_node_result,
 )
+from sqlbuild.integrations.dbt.main.runtime.render_node_result import render_dbt_node_result
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -38,6 +36,19 @@ from sqlbuild.integrations.dbt.models import (
     DbtNodeExecutionResult,
     DbtNodeMessage,
 )
+from sqlbuild.integrations.dbt.pipeline.constants import (
+    DBT_DEFER_FLAG,
+    DBT_EXECUTION_FAIL_STATUSES,
+    DBT_EXECUTION_SKIP_STATUSES,
+    DBT_EXECUTION_SUCCESS_STATUSES,
+    DBT_EXECUTION_WARN_STATUSES,
+    DBT_FULL_REFRESH_FLAG,
+    DBT_REPLAY_FULL,
+    DBT_REPLAY_NOOP_POLICIES,
+    DBT_SELECT_FLAG,
+    DBT_SELECTION_FLAGS,
+    DBT_UNIQUE_ID_SEPARATOR,
+)
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtModelOutcomeState,
@@ -47,13 +58,6 @@ from sqlbuild.integrations.dbt.types import (
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
-
-_DBT_SUCCESS_STATUSES: frozenset[str] = frozenset(
-    {"ok", "success", "pass", "passed", "warn", "warning"}
-)
-_DBT_WARN_STATUSES: frozenset[str] = frozenset({"warn", "warning"})
-_DBT_FAIL_STATUSES: frozenset[str] = frozenset({"error", "fail", "failed"})
-_DBT_SKIP_STATUSES: frozenset[str] = frozenset({"skip", "skipped"})
 
 
 def execute_dbt_commands(
@@ -198,13 +202,13 @@ def render_dbt_execution_summary_footer(
         status: str = node_result.status.lower()
         if node_result.execution_time is not None:
             elapsed += node_result.execution_time
-        if status in _DBT_WARN_STATUSES:
+        if status in DBT_EXECUTION_WARN_STATUSES:
             warn_count += 1
-        elif status in _DBT_FAIL_STATUSES:
+        elif status in DBT_EXECUTION_FAIL_STATUSES:
             fail_count += 1
-        elif status in _DBT_SKIP_STATUSES:
+        elif status in DBT_EXECUTION_SKIP_STATUSES:
             skip_count += 1
-        elif status in _DBT_SUCCESS_STATUSES:
+        elif status in DBT_EXECUTION_SUCCESS_STATUSES:
             pass_count += 1
     total_count: int = pass_count + warn_count + fail_count + skip_count
     style: CliStyle = CliStyle(use_color=use_color)
@@ -311,7 +315,7 @@ def _outcome_state_for_result(
     *, result: DbtNodeExecutionResult, planned_action: DbtModelPlanAction | None
 ) -> DbtModelOutcomeState:
     normalized_status: str = result.status.lower()
-    if normalized_status not in _DBT_SUCCESS_STATUSES:
+    if normalized_status not in DBT_EXECUTION_SUCCESS_STATUSES:
         return DbtModelOutcomeState.BLOCKING
     if planned_action == DbtModelPlanAction.RUN:
         return DbtModelOutcomeState.CHANGED
@@ -366,15 +370,15 @@ def _append_missing_run_results(
 
 
 def _resource_type_from_unique_id(unique_id: str) -> str:
-    if "." not in unique_id:
+    if DBT_UNIQUE_ID_SEPARATOR not in unique_id:
         return "node"
-    return unique_id.split(".", 1)[0]
+    return unique_id.split(DBT_UNIQUE_ID_SEPARATOR, 1)[0]
 
 
 def _node_name_from_unique_id(unique_id: str) -> str:
-    if "." not in unique_id:
+    if DBT_UNIQUE_ID_SEPARATOR not in unique_id:
         return unique_id
-    return unique_id.rsplit(".", 1)[-1]
+    return unique_id.rsplit(DBT_UNIQUE_ID_SEPARATOR, 1)[-1]
 
 
 def _execution_time_from_run_result(raw_result: dict[str, object]) -> float | None:
@@ -451,16 +455,16 @@ def _apply_dbt_replay_on_change(
     *, args: tuple[str, ...], replay_on_change: str | None, has_planned_model_work: bool
 ) -> tuple[str, ...]:
     policy: str | None = replay_on_change.strip().lower() if replay_on_change is not None else None
-    if policy in (None, "", "forward_only"):
+    if policy is None or policy in DBT_REPLAY_NOOP_POLICIES:
         return args
-    if policy != "full":
+    if policy != DBT_REPLAY_FULL:
         raise DbtInteropConfigError(
             "[dbt].replay_on_change must be 'forward_only' or 'full'; "
             "bounded replay policies are not supported for dbt"
         )
-    if not has_planned_model_work or "--full-refresh" in args:
+    if not has_planned_model_work or DBT_FULL_REFRESH_FLAG in args:
         return args
-    return ("--full-refresh", *args)
+    return (DBT_FULL_REFRESH_FLAG, *args)
 
 
 def build_deferred_dbt_relations(
@@ -616,7 +620,7 @@ def _strip_resolved_dbt_options(args: tuple[str, ...]) -> tuple[str, ...]:
         if arg in value_flags:
             index += 2
             continue
-        if arg == "--defer":
+        if arg == DBT_DEFER_FLAG:
             index += 1
             continue
         stripped.append(arg)
@@ -629,8 +633,8 @@ def _merge_dbt_select_terms(
 ) -> tuple[str, ...]:
     if not extra_terms:
         return args
-    if "--select" not in args:
-        return (*args, "--select", *extra_terms)
+    if DBT_SELECT_FLAG not in args:
+        return (*args, DBT_SELECT_FLAG, *extra_terms)
 
     merged: list[str] = []
     index: int = 0
@@ -639,7 +643,7 @@ def _merge_dbt_select_terms(
         token: str = args[index]
         merged.append(token)
         index += 1
-        if token != "--select":
+        if token != DBT_SELECT_FLAG:
             continue
         while index < len(args) and not args[index].startswith("--"):
             merged.append(args[index])
@@ -647,7 +651,7 @@ def _merge_dbt_select_terms(
         merged.extend(term for term in extra_terms if term not in merged)
         inserted = True
     if not inserted:
-        merged.extend(("--select", *extra_terms))
+        merged.extend((DBT_SELECT_FLAG, *extra_terms))
     return tuple(merged)
 
 
@@ -711,11 +715,11 @@ def _replace_dbt_select_terms(
     index: int = 0
     while index < len(args):
         token: str = args[index]
-        if token in {"--select", "--exclude"}:
+        if token in DBT_SELECTION_FLAGS:
             index += 1
             while index < len(args) and not args[index].startswith("--"):
                 index += 1
             continue
         stripped.append(token)
         index += 1
-    return (*stripped, "--select", *select_terms)
+    return (*stripped, DBT_SELECT_FLAG, *select_terms)

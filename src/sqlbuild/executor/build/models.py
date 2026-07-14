@@ -29,7 +29,7 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, NodeStartCallback
-from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 
 @dataclass(frozen=True)

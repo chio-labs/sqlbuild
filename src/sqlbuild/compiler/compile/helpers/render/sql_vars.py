@@ -6,6 +6,12 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from sqlbuild.compiler.compile.constants import (
+    SQL_CONTEXT_NAME_EXTRA_TOKENS,
+    SQL_IDENTIFIER_EXTRA_TOKEN,
+    SQL_INTERPOLATION_TOKEN,
+    SQL_QUOTE_TOKENS,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
@@ -13,17 +19,15 @@ from sqlbuild.compiler.compile.models.core import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.helpers.sql_scanning import (
+from sqlbuild.compiler.sql_analysis.main.is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
 )
-from sqlbuild.compiler.helpers.sql_scanning import (
+from sqlbuild.compiler.sql_analysis.main.is_identifier_start import (
     is_identifier_start as _is_identifier_start,
 )
-from sqlbuild.compiler.helpers.sql_scanning import (
-    skip_block_comment,
-    skip_line_comment,
-    skip_quoted_text,
-)
+from sqlbuild.compiler.sql_analysis.main.skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main.skip_line_comment import skip_line_comment
+from sqlbuild.compiler.sql_analysis.main.skip_quoted_text import skip_quoted_text
 
 _CONTEXT: str = "SQL interpolation"
 
@@ -78,14 +82,14 @@ def substitute_sql_vars(
 ) -> str:
     """Replace @@name, @@ENV:NAME, and allowed @@CTX:name references in SQL text."""
 
-    if "@@" not in sql:
+    if SQL_INTERPOLATION_TOKEN not in sql:
         return sql
 
     parts: list[str] = []
     cursor: int = 0
     while cursor < len(sql):
         character: str = sql[cursor]
-        if character in {"'", '"', "`"}:
+        if character in SQL_QUOTE_TOKENS:
             end: int = skip_quoted_text(sql=sql, start=cursor, context=_CONTEXT)
             parts.append(
                 _interpolate_sql_segment(
@@ -132,7 +136,7 @@ def _interpolate_sql_segment(
     effective_vars: dict[str, object],
     context_values: Mapping[str, str | None] | None,
 ) -> str:
-    if "@@" not in segment:
+    if SQL_INTERPOLATION_TOKEN not in segment:
         return segment
     parts: list[str] = []
     cursor: int = 0
@@ -231,13 +235,17 @@ def _consume_identifier(*, sql: str, start: int) -> int:
 
 def _consume_env_name(*, sql: str, start: int) -> int:
     cursor: int = start
-    while cursor < len(sql) and (sql[cursor].isalnum() or sql[cursor] == "_"):
+    while cursor < len(sql) and (
+        sql[cursor].isalnum() or sql[cursor] == SQL_IDENTIFIER_EXTRA_TOKEN
+    ):
         cursor += 1
     return cursor
 
 
 def _consume_context_name(*, sql: str, start: int) -> int:
     cursor: int = start
-    while cursor < len(sql) and (sql[cursor].isalnum() or sql[cursor] in {"_", "."}):
+    while cursor < len(sql) and (
+        sql[cursor].isalnum() or sql[cursor] in SQL_CONTEXT_NAME_EXTRA_TOKENS
+    ):
         cursor += 1
     return cursor

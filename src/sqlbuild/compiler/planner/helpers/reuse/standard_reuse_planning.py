@@ -29,7 +29,7 @@ from sqlbuild.compiler.planner.models import (
     StandardReusePlanningResult,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
 def build_standard_reuse_planning_result(

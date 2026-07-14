@@ -12,7 +12,25 @@ from scripts.testing.test_conventions.ast_utils import (
     is_docstring_only_module,
     is_parametrize_decorator,
 )
-from scripts.testing.test_conventions.constants import TEST_NAME_PATTERN, VALID_TEST_SCOPES
+from scripts.testing.test_conventions.constants import (
+    DESCRIPTION_FIELD_NAME,
+    DESCRIPTION_IDS_PARAMETER_NAME,
+    EXPECTED_FIELD_PREFIX,
+    FILE_BACKED_TEST_AREAS,
+    PARAMETRIZE_IDS_KEYWORD,
+    PYTHON_FILE_SUFFIX,
+    SOURCE_ROOT_DIRECTORY_NAME,
+    TEST_CASE_COLLECTION_NAME,
+    TEST_CASE_COLLECTION_SUFFIX,
+    TEST_CASE_PARAMETER_NAME,
+    TEST_FUNCTION_PREFIX,
+    TEST_HELPERS_FILENAME,
+    TEST_NAME_PATTERN,
+    TEST_ROOT_DIRECTORY_NAME,
+    TEST_TYPES_FILENAME,
+    TOOLING_ROOT_DIRECTORY_NAME,
+    VALID_TEST_SCOPES,
+)
 from scripts.testing.test_conventions.filesystem import module_name_for_file
 from scripts.testing.test_conventions.models import LocalTestTypesInfo, ModuleContext, Violation
 
@@ -30,7 +48,10 @@ def check_test_directory_path(*, repo_root: Path, test_directory: Path) -> list[
         test_directory.resolve().relative_to(repo_root.resolve()).parts
     )
     scoped_test_path_part_count: int = 3
-    if len(relative_parts) < scoped_test_path_part_count or relative_parts[0] != "tests":
+    if (
+        len(relative_parts) < scoped_test_path_part_count
+        or relative_parts[0] != TEST_ROOT_DIRECTORY_NAME
+    ):
         return [
             Violation(
                 code="TC028",
@@ -53,12 +74,12 @@ def check_test_directory_path(*, repo_root: Path, test_directory: Path) -> list[
         ]
 
     mirrored_root: str = relative_parts[2]
-    if mirrored_root == "src":
+    if mirrored_root == SOURCE_ROOT_DIRECTORY_NAME:
         return _check_src_mirroring(
             repo_root=repo_root, test_directory=test_directory, relative_parts=relative_parts
         )
 
-    if mirrored_root == "scripts":
+    if mirrored_root == TOOLING_ROOT_DIRECTORY_NAME:
         return _check_scripts_mirroring(
             repo_root=repo_root, test_directory=test_directory, relative_parts=relative_parts
         )
@@ -90,7 +111,7 @@ def _check_src_mirroring(
             )
         ]
 
-    package_path: Path = repo_root / "src" / relative_parts[3]
+    package_path: Path = repo_root / SOURCE_ROOT_DIRECTORY_NAME / relative_parts[3]
     if not package_path.is_dir():
         return [
             Violation(
@@ -105,11 +126,9 @@ def _check_src_mirroring(
 
     area_path: Path = package_path / relative_parts[4]
     if not area_path.exists():
-        if (
-            relative_parts[3] == "sqlbuild"
-            and relative_parts[4] == "providers"
-            and (package_path / "providers.py").is_file()
-        ):
+        if (relative_parts[3], relative_parts[4]) in FILE_BACKED_TEST_AREAS and (
+            package_path / f"{relative_parts[4]}{PYTHON_FILE_SUFFIX}"
+        ).is_file():
             return []
         return [
             Violation(
@@ -142,7 +161,7 @@ def _check_scripts_mirroring(
             )
         ]
 
-    area_path: Path = repo_root / "scripts" / relative_parts[3]
+    area_path: Path = repo_root / TOOLING_ROOT_DIRECTORY_NAME / relative_parts[3]
     if not area_path.exists():
         return [
             Violation(
@@ -214,7 +233,7 @@ def check_test_types_file(
             if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)
         }
 
-        if "description" not in field_names:
+        if DESCRIPTION_FIELD_NAME not in field_names:
             violations.append(
                 Violation(
                     code="TC003",
@@ -227,7 +246,7 @@ def check_test_types_file(
                 )
             )
 
-        if not any(field_name.startswith("expected_") for field_name in field_names):
+        if not any(field_name.startswith(EXPECTED_FIELD_PREFIX) for field_name in field_names):
             violations.append(
                 Violation(
                     code="TC004",
@@ -294,7 +313,7 @@ def build_module_context(
     """Build reusable module metadata for test checks."""
 
     expected_test_types_module: str = module_name_for_file(
-        repo_root=repo_root, file_path=file_path.parent / "_test_types.py"
+        repo_root=repo_root, file_path=file_path.parent / TEST_TYPES_FILENAME
     )
     imported_local_test_case_types: set[str] = set()
     violations: list[Violation] = []
@@ -308,7 +327,9 @@ def build_module_context(
                 if imported_name.name in local_test_types.dataclass_names:
                     imported_local_test_case_types.add(imported_name.asname or imported_name.name)
 
-        elif node.module and node.module.endswith("._test_types"):
+        elif node.module and node.module.endswith(
+            f".{TEST_TYPES_FILENAME.removesuffix(PYTHON_FILE_SUFFIX)}"
+        ):
             violations.append(
                 Violation(
                     code="TC005",
@@ -353,7 +374,7 @@ def check_test_file(
 
     violations: list[Violation] = []
 
-    if not file_path.name.startswith("test_"):
+    if not file_path.name.startswith(TEST_FUNCTION_PREFIX):
         violations.append(
             Violation(
                 code="TC006",
@@ -367,7 +388,7 @@ def check_test_file(
 
     for node in ast.walk(module):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
-            "test_"
+            TEST_FUNCTION_PREFIX
         ):
             violations.extend(
                 _check_test_function(
@@ -382,7 +403,7 @@ def check_test_file(
 
 
 def _check_top_level_test_module_shape(*, file_path: Path, module: ast.Module) -> list[Violation]:
-    if file_path.name == "_test_helpers.py":
+    if file_path.name == TEST_HELPERS_FILENAME:
         return []
 
     violations: list[Violation] = []
@@ -390,7 +411,7 @@ def _check_top_level_test_module_shape(*, file_path: Path, module: ast.Module) -
 
     for node in module.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith(
-            "test_"
+            TEST_FUNCTION_PREFIX
         ):
             violations.append(
                 Violation(
@@ -406,7 +427,7 @@ def _check_top_level_test_module_shape(*, file_path: Path, module: ast.Module) -
             )
         if (
             isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name.startswith("test_")
+            and node.name.startswith(TEST_FUNCTION_PREFIX)
             and first_test_function_line is None
         ):
             first_test_function_line = node.lineno
@@ -502,7 +523,11 @@ def _check_test_function(
         return violations
 
     test_case_arg: ast.arg | None = next(
-        (argument for argument in function_node.args.args if argument.arg == "test_case"),
+        (
+            argument
+            for argument in function_node.args.args
+            if argument.arg == TEST_CASE_PARAMETER_NAME
+        ),
         None,
     )
     if test_case_arg is None:
@@ -599,7 +624,7 @@ def _check_parametrize_shape(
         ]
 
     parameter_name: str | None = extract_name_constant(decorator.args[0])
-    if parameter_name != "test_case":
+    if parameter_name != TEST_CASE_PARAMETER_NAME:
         violations.append(
             Violation(
                 code="TC013",
@@ -610,7 +635,8 @@ def _check_parametrize_shape(
         )
 
     ids_expression: ast.expr | None = next(
-        (keyword.value for keyword in decorator.keywords if keyword.arg == "ids"), None
+        (keyword.value for keyword in decorator.keywords if keyword.arg == PARAMETRIZE_IDS_KEYWORD),
+        None,
     )
     if ids_expression is None:
         violations.append(
@@ -730,8 +756,8 @@ def _references_expected_field(function_node: ast.FunctionDef | ast.AsyncFunctio
             if (
                 chain
                 and len(chain) >= test_case_field_chain_part_count
-                and chain[0] == "test_case"
-                and chain[-1].startswith("expected_")
+                and chain[0] == TEST_CASE_PARAMETER_NAME
+                and chain[-1].startswith(EXPECTED_FIELD_PREFIX)
             ):
                 return True
     return False
@@ -744,7 +770,7 @@ def _is_local_test_case_constructor(*, expression: ast.expr, context: ModuleCont
 
 
 def _is_multi_case_list_name(name: str) -> bool:
-    return name == "TEST_CASES" or name.endswith("_TEST_CASES")
+    return name == TEST_CASE_COLLECTION_NAME or name.endswith(TEST_CASE_COLLECTION_SUFFIX)
 
 
 def _is_description_lambda_ids(expression: ast.expr | None) -> bool:
@@ -752,6 +778,9 @@ def _is_description_lambda_ids(expression: ast.expr | None) -> bool:
         return False
     if len(expression.args.args) != 1:
         return False
-    if expression.args.args[0].arg != "case":
+    if expression.args.args[0].arg != DESCRIPTION_IDS_PARAMETER_NAME:
         return False
-    return attribute_chain(expression.body) == ("case", "description")
+    return attribute_chain(expression.body) == (
+        DESCRIPTION_IDS_PARAMETER_NAME,
+        DESCRIPTION_FIELD_NAME,
+    )

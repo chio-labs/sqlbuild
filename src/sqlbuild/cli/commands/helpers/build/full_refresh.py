@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     SnapshotFullRefreshPolicy,
 )
-from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 _POLICY_STRICTNESS: dict[SnapshotFullRefreshPolicy, int] = {
     SnapshotFullRefreshPolicy.ALLOW: 0,

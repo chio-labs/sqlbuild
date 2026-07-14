@@ -12,8 +12,8 @@ from sqlbuild.compiler.compile.models.core import CompileModelConfig, CompilePro
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
-from sqlbuild.spec.models.exceptions import SpecConfigError
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.exceptions import SpecConfigError
+from sqlbuild.spec.contracts.models import (
     ClonePolicy,
     DefaultsConfig,
     LocalClonePolicy,
@@ -22,7 +22,7 @@ from sqlbuild.spec.models.project import (
     ProjectConfig,
     TargetConfig,
 )
-from sqlbuild.spec.models.targets import resolve_target_config
+from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
     build_external_sql_reference_resolver,

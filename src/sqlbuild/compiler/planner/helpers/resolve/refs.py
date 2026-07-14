@@ -15,7 +15,12 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.helpers.sql_scanning import find_matching_paren
+from sqlbuild.compiler.planner.constants import (
+    SQL_ALIAS_BOUNDARY_CHARACTERS,
+    SQL_ALIAS_KEYWORD,
+    SQL_FUNCTION_CALL_OPEN_PAREN,
+    SQL_IDENTIFIER_LEADING_CHARACTERS,
+)
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.references.main.quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
@@ -24,6 +29,7 @@ from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import
     reference_call_prefix_pattern_text,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
 
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
@@ -144,7 +150,10 @@ def resolve_udf_references(
             continue
 
         call_suffix_start: int = _skip_whitespace(sql=query_sql, start=match.end())
-        if call_suffix_start >= len(query_sql) or query_sql[call_suffix_start] != "(":
+        if (
+            call_suffix_start >= len(query_sql)
+            or query_sql[call_suffix_start] != SQL_FUNCTION_CALL_OPEN_PAREN
+        ):
             parts.append(match.group(0))
             last_index = match.end()
             continue
@@ -195,7 +204,10 @@ def resolve_table_function_references(
             continue
 
         call_suffix_start: int = _skip_whitespace(sql=query_sql, start=match.end())
-        if call_suffix_start >= len(query_sql) or query_sql[call_suffix_start] != "(":
+        if (
+            call_suffix_start >= len(query_sql)
+            or query_sql[call_suffix_start] != SQL_FUNCTION_CALL_OPEN_PAREN
+        ):
             parts.append(match.group(0))
             last_index = match.end()
             continue
@@ -249,12 +261,14 @@ def _build_cursor_subquery(
 
 def _has_following_alias(*, sql: str, start: int) -> bool:
     index: int = _skip_whitespace(sql=sql, start=start)
-    if index >= len(sql) or sql[index] in "),;":
+    if index >= len(sql) or sql[index] in SQL_ALIAS_BOUNDARY_CHARACTERS:
         return False
-    if sql[index : index + 2].upper() == "AS":
+    if sql[index : index + 2].upper() == SQL_ALIAS_KEYWORD:
         after_as: int = _skip_whitespace(sql=sql, start=index + 2)
-        return after_as < len(sql) and (sql[after_as].isalpha() or sql[after_as] in "[_")
-    if not (sql[index].isalpha() or sql[index] in "[_"):
+        return after_as < len(sql) and (
+            sql[after_as].isalpha() or sql[after_as] in SQL_IDENTIFIER_LEADING_CHARACTERS
+        )
+    if not (sql[index].isalpha() or sql[index] in SQL_IDENTIFIER_LEADING_CHARACTERS):
         return False
     match: re.Match[str] | None = re.match(r"[A-Za-z_][A-Za-z0-9_]*|\[[^\]]+\]", sql[index:])
     if match is None:

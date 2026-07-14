@@ -6,8 +6,12 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import (
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SourceColumnEntry,
+)
 
 _RESOURCE_TYPE_PREFIX: dict[str, str] = {
     CompiledResourceType.MODEL: "model",

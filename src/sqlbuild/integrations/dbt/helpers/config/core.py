@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, ResolvedDbtConfig
-from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
+from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
 
 def resolve_dbt_config(

@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.virtual.executor.helpers.functions import (
@@ -662,7 +663,7 @@ def build_rollback_ref_update(
                 version_hash=ref.version_hash,
             )
             for ref in target_function_refs
-            if ref.node_type == "udf"
+            if ref.node_type == CompiledResourceType.UDF
         )
         refs_by_node_type["table_fn"] = tuple(
             VirtualEnvironmentNodeRefRecord(
@@ -672,7 +673,7 @@ def build_rollback_ref_update(
                 version_hash=ref.version_hash,
             )
             for ref in target_function_refs
-            if ref.node_type == "table_fn"
+            if ref.node_type == CompiledResourceType.TABLE_FN
         )
     return RollbackRefUpdate(
         virtual_environment_record=virtual_environment_record,

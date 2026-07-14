@@ -11,6 +11,7 @@ DBT_EXECUTION_COMMANDS: frozenset[DbtInteropCommand] = frozenset(
     )
 )
 DBT_EXECUTION_DISPLAY_FLAGS: frozenset[str] = frozenset(("--json", "--verbose", "-v"))
+DBT_SUCCESSFUL_RESULT_STATUSES: frozenset[str] = frozenset({"ok", "success", "pass", "passed"})
 
 DBT_MANIFEST_CONFIG_KEY: str = "config"
 DBT_MANIFEST_INCREMENTAL_STRATEGY_KEY: str = "incremental_strategy"

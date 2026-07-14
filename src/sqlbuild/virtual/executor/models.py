@@ -23,7 +23,14 @@ from sqlbuild.runtime.contracts.types import (
     ConnectionElapsedCallback,
     NodeStartCallback,
 )
-from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.spec.contracts.models import SnapshotsConfig
+from sqlbuild.virtual.executor.constants import (
+    VIRTUAL_CLONE_FOUND_ACTIONS,
+    VIRTUAL_CLONE_HYDRATED_ACTION,
+    VIRTUAL_CLONE_MISSING_ACTION,
+    VIRTUAL_CLONE_REUSED_ACTION,
+    VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION,
+)
 from sqlbuild.virtual.executor.types import VirtualPlanReadyCallback
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
@@ -190,23 +197,25 @@ class VirtualCloneResult:
 
     @property
     def found_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action in {"hydrated", "reused"})
+        return sum(1 for item in self.item_results if item.action in VIRTUAL_CLONE_FOUND_ACTIONS)
 
     @property
     def hydrated_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action == "hydrated")
+        return sum(1 for item in self.item_results if item.action == VIRTUAL_CLONE_HYDRATED_ACTION)
 
     @property
     def reused_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action == "reused")
+        return sum(1 for item in self.item_results if item.action == VIRTUAL_CLONE_REUSED_ACTION)
 
     @property
     def missing_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action == "missing")
+        return sum(1 for item in self.item_results if item.action == VIRTUAL_CLONE_MISSING_ACTION)
 
     @property
     def skipped_locked_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action == "skipped_locked")
+        return sum(
+            1 for item in self.item_results if item.action == VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION
+        )
 
 
 @dataclass(frozen=True)

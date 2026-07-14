@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from scripts.type_annotations.type_annotation_conventions.constants import PYTHON_FILE_SUFFIX
+
 
 def resolve_repo_root(paths: Iterable[Path]) -> Path:
     """Return the repository root for the given target paths."""
@@ -28,11 +30,13 @@ def iter_python_files(paths: Iterable[Path]) -> list[Path]:
     files: set[Path] = set()
     for path in paths:
         resolved_path: Path = path.resolve()
-        if resolved_path.is_file() and resolved_path.suffix == ".py":
+        if resolved_path.is_file() and resolved_path.suffix == PYTHON_FILE_SUFFIX:
             files.add(resolved_path)
             continue
 
         if resolved_path.is_dir():
-            files.update(file_path.resolve() for file_path in resolved_path.rglob("*.py"))
+            files.update(
+                file_path.resolve() for file_path in resolved_path.rglob(f"*{PYTHON_FILE_SUFFIX}")
+            )
 
     return sorted(files)

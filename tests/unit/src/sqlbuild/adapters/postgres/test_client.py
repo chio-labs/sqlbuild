@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import ColumnInfo, SchemaDiffResult
-from sqlbuild.adapters.postgres.client import PostgresAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.compiler.compile.models.core import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
     PostgresAdapterDefaultsTestCase,

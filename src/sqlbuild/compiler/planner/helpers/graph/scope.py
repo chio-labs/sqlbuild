@@ -11,13 +11,11 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSource,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.helpers.lineage_graph import (
+from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
-    build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.helpers.selector_indexes import (
-    build_model_path_index,
-    build_model_tag_index,
+from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
+    build_lineage_upstream_deps,
 )
 from sqlbuild.compiler.planner.helpers.graph.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner.helpers.graph.core import (
@@ -27,6 +25,12 @@ from sqlbuild.compiler.planner.helpers.graph.core import (
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner.helpers.graph.loader_dag import expand_selected_loader_dependencies
+from sqlbuild.compiler.planner.helpers.graph.selector_indexes import (
+    build_model_path_index_impl as build_model_path_index,
+)
+from sqlbuild.compiler.planner.helpers.graph.selector_indexes import (
+    build_model_tag_index_impl as build_model_tag_index,
+)
 from sqlbuild.compiler.planner.helpers.graph.selectors import parse_selector, resolve_selectors
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector, PlannerScope
 from sqlbuild.compiler.planner.types import SelectorKind

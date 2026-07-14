@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 
 from sqlbuild.adapter.models import ExpressionInferenceProfile
 from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME, PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
     infer_columns_with_sql_analysis,
@@ -60,14 +61,21 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
+    SchemaAuditInstance,
+    SchemaColumn,
+    SchemaSeedEntry,
+    SourceColumnEntry,
+    SourceEntry,
     TargetConfig,
+)
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
+)
+from sqlbuild.spec.resolution.main.resolve_effective_scenario_config import (
     resolve_effective_scenario_config,
 )
-from sqlbuild.spec.models.schema import SchemaAuditInstance, SchemaColumn, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _POLYGLOT_ANALYSIS_WORKERS: int = 2
 _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS: int = 32
@@ -385,7 +393,7 @@ def _declared_column_nullability(
 ) -> InferredNullability:
     if nullable is False:
         return InferredNullability.NON_NULL
-    if any(audit.definition_name == "not_null" for audit in audits):
+    if any(audit.definition_name == NOT_NULL_AUDIT_NAME for audit in audits):
         return InferredNullability.NON_NULL
     return InferredNullability.UNKNOWN
 
@@ -809,7 +817,7 @@ def _resolve_target_namespace(
 def _expand_seed_environment_value(
     *, raw_value: str, effective_vars: dict[str, object], context_label: str
 ) -> str | None:
-    if raw_value == "preserve":
+    if raw_value == PRESERVE_TARGET_VALUE:
         return None
     return str(
         expand_template_data(
@@ -833,7 +841,7 @@ def _expand_seed_target_value(
     effective_vars: dict[str, object],
     context_label: str,
 ) -> str | None:
-    if raw_value == "preserve":
+    if raw_value == PRESERVE_TARGET_VALUE:
         return None
     return str(
         expand_template_data(

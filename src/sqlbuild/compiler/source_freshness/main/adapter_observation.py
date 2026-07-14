@@ -10,7 +10,7 @@ from sqlbuild.compiler.source_freshness.helpers.observation import (
     observe_adapter_sources_freshness as _observe_adapter_sources_freshness,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def observe_adapter_sources_freshness(

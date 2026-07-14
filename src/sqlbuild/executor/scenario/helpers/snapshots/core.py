@@ -21,6 +21,7 @@ from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.exceptions import ExecutorInputError, ExecutorJsonTypeError
 from sqlbuild.executor.scenario.constants import (
+    JSONL_BLANK_LINE,
     SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_JSONL_INVALID,
@@ -391,7 +392,7 @@ def read_scenario_snapshot_jsonl(*, file_path: Path) -> tuple[dict[str, object],
         line: str
         for line_number, line in enumerate(snapshot_file, start=1):
             stripped_line: str = line.strip()
-            if stripped_line == "":
+            if stripped_line == JSONL_BLANK_LINE:
                 continue
             try:
                 row: Any = json.loads(stripped_line)

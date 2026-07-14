@@ -23,7 +23,7 @@ from sqlbuild.compiler.planner.main.planning.version_identity_metadata import (
     build_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, WarehouseFingerprints, WarehouseSnapshot
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry
+from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.changes._test_types import (
     DetectModelChangesTestCase,
     DetectModelMetadataTestCase,

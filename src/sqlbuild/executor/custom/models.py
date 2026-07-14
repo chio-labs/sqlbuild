@@ -15,6 +15,7 @@ from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.custom.constants import CUSTOM_RELATION_QUALIFIER_SEPARATOR
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 
 
@@ -65,7 +66,7 @@ class MaterializationContext:
     ) -> str:
         """Return a fully-qualified relation name, preserving already-qualified input."""
 
-        if "." in name:
+        if CUSTOM_RELATION_QUALIFIER_SEPARATOR in name:
             return name
         return resolve_qualified_name_parts(
             adapter=self.adapter,
@@ -118,7 +119,7 @@ class PrepareVersionContext:
     ) -> str:
         """Return a fully-qualified relation name, preserving already-qualified input."""
 
-        if "." in name:
+        if CUSTOM_RELATION_QUALIFIER_SEPARATOR in name:
             return name
         return resolve_qualified_name_parts(
             adapter=self.adapter,

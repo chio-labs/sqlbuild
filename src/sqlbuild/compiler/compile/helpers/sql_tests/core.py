@@ -14,6 +14,15 @@ from sqlbuild.compiler.compile.constants import (
     RESERVED_SQL_TEST_CTE_NAMES,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
+    SQL_ARGUMENT_SEPARATOR_TOKEN,
+    SQL_CEREMONIAL_SELECT_VALUE,
+    SQL_CLOSE_PAREN_TOKEN,
+    SQL_OPEN_PAREN_TOKEN,
+    SQL_QUOTE_TOKENS,
+    SQL_SINGLE_QUOTE_TOKEN,
+    SQL_STATEMENT_TERMINATOR_TOKEN,
+    SQL_WILDCARD_TOKEN,
+    SQL_WITH_KEYWORD,
     TABLE_FN_ACTUAL_TEST_CTE_NAME,
     TABLE_FN_EXPECTED_TEST_CTE_NAME,
     UDF_ACTUAL_TEST_CTE_NAME,
@@ -36,15 +45,17 @@ from sqlbuild.compiler.compile.models.sql_tests import (
     CompileSqlTestCtes,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.helpers.sql_scanning import (
-    find_matching_paren,
+from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main.is_identifier_character import (
     is_identifier_character,
-    is_identifier_start,
-    skip_block_comment,
-    skip_line_comment,
+)
+from sqlbuild.compiler.sql_analysis.main.is_identifier_start import is_identifier_start
+from sqlbuild.compiler.sql_analysis.main.skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main.skip_line_comment import skip_line_comment
+from sqlbuild.compiler.sql_analysis.main.skip_quoted_text import (
     skip_quoted_text,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 
 _CONTEXT: str = "SQL test"
 
@@ -90,12 +101,12 @@ def _extract_sql_test_ctes_with_scanner(
         seen_cte_names.add(cte_name)
 
         index = _skip_ignorable(sql=sql, start=index)
-        if index < len(sql) and sql[index] == "(":
+        if index < len(sql) and sql[index] == SQL_OPEN_PAREN_TOKEN:
             index = find_matching_paren(sql=sql, open_paren_index=index, context=_CONTEXT) + 1
             index = _skip_ignorable(sql=sql, start=index)
         index = _consume_keyword(sql=sql, start=index, keyword="AS", file_label=file_label)
         index = _skip_ignorable(sql=sql, start=index)
-        if index >= len(sql) or sql[index] != "(":
+        if index >= len(sql) or sql[index] != SQL_OPEN_PAREN_TOKEN:
             raise CompileInputError(f"SQL test '{file_label}' CTE '{cte_name}' must use AS (...)")
         cte_body_start: int = index + 1
         cte_body_end: int = find_matching_paren(sql=sql, open_paren_index=index, context=_CONTEXT)
@@ -106,7 +117,7 @@ def _extract_sql_test_ctes_with_scanner(
             )
         )
         index = _skip_ignorable(sql=sql, start=cte_body_end + 1)
-        if index < len(sql) and sql[index] == ",":
+        if index < len(sql) and sql[index] == SQL_ARGUMENT_SEPARATOR_TOKEN:
             index = _skip_ignorable(sql=sql, start=index + 1)
             continue
         break
@@ -591,7 +602,7 @@ def _extract_macro_mock_value(*, cte: CompileSqlTestCte, file_label: str) -> str
     index: int = _skip_ignorable(sql=body, start=0)
     index = _consume_keyword(sql=body, start=index, keyword="SELECT", file_label=file_label)
     index = _skip_ignorable(sql=body, start=index)
-    if index >= len(body) or body[index] != "'":
+    if index >= len(body) or body[index] != SQL_SINGLE_QUOTE_TOKEN:
         raise CompileInputError(
             f"SQL test '{file_label}' macro mock '{cte.name}' must be a single SELECT string "
             "literal, for example SELECT '''US'''"
@@ -599,7 +610,7 @@ def _extract_macro_mock_value(*, cte: CompileSqlTestCte, file_label: str) -> str
     value: str
     value, index = _read_sql_string_literal(sql=body, start=index)
     index = _skip_ignorable(sql=body, start=index)
-    if index < len(body) and body[index] == ";":
+    if index < len(body) and body[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
         index = _skip_ignorable(sql=body, start=index + 1)
     if index != len(body):
         raise CompileInputError(
@@ -616,8 +627,8 @@ def _read_sql_string_literal(*, sql: str, start: int) -> tuple[str, int]:
     index: int = start + 1
     while index < len(sql):
         char: str = sql[index]
-        if char == "'":
-            if index + 1 < len(sql) and sql[index + 1] == "'":
+        if char == SQL_SINGLE_QUOTE_TOKEN:
+            if index + 1 < len(sql) and sql[index + 1] == SQL_SINGLE_QUOTE_TOKEN:
                 value_parts.append("'")
                 index += 2
                 continue
@@ -674,14 +685,14 @@ def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
         if sql.startswith("/*", index):
             index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
-        if sql[index] in {"'", '"', "`"}:
+        if sql[index] in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
-        if sql[index] == "(":
+        if sql[index] == SQL_OPEN_PAREN_TOKEN:
             depth += 1
             index += 1
             continue
-        if sql[index] == ")":
+        if sql[index] == SQL_CLOSE_PAREN_TOKEN:
             depth -= 1
             index += 1
             continue
@@ -735,14 +746,14 @@ def _find_select_list_end(*, sql: str, start: int) -> int:
         if sql.startswith("/*", index):
             index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
-        if sql[index] in {"'", '"', "`"}:
+        if sql[index] in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
-        if sql[index] == "(":
+        if sql[index] == SQL_OPEN_PAREN_TOKEN:
             depth += 1
             index += 1
             continue
-        if sql[index] == ")":
+        if sql[index] == SQL_CLOSE_PAREN_TOKEN:
             depth -= 1
             index += 1
             continue
@@ -764,14 +775,14 @@ def _split_top_level_commas(raw_value: str) -> tuple[str, ...]:
         if raw_value.startswith("/*", index):
             index = skip_block_comment(sql=raw_value, start=index, context=_CONTEXT)
             continue
-        if raw_value[index] in {"'", '"', "`"}:
+        if raw_value[index] in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=raw_value, start=index, context=_CONTEXT)
             continue
-        if raw_value[index] == "(":
+        if raw_value[index] == SQL_OPEN_PAREN_TOKEN:
             depth += 1
-        elif raw_value[index] == ")":
+        elif raw_value[index] == SQL_CLOSE_PAREN_TOKEN:
             depth -= 1
-        elif raw_value[index] == "," and depth == 0:
+        elif raw_value[index] == SQL_ARGUMENT_SEPARATOR_TOKEN and depth == 0:
             item: str = raw_value[value_start:index].strip()
             if item:
                 values.append(item)
@@ -807,14 +818,14 @@ def _extract_as_alias(expression: str) -> str | None:
         if expression.startswith("/*", index):
             index = skip_block_comment(sql=expression, start=index, context=_CONTEXT)
             continue
-        if expression[index] in {"'", '"', "`"}:
+        if expression[index] in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=expression, start=index, context=_CONTEXT)
             continue
-        if expression[index] == "(":
+        if expression[index] == SQL_OPEN_PAREN_TOKEN:
             depth += 1
             index += 1
             continue
-        if expression[index] == ")":
+        if expression[index] == SQL_CLOSE_PAREN_TOKEN:
             depth -= 1
             index += 1
             continue
@@ -850,13 +861,13 @@ def _contains_select_star(sql: str) -> bool:
         if sql.startswith("/*", index):
             index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
-        if sql[index] in {"'", '"', "`"}:
+        if sql[index] in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
         select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
         if select_end is not None:
             value_index: int = _skip_ignorable(sql=sql, start=select_end)
-            if value_index < len(sql) and sql[value_index] == "*":
+            if value_index < len(sql) and sql[value_index] == SQL_WILDCARD_TOKEN:
                 return True
             index = select_end
             continue
@@ -877,10 +888,10 @@ def _validate_ceremonial_select(*, sql: str, start: int, file_label: str) -> Non
     if select_end is None:
         raise CompileInputError(_ceremonial_select_error(file_label))
     index = _skip_ignorable(sql=sql, start=select_end)
-    if index >= len(sql) or sql[index] != "1":
+    if index >= len(sql) or sql[index] != SQL_CEREMONIAL_SELECT_VALUE:
         raise CompileInputError(_ceremonial_select_error(file_label))
     index = _skip_ignorable(sql=sql, start=index + 1)
-    if index < len(sql) and sql[index] == ";":
+    if index < len(sql) and sql[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
         index = _skip_ignorable(sql=sql, start=index + 1)
     if index != len(sql):
         raise CompileInputError(_ceremonial_select_error(file_label))
@@ -894,7 +905,7 @@ def _consume_keyword(*, sql: str, start: int, keyword: str, file_label: str) -> 
     keyword_end: int | None = _try_consume_keyword(sql=sql, start=start, keyword=keyword)
     if keyword_end is not None:
         return keyword_end
-    if keyword == "WITH":
+    if keyword == SQL_WITH_KEYWORD:
         raise CompileInputError(
             f"SQL test '{file_label}' must declare mock CTEs and one __expected__<model> "
             "CTE before `SELECT 1`"

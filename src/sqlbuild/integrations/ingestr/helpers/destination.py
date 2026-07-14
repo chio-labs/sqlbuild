@@ -5,6 +5,10 @@ from __future__ import annotations
 from urllib.parse import quote, urlencode
 
 from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.integrations.ingestr.constants import (
+    SQLSERVER_DRIVER_PARAMETER,
+    SQLSERVER_TRUST_SERVER_CERTIFICATE_PARAMETER,
+)
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 
 
@@ -165,9 +169,9 @@ def _sqlserver_uri(config: dict[str, object]) -> str:
         value: str | None = _optional_string(config=config, key=key)
         if value is not None:
             params[key] = value
-    if "driver" not in params:
-        params["driver"] = "ODBC Driver 18 for SQL Server"
-    if "TrustServerCertificate" not in params:
-        params["TrustServerCertificate"] = "yes"
+    if SQLSERVER_DRIVER_PARAMETER not in params:
+        params[SQLSERVER_DRIVER_PARAMETER] = "ODBC Driver 18 for SQL Server"
+    if SQLSERVER_TRUST_SERVER_CERTIFICATE_PARAMETER not in params:
+        params[SQLSERVER_TRUST_SERVER_CERTIFICATE_PARAMETER] = "yes"
     query: str = f"?{urlencode(params)}" if params else ""
     return f"mssql://{quote(user)}:{quote(password)}@{host}:{port}/{quote(database)}{query}"

@@ -13,6 +13,19 @@ from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropConfigError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtDiffOptions, DbtLsNode
+from sqlbuild.integrations.dbt.pipeline.constants import (
+    DBT_BOUNDED_FLAG,
+    DBT_DIFF_DAY_UNIT,
+    DBT_DIFF_HOUR_UNIT,
+    DBT_DIFF_MINUTE_UNIT,
+    DBT_EXCLUDE_FLAG,
+    DBT_FULL_FLAG,
+    DBT_MAX_COLUMN_EXAMPLES_FLAG,
+    DBT_MAX_ROW_ONLY_EXAMPLES_FLAG,
+    DBT_SCHEMA_ONLY_FLAG,
+    DBT_SELECT_FLAGS,
+    DBT_VERBOSE_FLAGS,
+)
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 
 
@@ -31,40 +44,40 @@ def parse_dbt_diff_options(args: tuple[str, ...]) -> DbtDiffOptions:
     index: int = 0
     while index < len(args):
         token: str = args[index]
-        if token in {"--select", "-s"}:
+        if token in DBT_SELECT_FLAGS:
             values: tuple[str, ...]
             values, index = _consume_multi_value(args=args, index=index)
             select.extend(values)
             dbt_args.extend((token, *values))
             continue
-        if token == "--exclude":
+        if token == DBT_EXCLUDE_FLAG:
             values, index = _consume_multi_value(args=args, index=index)
             exclude.extend(values)
             dbt_args.extend((token, *values))
             continue
-        if token == "--full":
+        if token == DBT_FULL_FLAG:
             full = True
             index += 1
             continue
-        if token == "--schema-only":
+        if token == DBT_SCHEMA_ONLY_FLAG:
             schema_only = True
             index += 1
             continue
-        if token == "--bounded":
+        if token == DBT_BOUNDED_FLAG:
             bounded, index = _consume_one_value(args=args, index=index)
             continue
-        if token in {"--verbose", "-v"}:
+        if token in DBT_VERBOSE_FLAGS:
             verbose = True
             max_column_examples = 10
             max_row_only_examples = 10
             index += 1
             continue
-        if token == "--max-column-examples":
+        if token == DBT_MAX_COLUMN_EXAMPLES_FLAG:
             raw_value: str
             raw_value, index = _consume_one_value(args=args, index=index)
             max_column_examples = _parse_positive_int(raw_value=raw_value, flag=token)
             continue
-        if token == "--max-row-only-examples":
+        if token == DBT_MAX_ROW_ONLY_EXAMPLES_FLAG:
             raw_value, index = _consume_one_value(args=args, index=index)
             max_row_only_examples = _parse_positive_int(raw_value=raw_value, flag=token)
             continue
@@ -398,11 +411,11 @@ def _parse_duration_bound(raw: str) -> timedelta:
         ) from error
     if amount <= 0:
         raise DbtInteropArgumentError("bounded dbt diff duration must be positive", code="C345")
-    if unit == "d":
+    if unit == DBT_DIFF_DAY_UNIT:
         return timedelta(days=amount)
-    if unit == "h":
+    if unit == DBT_DIFF_HOUR_UNIT:
         return timedelta(hours=amount)
-    if unit == "m":
+    if unit == DBT_DIFF_MINUTE_UNIT:
         return timedelta(minutes=amount)
     raise DbtInteropArgumentError(
         "timestamp cursor bounded dbt diff requires duration like 30d, 12h, or 15m",

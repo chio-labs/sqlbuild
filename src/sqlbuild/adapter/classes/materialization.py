@@ -8,7 +8,8 @@ from typing import Any
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import ColumnInfo, FunctionDefinition
-from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
+from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 class MaterializationMixin(ABC):
@@ -121,7 +122,7 @@ class MaterializationMixin(ABC):
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
-        csv_settings: SeedCsvSettings = default_seed_csv_settings,
+        csv_settings: SeedCsvSettings = DEFAULT_SEED_CSV_SETTINGS,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,

@@ -7,12 +7,14 @@ from typing import Any
 
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.exceptions import AdapterUserError
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.compiler.source_freshness.main.record_equivalence import (
     source_freshness_records_equivalent,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.executor.types import ExecutionStatus
+from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.main.data_version_hash import source_freshness_data_version_hash
 from sqlbuild.virtual.freshness.main.observation import observe_configured_source_freshness
 from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
@@ -57,7 +59,7 @@ def observe_virtual_environment_source_freshness(
             continue
 
         if source.managed:
-            if load_result is None or str(load_result.status) != "success":
+            if load_result is None or load_result.status != ExecutionStatus.SUCCESS:
                 unknown_source_names.append(source.name)
                 continue
             managed_record: SourceFreshnessRecord | None = _managed_loader_freshness_record(
@@ -301,8 +303,8 @@ def _managed_loader_freshness_record(
 def _is_soft_skipped_load(load_result: Any | None) -> bool:
     return (
         load_result is not None
-        and str(load_result.status) == "skipped"
-        and str(load_result.skip_mode) == "soft"
+        and load_result.status == ExecutionStatus.SKIPPED
+        and load_result.skip_mode == SkipMode.SOFT
     )
 
 

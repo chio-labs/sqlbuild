@@ -36,8 +36,8 @@ from sqlbuild.compiler.planner.types import (
     SchemaColumnSource,
     WarningSeverity,
 )
-from sqlbuild.spec.models.schema import SeedCsvSettings
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 def build_model_entry(

@@ -15,7 +15,9 @@ from sqlbuild.cli.commands.helpers.runtime.connection import resolve_connection_
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 
 def compile_janitor_project(*, invocation: JanitorInvocation) -> JanitorCompileContext:

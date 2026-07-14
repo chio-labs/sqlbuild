@@ -6,9 +6,10 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
+from sqlbuild.compiler.source_freshness.constants import VALID_DURATION_UNITS
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessComparableRecord
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
 def normalize_source_freshness_data_version(
@@ -104,7 +105,7 @@ def _parse_lag_tolerance(value: str) -> timedelta:
         )
     unit: str = value[-1]
     amount_text: str = value[:-1]
-    if unit not in {"m", "h", "d"} or not amount_text.isdigit():
+    if unit not in VALID_DURATION_UNITS or not amount_text.isdigit():
         raise SourceFreshnessObservationError(
             "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
         )

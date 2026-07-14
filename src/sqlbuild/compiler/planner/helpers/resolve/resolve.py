@@ -38,7 +38,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction, IncrementalMode, MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def resolve_model_sql(

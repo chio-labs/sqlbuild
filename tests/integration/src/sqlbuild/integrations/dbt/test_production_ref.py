@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import (
     DbtInteropConfigError,
     DbtInteropRuntimeError,
     DbtReuseUnavailableError,
 )
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.reuse import production_ref
-from sqlbuild.integrations.dbt.main.compile_production_ref_manifest import (
+from sqlbuild.integrations.dbt.main.reuse.compile_production_ref_manifest import (
     compile_production_ref_dbt_manifest,
 )
 from sqlbuild.integrations.dbt.models import (
@@ -21,7 +21,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtProductionRefCompileResult,
 )
-from sqlbuild.spec.models.project import DbtProductionRefConfig
+from sqlbuild.spec.contracts.models import DbtProductionRefConfig
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     DbtProductionRefCompileErrorTestCase,
     DbtProductionRefCompileSetupErrorTestCase,

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,

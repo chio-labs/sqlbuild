@@ -39,8 +39,13 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.models import (
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SourceColumnEntry,
+    SourceEntry,
+)
 
 
 def model_key(name: str) -> CompiledObjectKey:

@@ -25,13 +25,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
 )
-from sqlbuild.spec.models.project import (
-    SettingsConfig,
-)
-from sqlbuild.spec.models.schema import (
+from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
+    SettingsConfig,
+    SourceColumnEntry,
+    SourceEntry,
 )
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})

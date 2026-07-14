@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlbuild.adapter.models import LifeCycleEvent, QueryResult
 from sqlbuild.adapter.types import LifeCycleEventKind
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -39,7 +39,7 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.spec.models.schema import SeedCsvSettings
+from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.cli.commands.main.dag.helpers import (
     prepare_python_dag_project,
 )

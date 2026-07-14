@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models.core import CompiledSeed
 from sqlbuild.compiler.planner.helpers.identity.hashing import stable_version_identity_hash
-from sqlbuild.spec.models.schema import SchemaColumn, SeedCsvSettings
+from sqlbuild.spec.contracts.models import SchemaColumn, SeedCsvSettings
 
 
 def build_seed_identity(seed: CompiledSeed) -> tuple[str, str]:

@@ -5,6 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.compiler.discovery.constants import (
+    DLT_LOADER_KIND,
+    DLT_RESOURCE_WRITE_STRATEGY_KEY,
+    DLT_SOURCE_TYPE_FILESYSTEM,
+    DLT_SOURCE_TYPE_REST_API,
+    DLT_SOURCE_TYPE_SQL_DATABASE,
+    DLT_SOURCE_TYPES,
+    DLT_WRITE_DISPOSITION_DELETE_INSERT,
+    DLT_WRITE_DISPOSITION_MERGE,
+)
 from sqlbuild.compiler.discovery.exceptions import SourceParseError
 from sqlbuild.compiler.discovery.helpers.yml.primitives import (
     optional_non_empty_string,
@@ -13,7 +23,7 @@ from sqlbuild.compiler.discovery.helpers.yml.primitives import (
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredSourceFile
 from sqlbuild.integrations.dlt.models import DltResourceConfig, DltSourceConfig
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
-from sqlbuild.spec.models.source import IntegrationLoaderConfig, SourceEntry
+from sqlbuild.spec.contracts.models import IntegrationLoaderConfig, SourceEntry
 
 _ingestr_strategies: frozenset[str] = frozenset(
     {"replace", "append", "merge", "delete+insert", "truncate+insert"}
@@ -23,7 +33,7 @@ _ingestr_strategies: frozenset[str] = frozenset(
 def integration_loader_name(*, kind: str, source_name: str) -> str:
     """Return the generated loader name for a declarative integration loader."""
 
-    if kind == "dlt":
+    if kind == DLT_LOADER_KIND:
         return source_name
     return f"{kind}__{source_name}"
 
@@ -173,7 +183,7 @@ def _parse_dlt_source_group(
         label="dlt source",
         error_class=SourceParseError,
     )
-    if source_type not in {"sql_database", "rest_api", "filesystem"}:
+    if source_type not in DLT_SOURCE_TYPES:
         raise SourceParseError(
             f"{file_path} dlt source type must be one of: filesystem, rest_api, sql_database"
         )
@@ -232,7 +242,7 @@ def _parse_dlt_resource_entry(
         label="dlt resource",
         error_class=SourceParseError,
     )
-    if "write_strategy" in resource:
+    if DLT_RESOURCE_WRITE_STRATEGY_KEY in resource:
         raise SourceParseError(
             f"{file_path} dlt resource '{name}' must use dlt write_disposition, not write_strategy"
         )
@@ -240,11 +250,11 @@ def _parse_dlt_resource_entry(
         source_type=source_type, resource=resource, file_path=file_path
     )
     write_disposition: object | None = resource.get("write_disposition")
-    if write_disposition == "delete_insert":
+    if write_disposition == DLT_WRITE_DISPOSITION_DELETE_INSERT:
         raise SourceParseError(
             f"{file_path} dlt resource '{name}' does not support delete_insert; use a Python loader"
         )
-    if write_disposition == "merge" and resource.get("primary_key") is None:
+    if write_disposition == DLT_WRITE_DISPOSITION_MERGE and resource.get("primary_key") is None:
         raise SourceParseError(f"{file_path} dlt resource '{name}' merge requires primary_key")
     schema: str | None = (
         optional_non_empty_string(
@@ -291,16 +301,18 @@ def _parse_dlt_resource_entry(
 def _validate_dlt_group_config(
     *, source_type: str, config: dict[str, object], file_path: Path
 ) -> None:
-    if source_type == "rest_api":
+    if source_type == DLT_SOURCE_TYPE_REST_API:
         client: object | None = config.get("client")
         if not isinstance(client, dict):
             raise SourceParseError(f"{file_path} dlt rest_api config requires client.base_url")
         client_config: dict[str, object] = cast(dict[str, object], client)
         if not isinstance(client_config.get("base_url"), str):
             raise SourceParseError(f"{file_path} dlt rest_api config requires client.base_url")
-    if source_type == "sql_database" and not isinstance(config.get("credentials"), str):
+    if source_type == DLT_SOURCE_TYPE_SQL_DATABASE and not isinstance(
+        config.get("credentials"), str
+    ):
         raise SourceParseError(f"{file_path} dlt sql_database config requires credentials")
-    if source_type == "filesystem" and not isinstance(config.get("bucket_url"), str):
+    if source_type == DLT_SOURCE_TYPE_FILESYSTEM and not isinstance(config.get("bucket_url"), str):
         raise SourceParseError(f"{file_path} dlt filesystem config requires bucket_url")
 
 
@@ -315,7 +327,7 @@ def _validate_dlt_destination_config(*, config: dict[str, object], file_path: Pa
 
 
 def _dlt_resource_name(*, source_type: str, resource: dict[str, object], file_path: Path) -> str:
-    if source_type == "sql_database":
+    if source_type == DLT_SOURCE_TYPE_SQL_DATABASE:
         return require_non_empty_string(
             entry=resource,
             key="table",
@@ -323,7 +335,7 @@ def _dlt_resource_name(*, source_type: str, resource: dict[str, object], file_pa
             label="dlt sql_database resource",
             error_class=SourceParseError,
         )
-    if source_type == "rest_api":
+    if source_type == DLT_SOURCE_TYPE_REST_API:
         endpoint: object | None = resource.get("endpoint")
         if not isinstance(endpoint, dict):
             raise SourceParseError(f"{file_path} dlt rest_api resource must define endpoint")
@@ -357,7 +369,7 @@ def _raw_dlt_resource_config(*, source_type: str, resource: dict[str, object]) -
         "incremental",
         "schema",
     }
-    if source_type == "rest_api":
+    if source_type == DLT_SOURCE_TYPE_REST_API:
         return {"endpoint": resource["endpoint"]}
     return {key: value for key, value in resource.items() if key not in excluded}
 

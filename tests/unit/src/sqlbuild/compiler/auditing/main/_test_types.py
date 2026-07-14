@@ -50,3 +50,19 @@ class AuditGateSingleFieldIdentityTestCase:
     right_attachment_kind: AuditAttachmentKind = AuditAttachmentKind.MODEL
     left_always_run: bool = False
     right_always_run: bool = False
+
+
+@dataclass(frozen=True)
+class ParseAuditInstanceTestCase:
+    description: str
+    raw_audit: object
+    expected_definition_name: str
+    expected_always_run: bool
+    expected_argument_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ParseAuditInstanceErrorTestCase:
+    description: str
+    raw_audit: object
+    expected_error_fragment: str

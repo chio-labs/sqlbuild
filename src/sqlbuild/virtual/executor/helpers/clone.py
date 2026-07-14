@@ -34,6 +34,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.virtual.executor.constants import DUCKDB_MEMORY_DATABASE
 from sqlbuild.virtual.executor.helpers.rewrite import (
     build_physical_destination,
     build_physical_seed_destination,
@@ -45,9 +46,9 @@ from sqlbuild.virtual.executor.models import (
     CloneVersions,
     VirtualCloneItemResult,
 )
-from sqlbuild.virtual.helpers.encoding import encode_state_text
 from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
 from sqlbuild.virtual.state.main.locks.model_version_lock import acquire_model_version_lease
 from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
@@ -333,7 +334,10 @@ def attach_origin_database_for_clone(
         return None
     origin_database: object | None = origin_connection_config.get("database")
     destination_database: object | None = destination_connection_config.get("database")
-    if origin_database is None or origin_database in {destination_database, ":memory:"}:
+    if origin_database is None or origin_database in {
+        destination_database,
+        DUCKDB_MEMORY_DATABASE,
+    }:
         return None
     alias: str = "__sqb_clone_origin"
     adapter.execute(

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.diagnostics.helpers.logging import diagnostics_context
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from tests.unit.src.sqlbuild.diagnostics._test_types import (
     DiagnosticsContextualSqlTestCase,
     DiagnosticsLogTestCase,

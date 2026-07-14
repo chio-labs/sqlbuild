@@ -11,18 +11,22 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.helpers.lineage_graph import (
+from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
-    build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.helpers.selector_indexes import (
-    build_model_path_index,
-    build_model_tag_index,
+from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
+    build_lineage_upstream_deps,
 )
 from sqlbuild.compiler.planner.helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
     topologically_order_keys,
+)
+from sqlbuild.compiler.planner.helpers.graph.selector_indexes import (
+    build_model_path_index_impl as build_model_path_index,
+)
+from sqlbuild.compiler.planner.helpers.graph.selector_indexes import (
+    build_model_tag_index_impl as build_model_tag_index,
 )
 from sqlbuild.compiler.planner.helpers.graph.selectors import resolve_selectors
 from sqlbuild.compiler.planner.helpers.output.plan_entry import (
@@ -50,7 +54,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_clone_plan_output(

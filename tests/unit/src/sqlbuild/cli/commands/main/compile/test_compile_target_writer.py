@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.helpers.compile.target_writer import (
     write_compile_target,

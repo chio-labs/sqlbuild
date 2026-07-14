@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from tests.integration.src.sqlbuild.adapters.snapshot_sql_rendering._test_types import (
     SnapshotSqlRenderingAdapterTestCase,
 )

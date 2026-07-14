@@ -15,13 +15,11 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.helpers.lineage_graph import (
+from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
-    build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.helpers.selector_indexes import (
-    build_model_path_index,
-    build_model_tag_index,
+from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
+    build_lineage_upstream_deps,
 )
 from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
     build_deferred_locations,
@@ -41,6 +39,12 @@ from sqlbuild.compiler.pipeline.models import (
     ProjectGraph,
     PythonRunPlanOutputs,
 )
+from sqlbuild.compiler.planner.main.planning.build_model_path_index import (
+    build_model_path_index,
+)
+from sqlbuild.compiler.planner.main.planning.build_model_tag_index import (
+    build_model_tag_index,
+)
 from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
@@ -55,7 +59,7 @@ from sqlbuild.compiler.python_nodes.main.run_selection import (
 )
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.models.project import TargetConfig
+from sqlbuild.spec.contracts.models import TargetConfig
 
 
 def run_compile_pipeline(

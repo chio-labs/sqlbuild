@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
+from sqlbuild.integrations.dbt.main.manifest.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
 

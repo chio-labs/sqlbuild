@@ -8,17 +8,21 @@ from typing import Any
 from sqlbuild.adapter.types import BuiltinAdapter, TypeDialect
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.lineage.constants import (
+    POLYGLOT_RESOLVED_SOURCE_CONFIDENCE,
+    STAR_COLUMN_NAME,
+)
 from sqlbuild.compiler.lineage.helpers.columns import (
     _build_schema_mapping,
     _build_star_lineage,
     _normalize_sqlbuild_refs,
-    _PhysicalResource,
 )
 from sqlbuild.compiler.lineage.models import (
     ColumnLineage,
     ColumnLineageEdge,
     ColumnLineageSource,
     ModelColumnLineage,
+    PhysicalResource,
     ProjectColumnLineage,
     QualifiedLineageColumn,
 )
@@ -49,7 +53,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_COLUMN,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.lineage")
 _POLYGLOT_DIALECT_ALIASES: dict[str, PolyglotAnalysisDialect] = {
@@ -122,9 +126,9 @@ def _build_polyglot_model_column_lineage(
     dialect: str | None,
 ) -> ModelColumnLineage | None:
     normalized_sql: str
-    physical_resources: tuple[_PhysicalResource, ...]
+    physical_resources: tuple[PhysicalResource, ...]
     normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
-    resource_by_physical_name: dict[str, _PhysicalResource] = {
+    resource_by_physical_name: dict[str, PhysicalResource] = {
         resource.physical_name: resource for resource in physical_resources
     }
     polyglot_module: Any | None = import_polyglot_sql()
@@ -210,7 +214,7 @@ def _build_polyglot_model_column_lineage(
 def _projection_upstreams(
     *,
     projection: dict[str, Any],
-    resource_by_physical_name: dict[str, _PhysicalResource],
+    resource_by_physical_name: dict[str, PhysicalResource],
 ) -> tuple[tuple[ColumnLineageSource, ...], ColumnLineageConfidence]:
     upstream_values: object = projection.get(POLYGLOT_ANALYSIS_UPSTREAM)
     if not isinstance(upstream_values, list):
@@ -223,7 +227,11 @@ def _projection_upstreams(
         if not isinstance(upstream, dict):
             continue
         column_value: object = upstream.get(POLYGLOT_PAYLOAD_COLUMN)
-        if not isinstance(column_value, str) or not column_value or column_value == "*":
+        if (
+            not isinstance(column_value, str)
+            or not column_value
+            or column_value == STAR_COLUMN_NAME
+        ):
             continue
         source_name: object = upstream.get(POLYGLOT_ANALYSIS_SOURCE_NAME) or upstream.get(
             POLYGLOT_ANALYSIS_TABLE
@@ -231,12 +239,14 @@ def _projection_upstreams(
         if not isinstance(source_name, str) or not source_name:
             confidence = ColumnLineageConfidence.UNKNOWN
             continue
-        resource: _PhysicalResource | None = resource_by_physical_name.get(source_name)
+        resource: PhysicalResource | None = resource_by_physical_name.get(source_name)
         if resource is None:
             continue
         source_confidence: object = upstream.get(POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE)
         source_alias: object = upstream.get(POLYGLOT_ANALYSIS_SOURCE_ALIAS)
-        if source_confidence != "resolved" and not isinstance(source_alias, str):
+        if source_confidence != POLYGLOT_RESOLVED_SOURCE_CONFIDENCE and not isinstance(
+            source_alias, str
+        ):
             confidence = ColumnLineageConfidence.MEDIUM
         key: tuple[CompiledResourceType, str, str] = (
             resource.resource_type,

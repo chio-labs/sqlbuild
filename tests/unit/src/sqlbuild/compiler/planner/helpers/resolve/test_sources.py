@@ -6,15 +6,15 @@ import pytest
 
 from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.adapter.types import CursorKind
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.adapters.postgres.client import PostgresAdapter
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.planner.helpers.resolve.sources import (
     resolve_source_references,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     AdapterSourceResolutionTestCase,
     SourceResolutionErrorTestCase,

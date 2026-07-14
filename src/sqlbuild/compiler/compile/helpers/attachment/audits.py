@@ -40,14 +40,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.models.project import (
-    SettingsConfig,
-)
-from sqlbuild.spec.models.schema import (
+from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
+    SettingsConfig,
+    SourceColumnEntry,
 )
-from sqlbuild.spec.models.source import SourceColumnEntry
 
 
 @dataclass(frozen=True)

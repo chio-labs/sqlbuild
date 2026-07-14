@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.diagnostics.types import DiagnosticPhase, DiagnosticSeverity
-from sqlbuild.spec.models.schema import SourceLocation
+from sqlbuild.spec.contracts.models import SourceLocation
 
 
 @dataclass(frozen=True)

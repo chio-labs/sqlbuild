@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import argparse
 
+from sqlbuild.cli.commands.classes.sqlbuild_argument_parser import SqlbuildArgumentParser
 from sqlbuild.cli.commands.helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.helpers.entry.errors import (
-    SqlbuildArgumentParser,
-    build_argument_parser_class,
-)
+from sqlbuild.cli.commands.helpers.entry.errors import build_argument_parser_class
 from sqlbuild.cli.commands.helpers.entry.parser_arguments import (
     add_cursor_override_args,
     add_dbt_config_args,

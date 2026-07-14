@@ -9,9 +9,13 @@ from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
-from sqlbuild.integrations.dbt.main.profile_connection import resolve_raw_dbt_profile_connection
+from sqlbuild.integrations.dbt.main.profile.profile_connection import (
+    resolve_raw_dbt_profile_connection,
+)
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 _DUCKDB_SNOWFLAKE_LIKE_WARNING_KEYS: frozenset[str] = frozenset(
     {"account", "authenticator", "role", "token", "warehouse"}
@@ -19,6 +23,10 @@ _DUCKDB_SNOWFLAKE_LIKE_WARNING_KEYS: frozenset[str] = frozenset(
 _DBT_PROFILE_CONNECTION_ROUTING_KEYS: frozenset[str] = frozenset(
     {"source", "profile", "target", "project_dir", "profiles_dir"}
 )
+_CONNECTION_SOURCE_KEY: str = "source"
+_DBT_PROFILE_CONNECTION_SOURCE: str = "dbt_profile"
+_DATABASE_KEY: str = "database"
+_DUCKDB_MEMORY_DATABASE: str = ":memory:"
 
 
 def resolve_connection_config(
@@ -51,17 +59,17 @@ def resolve_connection_config(
                 if key not in _DBT_PROFILE_CONNECTION_ROUTING_KEYS
             }
             config = {**resolved_dbt_profile.connection, **user_overrides}
-    elif config.get("source") == "dbt_profile":
+    elif config.get(_CONNECTION_SOURCE_KEY) == _DBT_PROFILE_CONNECTION_SOURCE:
         raise DbtProfileError("connection.source = 'dbt_profile' requires project configuration")
     _warn_if_duckdb_has_snowflake_like_keys(adapter_name=adapter_name, config=config)
-    database: object | None = config.get("database")
+    database: object | None = config.get(_DATABASE_KEY)
     if (
         adapter_name == BuiltinAdapter.DUCKDB
         and isinstance(database, str)
         and not Path(database).is_absolute()
-        and database != ":memory:"
+        and database != _DUCKDB_MEMORY_DATABASE
     ):
-        config["database"] = str(project_dir / database)
+        config[_DATABASE_KEY] = str(project_dir / database)
     return config
 
 

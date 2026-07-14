@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_WRITE_ATTEMPTS
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from tests.unit.src.sqlbuild.compiler.fingerprints.main._test_types import (

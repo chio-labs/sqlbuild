@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.models import TableFreshnessMetadata
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.main.normalization import (
@@ -18,8 +18,8 @@ from sqlbuild.compiler.source_freshness.main.observation import (
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.helpers.state import (
     source_freshness_record_from_observation,
 )

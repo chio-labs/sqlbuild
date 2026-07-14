@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import TargetConfig
+from sqlbuild.spec.contracts.models import TargetConfig
 
 
 def validate_clone_request(

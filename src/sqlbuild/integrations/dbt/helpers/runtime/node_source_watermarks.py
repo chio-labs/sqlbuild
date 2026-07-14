@@ -47,7 +47,10 @@ from sqlbuild.compiler.node_source_watermarks.models import (
 )
 from sqlbuild.compiler.node_source_watermarks.types import WatermarkGraphResourceKind
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
-from sqlbuild.integrations.dbt.constants import DBT_MATERIALIZATION_VIEW
+from sqlbuild.integrations.dbt.constants import (
+    DBT_MATERIALIZATION_VIEW,
+    DBT_SUCCESSFUL_RESULT_STATUSES,
+)
 from sqlbuild.integrations.dbt.helpers.manifest.core import dbt_manifest_model_materialization
 from sqlbuild.integrations.dbt.manifest.models import (
     DbtManifestIndex,
@@ -132,7 +135,7 @@ def record_dbt_successful_node_source_watermark(
 
     if context is None or result.resource_type != DbtSupportedResourceType.MODEL:
         return
-    if result.status.lower() not in {"ok", "success", "pass", "passed"}:
+    if result.status.lower() not in DBT_SUCCESSFUL_RESULT_STATUSES:
         return
     model: DbtManifestModel | None = manifest.models_by_unique_id.get(result.unique_id)
     if model is None or _model_is_view(model):

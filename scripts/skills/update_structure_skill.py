@@ -7,6 +7,7 @@ import ast
 import re
 from pathlib import Path
 
+from scripts.skills.constants import VIOLATION_CLASS_NAME
 from scripts.skills.models import RuleReference
 
 generated_marker: str = "<!-- generated-by: make skills -->"
@@ -224,7 +225,7 @@ def _conditional_keyword_messages_by_code(
 
 
 def _is_violation_call(node: ast.Call) -> bool:
-    return isinstance(node.func, ast.Name) and node.func.id == "Violation"
+    return isinstance(node.func, ast.Name) and node.func.id == VIOLATION_CLASS_NAME
 
 
 def _keyword_string_options(

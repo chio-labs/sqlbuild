@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.constants import INTEGER_TYPE_TOKEN
 from sqlbuild.adapter.exceptions import AdapterUserError
 from sqlbuild.adapter.models import (
     ColumnInfo,
@@ -37,8 +38,10 @@ from sqlbuild.adapter.types import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
+from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
+from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 class BaseAdapter(StrictAdapter):
@@ -1268,7 +1271,7 @@ class BaseAdapter(StrictAdapter):
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
-        csv_settings: SeedCsvSettings = default_seed_csv_settings,
+        csv_settings: SeedCsvSettings = DEFAULT_SEED_CSV_SETTINGS,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,
@@ -1571,7 +1574,7 @@ class BaseAdapter(StrictAdapter):
             return "float"
         if any(token in normalized for token in ("DECIMAL", "NUMERIC")):
             return "decimal"
-        if "INT" in normalized:
+        if INTEGER_TYPE_TOKEN in normalized:
             return "integer"
         return self.sql_analysis_dialect_name
 
@@ -1856,7 +1859,7 @@ class BaseAdapter(StrictAdapter):
     ) -> str:
         """Render DDL that creates the node source watermark table when it is missing."""
 
-        from sqlbuild.adapters.shared.helpers.node_source_watermarks import (
+        from sqlbuild.adapter.main.render_create_node_source_watermark_table_sql import (
             render_create_node_source_watermark_table_sql,
         )
 
@@ -1876,7 +1879,7 @@ class BaseAdapter(StrictAdapter):
     ) -> str:
         """Render SQL that reads latest node source watermark rows per identity."""
 
-        from sqlbuild.adapters.shared.helpers.node_source_watermarks import (
+        from sqlbuild.adapter.main.render_read_latest_node_source_watermarks_sql import (
             render_read_latest_node_source_watermarks_sql,
         )
 
@@ -1917,7 +1920,7 @@ class BaseAdapter(StrictAdapter):
     ) -> str:
         """Render DML that appends source freshness records."""
 
-        from sqlbuild.adapters.shared.helpers.source_freshness import (
+        from sqlbuild.adapter.main.render_insert_source_freshness_records_sql import (
             render_insert_source_freshness_records_sql,
         )
 
@@ -1937,7 +1940,7 @@ class BaseAdapter(StrictAdapter):
     ) -> str:
         """Render DML that appends node source watermark records."""
 
-        from sqlbuild.adapters.shared.helpers.node_source_watermarks import (
+        from sqlbuild.adapter.main.render_insert_node_source_watermark_records_sql import (
             render_insert_node_source_watermark_records_sql,
         )
 
@@ -2071,13 +2074,13 @@ def _snapshot_initial_valid_from_expr(
     current_timestamp: str,
 ) -> str:
     prefix: str = f"{source_alias}." if source_alias is not None else ""
-    if initial_valid_from == "execution_time":
+    if initial_valid_from == InitialValidFrom.EXECUTION_TIME:
         return current_timestamp
-    if initial_valid_from == "observed_at" and observed_at_column is not None:
+    if initial_valid_from == InitialValidFrom.OBSERVED_AT and observed_at_column is not None:
         return f"{prefix}{observed_at_column}"
-    if initial_valid_from == "updated_at" and updated_at_column is not None:
+    if initial_valid_from == InitialValidFrom.UPDATED_AT and updated_at_column is not None:
         return f"{prefix}{updated_at_column}"
-    if snapshot_strategy == "timestamp" and updated_at_column is not None:
+    if snapshot_strategy == SnapshotStrategy.TIMESTAMP and updated_at_column is not None:
         return f"{prefix}{updated_at_column}"
     return current_timestamp
 

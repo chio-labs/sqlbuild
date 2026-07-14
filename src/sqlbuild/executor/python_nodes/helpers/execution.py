@@ -17,11 +17,6 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeStatus,
 )
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.helpers.python_node_scheduler import (
-    build_python_node_in_degree,
-    build_python_node_ready_queue,
-    unlock_downstream_python_nodes,
-)
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
@@ -40,6 +35,9 @@ from sqlbuild.executor.python_nodes.models import (
     TaskContext,
 )
 from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
+from sqlbuild.executor.scheduling.main.build_in_degree import build_python_node_in_degree
+from sqlbuild.executor.scheduling.main.build_ready_queue import build_python_node_ready_queue
+from sqlbuild.executor.scheduling.main.unlock_downstream import unlock_downstream_python_nodes
 from sqlbuild.provider.main.runtime import (
     ProviderContainer,
     _empty_provider_container,

@@ -11,7 +11,7 @@ from sqlbuild.compiler.source_freshness.helpers.planning import (
     build_standard_source_freshness_planning_result as _build_planning_result,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_standard_source_freshness_planning_result(

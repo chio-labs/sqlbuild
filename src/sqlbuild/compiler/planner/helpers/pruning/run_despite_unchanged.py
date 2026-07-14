@@ -7,6 +7,10 @@ from datetime import UTC, datetime, timedelta
 
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.constants import (
+    RUN_DESPITE_UNCHANGED_HOUR_SUFFIX,
+    RUN_DESPITE_UNCHANGED_MINUTE_SUFFIX,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.model_downstream_closure import (
     build_downstream_model_names,
@@ -21,7 +25,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     StandardSourceFreshnessPlanningResult,
 )
-from sqlbuild.spec.models.types import SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 
 _DURATION_PATTERN: re.Pattern[str] = re.compile(r"^([1-9][0-9]*)([mhd])$")
 
@@ -179,9 +183,9 @@ def _parse_duration(*, model_name: str, value: str) -> timedelta:
         )
     amount: int = int(match.group(1))
     unit: str = match.group(2)
-    if unit == "m":
+    if unit == RUN_DESPITE_UNCHANGED_MINUTE_SUFFIX:
         return timedelta(minutes=amount)
-    if unit == "h":
+    if unit == RUN_DESPITE_UNCHANGED_HOUR_SUFFIX:
         return timedelta(hours=amount)
     return timedelta(days=amount)
 

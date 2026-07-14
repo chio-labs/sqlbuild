@@ -53,10 +53,8 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.schema import SeedCsvSettings
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SeedCsvSettings, SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)

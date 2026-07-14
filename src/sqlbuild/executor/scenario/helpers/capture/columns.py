@@ -10,9 +10,84 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.adapter.types import TypeDialect
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_TYPE_INVALID
+from sqlbuild.executor.scenario.constants import (
+    BIGQUERY_BIGNUMERIC_TYPE,
+    BIGQUERY_BYTES_TYPE,
+    BIGQUERY_TIMESTAMP_TYPE,
+    BIGQUERY_VARCHAR_TYPES,
+    BIGQUERY_WIDEN_TO_DOUBLE_TYPES,
+    DATABRICKS_TIMESTAMP_NTZ_TYPE,
+    DATABRICKS_TIMESTAMP_TYPE,
+    DATABRICKS_VOID_TYPE,
+    DUCKDB_BLOB_TYPE,
+    DUCKDB_HUGEINT_TYPE,
+    DUCKDB_INTEGER_TYPE,
+    DUCKDB_LIST_TYPE,
+    DUCKDB_UHUGEINT_TYPE,
+    FALLBACK_BINARY_TYPES,
+    FALLBACK_BOOLEAN_TYPES,
+    FALLBACK_DATE_TYPE,
+    FALLBACK_DECIMAL_TYPES,
+    FALLBACK_FLOAT_TYPES,
+    FALLBACK_JSON_TYPES,
+    FALLBACK_POLYGLOT_BASE_TYPES,
+    FALLBACK_SIGNED_INTEGER_TYPES,
+    FALLBACK_STRUCTURED_TYPES,
+    FALLBACK_TIME_TYPES,
+    FALLBACK_TIMESTAMP_TOKEN,
+    FALLBACK_TIMESTAMP_TYPES,
+    FALLBACK_UNSIGNED_INTEGER_TYPES,
+    FALLBACK_VARCHAR_TYPES,
+    GENERIC_WIDEN_TO_DOUBLE_TYPES,
+    LOCAL_TYPE_BIGINT,
+    LOCAL_TYPE_BOOLEAN,
+    LOCAL_TYPE_DATE,
+    LOCAL_TYPE_DECIMAL,
+    LOCAL_TYPE_DOUBLE,
+    LOCAL_TYPE_INT,
+    LOCAL_TYPE_INT128,
+    LOCAL_TYPE_JSON,
+    LOCAL_TYPE_REAL,
+    LOCAL_TYPE_SMALLINT,
+    LOCAL_TYPE_TEXT,
+    LOCAL_TYPE_TIME,
+    LOCAL_TYPE_TIMESTAMP,
+    LOCAL_TYPE_TIMESTAMPTZ,
+    LOCAL_TYPE_UINT128,
+    LOCAL_TYPE_VARCHAR,
+    MALFORMED_RENDERED_TYPE_TOKEN,
+    POLYGLOT_ARRAY_TYPE,
+    POLYGLOT_COLLECTION_TYPES,
+    POLYGLOT_CUSTOM_TYPE,
+    POLYGLOT_DECIMAL_TYPES,
+    POLYGLOT_OBJECT_TYPE,
+    POLYGLOT_SPATIAL_AND_MONEY_TYPES,
+    POLYGLOT_VARCHAR_TYPES,
+    POSTGRES_BIGSERIAL_TYPE,
+    POSTGRES_PARAMETERIZED_DECIMAL_TYPES,
+    POSTGRES_PARAMETERIZED_TEXT_TYPES,
+    POSTGRES_SERIAL_TYPES,
+    POSTGRES_SMALLSERIAL_TYPE,
+    POSTGRES_VARCHAR_TYPES,
+    SCENARIO_LOCAL_TYPE_INVALID,
+    SNOWFLAKE_DOUBLE_TYPES,
+    SNOWFLAKE_NUMBER_TYPE,
+    SNOWFLAKE_REAL_TYPE,
+    SNOWFLAKE_TIMESTAMP_NTZ_TYPE,
+    SNOWFLAKE_TIMEZONE_TIMESTAMP_TYPES,
+    SNOWFLAKE_VECTOR_TYPE,
+    SNOWFLAKE_WIDEN_TO_DOUBLE_TYPES,
+    TYPE_ARGUMENT_CLOSE_ANGLE,
+    TYPE_ARGUMENT_CLOSE_PAREN,
+    TYPE_ARGUMENT_CLOSE_TOKENS,
+    TYPE_ARGUMENT_OPEN_PAREN,
+    TYPE_ARGUMENT_OPEN_TOKENS,
+    TYPE_ARGUMENT_SEPARATOR,
+    TYPE_PATTERN_WILDCARD,
+    UNTYPED_ARRAY_TYPE,
+)
 from sqlbuild.executor.scenario.models import ScenarioSnapshotColumn
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
@@ -24,93 +99,44 @@ class _TypePattern:
     args: tuple[str, ...] = ()
 
 
-_POSTGRES_SERIAL_TYPES: frozenset[str] = frozenset({"BIGSERIAL", "SERIAL", "SMALLSERIAL"})
 _POSTGRES_DIRECT_LOCAL_TYPES: dict[str, str] = {
-    "SMALLINT": "SMALLINT",
-    "INT2": "SMALLINT",
-    "SMALLSERIAL": "SMALLINT",
-    "INTEGER": "INT",
-    "INT": "INT",
-    "INT4": "INT",
-    "SERIAL": "INT",
-    "BIGSERIAL": "BIGINT",
-    "REAL": "REAL",
-    "FLOAT4": "REAL",
-    "TEXT": "TEXT",
+    "SMALLINT": LOCAL_TYPE_SMALLINT,
+    "INT2": LOCAL_TYPE_SMALLINT,
+    "SMALLSERIAL": LOCAL_TYPE_SMALLINT,
+    "INTEGER": LOCAL_TYPE_INT,
+    "INT": LOCAL_TYPE_INT,
+    "INT4": LOCAL_TYPE_INT,
+    "SERIAL": LOCAL_TYPE_INT,
+    "BIGSERIAL": LOCAL_TYPE_BIGINT,
+    "REAL": LOCAL_TYPE_REAL,
+    "FLOAT4": LOCAL_TYPE_REAL,
+    "TEXT": LOCAL_TYPE_TEXT,
     "UUID": "UUID",
     "INET": "INET",
     "INTERVAL": "INTERVAL",
-    "TIMESTAMPTZ": "TIMESTAMPTZ",
-    "TIMESTAMP WITH TIME ZONE": "TIMESTAMPTZ",
+    "TIMESTAMPTZ": LOCAL_TYPE_TIMESTAMPTZ,
+    "TIMESTAMP WITH TIME ZONE": LOCAL_TYPE_TIMESTAMPTZ,
 }
 _POSTGRES_ARRAY_ELEMENT_LOCAL_TYPES: dict[str, str] = {
-    "SMALLINT": "SMALLINT",
-    "INT2": "SMALLINT",
-    "INTEGER": "INT",
-    "INT": "INT",
-    "INT4": "INT",
-    "BIGINT": "BIGINT",
-    "INT8": "BIGINT",
-    "TEXT": "TEXT",
-    "VARCHAR": "VARCHAR",
-    "BOOLEAN": "BOOLEAN",
-    "BOOL": "BOOLEAN",
-    "REAL": "REAL",
-    "FLOAT4": "REAL",
-    "DOUBLE PRECISION": "DOUBLE",
-    "FLOAT8": "DOUBLE",
-    "NUMERIC": "DECIMAL",
-    "DECIMAL": "DECIMAL",
+    "SMALLINT": LOCAL_TYPE_SMALLINT,
+    "INT2": LOCAL_TYPE_SMALLINT,
+    "INTEGER": LOCAL_TYPE_INT,
+    "INT": LOCAL_TYPE_INT,
+    "INT4": LOCAL_TYPE_INT,
+    "BIGINT": LOCAL_TYPE_BIGINT,
+    "INT8": LOCAL_TYPE_BIGINT,
+    "TEXT": LOCAL_TYPE_TEXT,
+    "VARCHAR": LOCAL_TYPE_VARCHAR,
+    "BOOLEAN": LOCAL_TYPE_BOOLEAN,
+    "BOOL": LOCAL_TYPE_BOOLEAN,
+    "REAL": LOCAL_TYPE_REAL,
+    "FLOAT4": LOCAL_TYPE_REAL,
+    "DOUBLE PRECISION": LOCAL_TYPE_DOUBLE,
+    "FLOAT8": LOCAL_TYPE_DOUBLE,
+    "NUMERIC": LOCAL_TYPE_DECIMAL,
+    "DECIMAL": LOCAL_TYPE_DECIMAL,
     "UUID": "UUID",
 }
-_POSTGRES_VARCHAR_TYPES: frozenset[str] = frozenset(
-    {
-        "CIDR",
-        "CIRCLE",
-        "DATERANGE",
-        "INT4RANGE",
-        "INT8RANGE",
-        "LINE",
-        "LSEG",
-        "MACADDR",
-        "MACADDR8",
-        "NAME",
-        "NUMRANGE",
-        "PATH",
-        "POINT",
-        "POLYGON",
-        "REGCLASS",
-        "TSQUERY",
-        "TSRANGE",
-        "TSTZRANGE",
-        "TSVECTOR",
-        "VARBIT",
-    }
-)
-_FALLBACK_POLYGLOT_BASE_TYPES: frozenset[str] = frozenset(
-    {
-        "BOOL",
-        "BOOLEAN",
-        "TINYINT",
-        "SMALLINT",
-        "INT",
-        "INTEGER",
-        "BIGINT",
-        "FLOAT",
-        "DOUBLE",
-        "DECIMAL",
-        "NUMERIC",
-        "DATE",
-        "TIME",
-        "TIMESTAMP",
-        "DATETIME",
-        "VARCHAR",
-        "CHAR",
-        "TEXT",
-        "STRING",
-        "JSON",
-    }
-)
 
 
 def build_scenario_snapshot_columns(
@@ -229,9 +255,9 @@ def _postgres_pre_local_type(warehouse_type: str) -> str | None:
     args: tuple[str, ...] = pattern.args
     if base in _POSTGRES_DIRECT_LOCAL_TYPES:
         return _POSTGRES_DIRECT_LOCAL_TYPES[base]
-    if base in {"VARCHAR", "CHARACTER VARYING"} and args:
+    if base in POSTGRES_PARAMETERIZED_TEXT_TYPES and args:
         return f"TEXT({args[0]})"
-    if base in {"NUMERIC", "DECIMAL"} and args:
+    if base in POSTGRES_PARAMETERIZED_DECIMAL_TYPES and args:
         return "DECIMAL(" + ", ".join(args) + ")"
     if base.endswith("[]"):
         element_base: str = base[:-2].strip()
@@ -254,64 +280,64 @@ def _dialect_pre_local_type(*, warehouse_type: str, sql_analysis_dialect: str | 
         return _databricks_pre_local_type(base=base, args=args)
     if dialect == TypeDialect.DUCKDB:
         return _duckdb_pre_local_type(base=base, args=args)
-    if dialect is None and base not in _FALLBACK_POLYGLOT_BASE_TYPES:
-        return "VARCHAR"
+    if dialect is None and base not in FALLBACK_POLYGLOT_BASE_TYPES:
+        return LOCAL_TYPE_VARCHAR
     return None
 
 
 def _snowflake_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
-    if base == "NUMBER":
+    if base == SNOWFLAKE_NUMBER_TYPE:
         precision_and_scale_count: int = 2
         if len(args) >= precision_and_scale_count:
             return f"DECIMAL({args[0]}, {args[1]})"
         if len(args) == 1:
             return f"DECIMAL({args[0]})"
         return "DECIMAL(38, 0)"
-    if base in {"FLOAT", "FLOAT8", "DOUBLE", "DOUBLE PRECISION"}:
-        return "DOUBLE"
-    if base == "FLOAT4":
-        return "REAL"
-    if base in {"TIMESTAMP_LTZ", "TIMESTAMP_TZ"}:
-        return "TIMESTAMPTZ"
-    if base == "TIMESTAMP_NTZ":
-        return f"TIMESTAMP({args[0]})" if args else "TIMESTAMP"
+    if base in SNOWFLAKE_DOUBLE_TYPES:
+        return LOCAL_TYPE_DOUBLE
+    if base == SNOWFLAKE_REAL_TYPE:
+        return LOCAL_TYPE_REAL
+    if base in SNOWFLAKE_TIMEZONE_TIMESTAMP_TYPES:
+        return LOCAL_TYPE_TIMESTAMPTZ
+    if base == SNOWFLAKE_TIMESTAMP_NTZ_TYPE:
+        return f"TIMESTAMP({args[0]})" if args else LOCAL_TYPE_TIMESTAMP
     return None
 
 
 def _bigquery_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
-    if base == "BIGNUMERIC":
+    if base == BIGQUERY_BIGNUMERIC_TYPE:
         precision_and_scale_count: int = 2
         if len(args) >= precision_and_scale_count:
             return f"DECIMAL({args[0]}, {args[1]})"
         return "DECIMAL(38, 5)"
-    if base in {"RANGE", "BYTES"}:
-        return "VARCHAR"
-    if base == "TIMESTAMP":
-        return "TIMESTAMPTZ"
+    if base in BIGQUERY_VARCHAR_TYPES:
+        return LOCAL_TYPE_VARCHAR
+    if base == BIGQUERY_TIMESTAMP_TYPE:
+        return LOCAL_TYPE_TIMESTAMPTZ
     return None
 
 
 def _databricks_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
-    if base == "TIMESTAMP":
-        return "TIMESTAMPTZ"
-    if base == "TIMESTAMP_NTZ":
-        return "TIMESTAMP"
-    if base == "VOID":
-        return "VARCHAR"
+    if base == DATABRICKS_TIMESTAMP_TYPE:
+        return LOCAL_TYPE_TIMESTAMPTZ
+    if base == DATABRICKS_TIMESTAMP_NTZ_TYPE:
+        return LOCAL_TYPE_TIMESTAMP
+    if base == DATABRICKS_VOID_TYPE:
+        return LOCAL_TYPE_VARCHAR
     return None
 
 
 def _duckdb_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
-    if base == "HUGEINT":
-        return "INT128"
-    if base == "UHUGEINT":
-        return "UINT128"
-    if base == "BLOB":
-        return "VARCHAR"
-    if base == "LIST" and args:
+    if base == DUCKDB_HUGEINT_TYPE:
+        return LOCAL_TYPE_INT128
+    if base == DUCKDB_UHUGEINT_TYPE:
+        return LOCAL_TYPE_UINT128
+    if base == DUCKDB_BLOB_TYPE:
+        return LOCAL_TYPE_VARCHAR
+    if base == DUCKDB_LIST_TYPE and args:
         inner_type: str = _fallback_local_type_for_warehouse_type(args[0])
-        if inner_type == "BIGINT" and args[0].strip().upper() == "INTEGER":
-            inner_type = "INT"
+        if inner_type == LOCAL_TYPE_BIGINT and args[0].strip().upper() == DUCKDB_INTEGER_TYPE:
+            inner_type = LOCAL_TYPE_INT
         return inner_type + "[]"
     return None
 
@@ -340,43 +366,51 @@ def _local_type_with_polyglot(
 
     type_name: str = _polyglot_type_name(data_type)
     base_type: str = _parse_type_pattern(warehouse_type).base
-    if type_name in {"BIGDECIMAL", "DECIMAL"}:
+    if type_name in POLYGLOT_DECIMAL_TYPES:
         rendered_bigdecimal_type: str = data_type.sql(dialect="duckdb").strip()
-        if ")(" not in rendered_bigdecimal_type:
+        if MALFORMED_RENDERED_TYPE_TOKEN not in rendered_bigdecimal_type:
             return rendered_bigdecimal_type
-        return _decimal_local_type_from_polyglot(data_type) or "VARCHAR"
-    if type_name in {"NULL", "RANGE", "XML"}:
-        return "VARCHAR"
-    if type_name == "OBJECT":
-        return "JSON"
-    if type_name == "ARRAY" and not _polyglot_element_type(data_type):
-        return "JSON"
-    if type_name in {"ARRAY", "LIST"} and _polyglot_element_type(data_type):
+        return _decimal_local_type_from_polyglot(data_type) or LOCAL_TYPE_VARCHAR
+    if type_name in POLYGLOT_VARCHAR_TYPES:
+        return LOCAL_TYPE_VARCHAR
+    if type_name == POLYGLOT_OBJECT_TYPE:
+        return LOCAL_TYPE_JSON
+    if type_name == POLYGLOT_ARRAY_TYPE and not _polyglot_element_type(data_type):
+        return LOCAL_TYPE_JSON
+    if type_name in POLYGLOT_COLLECTION_TYPES and _polyglot_element_type(data_type):
         return data_type.sql(dialect="duckdb").strip()
-    if type_name in {"GEOGRAPHY", "GEOMETRY", "MONEY"}:
-        return "VARCHAR"
+    if type_name in POLYGLOT_SPATIAL_AND_MONEY_TYPES:
+        return LOCAL_TYPE_VARCHAR
     dialect: TypeDialect | None = _coerce_type_dialect(sql_analysis_dialect)
-    if dialect == TypeDialect.POSTGRES and base_type in _POSTGRES_VARCHAR_TYPES:
-        return "VARCHAR"
-    if dialect == TypeDialect.POSTGRES and base_type in _POSTGRES_SERIAL_TYPES:
+    if dialect == TypeDialect.POSTGRES and base_type in POSTGRES_VARCHAR_TYPES:
+        return LOCAL_TYPE_VARCHAR
+    if dialect == TypeDialect.POSTGRES and base_type in POSTGRES_SERIAL_TYPES:
         return _postgres_serial_local_type(base_type)
-    if dialect == TypeDialect.BIGQUERY and base_type == "BYTES" and data_type.expressions:
-        return "VARCHAR"
-    if dialect == TypeDialect.SNOWFLAKE and base_type == "VECTOR":
-        return "JSON"
+    if (
+        dialect == TypeDialect.BIGQUERY
+        and base_type == BIGQUERY_BYTES_TYPE
+        and data_type.expressions
+    ):
+        return LOCAL_TYPE_VARCHAR
+    if dialect == TypeDialect.SNOWFLAKE and base_type == SNOWFLAKE_VECTOR_TYPE:
+        return LOCAL_TYPE_JSON
 
     local_type: str = data_type.sql(dialect="duckdb").strip()
-    if not local_type or local_type == "[]" or ")(" in local_type:
+    if (
+        not local_type
+        or local_type == UNTYPED_ARRAY_TYPE
+        or MALFORMED_RENDERED_TYPE_TOKEN in local_type
+    ):
         return _fallback_local_type_for_warehouse_type(warehouse_type)
     if local_type.startswith("BLOB"):
         return "VARCHAR"
     if local_type.startswith("TIMESTAMPTZ("):
         return "TIMESTAMPTZ"
-    if local_type == "REAL" and _should_widen_real_to_double(
+    if local_type == LOCAL_TYPE_REAL and _should_widen_real_to_double(
         warehouse_type=warehouse_type,
         sql_analysis_dialect=sql_analysis_dialect,
     ):
-        return "DOUBLE"
+        return LOCAL_TYPE_DOUBLE
     return local_type
 
 
@@ -385,39 +419,39 @@ def _fallback_local_type_for_warehouse_type(warehouse_type: str) -> str:
 
     normalized_type: str = warehouse_type.strip().upper()
     base_type: str = normalized_type.split("(", 1)[0].strip()
-    if base_type in {"BOOL", "BOOLEAN"}:
-        return "BOOLEAN"
-    if base_type in {"TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT", "HUGEINT"}:
-        return "BIGINT"
-    if base_type in {"UTINYINT", "USMALLINT", "UINTEGER", "UBIGINT", "UHUGEINT"}:
-        return "BIGINT"
-    if base_type in {"FLOAT", "FLOAT4", "REAL", "DOUBLE", "DOUBLE PRECISION", "FLOAT8"}:
-        return "DOUBLE"
-    if base_type in {"DECIMAL", "DEC", "NUMERIC", "NUMBER"}:
+    if base_type in FALLBACK_BOOLEAN_TYPES:
+        return LOCAL_TYPE_BOOLEAN
+    if base_type in FALLBACK_SIGNED_INTEGER_TYPES:
+        return LOCAL_TYPE_BIGINT
+    if base_type in FALLBACK_UNSIGNED_INTEGER_TYPES:
+        return LOCAL_TYPE_BIGINT
+    if base_type in FALLBACK_FLOAT_TYPES:
+        return LOCAL_TYPE_DOUBLE
+    if base_type in FALLBACK_DECIMAL_TYPES:
         return _decimal_local_type(normalized_type)
-    if base_type == "DATE":
-        return "DATE"
-    if base_type in {"TIME", "TIME WITH TIME ZONE", "TIMETZ"}:
-        return "TIME"
-    if "TIMESTAMP" in base_type or base_type in {"DATETIME", "TIMESTAMPTZ"}:
-        return "TIMESTAMP"
-    if base_type in {"VARCHAR", "CHAR", "CHARACTER", "TEXT", "STRING"}:
-        return "VARCHAR"
-    if base_type in {"JSON", "JSONB"}:
-        return "JSON"
-    if base_type in {"BLOB", "BYTEA", "BINARY", "VARBINARY"}:
-        return "VARCHAR"
-    if base_type in {"ARRAY", "OBJECT", "VARIANT", "JSON", "JSONB"}:
-        return "JSON"
-    return "VARCHAR"
+    if base_type == FALLBACK_DATE_TYPE:
+        return LOCAL_TYPE_DATE
+    if base_type in FALLBACK_TIME_TYPES:
+        return LOCAL_TYPE_TIME
+    if FALLBACK_TIMESTAMP_TOKEN in base_type or base_type in FALLBACK_TIMESTAMP_TYPES:
+        return LOCAL_TYPE_TIMESTAMP
+    if base_type in FALLBACK_VARCHAR_TYPES:
+        return LOCAL_TYPE_VARCHAR
+    if base_type in FALLBACK_JSON_TYPES:
+        return LOCAL_TYPE_JSON
+    if base_type in FALLBACK_BINARY_TYPES:
+        return LOCAL_TYPE_VARCHAR
+    if base_type in FALLBACK_STRUCTURED_TYPES:
+        return LOCAL_TYPE_JSON
+    return LOCAL_TYPE_VARCHAR
 
 
 def _postgres_serial_local_type(base_type: str) -> str:
-    if base_type == "BIGSERIAL":
-        return "BIGINT"
-    if base_type == "SMALLSERIAL":
-        return "SMALLINT"
-    return "INT"
+    if base_type == POSTGRES_BIGSERIAL_TYPE:
+        return LOCAL_TYPE_BIGINT
+    if base_type == POSTGRES_SMALLSERIAL_TYPE:
+        return LOCAL_TYPE_SMALLINT
+    return LOCAL_TYPE_INT
 
 
 def _parse_type_pattern(type_text: str) -> _TypePattern:
@@ -427,7 +461,11 @@ def _parse_type_pattern(type_text: str) -> _TypePattern:
     open_index: int = _first_type_arg_open_index(normalized_type)
     if open_index == -1:
         return _TypePattern(base=normalized_type)
-    close_char: str = ")" if normalized_type[open_index] == "(" else ">"
+    close_char: str = (
+        TYPE_ARGUMENT_CLOSE_PAREN
+        if normalized_type[open_index] == TYPE_ARGUMENT_OPEN_PAREN
+        else TYPE_ARGUMENT_CLOSE_ANGLE
+    )
     close_index: int = normalized_type.rfind(close_char)
     if close_index == -1 or close_index < open_index:
         return _TypePattern(base=normalized_type)
@@ -454,11 +492,11 @@ def _split_type_args(args_text: str) -> list[str]:
     index: int
     character: str
     for index, character in enumerate(args_text):
-        if character in "(<":
+        if character in TYPE_ARGUMENT_OPEN_TOKENS:
             depth += 1
-        elif character in ")>":
+        elif character in TYPE_ARGUMENT_CLOSE_TOKENS:
             depth = max(depth - 1, 0)
-        elif character == "," and depth == 0:
+        elif character == TYPE_ARGUMENT_SEPARATOR and depth == 0:
             args.append(args_text[start:index].strip())
             start = index + 1
     args.append(args_text[start:].strip())
@@ -466,15 +504,15 @@ def _split_type_args(args_text: str) -> list[str]:
 
 
 def _type_pattern_specificity(*, pattern: _TypePattern, warehouse_type: _TypePattern) -> int | None:
-    if pattern.base != "*" and pattern.base != warehouse_type.base:
+    if pattern.base != TYPE_PATTERN_WILDCARD and pattern.base != warehouse_type.base:
         return None
     if len(pattern.args) != len(warehouse_type.args):
         return None
-    specificity: int = 0 if pattern.base == "*" else 100
+    specificity: int = 0 if pattern.base == TYPE_PATTERN_WILDCARD else 100
     pattern_arg: str
     warehouse_arg: str
     for pattern_arg, warehouse_arg in zip(pattern.args, warehouse_type.args, strict=True):
-        if pattern_arg == "*":
+        if pattern_arg == TYPE_PATTERN_WILDCARD:
             continue
         if pattern_arg != warehouse_arg:
             return None
@@ -494,18 +532,18 @@ def _render_local_type_template(*, template: str, args: tuple[str, ...]) -> str:
 def _decimal_local_type(normalized_type: str) -> str:
     """Return a DuckDB decimal type preserving precision and scale when present."""
 
-    if "(" not in normalized_type:
-        return "DECIMAL"
+    if TYPE_ARGUMENT_OPEN_PAREN not in normalized_type:
+        return LOCAL_TYPE_DECIMAL
     precision_scale: str = normalized_type.split("(", 1)[1].split(")", 1)[0].strip()
     if not precision_scale:
-        return "DECIMAL"
+        return LOCAL_TYPE_DECIMAL
     return f"DECIMAL({precision_scale})"
 
 
 def _decimal_local_type_from_polyglot(data_type: Any) -> str | None:
     precision_scale: str | None = _polyglot_precision_scale(data_type)
     if precision_scale is None:
-        return "DECIMAL"
+        return LOCAL_TYPE_DECIMAL
     return f"DECIMAL({precision_scale})"
 
 
@@ -522,7 +560,7 @@ def _polyglot_precision_scale(data_type: Any) -> str | None:
 def _polyglot_type_name(data_type: Any) -> str:
     args: dict[str, Any] = dict(getattr(data_type, "args", {}) or {})
     data_type_name: str = str(args.get("data_type", "")).upper()
-    if data_type_name == "CUSTOM":
+    if data_type_name == POLYGLOT_CUSTOM_TYPE:
         return str(args.get("name", "")).upper().replace(" ", "")
     return data_type_name
 
@@ -538,10 +576,10 @@ def _should_widen_real_to_double(*, warehouse_type: str, sql_analysis_dialect: s
     base_type: str = normalized_type.split("(", 1)[0].strip()
     dialect: TypeDialect | None = _coerce_type_dialect(sql_analysis_dialect)
     if dialect == TypeDialect.SNOWFLAKE:
-        return base_type in {"FLOAT", "FLOAT8", "DOUBLE", "DOUBLE PRECISION"}
+        return base_type in SNOWFLAKE_WIDEN_TO_DOUBLE_TYPES
     if dialect == TypeDialect.BIGQUERY:
-        return base_type in {"FLOAT64"}
-    return base_type in {"DOUBLE", "DOUBLE PRECISION", "FLOAT8"}
+        return base_type in BIGQUERY_WIDEN_TO_DOUBLE_TYPES
+    return base_type in GENERIC_WIDEN_TO_DOUBLE_TYPES
 
 
 def _coerce_type_dialect(dialect: str | None) -> TypeDialect | None:

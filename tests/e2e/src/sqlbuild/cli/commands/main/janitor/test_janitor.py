@@ -584,7 +584,7 @@ def test_given_warehouse_cleanup_failure_when_running_janitor_then_state_cleanup
         "from typing import Any\n"
         "from sqlbuild.adapter.exceptions import AdapterUserError\n"
         "from sqlbuild.adapter.classes.statement_recorder import StatementRecorder\n"
-        "from sqlbuild.adapters.duckdb.client import DuckDbAdapter\n\n"
+        "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n"
         "class FailingJanitorDuckDbAdapter(DuckDbAdapter):\n"
         "    adapter_name = 'failing_janitor_duckdb'\n\n"
         "    def drop(\n"

@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.planner.helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     PlanAuditTestCase,
 )

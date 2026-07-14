@@ -5,6 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.helpers.lineage.constants import (
+    JSON_OUTPUT_FORMAT,
+    LIST_OUTPUT_FORMAT,
+)
 from sqlbuild.cli.commands.helpers.lineage.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.cli.commands.helpers.lineage.output import (
     format_column_lineage_json,
@@ -28,7 +32,9 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 
 def run_lineage(
@@ -81,9 +87,9 @@ def run_lineage(
             mode=lineage_mode,
         )
         if column_trace is not None:
-            if output_format == "json":
+            if output_format == JSON_OUTPUT_FORMAT:
                 print(format_column_lineage_json(column_trace))
-            elif output_format == "list":
+            elif output_format == LIST_OUTPUT_FORMAT:
                 print(
                     "\n"
                     + format_column_lineage_list(trace=column_trace, use_color=supports_color())
@@ -110,9 +116,9 @@ def run_lineage(
             depth=parsed_depth,
         )
 
-    if output_format == "json":
+    if output_format == JSON_OUTPUT_FORMAT:
         print(format_lineage_json(lineage_graph))
-    elif output_format == "list":
+    elif output_format == LIST_OUTPUT_FORMAT:
         print("\n" + format_lineage_list(graph=lineage_graph, use_color=supports_color()) + "\n")
     else:
         print("\n" + format_lineage_tree(graph=lineage_graph, use_color=supports_color()) + "\n")

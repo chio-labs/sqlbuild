@@ -13,11 +13,11 @@ if str(repo_root) not in sys.path:
 def main(argv: list[str] | None = None) -> int:
     """Run the type annotation convention checker CLI."""
 
-    from scripts.type_annotations.type_annotation_conventions.checker import (
-        main as checker_main,
+    from scripts.type_annotations.type_annotation_conventions.main.check_conventions import (
+        check_type_annotation_conventions,
     )
 
-    return checker_main(argv)
+    return check_type_annotation_conventions(argv)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,9 @@ from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.helpers.runtime.connection import resolve_project_connection_config
 from sqlbuild.cli.commands.helpers.runtime.models import AdapterConnectionContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 
 def resolve_adapter_connection_context(

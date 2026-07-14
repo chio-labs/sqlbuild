@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.capabilities.type_normalization import types_equal
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.main.types_equal import types_equal
 from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def validate_and_evolve_existing_target(
@@ -32,7 +33,7 @@ def validate_and_evolve_existing_target(
     for staging_column in staging_columns:
         target_column: ColumnInfo | None = target_by_name.get(staging_column.name.lower())
         if target_column is None:
-            if source_entry.contract == "enforced":
+            if source_entry.contract == ContractPolicy.ENFORCED:
                 raise ExecutorInputError(
                     f"Source '{source_entry.name}' contract has extra columns: "
                     f"{staging_column.name}"

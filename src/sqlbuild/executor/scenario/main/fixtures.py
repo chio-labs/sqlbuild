@@ -10,7 +10,7 @@ from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_n
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
-from sqlbuild.diagnostics.helpers.logging import diagnostics_context
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_FIXTURE_FAILED
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.types import ExecutionStatus

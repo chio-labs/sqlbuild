@@ -6,6 +6,11 @@ from decimal import Decimal, InvalidOperation
 from typing import cast
 
 from sqlbuild.adapter.models import RowDiffTolerance, RowDiffTolerances
+from sqlbuild.executor.diff.constants import (
+    ROW_DIFF_ABSOLUTE_TOLERANCE_KEY,
+    ROW_DIFF_RELATIVE_TOLERANCE_KEY,
+    ROW_DIFF_TOLERANCE_KEYS,
+)
 from sqlbuild.executor.exceptions import ExecutorInputError
 
 
@@ -64,18 +69,18 @@ def _parse_tolerance_rule(*, raw: object, label: str) -> RowDiffTolerance:
     raw_mapping: dict[str, object] = cast(dict[str, object], raw)
 
     unsupported_keys: tuple[str, ...] = tuple(
-        str(key) for key in raw_mapping if key not in {"absolute", "relative"}
+        str(key) for key in raw_mapping if key not in ROW_DIFF_TOLERANCE_KEYS
     )
     if unsupported_keys:
         unsupported: str = ", ".join(unsupported_keys)
         raise ExecutorInputError(f"{label} contains unsupported keys: {unsupported}", code="X403")
 
     absolute: Decimal | None = _parse_optional_decimal(
-        raw=raw_mapping.get("absolute"),
+        raw=raw_mapping.get(ROW_DIFF_ABSOLUTE_TOLERANCE_KEY),
         label=f"{label}.absolute",
     )
     relative: Decimal | None = _parse_optional_decimal(
-        raw=raw_mapping.get("relative"),
+        raw=raw_mapping.get(ROW_DIFF_RELATIVE_TOLERANCE_KEY),
         label=f"{label}.relative",
     )
     if absolute is None and relative is None:

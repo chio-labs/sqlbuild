@@ -11,7 +11,7 @@ import pytest
 
 from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.adapter.types import LifeCycleEventKind
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason

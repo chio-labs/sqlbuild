@@ -7,8 +7,8 @@ from typing import Any, cast, overload
 
 from sqlbuild.python_nodes.models import LoaderDefinition
 from sqlbuild.python_nodes.types import LoaderColumnSpec
-from sqlbuild.spec.models.source import SourceColumnEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceColumnEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 def _decorate_loader(

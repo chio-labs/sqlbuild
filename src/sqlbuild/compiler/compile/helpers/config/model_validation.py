@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
+from sqlbuild.compiler.compile.constants import SQL_WILDCARD_TOKEN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import CompileModelConfig
 from sqlbuild.compiler.planner.types import (
@@ -330,7 +331,7 @@ def validate_snapshot_config(
     if (
         strategy == SnapshotStrategy.CHECK
         and isinstance(check_columns, list)
-        and "*" in check_columns
+        and SQL_WILDCARD_TOKEN in check_columns
         and len(check_columns) != 1
     ):
         raise CompileInputError(
@@ -434,7 +435,7 @@ def validate_snapshot_config(
                 declared_column_names=declared_column_names,
                 model_name=model_name,
             )
-        if check_columns != ["*"]:
+        if check_columns != [SQL_WILDCARD_TOKEN]:
             _validate_declared_config_columns(
                 column_names=_string_sequence(check_columns),
                 config_key="check_columns",

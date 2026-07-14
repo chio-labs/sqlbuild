@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from sqlbuild.integrations.dagster.constants import (
+    DAGSTER_ASSET_NODE_KINDS,
+    DAGSTER_DIRECT_KIND_NODE_KINDS,
+    MODEL_NODE_KIND,
+    VIEW_MATERIALIZATION_TYPE,
+)
 from sqlbuild.integrations.dagster.helpers.imports import load_dagster
 from sqlbuild.integrations.dagster.translator import SqlBuildDagsterTranslator
-
-_ASSET_KINDS: frozenset[str] = frozenset(
-    {"source", "loader", "seed", "model", "udf", "table_fn", "task", "asset"}
-)
 
 
 def build_asset_specs(
@@ -24,7 +26,7 @@ def build_asset_specs(
     project_name: object = dag.get("project_name")
     specs: list[Any] = []
     for node in dag["nodes"]:
-        if str(node.get("kind")) not in _ASSET_KINDS:
+        if str(node.get("kind")) not in DAGSTER_ASSET_NODE_KINDS:
             continue
         translated_node: Mapping[str, Any] = {**node, "project_name": project_name}
         deps: list[Any] = []
@@ -124,11 +126,11 @@ def _upstream_by_id(dag: Mapping[str, Any]) -> dict[str, list[str]]:
 
 def _asset_spec_kinds(node: Mapping[str, Any]) -> set[str]:
     kind: str = str(node.get("kind"))
-    if kind == "model":
+    if kind == MODEL_NODE_KIND:
         materialization_type: str = str(node.get("materialization_type") or "table")
-        if materialization_type == "view":
+        if materialization_type == VIEW_MATERIALIZATION_TYPE:
             return {"sqlbuild", "view"}
         return {"sqlbuild", "table"}
-    if kind in {"source", "loader", "seed", "task", "asset", "udf", "table_fn"}:
+    if kind in DAGSTER_DIRECT_KIND_NODE_KINDS:
         return {"sqlbuild", kind}
     return {"sqlbuild"}

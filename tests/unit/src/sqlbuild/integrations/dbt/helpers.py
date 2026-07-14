@@ -17,7 +17,7 @@ from sqlbuild.adapter.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.helpers.diff.output import has_diff_failures
 from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
@@ -59,7 +59,11 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner, build_dbt_ls_argv
+from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
+    DbtCompileReferenceResolver,
+)
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
+from sqlbuild.integrations.dbt.helpers.cli.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt.helpers.graph.core import (
     build_dbt_combined_graph,
     dbt_model_graph_key,
@@ -67,7 +71,6 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
     sqlbuild_model_graph_key,
 )
 from sqlbuild.integrations.dbt.helpers.lineage.selection import select_dbt_lineage_target
-from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
@@ -90,9 +93,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtLineageDirection,
 )
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.schema import SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SchemaSeedEntry, SourceEntry
 
 
 def build_cli_overrides(

@@ -6,6 +6,7 @@ import json
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
+from sqlbuild.cli.commands.helpers.compile.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.compiler.compile.models.core import (
@@ -21,13 +22,14 @@ from sqlbuild.compiler.compile.models.sql_tests import (
     CompiledModelSqlTestPayload,
     CompiledSqlTest,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLocation
 from sqlbuild.compiler.diagnostics.types import DiagnosticSeverity
 from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.spec.models.schema import SourceLocation
+from sqlbuild.spec.contracts.models import SourceLocation
 
 _HUMAN_MODEL_LIMIT: int = 100
 _MIN_MODEL_NAME_WIDTH: int = 24
@@ -402,7 +404,10 @@ def _format_diagnostic_text(
     if diagnostic.resource_name is not None:
         label: str = "model"
         resource: str = diagnostic.resource_name
-        if diagnostic.resource_type is not None and str(diagnostic.resource_type) != "model":
+        if (
+            diagnostic.resource_type is not None
+            and str(diagnostic.resource_type) != CompiledResourceType.MODEL
+        ):
             label = "resource"
             resource = f"{diagnostic.resource_type}: {resource}"
         lines.append(f"  {label}: {style.object_name(resource)}")
@@ -529,8 +534,8 @@ def _execution_layer_count(graph: ProjectGraph) -> int:
 
 def _relative_target_path(path: Path) -> str:
     parts: tuple[str, ...] = path.parts
-    if "target" in parts:
-        target_index: int = parts.index("target")
+    if TARGET_DIRECTORY_NAME in parts:
+        target_index: int = parts.index(TARGET_DIRECTORY_NAME)
         return Path(*parts[target_index:]).as_posix()
     return path.as_posix()
 

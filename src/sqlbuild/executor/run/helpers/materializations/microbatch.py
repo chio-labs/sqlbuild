@@ -32,7 +32,8 @@ from sqlbuild.compiler.planner.types import (
     IncrementalStrategy,
     OnSchemaChange,
 )
-from sqlbuild.diagnostics.helpers.logging import diagnostics_context, log_debug_event
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.helpers.execution.final_audits import (

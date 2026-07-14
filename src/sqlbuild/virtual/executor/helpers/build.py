@@ -95,8 +95,9 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.spec.models.project import SnapshotsConfig
-from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
+from sqlbuild.spec.contracts.models import SnapshotsConfig
+from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.executor.classes.node_result_store import VirtualNodeResultStore
 from sqlbuild.virtual.executor.helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor.helpers.rewrite import (
@@ -127,7 +128,6 @@ from sqlbuild.virtual.freshness.main.runtime_persistence import (
     persist_virtual_environment_source_freshness,
 )
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
-from sqlbuild.virtual.helpers.encoding import encode_state_text
 from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
 from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_python_identities
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
@@ -140,6 +140,7 @@ from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.main.checkpoints.checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )
+from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.main.python_identities.python_node_identity_write import (
     try_record_virtual_python_node_identity,
@@ -1764,7 +1765,7 @@ def _build_node_ref_groups(
                 version_hash=ref.version_hash,
             )
             for ref in function_refs
-            if ref.node_type == "udf"
+            if ref.node_type == CompiledResourceType.UDF
         ),
         "table_fn": tuple(
             VirtualEnvironmentNodeRefRecord(
@@ -1774,7 +1775,7 @@ def _build_node_ref_groups(
                 version_hash=ref.version_hash,
             )
             for ref in function_refs
-            if ref.node_type == "table_fn"
+            if ref.node_type == CompiledResourceType.TABLE_FN
         ),
     }
 

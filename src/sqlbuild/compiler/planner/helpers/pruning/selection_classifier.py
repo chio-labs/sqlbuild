@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     SelectionStalenessGraph,
     SelectionStalenessNodeKey,
@@ -45,7 +46,7 @@ def classify_selection_staleness_warnings(
         triggers: tuple[str, ...] = _changed_upstream_names(
             graph=graph,
             model_key=SelectionStalenessNodeKey(
-                resource_type="model",
+                resource_type=CompiledResourceType.MODEL.value,
                 name=model_name,
             ),
         )
@@ -80,7 +81,7 @@ def _changed_upstream_names(
             return False, found_names, visiting_keys, stale_cache
         visiting_keys = visiting_keys | {upstream_key}
         is_stale: bool
-        if upstream_key.resource_type == "model":
+        if upstream_key.resource_type == CompiledResourceType.MODEL.value:
             in_run_set: bool = upstream_key.name in graph.run_model_names
             own_changed: bool = upstream_key.name in graph.changed_model_names
             if own_changed and not in_run_set:
@@ -99,12 +100,12 @@ def _changed_upstream_names(
                 is_stale = ancestor_stale
                 if ancestor_stale and not in_run_set and upstream_key != model_key:
                     found_names = found_names | {upstream_key.name}
-        elif upstream_key.resource_type == "seed":
+        elif upstream_key.resource_type == CompiledResourceType.SEED.value:
             changed: bool = upstream_key.name in graph.changed_seed_names
             if changed and upstream_key.name not in graph.run_seed_names:
                 found_names = found_names | {upstream_key.name}
             is_stale = changed
-        elif upstream_key.resource_type == "source":
+        elif upstream_key.resource_type == CompiledResourceType.SOURCE.value:
             changed = upstream_key.name in graph.changed_source_names
             if changed and upstream_key.name not in graph.run_source_names:
                 found_names = found_names | {upstream_key.name}
@@ -123,16 +124,16 @@ def _changed_upstream_names(
 def _run_parent_changed(
     *, graph: SelectionStalenessGraph, parent_key: SelectionStalenessNodeKey
 ) -> bool:
-    if parent_key.resource_type == "model":
+    if parent_key.resource_type == CompiledResourceType.MODEL.value:
         return (
             parent_key.name in graph.run_model_names
             and parent_key.name in graph.changed_model_names
         )
-    if parent_key.resource_type == "seed":
+    if parent_key.resource_type == CompiledResourceType.SEED.value:
         return (
             parent_key.name in graph.run_seed_names and parent_key.name in graph.changed_seed_names
         )
-    if parent_key.resource_type == "source":
+    if parent_key.resource_type == CompiledResourceType.SOURCE.value:
         return (
             parent_key.name in graph.run_source_names
             and parent_key.name in graph.changed_source_names

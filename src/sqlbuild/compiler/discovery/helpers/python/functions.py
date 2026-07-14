@@ -5,6 +5,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from sqlbuild.compiler.discovery.constants import (
+    PYTHON_UDF_DECORATOR_NAME,
+    PYTHON_UDF_IMPORT_MODULES,
+)
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 
 
@@ -77,9 +81,9 @@ def _as_udf_call(decorator: ast.expr) -> ast.Call | None:
     if not isinstance(decorator, ast.Call):
         return None
     function: ast.expr = decorator.func
-    if isinstance(function, ast.Name) and function.id == "udf":
+    if isinstance(function, ast.Name) and function.id == PYTHON_UDF_DECORATOR_NAME:
         return decorator
-    if isinstance(function, ast.Attribute) and function.attr == "udf":
+    if isinstance(function, ast.Attribute) and function.attr == PYTHON_UDF_DECORATOR_NAME:
         return decorator
     return None
 
@@ -107,7 +111,7 @@ def _build_warehouse_python_body(
 
 def _is_sqlbuild_udf_import(node: ast.stmt) -> bool:
     if isinstance(node, ast.ImportFrom):
-        return node.module in {"sqlbuild", "sqlbuild.functions"} and any(
-            alias.name == "udf" for alias in node.names
+        return node.module in PYTHON_UDF_IMPORT_MODULES and any(
+            alias.name == PYTHON_UDF_DECORATOR_NAME for alias in node.names
         )
     return False

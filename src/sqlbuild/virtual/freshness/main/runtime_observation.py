@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.virtual.freshness.helpers.runtime import (
     observe_virtual_environment_source_freshness as _observe_virtual_environment_source_freshness,
 )

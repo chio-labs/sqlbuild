@@ -14,6 +14,7 @@ from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.integrations.dbt.constants import DBT_SUCCESSFUL_RESULT_STATUSES
 from sqlbuild.integrations.dbt.models import (
     DbtFingerprintDestination,
     DbtNodeExecutionResult,
@@ -134,4 +135,4 @@ def build_dbt_fingerprint_destination(project: CompiledProject) -> DbtFingerprin
 
 
 def _is_successful_dbt_result(result: DbtNodeExecutionResult) -> bool:
-    return result.status.lower() in {"ok", "success", "pass", "passed"}
+    return result.status.lower() in DBT_SUCCESSFUL_RESULT_STATUSES

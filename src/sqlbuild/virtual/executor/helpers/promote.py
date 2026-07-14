@@ -420,7 +420,7 @@ def build_promote_ref_update(
                 version_hash=ref.version_hash,
             )
             for ref in function_refs
-            if ref.node_type == "udf"
+            if ref.node_type == CompiledResourceType.UDF
         )
         refs_by_node_type["table_fn"] = tuple(
             VirtualEnvironmentNodeRefRecord(
@@ -430,7 +430,7 @@ def build_promote_ref_update(
                 version_hash=ref.version_hash,
             )
             for ref in function_refs
-            if ref.node_type == "table_fn"
+            if ref.node_type == CompiledResourceType.TABLE_FN
         )
     return PromoteRefUpdate(
         virtual_environment_record=virtual_environment_record,

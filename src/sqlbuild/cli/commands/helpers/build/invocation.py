@@ -24,12 +24,10 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.models.project import TargetConfig
-from sqlbuild.spec.models.targets import (
-    resolve_effective_force,
-    resolve_target_config,
-    resolve_target_name,
-)
+from sqlbuild.spec.contracts.models import TargetConfig
+from sqlbuild.spec.resolution.main.resolve_effective_force import resolve_effective_force
+from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 
 
 def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation:

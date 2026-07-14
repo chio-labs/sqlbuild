@@ -12,7 +12,7 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_render_adapter(adapter_name: str | None) -> BaseAdapter | None:

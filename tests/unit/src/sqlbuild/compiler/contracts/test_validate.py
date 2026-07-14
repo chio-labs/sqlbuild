@@ -8,7 +8,7 @@ from sqlbuild.adapter.types import TypeDialect
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.models.schema import SourceLocation
+from sqlbuild.spec.contracts.models import SourceLocation
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import (
     ContractLocationTestCase,
     ContractMissingDeclarationsTestCase,

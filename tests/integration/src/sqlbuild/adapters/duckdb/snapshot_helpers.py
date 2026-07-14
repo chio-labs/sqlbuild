@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 
 
 class InsertFaultDuckDbAdapter(DuckDbAdapter):

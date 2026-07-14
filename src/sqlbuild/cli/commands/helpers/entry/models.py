@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.check.models import CheckCommandRequest
@@ -13,7 +14,6 @@ from sqlbuild.cli.commands.helpers.clone.models import CloneCommandRequest
 from sqlbuild.cli.commands.helpers.compile.models import CompileCommandRequest
 from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
-from sqlbuild.cli.commands.helpers.entry.namespace import CliNamespace  # noqa: F401
 from sqlbuild.cli.commands.helpers.entry.types import (
     DagCommandHandler,
     DebugCommandHandler,

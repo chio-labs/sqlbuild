@@ -13,9 +13,11 @@ if str(repo_root) not in sys.path:
 def main(argv: list[str] | None = None) -> int:
     """Run the structure convention checker CLI."""
 
-    from scripts.structure.structure_conventions.checker import main as checker_main
+    from scripts.structure.structure_conventions.main.check_structure_conventions import (
+        check_structure_conventions,
+    )
 
-    return checker_main(argv)
+    return check_structure_conventions(argv)
 
 
 if __name__ == "__main__":

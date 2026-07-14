@@ -10,17 +10,18 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.lineage.constants import STAR_COLUMN_NAME
 from sqlbuild.compiler.lineage.helpers.columns import (
     _build_schema_mapping,
     _build_star_lineage,
     _normalize_sqlbuild_refs,
-    _PhysicalResource,
 )
 from sqlbuild.compiler.lineage.models import (
     ColumnLineage,
     ColumnLineageEdge,
     ColumnLineageSource,
     ModelColumnLineage,
+    PhysicalResource,
     ProjectColumnLineage,
     QualifiedLineageColumn,
 )
@@ -40,7 +41,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_SET_OPERATION_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.lineage")
 
@@ -120,7 +121,7 @@ def _build_polyglot_fast_model_column_lineage(
             )
         if model.fast_lineage_has_star:
             normalized_sql: str
-            physical_resources: tuple[_PhysicalResource, ...]
+            physical_resources: tuple[PhysicalResource, ...]
             normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
             del normalized_sql
             lineages.extend(
@@ -141,7 +142,7 @@ def _build_polyglot_fast_model_column_lineage(
     if polyglot_module is None:
         return None
     normalized_sql: str
-    physical_resources: tuple[_PhysicalResource, ...]
+    physical_resources: tuple[PhysicalResource, ...]
     normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
     try:
         parsed: Any = polyglot_module.parse_one(normalized_sql, dialect=dialect or "generic")
@@ -164,11 +165,11 @@ def _build_polyglot_fast_model_column_lineage(
     if parsed_kind != POLYGLOT_KIND_SELECT:
         return None
 
-    alias_map: dict[str, _PhysicalResource] = _polyglot_table_alias_map(
+    alias_map: dict[str, PhysicalResource] = _polyglot_table_alias_map(
         parsed=parsed,
         physical_resources=physical_resources,
     )
-    unqualified_resource: _PhysicalResource | None = _single_alias_resource(alias_map)
+    unqualified_resource: PhysicalResource | None = _single_alias_resource(alias_map)
     lineages: list[ColumnLineage] = []
     has_star: bool = False
     projections: tuple[Any, ...] = tuple(getattr(parsed, "expressions", ()))
@@ -231,7 +232,7 @@ def _build_polyglot_union_model_column_lineage(
     model: CompiledModel,
     parsed: Any,
     schema: dict[str, dict[str, str]],
-    physical_resources: tuple[_PhysicalResource, ...],
+    physical_resources: tuple[PhysicalResource, ...],
 ) -> ModelColumnLineage | None:
     selects: tuple[Any, ...] = _polyglot_set_expression_selects(parsed)
     if not selects:
@@ -271,7 +272,7 @@ def _build_polyglot_union_model_column_lineage(
                     index=index,
                     inferred_names=inferred_names,
                 )
-            alias_map: dict[str, _PhysicalResource] = _polyglot_table_alias_map(
+            alias_map: dict[str, PhysicalResource] = _polyglot_table_alias_map(
                 parsed=select,
                 physical_resources=physical_resources,
             )
@@ -349,22 +350,22 @@ def _polyglot_set_expression_selects(expression: Any) -> tuple[Any, ...]:
 def _polyglot_table_alias_map(
     *,
     parsed: Any,
-    physical_resources: tuple[_PhysicalResource, ...],
-) -> dict[str, _PhysicalResource]:
-    physical_resource_by_name: dict[str, _PhysicalResource] = {
+    physical_resources: tuple[PhysicalResource, ...],
+) -> dict[str, PhysicalResource]:
+    physical_resource_by_name: dict[str, PhysicalResource] = {
         resource.physical_name: resource for resource in physical_resources
     }
     physical_resource_by_name.update(
         {resource.resource_name: resource for resource in physical_resources}
     )
-    alias_map: dict[str, _PhysicalResource] = {}
+    alias_map: dict[str, PhysicalResource] = {}
     try:
         tables: tuple[Any, ...] = tuple(parsed.find_all(POLYGLOT_KIND_TABLE))
     except Exception:
         return alias_map
     for table in tables:
         table_name: str = str(getattr(table, "name", "") or "")
-        resource: _PhysicalResource | None = physical_resource_by_name.get(table_name)
+        resource: PhysicalResource | None = physical_resource_by_name.get(table_name)
         if resource is None:
             continue
         alias_map[table_name] = resource
@@ -378,10 +379,10 @@ def _polyglot_projection_output_name(
     *, projection: Any, index: int, inferred_names: tuple[str, ...]
 ) -> str | None:
     raw_name: str = str(getattr(projection, "output_name", "") or "")
-    if raw_name and raw_name != "*":
+    if raw_name and raw_name != STAR_COLUMN_NAME:
         return raw_name
     raw_name = str(getattr(projection, "alias_or_name", "") or "")
-    if raw_name and raw_name != "*":
+    if raw_name and raw_name != STAR_COLUMN_NAME:
         return raw_name
     if index < len(inferred_names):
         return inferred_names[index]
@@ -391,8 +392,8 @@ def _polyglot_projection_output_name(
 def _polyglot_projection_upstream_columns(
     *,
     projection: Any,
-    alias_map: dict[str, _PhysicalResource],
-    unqualified_resource: _PhysicalResource | None,
+    alias_map: dict[str, PhysicalResource],
+    unqualified_resource: PhysicalResource | None,
 ) -> tuple[tuple[ColumnLineageSource, ...], ColumnLineageConfidence]:
     columns: list[ColumnLineageSource] = []
     seen: set[tuple[CompiledResourceType, str, str]] = set()
@@ -401,7 +402,7 @@ def _polyglot_projection_upstream_columns(
     for column_name, table_name in column_refs:
         if not column_name:
             continue
-        resource: _PhysicalResource | None = None
+        resource: PhysicalResource | None = None
         if table_name:
             resource = alias_map.get(table_name)
         elif unqualified_resource is not None:
@@ -429,8 +430,8 @@ def _polyglot_projection_upstream_columns(
     return tuple(columns), confidence
 
 
-def _single_alias_resource(alias_map: dict[str, _PhysicalResource]) -> _PhysicalResource | None:
-    resource: _PhysicalResource | None = None
+def _single_alias_resource(alias_map: dict[str, PhysicalResource]) -> PhysicalResource | None:
+    resource: PhysicalResource | None = None
     for candidate in alias_map.values():
         if resource is None:
             resource = candidate

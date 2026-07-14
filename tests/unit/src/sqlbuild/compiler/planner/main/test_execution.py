@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.helpers.sql import (
@@ -32,7 +32,7 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
     StandardScopePruning,
 )
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
     build_standard_reuse_from_target_project,
     build_standard_reuse_from_target_scope,

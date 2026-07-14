@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlbuild.compiler.source_freshness.constants import (
+    DURATION_DAY_UNIT,
+    DURATION_HOUR_UNIT,
+)
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
-from sqlbuild.spec.models.source import SourceFreshnessAgePolicy
+from sqlbuild.spec.contracts.models import SourceFreshnessAgePolicy
 
 
 def evaluate_source_freshness_age_policy(
@@ -40,8 +44,8 @@ def _align_timezone(*, data_version: datetime, observed_at: datetime) -> datetim
 def _duration_seconds(value: str) -> int:
     amount: int = int(value[:-1])
     unit: str = value[-1]
-    if unit == "d":
+    if unit == DURATION_DAY_UNIT:
         return amount * 24 * 60 * 60
-    if unit == "h":
+    if unit == DURATION_HOUR_UNIT:
         return amount * 60 * 60
     return amount * 60

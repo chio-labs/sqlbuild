@@ -163,8 +163,8 @@ def validate_source_expression_syntax(
 ) -> None:
     """Validate that a source expression is parseable as a FROM target."""
 
-    from sqlbuild.compiler.helpers.sources import render_source_relation
-    from sqlbuild.spec.models.source import SourceEntry
+    from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+    from sqlbuild.spec.contracts.models import SourceEntry
 
     rendered: str = render_source_relation(
         entry=SourceEntry(name=source_name, expression=expression)

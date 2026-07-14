@@ -9,7 +9,7 @@ from sqlbuild.cli.commands.helpers.load.selection import (
     select_load_reference_entries,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.cli.commands.helpers.load_selection._test_types import (
     LoadReferenceSelectionTestCase,
     LoadSelectionTestCase,

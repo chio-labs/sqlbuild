@@ -8,6 +8,7 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
+from sqlbuild.compiler.discovery.constants import NOT_NULL_AUDIT_NAME, SEEDS_DIRECTORY_NAME
 from sqlbuild.compiler.discovery.exceptions import SchemaParseError
 from sqlbuild.compiler.discovery.helpers.yml.primitives import (
     optional_bool,
@@ -17,7 +18,7 @@ from sqlbuild.compiler.discovery.helpers.yml.primitives import (
     parse_audit_instances,
     require_non_empty_string,
 )
-from sqlbuild.spec.models.schema import (
+from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
     SchemaModelEntry,
@@ -94,7 +95,7 @@ def _parse_seed_entries(
     *, payload: dict[str, object], file_path: Path
 ) -> tuple[SchemaSeedEntry, ...]:
     raw_seeds: object = payload.get("seeds", [])
-    if raw_seeds and "seeds" not in file_path.parts:
+    if raw_seeds and SEEDS_DIRECTORY_NAME not in file_path.parts:
         raise SchemaParseError(
             f"{file_path} declares seeds, but seed declarations must live under seeds/**/*.yml"
         )
@@ -364,7 +365,7 @@ def _parse_columns(
 def _validate_nullable_audits(
     *, file_path: Path, column_name: str, nullable: bool | None, audit_names: tuple[str, ...]
 ) -> None:
-    if nullable is True and "not_null" in audit_names:
+    if nullable is True and NOT_NULL_AUDIT_NAME in audit_names:
         raise SchemaParseError(
             f"{file_path} column '{column_name}' cannot set nullable = true and audit not_null"
         )

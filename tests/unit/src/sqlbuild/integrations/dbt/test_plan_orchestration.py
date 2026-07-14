@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner, build_dbt_ls_argv
+from sqlbuild.integrations.dbt.helpers.cli.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.planning.orchestration import plan_dbt_interop_command

@@ -31,7 +31,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotRelation,
     ScenarioSnapshotStateResult,
 )
-from sqlbuild.spec.models.schema import default_seed_csv_settings
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from tests.unit.src.sqlbuild.executor.scenario.helpers._test_types import (
     ExecuteScenarioSnapshotCaptureStepsTestCase,
     ScenarioSnapshotStateTestCase,
@@ -98,7 +98,7 @@ def build_snapshot_input_specs_test_plan(
                 destination=_target("seed", "currency_codes"),
                 file_path=Path("seeds/currency_codes.csv"),
                 columns=(),
-                csv_settings=default_seed_csv_settings,
+                csv_settings=DEFAULT_SEED_CSV_SETTINGS,
             ),
         ),
         model_entries=(

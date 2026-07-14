@@ -6,8 +6,8 @@ from datetime import datetime
 import pytest
 
 from sqlbuild.adapter.types import FrameworkType
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.helpers.sql import (
     build_create_table_sql,

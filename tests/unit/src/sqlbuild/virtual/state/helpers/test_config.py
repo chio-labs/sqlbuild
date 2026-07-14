@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.exceptions import SpecConfigError
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.exceptions import SpecConfigError
+from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
     SettingsConfig,

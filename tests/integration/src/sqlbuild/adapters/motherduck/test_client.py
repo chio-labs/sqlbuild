@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import QueryResult
-from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
+from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
 from tests.integration.src.sqlbuild.adapters.motherduck._test_types import (
     MotherDuckBuildFlowTestCase,
     MotherDuckQueryTestCase,

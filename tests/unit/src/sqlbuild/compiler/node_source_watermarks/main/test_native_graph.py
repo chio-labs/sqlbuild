@@ -16,7 +16,7 @@ from sqlbuild.compiler.node_source_watermarks.types import WatermarkGraphResourc
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.node_source_watermarks.main._test_types import (
     NativeNodeSourceWatermarkInputsTestCase,
 )

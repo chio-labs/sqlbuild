@@ -34,8 +34,12 @@ from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.refs import model, source
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    ProjectConfig,
+    SourceColumnEntry,
+    SourceEntry,
+)
 from sqlbuild.tasks import task
 
 

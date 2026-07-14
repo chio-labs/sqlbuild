@@ -11,22 +11,23 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import (
     DbtInteropConfigError,
     DbtInteropRuntimeError,
     DbtReuseUnavailableError,
 )
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.manifest.core import (
     precompute_dbt_manifest_seed_content_hashes,
 )
+from sqlbuild.integrations.dbt.helpers.reuse.constants import DBT_LOCAL_REMOTE
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
     DbtProductionRefCompileResult,
 )
 from sqlbuild.integrations.dbt.types import DbtReuseUnavailableReason
-from sqlbuild.spec.models.project import DbtProductionRefConfig
+from sqlbuild.spec.contracts.models import DbtProductionRefConfig
 
 _PRODUCTION_REF_MANIFEST_CACHE_VERSION: int = 2
 
@@ -393,7 +394,7 @@ def _remote_tracking_ref(*, git_root: Path, git_ref: str) -> tuple[str, str, str
     if remote_result.returncode != 0:
         return None
     remote: str = remote_result.stdout.strip()
-    if not remote or remote == ".":
+    if not remote or remote == DBT_LOCAL_REMOTE:
         return None
 
     merge_result: subprocess.CompletedProcess[str] = _run_git_text(

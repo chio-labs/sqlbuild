@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from tests.integration.src.sqlbuild.adapters.sqlserver.helpers import build_unique_schema_name
 
 

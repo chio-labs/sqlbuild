@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-import sqlbuild.adapter.capabilities.type_normalization as type_normalization
-from sqlbuild.adapter.capabilities.type_normalization import (
-    NormalizedType,
-    TypeFamily,
-    normalize_numeric_family,
-    normalize_type,
-    types_equal,
-)
+import sqlbuild.adapter.helpers.type_normalization as type_normalization
+from sqlbuild.adapter.main.normalize_numeric_family import normalize_numeric_family
+from sqlbuild.adapter.main.normalize_type import normalize_type
+from sqlbuild.adapter.main.types_equal import types_equal
+from sqlbuild.adapter.models import NormalizedType
+from sqlbuild.adapter.types import TypeFamily
 from tests.unit.src.sqlbuild.adapter.capabilities._test_types import (
     NumericFamilyTestCase,
     TypeEqualityTestCase,

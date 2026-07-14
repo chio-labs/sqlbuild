@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
-from sqlbuild.virtual.helpers.encoding import encode_state_text
+from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
 from sqlbuild.virtual.state.models import (
     PythonNodeVersionRecord,
     VirtualEnvironmentPythonNodeRefRecord,

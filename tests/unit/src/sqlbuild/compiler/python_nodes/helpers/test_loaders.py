@@ -18,8 +18,8 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeDependencyEdge,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.spec.models.source import SourceColumnEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceColumnEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.python_nodes.helpers._test_types import (
     PythonLoaderNodeConversionTestCase,
 )

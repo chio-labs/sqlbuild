@@ -12,7 +12,7 @@ from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
-from sqlbuild.spec.models.schema import SeedCsvSettings
+from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 class CloneFingerprintAdapter:

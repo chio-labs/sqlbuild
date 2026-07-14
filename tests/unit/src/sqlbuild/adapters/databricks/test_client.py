@@ -10,7 +10,7 @@ from sqlbuild.adapter.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapter.types import FunctionNullabilityRule, LoaderLogicalType
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,
     FunctionReturnColumn,

@@ -7,7 +7,10 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.types import AdapterExecute
-from sqlbuild.executor.node_results.constants import NODE_RESULTS_TABLE_NAME
+from sqlbuild.executor.node_results.constants import (
+    NODE_RESULT_MATERIALIZED_TRUE_VALUE,
+    NODE_RESULTS_TABLE_NAME,
+)
 from sqlbuild.executor.node_results.helpers.serialization import decode_json_b64
 from sqlbuild.executor.node_results.helpers.sql import build_read_history_sql
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultQuery
@@ -69,4 +72,4 @@ def _row_to_envelope(row: tuple[Any, ...]) -> NodeResultEnvelope:
 def _parse_materialized(value: object) -> bool | None:
     if value is None:
         return None
-    return str(value).lower() == "true"
+    return str(value).lower() == NODE_RESULT_MATERIALIZED_TRUE_VALUE

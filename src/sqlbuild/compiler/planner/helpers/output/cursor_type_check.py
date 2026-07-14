@@ -6,10 +6,11 @@ import logging
 from typing import Any
 
 from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.compiler.planner.constants import POLYGLOT_CUSTOM_DATA_TYPE_NAME
 from sqlbuild.compiler.planner.models import PlanWarning
 from sqlbuild.compiler.planner.types import CursorType, WarningSeverity
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 _TIMESTAMP_SUBSTRINGS: frozenset[str] = frozenset(
@@ -222,7 +223,7 @@ def _classify_type_with_polyglot(warehouse_type: str) -> CursorType | None:
 
     args: dict[str, Any] = dict(getattr(parsed, "args", {}) or {})
     type_name: str = str(args.get("data_type", "")).upper()
-    if type_name == "CUSTOM":
+    if type_name == POLYGLOT_CUSTOM_DATA_TYPE_NAME:
         type_name = str(args.get("name", "")).upper().replace("_", "")
 
     if type_name in _POLYGLOT_TIMESTAMP_TYPE_NAMES:

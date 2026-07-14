@@ -17,6 +17,10 @@ from pydantic import ValidationError
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.constants import (
+    PYTHON_FACTORY_FOLDER,
+    PYTHON_INIT_MODULE_STEM,
+    PYTHON_LOADER_FOLDER,
+    PYTHON_NODE_KIND_VOWELS,
     SCHEMA_FILE_NAME,
     SEED_FILE_SUFFIX,
     YAML_FILE_SUFFIXES,
@@ -73,8 +77,7 @@ from sqlbuild.python_nodes.models import (
     HookDefinition,
     TaskDefinition,
 )
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
 from sqlbuild.tasks import get_task_definition
 
 _PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")
@@ -381,7 +384,7 @@ def discover_materialization_files(
     discovered_files: list[DiscoveredMaterializationFile] = []
     file_path: Path
     for file_path in sorted(materializations_root.rglob("*.py")):
-        if file_path.stem == "__init__":
+        if file_path.stem == PYTHON_INIT_MODULE_STEM:
             continue
         materialize_fn: Callable[..., object] | None = _load_materialize_function(
             file_path=file_path,
@@ -473,7 +476,7 @@ def discover_hook_functions(
     provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
     file_path: Path
     for file_path in sorted(hooks_root.rglob("*.py")):
-        if file_path.stem == "__init__" or file_path.name.startswith("_"):
+        if file_path.stem == PYTHON_INIT_MODULE_STEM or file_path.name.startswith("_"):
             continue
         module: ModuleType = _load_python_node_module(
             file_path=file_path,
@@ -521,7 +524,7 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
     seen_names: dict[str, Path] = {}
     file_path: Path
     for file_path in sorted(providers_root.rglob("*.py")):
-        if file_path.stem == "__init__" or file_path.name.startswith("_"):
+        if file_path.stem == PYTHON_INIT_MODULE_STEM or file_path.name.startswith("_"):
             continue
         module: ModuleType = _load_provider_module(file_path=file_path, project_dir=project_dir)
         for _, value in inspect.getmembers(module, inspect.isclass):
@@ -651,11 +654,11 @@ def _discover_python_node_functions(
             continue
         file_path: Path
         for file_path in sorted(node_root.rglob("*.py")):
-            if file_path.stem == "__init__":
+            if file_path.stem == PYTHON_INIT_MODULE_STEM:
                 continue
             module: ModuleType = (
                 _load_loader_module(file_path=file_path, project_dir=project_dir)
-                if node_folder == "loaders"
+                if node_folder == PYTHON_LOADER_FOLDER
                 else _load_python_node_module(
                     file_path=file_path,
                     project_dir=project_dir,
@@ -682,7 +685,7 @@ def _append_module_python_nodes(
     node_folder: str,
     provider_by_name: dict[str, DiscoveredProvider],
 ) -> None:
-    if node_folder != "factories":
+    if node_folder != PYTHON_FACTORY_FOLDER:
         for _, value in inspect.getmembers(module, inspect.isfunction):
             if value.__module__ != module.__name__:
                 continue
@@ -872,7 +875,7 @@ def _validate_python_node_kind(
     relative_path: Path = file_path.relative_to(project_dir)
     folder: str = relative_path.parts[0]
     if factory_definition is None:
-        article: str = "an" if actual_kind[0] in {"a", "e", "i", "o", "u"} else "a"
+        article: str = "an" if actual_kind[0] in PYTHON_NODE_KIND_VOWELS else "a"
         raise PythonNodeDiscoveryError(
             f"Python node '{function_name}' in {folder}/ is {article} {actual_kind}; "
             f"{actual_kind}s must live in {actual_kind}s/ or be generated from factories/."

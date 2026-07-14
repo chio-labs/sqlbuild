@@ -14,6 +14,11 @@ from sqlbuild.compiler.planner.main.planning.selection import resolve_project_se
 from sqlbuild.compiler.planner.main.planning.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
+from sqlbuild.compiler.python_nodes.constants import (
+    PYTHON_NODE_PATH_ROOTS,
+    SQL_MODEL_PATH_ROOT,
+    TAG_NOT_FOUND_ERROR_CODE,
+)
 from sqlbuild.compiler.python_nodes.helpers.selectors import resolve_python_node_selectors
 from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonNode,
@@ -373,12 +378,12 @@ def _resolve_tag(
     try:
         atoms.update(_resolve_sql(raw=raw, project_graph=project_graph))
     except PlannerInputError as error:
-        if error.code != "S008":
+        if error.code != TAG_NOT_FOUND_ERROR_CODE:
             raise
     try:
         atoms.update(_resolve_python(raw=raw, python_graph=python_graph))
     except PlannerInputError as error:
-        if error.code != "S008":
+        if error.code != TAG_NOT_FOUND_ERROR_CODE:
             raise
     if not atoms:
         parsed: ParsedSelector | PathSelector = parse_project_selector(raw)
@@ -395,9 +400,9 @@ def _resolve_path(
         raise PlannerInputError(f"unsupported path selector '{raw}'")
     folder: str = parsed.value.replace("\\", "/").strip("/")
     root: str = folder.split("/", 1)[0]
-    if root == "models":
+    if root == SQL_MODEL_PATH_ROOT:
         return _resolve_sql(raw=raw, project_graph=project_graph)
-    if root in {"tasks", "assets", "checks", "loaders"}:
+    if root in PYTHON_NODE_PATH_ROOTS:
         return _resolve_python(raw=raw, python_graph=python_graph)
     raise PlannerInputError(
         PATH_SELECTOR_EXPLICIT_ROOT_ERROR,

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.lineage.models import ColumnLineage, ColumnLineageSource
+from sqlbuild.compiler.lineage.models import ColumnLineage, ColumnLineageSource, PhysicalResource
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
@@ -22,14 +21,7 @@ _SQLBUILD_UDF_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
-@dataclass(frozen=True)
-class _PhysicalResource:
-    resource_type: CompiledResourceType
-    resource_name: str
-    physical_name: str
-
-
-def _normalize_sqlbuild_refs(sql: str) -> tuple[str, tuple[_PhysicalResource, ...]]:
+def _normalize_sqlbuild_refs(sql: str) -> tuple[str, tuple[PhysicalResource, ...]]:
     def replace(match: re.Match[str]) -> str:
         kind: str = match.group("kind")
         name: str = match.group("name")
@@ -43,8 +35,8 @@ def _normalize_sqlbuild_refs(sql: str) -> tuple[str, tuple[_PhysicalResource, ..
         )
         return physical_name
 
-    resources: tuple[_PhysicalResource, ...] = tuple(
-        _PhysicalResource(
+    resources: tuple[PhysicalResource, ...] = tuple(
+        PhysicalResource(
             resource_type={
                 "ref": CompiledResourceType.MODEL,
                 "source": CompiledResourceType.SOURCE,
@@ -113,7 +105,7 @@ def _build_star_lineage(
     *,
     model: CompiledModel,
     schema: dict[str, dict[str, str]],
-    physical_resources: tuple[_PhysicalResource, ...],
+    physical_resources: tuple[PhysicalResource, ...],
     existing_columns: set[str],
 ) -> tuple[ColumnLineage, ...]:
     lineages: list[ColumnLineage] = []

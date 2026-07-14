@@ -5,6 +5,13 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from scripts.type_annotations.type_annotation_conventions.constants import (
+    DISCARDED_LOCAL_NAME,
+    ENUM_BASE_CLASS_NAMES,
+    EXEMPT_CLASS_ATTRIBUTE_NAMES,
+    EXEMPT_MODULE_VARIABLE_NAMES,
+    METHOD_RECEIVER_PARAMETER_NAMES,
+)
 from scripts.type_annotations.type_annotation_conventions.models import Violation
 
 
@@ -102,7 +109,11 @@ class _TypeAnnotationVisitor(ast.NodeVisitor):
     def _check_function_signature(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         positional_args: list[ast.arg] = [*node.args.posonlyargs, *node.args.args]
         exempt_parameter_name: str | None = None
-        if self._class_depth > 0 and positional_args and positional_args[0].arg in {"self", "cls"}:
+        if (
+            self._class_depth > 0
+            and positional_args
+            and positional_args[0].arg in METHOD_RECEIVER_PARAMETER_NAMES
+        ):
             exempt_parameter_name = positional_args[0].arg
 
         for parameter in [
@@ -156,7 +167,7 @@ class _TypeAnnotationVisitor(ast.NodeVisitor):
         ]:
             if parameter is None:
                 continue
-            if parameter.annotation is not None or parameter.arg in {"self", "cls"}:
+            if parameter.annotation is not None or parameter.arg in METHOD_RECEIVER_PARAMETER_NAMES:
                 names.add(parameter.arg)
         return names
 
@@ -191,7 +202,7 @@ class _TypeAnnotationVisitor(ast.NodeVisitor):
     def _check_local_assignment(self, node: ast.Assign | ast.AugAssign) -> None:
         current_scope: set[str] = self._function_scopes[-1]
         for target in _iter_simple_name_targets(node):
-            if target.id == "_":
+            if target.id == DISCARDED_LOCAL_NAME:
                 continue
             if target.id in current_scope:
                 continue
@@ -222,17 +233,17 @@ def _iter_simple_name_targets(node: ast.Assign | ast.AugAssign) -> list[ast.Name
 
 
 def _is_exempt_module_name(name: str) -> bool:
-    return name in {"__all__", "__match_args__", "__slots__", "__version__"}
+    return name in EXEMPT_MODULE_VARIABLE_NAMES
 
 
 def _is_exempt_class_name(name: str) -> bool:
-    return name in {"__match_args__", "__slots__", "__test__"}
+    return name in EXEMPT_CLASS_ATTRIBUTE_NAMES
 
 
 def _is_enum_class(node: ast.ClassDef) -> bool:
     for base in node.bases:
-        if isinstance(base, ast.Name) and base.id in {"Enum", "StrEnum"}:
+        if isinstance(base, ast.Name) and base.id in ENUM_BASE_CLASS_NAMES:
             return True
-        if isinstance(base, ast.Attribute) and base.attr in {"Enum", "StrEnum"}:
+        if isinstance(base, ast.Attribute) and base.attr in ENUM_BASE_CLASS_NAMES:
             return True
     return False

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.models import ColumnInfo
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledModel,
     CompiledObjectKey,
@@ -25,8 +25,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.models.schema import SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SchemaSeedEntry, SourceEntry
 
 
 class RecordingDuckDbAdapter(DuckDbAdapter):

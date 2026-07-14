@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

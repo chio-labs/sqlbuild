@@ -15,27 +15,40 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
+    DbtCompileReferenceResolver,
+)
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.cli.arg_parser import parse_dbt_execution_args
-from sqlbuild.integrations.dbt.helpers.cli.args import route_dbt_interop_args
-from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner, resolve_dbt_executable
-from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
-from sqlbuild.integrations.dbt.helpers.manifest.core import (
-    build_dbt_manifest_index,
-    load_dbt_manifest_index,
+from sqlbuild.integrations.dbt.main.cli.enforce_standard_mode import (
+    enforce_dbt_interop_standard_mode,
 )
-from sqlbuild.integrations.dbt.helpers.planning.orchestration import plan_dbt_interop_command
-from sqlbuild.integrations.dbt.helpers.planning.runtime import (
-    resolve_dbt_interop_adapter,
+from sqlbuild.integrations.dbt.main.cli.parse_execution_args import parse_dbt_execution_args
+from sqlbuild.integrations.dbt.main.cli.resolve_executable import resolve_dbt_executable
+from sqlbuild.integrations.dbt.main.cli.route_interop_args import route_dbt_interop_args
+from sqlbuild.integrations.dbt.main.config.resolve_plan_options import resolve_dbt_plan_options
+from sqlbuild.integrations.dbt.main.config.resolve_vars_mapping import resolve_dbt_vars_mapping
+from sqlbuild.integrations.dbt.main.graph.build_combined_graph import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.main.manifest.build_manifest_index import (
+    build_manifest_index as build_dbt_manifest_index,
+)
+from sqlbuild.integrations.dbt.main.manifest.load_manifest_index import (
+    load_manifest_index as load_dbt_manifest_index,
+)
+from sqlbuild.integrations.dbt.main.manifest.resolve_manifest_path import (
     resolve_dbt_manifest_path,
-    resolve_dbt_plan_options,
-    resolve_dbt_vars_mapping,
 )
-from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.helpers.reuse.production_ref import compile_production_ref_manifest
-from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
+from sqlbuild.integrations.dbt.main.planning.plan_interop_command import plan_dbt_interop_command
+from sqlbuild.integrations.dbt.main.profile.resolve_connection_config import (
+    resolve_connection_config,
+)
+from sqlbuild.integrations.dbt.main.reuse.compile_production_ref_manifest import (
+    compile_production_ref_dbt_manifest as compile_production_ref_manifest,
+)
+from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime.resolve_interop_adapter import (
+    resolve_dbt_interop_adapter,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -54,10 +67,14 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsResult,
     DbtProductionRefCompileResult,
 )
+from sqlbuild.integrations.dbt.pipeline.constants import DBT_FORCE_FLAG
 from sqlbuild.integrations.dbt.pipeline.helpers.plan_output import dbt_failure_detail
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtSupportedResourceType
-from sqlbuild.spec.models.project import DbtProductionRefConfig, resolve_effective_adapter_name
-from sqlbuild.spec.models.targets import resolve_effective_force
+from sqlbuild.spec.contracts.models import DbtProductionRefConfig
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
+from sqlbuild.spec.resolution.main.resolve_effective_force import resolve_effective_force
 
 
 def resolve_dbt_execution_invocation(
@@ -79,7 +96,7 @@ def resolve_dbt_execution_invocation(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
         selected_target=None,
-        cli_force="--force" in routed.sqlbuild_args,
+        cli_force=DBT_FORCE_FLAG in routed.sqlbuild_args,
     )
     effective_sqlbuild_args: tuple[str, ...] = _with_effective_force(
         args=routed.sqlbuild_args,
@@ -219,9 +236,9 @@ def resolve_dbt_interop_plan(
 
 
 def _with_effective_force(*, args: tuple[str, ...], force: bool) -> tuple[str, ...]:
-    if not force or "--force" in args:
+    if not force or DBT_FORCE_FLAG in args:
         return args
-    return (*args, "--force")
+    return (*args, DBT_FORCE_FLAG)
 
 
 def prepare_dbt_comparison_manifests(

@@ -19,7 +19,8 @@ from sqlbuild.adapter.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter, _BigQueryConnection
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,
     FunctionReturnColumn,

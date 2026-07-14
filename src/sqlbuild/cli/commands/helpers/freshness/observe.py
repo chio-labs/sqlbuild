@@ -35,8 +35,8 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
-from sqlbuild.spec.models.types import SourceFreshnessStrategy
+from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
 
 
 def observe_source_freshness_for_command(

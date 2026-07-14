@@ -13,7 +13,7 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
 )
 from sqlbuild.python_nodes.types import ColumnLineageRefSpec, PythonNodeColumnSpec
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 
 def _decorate_asset(

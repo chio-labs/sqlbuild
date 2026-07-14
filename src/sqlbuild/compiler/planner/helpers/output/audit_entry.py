@@ -22,7 +22,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
     assert_no_unresolved_sql_markers,
 )
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def plan_audit(

@@ -20,7 +20,7 @@ from sqlbuild.executor.load.models import (
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     SourceLoadExecutionContextTestCase,
     SourceLoadNoneReturnTestCase,

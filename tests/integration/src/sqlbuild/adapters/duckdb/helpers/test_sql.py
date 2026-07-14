@@ -4,7 +4,7 @@ import pytest
 
 from sqlbuild.adapter.models import CursorValue
 from sqlbuild.adapter.types import CursorKind
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from tests.integration.src.sqlbuild.adapters.duckdb.helpers._test_types import (
     BuildAttachSqlTestCase,
     BuildCursorFilterTestCase,

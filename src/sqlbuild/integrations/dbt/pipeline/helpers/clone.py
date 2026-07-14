@@ -17,9 +17,18 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_MATERIALIZATION_VIEW,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.manifest.core import dbt_manifest_model_materialization
+from sqlbuild.integrations.dbt.main.manifest.manifest_model_materialization import (
+    dbt_manifest_model_materialization,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import DbtCloneOptions, DbtLsNode
+from sqlbuild.integrations.dbt.pipeline.constants import (
+    DBT_CLONE_POSITIONAL_SELECT_TOKEN,
+    DBT_EXCLUDE_FLAG,
+    DBT_HARD_COPY_FLAG,
+    DBT_NO_SQL_VALIDATION_FLAG,
+    DBT_SELECT_FLAGS,
+)
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 
 
@@ -34,22 +43,22 @@ def parse_dbt_clone_options(args: tuple[str, ...]) -> DbtCloneOptions:
     index: int = 0
     while index < len(args):
         token: str = args[index]
-        if token in {"--select", "-s"}:
+        if token in DBT_SELECT_FLAGS:
             values: tuple[str, ...]
             values, index = _consume_multi_value(args=args, index=index)
             select.extend(values)
             dbt_args.extend((token, *values))
             continue
-        if token == "--exclude":
+        if token == DBT_EXCLUDE_FLAG:
             values, index = _consume_multi_value(args=args, index=index)
             exclude.extend(values)
             dbt_args.extend((token, *values))
             continue
-        if token == "--hard-copy":
+        if token == DBT_HARD_COPY_FLAG:
             hard_copy = True
             index += 1
             continue
-        if token == "--no-sql-validation":
+        if token == DBT_NO_SQL_VALIDATION_FLAG:
             no_sql_validation = True
             index += 1
             continue
@@ -58,7 +67,11 @@ def parse_dbt_clone_options(args: tuple[str, ...]) -> DbtCloneOptions:
             value, index = _consume_one_value(args=args, index=index)
             dbt_args.extend((token, value))
             continue
-        if token == "select" and index + 1 < len(args) and not args[index + 1].startswith("--"):
+        if (
+            token == DBT_CLONE_POSITIONAL_SELECT_TOKEN
+            and index + 1 < len(args)
+            and not args[index + 1].startswith("--")
+        ):
             selector: str = args[index + 1]
             raise DbtInteropArgumentError(
                 "unexpected positional argument 'select'",

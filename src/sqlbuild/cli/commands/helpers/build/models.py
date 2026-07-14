@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.build.progress import BuildProgressCallbacks
-from sqlbuild.cli.commands.helpers.build.python_lifecycle_state import StandardPythonLifecycleState
+from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
+from sqlbuild.cli.commands.classes.standard_python_lifecycle_state import (
+    StandardPythonLifecycleState,
+)
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
