@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.clone.types import CloneItemCallback, CloneStartCallback
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
 from sqlbuild.integrations.dbt.models import (
     DbtCloneOptions,
     DbtCloneRun,

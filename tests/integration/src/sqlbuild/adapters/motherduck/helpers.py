@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
+from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
 
 
 def build_motherduck_connection_config() -> dict[str, object]:

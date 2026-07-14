@@ -6,9 +6,9 @@ import re
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.references.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def render_audit_sql(

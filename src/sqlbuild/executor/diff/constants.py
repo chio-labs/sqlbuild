@@ -1,0 +1,11 @@
+"""Constants for diff execution."""
+
+BOUNDED_DIFF_DAY_UNIT: str = "d"
+BOUNDED_DIFF_HOUR_UNIT: str = "h"
+BOUNDED_DIFF_MINUTE_UNIT: str = "m"
+
+ROW_DIFF_ABSOLUTE_TOLERANCE_KEY: str = "absolute"
+ROW_DIFF_RELATIVE_TOLERANCE_KEY: str = "relative"
+ROW_DIFF_TOLERANCE_KEYS: frozenset[str] = frozenset(
+    (ROW_DIFF_ABSOLUTE_TOLERANCE_KEY, ROW_DIFF_RELATIVE_TOLERANCE_KEY)
+)

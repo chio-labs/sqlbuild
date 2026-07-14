@@ -7,8 +7,14 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from sqlbuild.cli.commands.helpers.entry.constants import SQLBUILD_CONCURRENCY_ENV_VAR
-from sqlbuild.cli.commands.helpers.entry.models import CliNamespace, ParsedCliInvocation
+from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.commands.helpers.entry.constants import (
+    DEBUG_OPTION,
+    EMPTY_ENV_VALUE,
+    NO_COLOR_OPTION,
+    SQLBUILD_CONCURRENCY_ENV_VAR,
+)
+from sqlbuild.cli.commands.helpers.entry.models import ParsedCliInvocation
 from sqlbuild.cli.commands.helpers.entry.types import CliCommand
 
 _DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
@@ -32,7 +38,7 @@ def resolve_env_default_concurrency(explicit_concurrency: int | None) -> int | N
     if explicit_concurrency is not None:
         return explicit_concurrency
     raw_value: str | None = os.environ.get(SQLBUILD_CONCURRENCY_ENV_VAR)
-    if raw_value is None or raw_value == "":
+    if raw_value is None or raw_value == EMPTY_ENV_VALUE:
         return None
     try:
         concurrency: int = int(raw_value)
@@ -74,10 +80,10 @@ def parse_cli_invocation(
             dbt_passthrough_args: list[str] = []
             dbt_arg: str
             for dbt_arg in unknown_args:
-                if dbt_arg == "--no-color":
+                if dbt_arg == NO_COLOR_OPTION:
                     args.no_color = True
                     continue
-                if dbt_arg == "--debug":
+                if dbt_arg == DEBUG_OPTION:
                     args.debug = True
                     continue
                 dbt_passthrough_args.append(dbt_arg)

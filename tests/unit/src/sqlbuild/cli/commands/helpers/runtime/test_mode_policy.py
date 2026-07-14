@@ -8,7 +8,7 @@ from sqlbuild.cli.commands.helpers.runtime.mode_policy import (
 )
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, SettingsConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SettingsConfig
 from tests.unit.src.sqlbuild.cli.commands.helpers.runtime._test_types import ModeGuardTestCase
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models.core import CompiledSource
 from sqlbuild.compiler.manifest.constants import RESOURCE_TYPE_SOURCE
 from sqlbuild.compiler.manifest.helpers.shared import build_source_columns_dict
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_source_node(

@@ -8,7 +8,7 @@ import pytest
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.exceptions import AdapterUserError
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from tests.unit.src.sqlbuild.adapter.classes.strict_adapter._test_types import (
     FirstClassAdapterImplementationContractTestCase,
     StrictAdapterContractTestCase,

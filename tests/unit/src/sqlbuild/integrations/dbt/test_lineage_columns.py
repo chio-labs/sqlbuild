@@ -30,7 +30,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtSourceSchemaInspectionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtLineageDirection, DbtLineageOutputFormat
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtColumnLineageErrorTestCase,
     DbtColumnLineageOutputTestCase,

@@ -14,6 +14,15 @@ from sqlbuild.compiler.lineage.types import (
 
 
 @dataclass(frozen=True)
+class PhysicalResource:
+    """A physical SQL identifier mapped to its SQLBuild resource."""
+
+    resource_type: CompiledResourceType
+    resource_name: str
+    physical_name: str
+
+
+@dataclass(frozen=True)
 class QualifiedLineageColumn:
     """A resource-qualified column in the collapsed SQLBuild lineage graph."""
 

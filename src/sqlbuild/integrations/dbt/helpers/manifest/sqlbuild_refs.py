@@ -40,3 +40,21 @@ def resolve_sqlbuild_model_dbt_refs(
                 )
             )
     return tuple(refs)
+
+
+def resolve_dbt_reference_relation(
+    *,
+    manifest: DbtManifestIndex | None,
+    ref_kind: str,
+    ref_name: str,
+    ref_package: str | None,
+) -> str | None:
+    """Resolve one external dbt reference to its manifest relation."""
+
+    if ref_kind != SqlReferenceKind.DBT_REF or manifest is None:
+        return None
+    return resolve_dbt_manifest_model(
+        manifest=manifest,
+        package_name=ref_package,
+        name=ref_name,
+    ).relation_name

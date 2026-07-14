@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from sqlbuild.adapters.postgres.client import PostgresAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[6]
 

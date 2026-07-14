@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.compile.constants import (
+    SQL_ARGUMENT_SEPARATOR_TOKEN,
+    SQL_CLOSE_PAREN_TOKEN,
+    SQL_OPEN_PAREN_TOKEN,
+    SQL_QUOTE_TOKENS,
+    SQL_REFERENCE_NAME_QUOTE_TOKENS,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import CompileSqlReference
-from sqlbuild.compiler.helpers.sql_scanning import (
-    find_matching_paren,
-    skip_block_comment,
-    skip_line_comment,
-    skip_quoted_text,
-)
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main.skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main.skip_line_comment import skip_line_comment
+from sqlbuild.compiler.sql_analysis.main.skip_quoted_text import skip_quoted_text
 
 _CONTEXT: str = "SQL reference"
 _REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (
@@ -42,7 +47,7 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
         if sql.startswith("/*", index):
             index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
-        if sql[index] in {"'", '"', "`"}:
+        if sql[index] in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
 
@@ -124,16 +129,16 @@ def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:
     index: int = 0
     while index < len(raw_arguments):
         character: str = raw_arguments[index]
-        if character in {"'", '"', "`"}:
+        if character in SQL_QUOTE_TOKENS:
             quoted_end: int = skip_quoted_text(sql=raw_arguments, start=index, context=_CONTEXT)
             current.append(raw_arguments[index:quoted_end])
             index = quoted_end
             continue
-        if character == "(":
+        if character == SQL_OPEN_PAREN_TOKEN:
             depth += 1
-        elif character == ")":
+        elif character == SQL_CLOSE_PAREN_TOKEN:
             depth -= 1
-        elif character == "," and depth == 0:
+        elif character == SQL_ARGUMENT_SEPARATOR_TOKEN and depth == 0:
             argument_text: str = "".join(current).strip()
             if argument_text:
                 arguments.append(argument_text)
@@ -155,11 +160,7 @@ def _parse_reference_name(*, raw_value: str, ref_kind: SqlReferenceKind) -> str:
     if (
         len(stripped_value) >= paired_quote_character_count
         and stripped_value[0] == stripped_value[-1]
-        and stripped_value[0]
-        in {
-            "'",
-            '"',
-        }
+        and stripped_value[0] in SQL_REFERENCE_NAME_QUOTE_TOKENS
     ):
         return stripped_value[1:-1]
     if (

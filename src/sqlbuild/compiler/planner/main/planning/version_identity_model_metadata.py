@@ -6,9 +6,17 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models.core import CompiledModel
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.constants import (
+    MODEL_CONTRACT_CONFIG_KEY,
+    MODEL_CUSTOM_CONFIG_KEY,
+    MODEL_PLACEHOLDERS_CONFIG_KEY,
+    MODEL_POST_HOOKS_CONFIG_KEY,
+    MODEL_PRE_HOOKS_CONFIG_KEY,
+)
 from sqlbuild.compiler.planner.main.planning.version_identity_metadata import (
     build_version_identity_metadata_json,
 )
+from sqlbuild.compiler.planner.types import ContractPolicy
 
 
 def build_model_version_identity_metadata_json(
@@ -43,19 +51,19 @@ def _model_execution_signature(model: CompiledModel) -> dict[str, object]:
     contract_signature: dict[str, object] | None = _contract_output_signature(model)
     if contract_signature is not None:
         signature["contract"] = contract_signature
-    if "config" in model.config.values:
-        signature["custom_config"] = model.config.values["config"]
-    if "placeholders" in model.config.values:
-        signature["custom_placeholders"] = model.config.values["placeholders"]
-    if "pre_hooks" in model.config.values:
-        signature["pre_hooks"] = model.config.values["pre_hooks"]
-    if "post_hooks" in model.config.values:
-        signature["post_hooks"] = model.config.values["post_hooks"]
+    if MODEL_CUSTOM_CONFIG_KEY in model.config.values:
+        signature["custom_config"] = model.config.values[MODEL_CUSTOM_CONFIG_KEY]
+    if MODEL_PLACEHOLDERS_CONFIG_KEY in model.config.values:
+        signature["custom_placeholders"] = model.config.values[MODEL_PLACEHOLDERS_CONFIG_KEY]
+    if MODEL_PRE_HOOKS_CONFIG_KEY in model.config.values:
+        signature["pre_hooks"] = model.config.values[MODEL_PRE_HOOKS_CONFIG_KEY]
+    if MODEL_POST_HOOKS_CONFIG_KEY in model.config.values:
+        signature["post_hooks"] = model.config.values[MODEL_POST_HOOKS_CONFIG_KEY]
     return signature
 
 
 def _contract_output_signature(model: CompiledModel) -> dict[str, object] | None:
-    if model.config.values.get("contract") != "enforced":
+    if model.config.values.get(MODEL_CONTRACT_CONFIG_KEY) != ContractPolicy.ENFORCED:
         return None
     schema_entry: Any | None = model.schema_entry
     if schema_entry is None or not schema_entry.columns:

@@ -13,7 +13,7 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
 )
 from sqlbuild.executor.pipeline.models import ResolvedBuildInputs
-from sqlbuild.spec.models.project import SettingsConfig
+from sqlbuild.spec.contracts.models import SettingsConfig
 
 
 def resolve_promotion_mode(

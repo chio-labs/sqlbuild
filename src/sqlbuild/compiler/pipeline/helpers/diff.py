@@ -9,16 +9,25 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.helpers.lineage_graph import (
+from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
+)
+from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.helpers.selector_indexes import (
-    build_model_path_index,
-    build_model_tag_index,
+from sqlbuild.compiler.pipeline.constants import (
+    MODEL_PATH_ROOT,
+    PATH_SELECTOR_PREFIX,
+    PATH_SEPARATORS,
 )
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.planning.build_model_path_index import (
+    build_model_path_index,
+)
+from sqlbuild.compiler.planner.main.planning.build_model_tag_index import (
+    build_model_tag_index,
+)
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
@@ -167,9 +176,11 @@ def _resolve_selector_token(
             upstream=upstream,
             downstream=downstream,
         )
-    if core.startswith("path:") or "/" in core or "\\" in core:
-        path_value: str = core.removeprefix("path:").replace("\\", "/").strip("/")
-        if path_value == "models":
+    if core.startswith(PATH_SELECTOR_PREFIX) or any(
+        separator in core for separator in PATH_SEPARATORS
+    ):
+        path_value: str = core.removeprefix(PATH_SELECTOR_PREFIX).replace("\\", "/").strip("/")
+        if path_value == MODEL_PATH_ROOT:
             path_value = ""
         elif path_value.startswith("models/"):
             path_value = path_value.removeprefix("models/")

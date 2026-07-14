@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.helpers.attachment.core import resolve_run_id
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.models import (
     LocalConfig,
     LocalTargetConfig,
     ProjectConfig,

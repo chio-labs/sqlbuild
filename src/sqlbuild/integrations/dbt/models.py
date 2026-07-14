@@ -33,8 +33,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.spec.models.project import DbtProductionRefConfig, ScenarioConfig
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import DbtProductionRefConfig, ScenarioConfig, SourceColumnEntry
 
 
 @dataclass(frozen=True)

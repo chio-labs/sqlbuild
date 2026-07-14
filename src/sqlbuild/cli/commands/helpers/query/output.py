@@ -11,19 +11,24 @@ from typing import Any
 from sqlbuild.adapter.models import QueryResult
 from sqlbuild.cli.exceptions import CliUserError
 
+_LONG_OUTPUT_FORMAT: str = "long"
+_TABLE_OUTPUT_FORMAT: str = "table"
+_JSON_OUTPUT_FORMAT: str = "json"
+_CSV_OUTPUT_FORMAT: str = "csv"
+
 
 def render_query_result(*, result: QueryResult, output_format: str, limit: int | None) -> str:
     """Render a query result using the requested output format."""
 
     if not result.columns:
         return "OK\n"
-    if output_format == "long":
+    if output_format == _LONG_OUTPUT_FORMAT:
         return render_long_query_result(result=result, limit=limit)
-    if output_format == "table":
+    if output_format == _TABLE_OUTPUT_FORMAT:
         return render_table_query_result(result=result, limit=limit)
-    if output_format == "json":
+    if output_format == _JSON_OUTPUT_FORMAT:
         return render_json_query_result(result)
-    if output_format == "csv":
+    if output_format == _CSV_OUTPUT_FORMAT:
         return render_csv_query_result(result)
     raise CliUserError(f"unsupported query output format '{output_format}'")
 

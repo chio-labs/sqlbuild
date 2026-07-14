@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.contracts.helpers.columns import collect_model_column_contract_diagnostics
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
+from sqlbuild.compiler.planner.types import ContractPolicy
 
 
 def evaluate_model_contracts(
@@ -17,7 +18,7 @@ def evaluate_model_contracts(
     """Evaluate model header column contracts against inferred output columns."""
 
     if not any(
-        model.config.values.get("contract") == "enforced"
+        model.config.values.get("contract") == ContractPolicy.ENFORCED
         or (model.schema_entry is not None and model.schema_entry.columns)
         for model in project.models
     ):

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapters.postgres.client import PostgresAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 
 
 def build_unique_schema_name(*, prefix: str) -> str:

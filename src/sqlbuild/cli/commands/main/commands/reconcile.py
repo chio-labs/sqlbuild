@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.constants import RECONCILE_ATTACH_COMMAND
 from sqlbuild.cli.commands.helpers.reconcile.output import format_reconcile_output
 from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.helpers.runtime.connection import (
@@ -16,7 +17,9 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 from sqlbuild.virtual.reconcile.main.reconcile import run_virtual_reconcile
 
 
@@ -52,7 +55,7 @@ def run_reconcile(
         project_dir=effective_project_dir,
         cli_vars=cli_vars,
     )
-    if reconcile_command == "attach" and not auto_approve:
+    if reconcile_command == RECONCILE_ATTACH_COMMAND and not auto_approve:
         if model_name is None:
             raise CliUserError("reconcile attach requires --model", code="C249")
         prompt: str = f"Type 'attach {model_name}' to confirm: "

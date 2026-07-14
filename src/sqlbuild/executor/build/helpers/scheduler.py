@@ -35,7 +35,8 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.diagnostics.helpers.logging import diagnostics_context, log_debug_event
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.constants import (
     BUILD_CUSTOM_MATERIALIZATION_MISSING_CODE,
@@ -70,11 +71,8 @@ from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersio
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main.execute import execute_function
-from sqlbuild.executor.helpers.load_execution import (
-    build_load_execution_indexes,
-    skipped_load_result,
-)
-from sqlbuild.executor.helpers.worker_completion import run_worker_with_completion
+from sqlbuild.executor.load.main.build_execution_indexes import build_load_execution_indexes
+from sqlbuild.executor.load.main.skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.main.execute import (
@@ -86,6 +84,7 @@ from sqlbuild.executor.run.main.execute import (
     execute_view_entry,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
+from sqlbuild.executor.scheduling.main.run_worker import run_worker_with_completion
 from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
 from sqlbuild.executor.seed.main.execute import execute_seed
 from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
@@ -95,8 +94,7 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
-from sqlbuild.spec.models.project import SnapshotsConfig
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SnapshotsConfig, SourceEntry
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 

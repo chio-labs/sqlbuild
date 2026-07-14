@@ -11,7 +11,7 @@ from sqlbuild.adapter.models import RelationLookup
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.janitor.models import JanitorRelationKey
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")

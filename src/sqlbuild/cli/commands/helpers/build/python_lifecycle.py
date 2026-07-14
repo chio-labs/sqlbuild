@@ -7,12 +7,14 @@ from datetime import datetime
 from typing import Any, TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.classes.standard_python_lifecycle_state import (
+    StandardPythonLifecycleState,
+)
 from sqlbuild.cli.commands.helpers.build.models import StandardLifecycleCallbacks
 from sqlbuild.cli.commands.helpers.build.python_lifecycle_selection import (
     python_node_result_names,
     task_asset_python_node_names,
 )
-from sqlbuild.cli.commands.helpers.build.python_lifecycle_state import StandardPythonLifecycleState
 from sqlbuild.cli.commands.helpers.build.python_node_output import write_python_node_results
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -43,7 +45,7 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import NodeStartCallback
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def prepare_standard_python_lifecycle(

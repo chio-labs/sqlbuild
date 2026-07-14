@@ -14,7 +14,9 @@ from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningPro
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 
 def resolve_clone_invocation(*, request: CloneCommandRequest) -> CloneInvocation:

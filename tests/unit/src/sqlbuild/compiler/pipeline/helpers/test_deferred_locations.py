@@ -6,14 +6,14 @@ from collections.abc import Callable
 
 import pytest
 
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledProject,
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.pipeline.helpers.deferred_locations import build_deferred_locations
-from sqlbuild.spec.models.project import TargetConfig
+from sqlbuild.spec.contracts.models import TargetConfig
 from tests.unit.src.sqlbuild.compiler.pipeline.helpers._test_types import (
     DeferredTargetTestCase,
 )

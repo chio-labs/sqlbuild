@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.models.core import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerAdapterDefaultsTestCase,

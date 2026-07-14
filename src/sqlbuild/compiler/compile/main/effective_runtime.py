@@ -7,11 +7,9 @@ from sqlbuild.compiler.compile.helpers.attachment.core import (
     resolve_run_id,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import TargetConfig
-from sqlbuild.spec.models.targets import (
-    resolve_target_config,
-    resolve_target_name,
-)
+from sqlbuild.spec.contracts.models import TargetConfig
+from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 
 
 def build_effective_runtime_config(

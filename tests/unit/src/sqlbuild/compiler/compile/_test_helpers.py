@@ -5,7 +5,7 @@ from sqlbuild.compiler.compile.models.sql_tests import (
     CompileSqlTestInput,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
+from sqlbuild.integrations.dbt.main.manifest.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
 

@@ -15,12 +15,12 @@ from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.helpers.load_execution import load_resource_kind
 from sqlbuild.executor.load.helpers.cursors import (
     exclusive_cursor_end,
     format_cursor_bound,
     load_staging_cursor_bounds,
 )
+from sqlbuild.executor.load.helpers.execution import load_resource_kind
 from sqlbuild.executor.load.helpers.external import execute_external_source_load
 from sqlbuild.executor.load.helpers.loader_invocation import (
     build_loader_context,
@@ -39,8 +39,8 @@ from sqlbuild.executor.load.models import (
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import invoke_with_providers
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 def execute_source_load(

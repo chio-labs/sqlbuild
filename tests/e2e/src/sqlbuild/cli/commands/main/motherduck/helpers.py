@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
+from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
 from tests.integration.src.sqlbuild.adapters.motherduck.helpers import (
     build_motherduck_connection_config,
     build_unique_schema_name,

@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import gettempdir
 from typing import Any
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models.core import (
@@ -54,9 +54,13 @@ from sqlbuild.compiler.planner.models import (
     StandardModelVersionIdentities,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, SettingsConfig
-from sqlbuild.spec.models.schema import SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    ProjectConfig,
+    SchemaSeedEntry,
+    SettingsConfig,
+    SourceEntry,
+)
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,

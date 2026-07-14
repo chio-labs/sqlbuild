@@ -16,7 +16,7 @@ from sqlbuild.adapter.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.models.core import (
     FunctionArgument,
     FunctionReturnColumn,

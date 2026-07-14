@@ -10,6 +10,8 @@ from sqlbuild.compiler.compile.constants import (
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
+    SQL_ARGUMENT_SEPARATOR_TOKEN,
+    SQL_OPEN_PAREN_TOKEN,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.analysis.ctes import (
@@ -27,7 +29,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
 )
-from sqlbuild.compiler.helpers.sql_scanning import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
 
 _CONTEXT: str = "SQL scenario"
 
@@ -73,12 +75,12 @@ def _extract_sql_scenario_ctes_with_scanner(
         seen_cte_names.add(cte_name)
 
         index = _skip_ignorable(sql=sql, start=index)
-        if index < len(sql) and sql[index] == "(":
+        if index < len(sql) and sql[index] == SQL_OPEN_PAREN_TOKEN:
             index = find_matching_paren(sql=sql, open_paren_index=index, context=_CONTEXT) + 1
             index = _skip_ignorable(sql=sql, start=index)
         index = _consume_keyword(sql=sql, start=index, keyword="AS", file_label=file_label)
         index = _skip_ignorable(sql=sql, start=index)
-        if index >= len(sql) or sql[index] != "(":
+        if index >= len(sql) or sql[index] != SQL_OPEN_PAREN_TOKEN:
             raise CompileInputError(
                 f"SQL scenario '{file_label}' CTE '{cte_name}' must use AS (...)"
             )
@@ -91,7 +93,7 @@ def _extract_sql_scenario_ctes_with_scanner(
             )
         )
         index = _skip_ignorable(sql=sql, start=cte_body_end + 1)
-        if index < len(sql) and sql[index] == ",":
+        if index < len(sql) and sql[index] == SQL_ARGUMENT_SEPARATOR_TOKEN:
             index = _skip_ignorable(sql=sql, start=index + 1)
             continue
         break

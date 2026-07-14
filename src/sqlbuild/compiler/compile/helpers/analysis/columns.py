@@ -9,6 +9,15 @@ from typing import Any, cast
 
 from sqlbuild.adapter.models import ExpressionInferenceProfile
 from sqlbuild.adapter.types import FunctionNullabilityRule
+from sqlbuild.compiler.compile.constants import (
+    DECIMAL_SQL_TYPE_NAME,
+    FULL_JOIN_SIDE,
+    LEFT_JOIN_SIDE,
+    RESOLVED_SOURCE_CONFIDENCE,
+    RIGHT_JOIN_SIDE,
+    SQL_WILDCARD_TOKEN,
+    UNKNOWN_SQL_TYPE_NAME,
+)
 from sqlbuild.compiler.compile.models.core import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
@@ -198,7 +207,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
@@ -391,7 +400,7 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         if bool(projection.get(_POLYGLOT_ANALYSIS_IS_STAR)):
             continue
         output_column: str = str(projection.get(_POLYGLOT_ANALYSIS_NAME) or "")
-        if not output_column or output_column == "*":
+        if not output_column or output_column == SQL_WILDCARD_TOKEN:
             continue
         columns.append(
             InferredColumn(
@@ -526,10 +535,10 @@ def _compact_analysis_has_star(analysis: dict[str, Any]) -> bool:
 
 def _compact_projection_type(projection: dict[str, Any]) -> str | None:
     cast_type: object = projection.get(_POLYGLOT_ANALYSIS_CAST_TYPE)
-    if isinstance(cast_type, str) and cast_type and cast_type != "UNKNOWN":
+    if isinstance(cast_type, str) and cast_type and cast_type != UNKNOWN_SQL_TYPE_NAME:
         return cast_type
     type_hint: object = projection.get(_POLYGLOT_ANALYSIS_TYPE_HINT)
-    if isinstance(type_hint, str) and type_hint and type_hint != "UNKNOWN":
+    if isinstance(type_hint, str) and type_hint and type_hint != UNKNOWN_SQL_TYPE_NAME:
         return type_hint
     return None
 
@@ -566,7 +575,7 @@ def _compact_lineage_upstream_columns(
         if not isinstance(upstream, dict):
             continue
         column_name: object = upstream.get(_POLYGLOT_PAYLOAD_COLUMN)
-        if not isinstance(column_name, str) or not column_name or column_name == "*":
+        if not isinstance(column_name, str) or not column_name or column_name == SQL_WILDCARD_TOKEN:
             continue
         source_name: object = upstream.get(_POLYGLOT_ANALYSIS_SOURCE_NAME) or upstream.get(
             _POLYGLOT_ANALYSIS_TABLE
@@ -579,7 +588,7 @@ def _compact_lineage_upstream_columns(
             continue
         source_confidence: object = upstream.get(_POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE)
         source_alias: object = upstream.get(_POLYGLOT_ANALYSIS_SOURCE_ALIAS)
-        if source_confidence != "resolved" and not isinstance(source_alias, str):
+        if source_confidence != RESOLVED_SOURCE_CONFIDENCE and not isinstance(source_alias, str):
             confidence = ColumnLineageConfidence.MEDIUM
         resource_type, resource_name = resource
         key: tuple[CompiledResourceType, str, str] = (resource_type, resource_name, column_name)
@@ -683,7 +692,7 @@ def _infer_columns_from_polyglot_ast(
         if bool(getattr(projection, "is_star", False)):
             continue
         name: str = str(getattr(projection, "output_name", "") or "")
-        if not name or name == "*":
+        if not name or name == SQL_WILDCARD_TOKEN:
             continue
         inner: Any = (
             projection.this
@@ -758,7 +767,7 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
             has_star = True
             continue
         output_column: str = str(getattr(projection, "output_name", "") or "")
-        if not output_column or output_column == "*":
+        if not output_column or output_column == SQL_WILDCARD_TOKEN:
             continue
         col_type: str | None = _polyglot_cast_type(inner)
         nullability: InferredNullability = InferredNullability.UNKNOWN
@@ -830,7 +839,7 @@ def _extract_polyglot_lineage_facts(
             has_star = True
             continue
         output_column: str = str(getattr(projection, "output_name", "") or "")
-        if not output_column or output_column == "*":
+        if not output_column or output_column == SQL_WILDCARD_TOKEN:
             continue
         upstream_columns, confidence = _polyglot_lineage_upstream_columns(
             projection=projection,
@@ -1054,7 +1063,7 @@ def _polyglot_cast_type(expression: Any) -> str | None:
     type_name: str = _polyglot_type_name(raw_type)
     precision: object = target.get(_POLYGLOT_PAYLOAD_PRECISION)
     scale: object = target.get(_POLYGLOT_PAYLOAD_SCALE)
-    if type_name == "DECIMAL" and isinstance(precision, int):
+    if type_name == DECIMAL_SQL_TYPE_NAME and isinstance(precision, int):
         if isinstance(scale, int):
             return f"DECIMAL({precision}, {scale})"
         return f"DECIMAL({precision})"
@@ -1671,13 +1680,13 @@ def _alias_nullability_from_select(
             continue
         joined_alias: str = _table_alias_or_name(joined_table)
         side: str = str(join.args.get("side") or "").upper()
-        if side == "LEFT":
+        if side == LEFT_JOIN_SIDE:
             alias_nullability[joined_alias] = InferredNullability.NULLABLE
-        elif side == "RIGHT":
+        elif side == RIGHT_JOIN_SIDE:
             for alias in current_aliases:
                 alias_nullability[alias] = InferredNullability.NULLABLE
             alias_nullability[joined_alias] = InferredNullability.UNKNOWN
-        elif side == "FULL":
+        elif side == FULL_JOIN_SIDE:
             for alias in current_aliases:
                 alias_nullability[alias] = InferredNullability.NULLABLE
             alias_nullability[joined_alias] = InferredNullability.NULLABLE

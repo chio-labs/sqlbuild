@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.build.progress import (
+from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
     format_build_footer,
 )

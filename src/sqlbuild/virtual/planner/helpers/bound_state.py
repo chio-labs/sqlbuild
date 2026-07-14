@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
-from sqlbuild.spec.models.targets import resolve_target_name
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.freshness.main.current_records import (
     build_current_virtual_source_freshness_records,
 )

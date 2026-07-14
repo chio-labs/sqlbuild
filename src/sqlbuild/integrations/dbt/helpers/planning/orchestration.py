@@ -12,10 +12,15 @@ from sqlbuild.compiler.planner.main.planning.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.compiler.planner.models import SelectorExpansion
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.manifest.sqlbuild_refs import (
     resolve_sqlbuild_model_dbt_refs,
+)
+from sqlbuild.integrations.dbt.helpers.planning.constants import (
+    DBT_DATA_TEST_SELECTOR,
+    DBT_PATH_SELECTOR_SEPARATOR,
+    DBT_UNIT_TEST_SELECTOR,
 )
 from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
@@ -135,7 +140,7 @@ def _is_dbt_anchor_term(*, term: str, project: CompiledProject) -> bool:
     parsed: SelectorExpansion = split_selector_expansion(term)
     if not parsed.downstream:
         return False
-    if "~" in parsed.core:
+    if DBT_PATH_SELECTOR_SEPARATOR in parsed.core:
         return False
     return not _matches_sqlbuild_direct_selector(term=parsed.core, project=project)
 
@@ -255,9 +260,9 @@ def resolve_sqlbuild_test_actions(
     term: str
     for term in select:
         parsed: SelectorExpansion = split_selector_expansion(term)
-        if parsed.core == "test_type:data":
+        if parsed.core == DBT_DATA_TEST_SELECTOR:
             has_data_selector = True
-        elif parsed.core == "test_type:unit":
+        elif parsed.core == DBT_UNIT_TEST_SELECTOR:
             has_unit_selector = True
     if has_data_selector and not has_unit_selector:
         return (DbtInteropSqlbuildTestAction.AUDIT,)

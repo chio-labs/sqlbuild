@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.executor.types import ExecutionStatus
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 
 @dataclass(frozen=True)

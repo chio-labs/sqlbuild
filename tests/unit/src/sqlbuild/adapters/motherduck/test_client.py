@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
+from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
 from tests.unit.src.sqlbuild.adapters.motherduck._test_types import (
     MotherDuckAdapterDefaultsTestCase,
     MotherDuckConnectionDatabaseTestCase,

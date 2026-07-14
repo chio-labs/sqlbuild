@@ -197,10 +197,10 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=(),
         ),
         CheckPathsTestCase(
-            description="allows oversized adapter client source file",
+            description="allows oversized adapter class source file",
             repo_files=compliant_repo_files()
             | {
-                "src/sqlbuild/adapters/example/client.py": "class ExampleAdapter:\n    pass\n"
+                "src/sqlbuild/adapters/example/classes/example_adapter.py": "class ExampleAdapter:\n    pass\n"
                 + "    FILLER = 'implementation detail'\n" * 2000,
             },
             expected_violation_codes=(),
@@ -278,7 +278,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                     f"src/sqlbuild/example/widget/helpers/module_{index}.py": (
                         f"def build_{index}() -> int:\n    return {index}\n"
                     )
-                    for index in range(11)
+                    for index in range(12)
                 },
             },
             expected_violation_codes=("SC050",),
@@ -291,7 +291,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                     f"src/sqlbuild/example/widget/helpers/module_{index}.py": (
                         f"def build_{index}() -> int:\n    return {index}\n"
                     )
-                    for index in range(11)
+                    for index in range(12)
                 },
             },
             expected_violation_codes=("SC050",),
@@ -501,7 +501,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=("SC017",),
         ),
         CheckPathsTestCase(
-            description="allows the compiler top-level helpers package",
+            description="reports the compiler top-level helpers package",
             repo_files=compliant_repo_files()
             | {
                 "src/sqlbuild/compiler/helpers/__init__.py": '"""Helpers."""\n',
@@ -509,7 +509,7 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
                     "def render_source() -> str:\n    return 'source'\n"
                 ),
             },
-            expected_violation_codes=(),
+            expected_violation_codes=("SC017",),
         ),
         CheckPathsTestCase(
             description="reports banned generic filename",
@@ -1494,12 +1494,12 @@ from tests.unit.scripts.structure.check_structure_conventions.helpers import (
             expected_violation_codes=("SC033",),
         ),
         CheckPathsTestCase(
-            description="allows cross-domain diagnostics logging helper import",
+            description="allows cross-domain diagnostics logging main import",
             repo_files=compliant_repo_files()
             | {
                 "src/sqlbuild/example/main/run.py": dedent(
                     """
-                from sqlbuild.diagnostics.helpers.logging import log_debug_event
+                from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 
                 def run() -> None:

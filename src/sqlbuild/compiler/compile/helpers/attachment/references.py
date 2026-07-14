@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild.compiler.compile.constants import TABLE_FUNCTION_RETURN_KEYS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models.core import (
     CompileSqlReference,
@@ -307,4 +308,4 @@ def build_known_table_function_names(discovered_inputs: DiscoveredProjectInputs)
 
 
 def _is_table_function_returns(raw_returns: object) -> bool:
-    return isinstance(raw_returns, dict) and set(raw_returns) == {"table"}
+    return isinstance(raw_returns, dict) and set(raw_returns) == TABLE_FUNCTION_RETURN_KEYS

@@ -19,14 +19,14 @@ from sqlbuild.adapter.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapter.types import FunctionNullabilityRule
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
 from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
 from tests.integration.src.sqlbuild.adapters.databricks._test_types import (

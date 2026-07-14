@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 
 _ENV_KEYS: tuple[str, ...] = (
     "SQB_TEST_SNOWFLAKE_ACCOUNT",

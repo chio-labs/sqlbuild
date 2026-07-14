@@ -10,7 +10,7 @@ import pytest
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredSourceFile
 from sqlbuild.integrations.ingestr.main.loaders import build_ingestr_loader_functions
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
-from sqlbuild.spec.models.source import IntegrationLoaderConfig, SourceEntry
+from sqlbuild.spec.contracts.models import IntegrationLoaderConfig, SourceEntry
 from tests.unit.src.sqlbuild.integrations.ingestr._test_types import (
     IngestrLoaderDiscoveryTestCase,
 )

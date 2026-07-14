@@ -10,7 +10,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

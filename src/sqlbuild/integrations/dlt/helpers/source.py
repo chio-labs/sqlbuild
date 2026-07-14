@@ -5,6 +5,14 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, cast
 
+from sqlbuild.integrations.dlt.constants import (
+    DLT_FILESYSTEM_READER_CSV,
+    DLT_FILESYSTEM_READER_JSONL,
+    DLT_FILESYSTEM_READER_PARQUET,
+    DLT_SOURCE_TYPE_FILESYSTEM,
+    DLT_SOURCE_TYPE_REST_API,
+    DLT_SOURCE_TYPE_SQL_DATABASE,
+)
 from sqlbuild.integrations.dlt.exceptions import DltIntegrationError
 from sqlbuild.integrations.dlt.models import DltSourceConfig
 
@@ -12,11 +20,11 @@ from sqlbuild.integrations.dlt.models import DltSourceConfig
 def build_dlt_source(config: DltSourceConfig) -> Any:
     """Build a dlt source/resource for one declarative SQLBuild resource."""
 
-    if config.source_type == "sql_database":
+    if config.source_type == DLT_SOURCE_TYPE_SQL_DATABASE:
         return _build_sql_database_source(config)
-    if config.source_type == "rest_api":
+    if config.source_type == DLT_SOURCE_TYPE_REST_API:
         return _build_rest_api_source(config)
-    if config.source_type == "filesystem":
+    if config.source_type == DLT_SOURCE_TYPE_FILESYSTEM:
         return _build_filesystem_resource(config)
     raise DltIntegrationError(f"Unsupported dlt source type '{config.source_type}'")
 
@@ -68,11 +76,11 @@ def _build_filesystem_resource(config: DltSourceConfig) -> Any:
     source_config: dict[str, object] = deepcopy(config.config)
     filesystem_factory: Any = filesystem
     resource: Any = filesystem_factory(**cast(Any, source_config))
-    if reader == "csv":
+    if reader == DLT_FILESYSTEM_READER_CSV:
         return resource | read_csv().with_name(config.resource.dlt_name)
-    if reader == "jsonl":
+    if reader == DLT_FILESYSTEM_READER_JSONL:
         return resource | read_jsonl().with_name(config.resource.dlt_name)
-    if reader == "parquet":
+    if reader == DLT_FILESYSTEM_READER_PARQUET:
         return resource | read_parquet().with_name(config.resource.dlt_name)
     raise DltIntegrationError(
         f"dlt filesystem source '{config.resource.name}' reader must be one of: csv, jsonl, parquet"

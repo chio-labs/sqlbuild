@@ -1,0 +1,1 @@
+"""Core adapter implementation helpers."""

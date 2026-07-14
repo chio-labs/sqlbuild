@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.checks import get_check_definition
-from sqlbuild.compiler.discovery.constants import RESERVED_MODEL_NAMES
+from sqlbuild.compiler.discovery.constants import CURRENT_DIRECTORY_PATH, RESERVED_MODEL_NAMES
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedDiscoveryError
 from sqlbuild.compiler.discovery.helpers.integrations.loaders import integration_loader_name
 from sqlbuild.compiler.discovery.models import (
@@ -32,8 +32,7 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
     TaskDefinition,
 )
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
 from sqlbuild.tasks import get_task_definition
 
 
@@ -786,7 +785,7 @@ def _validate_path_defaults_match_models(
             {
                 str(Path(model_path).parent)
                 for model_path in model_paths
-                if str(Path(model_path).parent) != "."
+                if str(Path(model_path).parent) != CURRENT_DIRECTORY_PATH
             }
         )
     )

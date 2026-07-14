@@ -12,49 +12,27 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
+from sqlbuild.integrations.dbt.helpers.runtime.constants import (
+    DBT_ERROR_LEVEL,
+    DBT_NODE_FINISHED_EVENT,
+    DBT_NODE_MESSAGE_EVENT_NAMES,
+    DBT_NODE_MESSAGE_LEVELS,
+    DBT_NODE_STARTED_EVENT_NAMES,
+    DBT_OUTCOME_STATUSES,
+    DBT_RESULT_EVENT_NAMES,
+    DBT_START_STATUSES,
+    DBT_STATUS_ERROR_VALUES,
+    DBT_STATUS_OK_VALUES,
+    DBT_STATUS_PASS_VALUES,
+    DBT_STATUS_SKIP_VALUES,
+    DBT_STATUS_WARN_VALUES,
+    DBT_WARN_LEVEL,
+)
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 
-_RESULT_EVENT_NAMES: frozenset[str] = frozenset(
-    {
-        "LogModelResult",
-        "LogSeedResult",
-        "LogSnapshotResult",
-        "LogTestResult",
-        "LogBatchResult",
-        "LogFunctionResult",
-        "NodeFinished",
-    }
-)
-
-_NODE_MESSAGE_EVENT_NAMES: frozenset[str] = frozenset(
-    {
-        "RunResultError",
-        "RunResultFailure",
-        "RunResultWarning",
-        "GenericExceptionOnRun",
-    }
-)
-
-_NODE_STARTED_EVENT_NAMES: frozenset[str] = frozenset({"LogStartLine", "NodeStarted"})
-
-_DBT_OUTCOME_STATUSES: frozenset[str] = frozenset(
-    {
-        "error",
-        "fail",
-        "failed",
-        "ok",
-        "pass",
-        "passed",
-        "skip",
-        "skipped",
-        "success",
-        "warn",
-        "warning",
-    }
-)
 _DBT_DURATION_WIDTH: int = 7
 _DBT_STATUS_REFRESH_SECONDS: float = 1.0
 
@@ -366,7 +344,7 @@ def parse_dbt_node_start_message(*, event: dict[str, object]) -> str | None:
 
     info: dict[str, object] = _dict_value(event.get("info"))
     event_name: str | None = _str_value(info.get("name"))
-    if event_name not in _NODE_STARTED_EVENT_NAMES:
+    if event_name not in DBT_NODE_STARTED_EVENT_NAMES:
         return None
     data: dict[str, object] = _dict_value(event.get("data"))
     node_info: dict[str, object] = _dict_value(data.get("node_info"))
@@ -383,7 +361,7 @@ def parse_dbt_node_start_result(*, event: dict[str, object]) -> DbtNodeExecution
 
     info: dict[str, object] = _dict_value(event.get("info"))
     event_name: str | None = _str_value(info.get("name"))
-    if event_name not in _NODE_STARTED_EVENT_NAMES:
+    if event_name not in DBT_NODE_STARTED_EVENT_NAMES:
         return None
     data: dict[str, object] = _dict_value(event.get("data"))
     node_info: dict[str, object] = _dict_value(data.get("node_info"))
@@ -422,7 +400,7 @@ def parse_dbt_node_message(*, event: dict[str, object]) -> DbtNodeMessage | None
     data: dict[str, object] = _dict_value(event.get("data"))
     event_name: str | None = _str_value(info.get("name"))
     level: str | None = _str_value(info.get("level"))
-    if event_name not in _NODE_MESSAGE_EVENT_NAMES and level not in {"warn", "error"}:
+    if event_name not in DBT_NODE_MESSAGE_EVENT_NAMES and level not in DBT_NODE_MESSAGE_LEVELS:
         return None
     if _event_unique_id(event) is None:
         return None
@@ -442,13 +420,13 @@ def parse_dbt_node_result(
     info: dict[str, object] = _dict_value(event.get("info"))
     data: dict[str, object] = _dict_value(event.get("data"))
     event_name: str | None = _str_value(info.get("name"))
-    if event_name not in _RESULT_EVENT_NAMES:
+    if event_name not in DBT_RESULT_EVENT_NAMES:
         return None
     node_info: dict[str, object] = _dict_value(data.get("node_info"))
     unique_id: str | None = _str_value(node_info.get("unique_id"))
     if unique_id is None or unique_id.startswith("unit_test"):
         return None
-    if event_name == "NodeFinished":
+    if event_name == DBT_NODE_FINISHED_EVENT:
         run_result: dict[str, object] = _dict_value(data.get("run_result"))
         status: str | None = _str_value(run_result.get("status")) or _str_value(
             node_info.get("node_status")
@@ -531,7 +509,7 @@ def render_dbt_node_result(
         + "\n"
     )
     for message in result.messages:
-        message_status: str = "warn" if message.level == "warn" else "error"
+        message_status: str = DBT_WARN_LEVEL if message.level == DBT_WARN_LEVEL else DBT_ERROR_LEVEL
         stream.write(f"         {style.status(status=message_status):<9} {message.message}\n")
     stream.flush()
 
@@ -544,17 +522,17 @@ def _node_detail(*, unique_id: str, detail_by_unique_id: dict[str, str] | None) 
 
 def _display_status(status: str) -> str:
     normalized: str = status.lower()
-    if normalized in {"ok", "success"}:
+    if normalized in DBT_STATUS_OK_VALUES:
         return "OK"
-    if normalized in {"pass", "passed"}:
+    if normalized in DBT_STATUS_PASS_VALUES:
         return "PASS"
-    if normalized in {"warn", "warning"}:
+    if normalized in DBT_STATUS_WARN_VALUES:
         return "WARN"
-    if normalized in {"skip", "skipped"}:
+    if normalized in DBT_STATUS_SKIP_VALUES:
         return "SKIP"
-    if normalized in {"error", "fail", "failed"}:
+    if normalized in DBT_STATUS_ERROR_VALUES:
         return "FAIL"
-    if normalized == "start":
+    if normalized in DBT_START_STATUSES:
         return "START"
     return status.upper()
 
@@ -567,7 +545,7 @@ def _trusted_status(value: object | None) -> str | None:
     status: str | None = _str_value(value)
     if status is None:
         return None
-    return status if status.lower() in _DBT_OUTCOME_STATUSES else None
+    return status if status.lower() in DBT_OUTCOME_STATUSES else None
 
 
 def _dict_value(value: object | None) -> dict[str, object]:

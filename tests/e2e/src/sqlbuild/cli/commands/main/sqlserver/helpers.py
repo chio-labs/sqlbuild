@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerDependencyBaselineE2ETestCase,
 )

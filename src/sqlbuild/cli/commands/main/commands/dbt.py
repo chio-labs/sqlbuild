@@ -6,6 +6,11 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild.cli.commands.constants import (
+    DBT_CLI_OUTPUT_OPTIONS,
+    DBT_JSON_OUTPUT_OPTION,
+    DBT_VERBOSE_OPTIONS,
+)
 from sqlbuild.cli.commands.helpers.dbt.auto_init import (
     ensure_sqlbuild_project_for_dbt_command,
 )
@@ -15,7 +20,7 @@ from sqlbuild.cli.commands.main.commands.dbt_diff import run_dbt_diff_command
 from sqlbuild.cli.commands.main.commands.dbt_lineage import run_dbt_lineage_command
 from sqlbuild.cli.commands.main.commands.dbt_scenario import run_dbt_scenario_command
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
-from sqlbuild.integrations.dbt.main.validate_execution_args import validate_dbt_execution_args
+from sqlbuild.integrations.dbt.main.cli.validate_execution_args import validate_dbt_execution_args
 from sqlbuild.integrations.dbt.models import DbtInteropExecutionRequest, DbtInteropPlan
 from sqlbuild.integrations.dbt.pipeline.main.execute import execute_dbt_interop_from_project
 from sqlbuild.integrations.dbt.pipeline.main.plan import plan_dbt_interop_from_project
@@ -80,11 +85,9 @@ def _run_dbt_plan(
 ) -> int:
     """Execute `sqb dbt plan`."""
 
-    json_output: bool = "--json" in args
-    verbose: bool = "--verbose" in args or "-v" in args
-    routed_args: tuple[str, ...] = tuple(
-        arg for arg in args if arg not in {"--json", "--verbose", "-v"}
-    )
+    json_output: bool = DBT_JSON_OUTPUT_OPTION in args
+    verbose: bool = any(option in args for option in DBT_VERBOSE_OPTIONS)
+    routed_args: tuple[str, ...] = tuple(arg for arg in args if arg not in DBT_CLI_OUTPUT_OPTIONS)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     use_color: bool = not no_color and not json_output and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
@@ -119,11 +122,9 @@ def _run_dbt_plan(
 def _run_dbt_execution_command(
     *, command: DbtInteropCommand, project_dir: Path | None, args: tuple[str, ...], no_color: bool
 ) -> int:
-    verbose: bool = "--verbose" in args or "-v" in args
-    json_output: bool = "--json" in args
-    routed_args: tuple[str, ...] = tuple(
-        arg for arg in args if arg not in {"--json", "--verbose", "-v"}
-    )
+    verbose: bool = any(option in args for option in DBT_VERBOSE_OPTIONS)
+    json_output: bool = DBT_JSON_OUTPUT_OPTION in args
+    routed_args: tuple[str, ...] = tuple(arg for arg in args if arg not in DBT_CLI_OUTPUT_OPTIONS)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     use_color: bool = not no_color and not json_output and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout

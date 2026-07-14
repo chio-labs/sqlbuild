@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild.integrations.dlt.constants import DLT_FORCE_PROGRESS_COUNTER_NAMES
 from sqlbuild.integrations.dlt.models import DltProgressCounter, DltProgressEvent
 
 
@@ -101,7 +102,7 @@ class SqlbuildDltProgressCollector:
     def _emit_live_progress(self, counter: DltProgressCounter) -> None:
         message: str = f"dlt {self._display_step(counter.step)}: {self._format_counter(counter)}"
         self._emit_live_message(
-            message=message, force=counter.name in {"Resources", "Files", "Jobs"}
+            message=message, force=counter.name in DLT_FORCE_PROGRESS_COUNTER_NAMES
         )
 
     def _emit_live_message(self, *, message: str, force: bool = False) -> None:

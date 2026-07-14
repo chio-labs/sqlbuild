@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+from sqlbuild.cli.commands.classes.load_progress_reporter import LoadProgressReporter
 from sqlbuild.cli.commands.helpers.input.parsing import (
     parse_cursor_integer,
     parse_cursor_timestamp,
@@ -14,7 +15,6 @@ from sqlbuild.cli.commands.helpers.load.models import (
     LoadInvocation,
     LoadRunOutcome,
 )
-from sqlbuild.cli.commands.helpers.load.progress import LoadProgressReporter
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (
@@ -22,6 +22,7 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
+from sqlbuild.executor.types import ExecutionStatus
 
 
 def execute_load_plan(
@@ -89,7 +90,7 @@ def execute_load_plan(
     return LoadRunOutcome(
         results=results,
         elapsed=time.monotonic() - start,
-        success_count=sum(1 for result in results if result.status.value == "success"),
-        fail_count=sum(1 for result in results if result.status.value == "failed"),
-        skip_count=sum(1 for result in results if result.status.value == "skipped"),
+        success_count=sum(1 for result in results if result.status == ExecutionStatus.SUCCESS),
+        fail_count=sum(1 for result in results if result.status == ExecutionStatus.FAILED),
+        skip_count=sum(1 for result in results if result.status == ExecutionStatus.SKIPPED),
     )

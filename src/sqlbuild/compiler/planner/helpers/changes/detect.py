@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner.constants import EMPTY_FINGERPRINT_METADATA_JSON
 from sqlbuild.compiler.planner.helpers.changes.config import get_config_str
 from sqlbuild.compiler.planner.helpers.changes.metadata import version_identity_metadata_payload
 from sqlbuild.compiler.planner.helpers.changes.policy import (
@@ -43,7 +44,8 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
-from sqlbuild.diagnostics.helpers.logging import log_debug_event, log_sql
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
+from sqlbuild.diagnostics.main.log_sql import log_sql
 
 
 def detect_changes(
@@ -149,7 +151,7 @@ def detect_model_changes(
     query_changed: bool = False
     config_changed: bool = (
         fingerprint is not None
-        and fingerprint.metadata_json != "{}"
+        and fingerprint.metadata_json != EMPTY_FINGERPRINT_METADATA_JSON
         and version_identity_metadata_payload(metadata_json)
         != version_identity_metadata_payload(fingerprint.metadata_json)
     )

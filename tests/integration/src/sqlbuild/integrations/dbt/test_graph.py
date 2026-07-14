@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.graph.core import (
     build_dbt_combined_graph,
     dbt_model_graph_key,

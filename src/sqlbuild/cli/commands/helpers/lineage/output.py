@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild.cli.commands.helpers.lineage.constants import (
+    BOTH_DIRECTIONS,
+    DOWNSTREAM_DIRECTION,
+    UPSTREAM_DIRECTION,
+)
 from sqlbuild.cli.commands.helpers.lineage.models import (
     ColumnLineageTrace,
     LineageGraph,
@@ -19,6 +24,7 @@ from sqlbuild.compiler.lineage.main.render_dependency_tree import render_depende
 from sqlbuild.compiler.lineage.main.serialize_column import serialize_column
 from sqlbuild.compiler.lineage.main.serialize_column_edge import serialize_column_edge
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
+from sqlbuild.compiler.lineage.types import ColumnTransformKind
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
 _HUMAN_COLUMN_TRACE_LIMIT: int = 25
@@ -123,11 +129,11 @@ def format_lineage_tree(*, graph: LineageGraph, use_color: bool = True) -> str:
     lines: list[str] = [
         f"{title}  {_format_node(node=node_by_key[focus], style=style)}  {direction}"
     ]
-    if graph.direction in {"upstream", "both"}:
+    if graph.direction in {UPSTREAM_DIRECTION, BOTH_DIRECTIONS}:
         upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
         for parent, child in graph.edges:
             upstream.setdefault(child, []).append(parent)
-        if graph.direction == "both":
+        if graph.direction == BOTH_DIRECTIONS:
             lines.append(style.object_name("upstream"))
         lines.extend(
             render_dependency_tree(
@@ -140,11 +146,11 @@ def format_lineage_tree(*, graph: LineageGraph, use_color: bool = True) -> str:
                 already_shown=lambda: style.muted(" (already shown)"),
             )
         )
-    if graph.direction in {"downstream", "both"}:
+    if graph.direction in {DOWNSTREAM_DIRECTION, BOTH_DIRECTIONS}:
         downstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
         for parent, child in graph.edges:
             downstream.setdefault(parent, []).append(child)
-        if graph.direction == "both":
+        if graph.direction == BOTH_DIRECTIONS:
             lines.append(style.object_name("downstream"))
         lines.extend(
             render_dependency_tree(
@@ -177,7 +183,7 @@ def format_column_lineage_tree(
     if not trace.trace:
         lines.append(style.muted("  No column dependencies found"))
         return "\n".join(lines)
-    is_downstream: bool = trace.direction == "downstream"
+    is_downstream: bool = trace.direction == DOWNSTREAM_DIRECTION
     deps: dict[str, list[ColumnLineageEdge]] = {}
     for edge in trace.trace[:_HUMAN_COLUMN_TRACE_LIMIT]:
         key_column: QualifiedLineageColumn = edge.source if is_downstream else edge.target
@@ -249,7 +255,7 @@ def _format_transform(*, edge: ColumnLineageEdge, style: CliStyle) -> str:
 
 
 def _human_transform_label(edge: ColumnLineageEdge) -> str:
-    if str(edge.transform_kind) == "star":
+    if str(edge.transform_kind) == ColumnTransformKind.STAR:
         return "from SELECT *"
     return str(edge.transform_kind)
 

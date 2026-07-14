@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner.helpers.resolve._test_types import (
     ResolveAndExecuteTestCase,
     ResolveSourceTestCase,

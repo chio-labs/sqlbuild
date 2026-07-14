@@ -11,8 +11,12 @@ from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessAgePolicy, SourceFreshnessConfig
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.models import (
+    SourceEntry,
+    SourceFreshnessAgePolicy,
+    SourceFreshnessConfig,
+)
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
 class FreshnessRecordingAdapter:

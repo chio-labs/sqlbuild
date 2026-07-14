@@ -40,7 +40,9 @@ from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
+
+_IGNORED_EXCLUDE_SELECTOR_ERROR_CODES: frozenset[str] = frozenset({"S007", "S008", "S009"})
 
 
 def resolve_selected_check_names(
@@ -349,7 +351,7 @@ def _resolve_python_check_excludes(
                     )
                 )
             except PlannerInputError as error:
-                if error.code in {"S007", "S008", "S009"}:
+                if error.code in _IGNORED_EXCLUDE_SELECTOR_ERROR_CODES:
                     continue
                 raise
     return frozenset(excluded)

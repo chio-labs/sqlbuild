@@ -5,11 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import TargetConfig
-from sqlbuild.spec.models.targets import (
-    resolve_target_config,
-    resolve_target_name,
-)
+from sqlbuild.spec.contracts.models import TargetConfig
+from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
+from sqlbuild.virtual.state.constants import DUCKDB_MEMORY_DATABASE
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import StateBackendConfig
 from sqlbuild.virtual.state.types import StateBackendName
@@ -71,7 +70,7 @@ def _resolve_connection_config(
         backend == StateBackendName.DUCKDB
         and isinstance(database, str)
         and not Path(database).is_absolute()
-        and database != ":memory:"
+        and database != DUCKDB_MEMORY_DATABASE
     ):
         config["database"] = str(project_dir / database)
     return config

@@ -34,15 +34,17 @@ from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
     ScenarioConfig,
+    SchemaModelEntry,
+    SchemaSeedEntry,
     SettingsConfig,
+    SourceEntry,
+    SourceLocation,
     TargetConfig,
 )
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
-from sqlbuild.spec.models.source import SourceEntry
 
 if TYPE_CHECKING:
     from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest, CompileSqlTestInput

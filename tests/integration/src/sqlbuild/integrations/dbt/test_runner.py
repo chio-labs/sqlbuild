@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsResult
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import RealDbtRunnerTestCase
 

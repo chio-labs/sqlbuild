@@ -16,8 +16,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.schema import default_seed_csv_settings
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class BuildSchemaPreflightAdapter(BaseAdapter):
@@ -74,7 +74,7 @@ def build_schema_preflight_plan() -> PlanOutput:
                 destination=_location(schema="dev", name="statuses"),
                 file_path=Path("seeds/statuses.csv"),
                 columns=(ColumnInfo(name="id", type="INTEGER"),),
-                csv_settings=default_seed_csv_settings,
+                csv_settings=DEFAULT_SEED_CSV_SETTINGS,
             ),
         ),
         source_load_entries=(

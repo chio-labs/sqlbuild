@@ -13,16 +13,16 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.helpers.load_execution import (
-    build_source_downstream_names,
-    build_source_upstream_names,
-    dependency_node_names,
-)
 from sqlbuild.executor.load.helpers.dag_runtime import (
     build_load_dag_state,
     complete_dag_source,
     execute_ready_dag_source,
     load_dag_worker,
+)
+from sqlbuild.executor.load.helpers.execution import (
+    build_source_downstream_names,
+    build_source_upstream_names,
+    dependency_node_names,
 )
 from sqlbuild.executor.load.models import (
     ExternalLoadPhaseResult,
@@ -34,8 +34,9 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.load.types import LoadProgressCallback
+from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def validate_external_loaders_are_preconnect_runnable(
@@ -119,8 +120,8 @@ def run_external_source_loads(
             ),
         )
         preloaded_results.append(result)
-        if result.status.value == "failed" or (
-            result.status.value == "skipped" and result.skip_mode == SkipMode.HARD
+        if result.status == ExecutionStatus.FAILED or (
+            result.status == ExecutionStatus.SKIPPED and result.skip_mode == SkipMode.HARD
         ):
             failed_or_hard_skipped.add(external_source.name)
         if callbacks.on_load_complete is not None:

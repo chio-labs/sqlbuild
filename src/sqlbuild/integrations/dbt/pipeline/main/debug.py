@@ -7,10 +7,14 @@ from typing import TextIO
 
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.config.core import resolve_dbt_config
-from sqlbuild.integrations.dbt.helpers.planning.runtime import parse_dbt_config_overrides
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
+from sqlbuild.integrations.dbt.main.cli.enforce_standard_mode import (
+    enforce_dbt_interop_standard_mode,
+)
+from sqlbuild.integrations.dbt.main.config.parse_config_overrides import (
+    parse_dbt_config_overrides,
+)
+from sqlbuild.integrations.dbt.main.config.resolve_config import resolve_dbt_config
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, ResolvedDbtConfig
 
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

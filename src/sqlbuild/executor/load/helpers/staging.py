@@ -7,13 +7,14 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.types import LoaderLogicalType
+from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.executor.load.helpers.rows import (
     build_rows_sql,
     iter_loader_row_batches,
     update_loader_rows_schema,
 )
 from sqlbuild.executor.load.models import LoaderRowsSchema
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def write_loader_rows_to_staging(
@@ -47,7 +48,7 @@ def write_loader_rows_to_staging(
             columns=source_entry.columns,
             column_names=column_names,
             inferred_types=inferred_types,
-            contract_enforced=source_entry.contract == "enforced",
+            contract_enforced=source_entry.contract == ContractPolicy.ENFORCED,
         )
         column_names = schema.column_names
         inferred_types = schema.inferred_types

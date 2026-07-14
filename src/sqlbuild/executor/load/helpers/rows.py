@@ -11,7 +11,7 @@ from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.adapter.types import LoaderLogicalType
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoaderRowsSchema
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 
 def normalize_loader_rows(value: object) -> tuple[dict[str, object], ...]:

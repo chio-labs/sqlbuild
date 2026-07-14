@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
     build_databricks_connection_config,
     build_unique_schema_name,

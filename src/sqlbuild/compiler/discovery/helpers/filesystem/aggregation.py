@@ -34,7 +34,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredTaskFunction,
 )
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
 def build_discovered_project_inputs(

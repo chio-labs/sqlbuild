@@ -16,7 +16,7 @@ from sqlbuild.executor.run.helpers.reuse.audit import (
     reused_final_audit_results_by_binding_key,
 )
 from sqlbuild.executor.run.models import FinalAuditRun, ModelMaterializationContext
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def run_final_model_audits(

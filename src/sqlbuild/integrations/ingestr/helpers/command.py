@@ -7,10 +7,11 @@ from dataclasses import replace
 from typing import cast
 
 from sqlbuild.compiler.compile.main.expand_template_data import expand_template_data
+from sqlbuild.integrations.ingestr.constants import INGESTR_INTEGRATION_KIND
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 from sqlbuild.integrations.ingestr.helpers.destination import build_destination_uri
 from sqlbuild.integrations.ingestr.models import IngestrSourceConfig
-from sqlbuild.spec.models.source import IntegrationLoaderConfig, SourceEntry
+from sqlbuild.spec.contracts.models import IntegrationLoaderConfig, SourceEntry
 
 
 def resolve_ingestr_config(
@@ -64,7 +65,7 @@ def build_ingestr_command(
     """Build the ingestr CLI command for one source entry."""
 
     integration_loader: IntegrationLoaderConfig | None = source_entry.integration_loader
-    if integration_loader is None or integration_loader.kind != "ingestr":
+    if integration_loader is None or integration_loader.kind != INGESTR_INTEGRATION_KIND:
         raise IngestrIntegrationError(
             f"Source '{source_entry.name}' does not define ingestr config"
         )

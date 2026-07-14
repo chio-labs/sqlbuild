@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from sqlbuild.cli.commands.classes.dbt_init_progress_reporter import DbtInitProgressReporter
 from sqlbuild.cli.commands.helpers.dbt_init.branch_detection import (
     detect_default_production_git_ref,
 )
@@ -12,10 +13,9 @@ from sqlbuild.cli.commands.helpers.dbt_init.models import (
     DbtInitCommandRequest,
     DbtInitInvocation,
 )
-from sqlbuild.cli.commands.helpers.dbt_init.progress import DbtInitProgressReporter
 from sqlbuild.cli.commands.helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.cli.exceptions import CliUserError
-from sqlbuild.integrations.dbt.main.profile_init import _validate_dbt_profile_init_request
+from sqlbuild.integrations.dbt.main.profile.profile_init import _validate_dbt_profile_init_request
 from sqlbuild.integrations.dbt.models import DbtInitProgressCallbacks, DbtInitRequest
 from sqlbuild.presentation.main.supports_color import supports_color
 

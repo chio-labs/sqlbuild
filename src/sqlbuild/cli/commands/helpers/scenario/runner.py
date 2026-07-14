@@ -20,6 +20,8 @@ from sqlbuild.cli.commands.helpers.scenario.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
+    SQL_ANALYSIS_CONFIG_KEY,
+    SQL_VALIDATION_CONFIG_KEY,
     SUCCESS_STATUS,
 )
 from sqlbuild.cli.commands.helpers.scenario.dialect import require_scenario_capture_dialect
@@ -67,8 +69,10 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
+)
+from sqlbuild.spec.resolution.main.resolve_effective_scenario_config import (
     resolve_effective_scenario_config,
 )
 
@@ -295,12 +299,12 @@ def _effective_sql_analysis_and_validation_enabled(
     setting_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
     sql_analysis_enabled: bool = (
         discovered_inputs.local_config.settings.sql_analysis
-        if "sql_analysis" in setting_overrides
+        if SQL_ANALYSIS_CONFIG_KEY in setting_overrides
         else discovered_inputs.project_config.settings.sql_analysis
     )
     sql_validation_enabled: bool = (
         discovered_inputs.local_config.settings.sql_validation
-        if "sql_validation" in setting_overrides
+        if SQL_VALIDATION_CONFIG_KEY in setting_overrides
         else discovered_inputs.project_config.settings.sql_validation
     )
     return sql_analysis_enabled and sql_validation_enabled

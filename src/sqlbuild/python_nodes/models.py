@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 from sqlbuild.errors.contracts.exceptions import SharedInputError
 from sqlbuild.python_nodes.types import PythonCheckSeverity, SqlResourceRefKind
-from sqlbuild.spec.models.source import SourceColumnEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import SourceColumnEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)

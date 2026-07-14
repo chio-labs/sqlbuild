@@ -23,7 +23,7 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.models.targets import resolve_effective_force
+from sqlbuild.spec.resolution.main.resolve_effective_force import resolve_effective_force
 
 
 def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:

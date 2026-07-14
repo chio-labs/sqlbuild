@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.models import QueryResult
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 
 
 class NoConnectDuckDbAdapter(DuckDbAdapter):

@@ -9,13 +9,13 @@ import pytest
 
 from sqlbuild.adapter.models import LifeCycleEvent
 from sqlbuild.adapter.types import LifeCycleEventKind
-from sqlbuild.cli.commands.helpers.build.progress import (
+from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
     _aggregate_audit_results,
-    _AuditDisplayEntry,
     _truncate_name,
     format_build_footer,
 )
+from sqlbuild.cli.commands.models import AuditDisplayEntry
 from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
     NestedCommandProgressCallbacks,
 )
@@ -312,7 +312,7 @@ def test_given_child_rows_when_completing_nested_progress_then_renders_aligned_e
 def test_given_audit_results_when_aggregating_then_produces_expected_entries(
     test_case: AuditAggregationTestCase,
 ) -> None:
-    entries: list[_AuditDisplayEntry] = _aggregate_audit_results(test_case.audit_results)
+    entries: list[AuditDisplayEntry] = _aggregate_audit_results(test_case.audit_results)
 
     assert len(entries) == test_case.expected_entry_count
 

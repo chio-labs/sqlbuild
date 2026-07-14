@@ -6,6 +6,36 @@ PATH_SELECTOR_EXPLICIT_ROOT_ERROR: str = (
     "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
     "'checks/', or 'loaders/'"
 )
+EMPTY_FINGERPRINT_METADATA_JSON: str = "{}"
+MODEL_SELECTOR_ROOT: str = "models"
+MODEL_SELECTOR_ROOT_PREFIX: str = "models/"
+SELECTOR_MISSING_NAME_ERROR_FRAGMENT: str = "no name"
+PATH_SELECTOR_SEPARATOR: str = "~"
+SELECTOR_KIND_SEPARATOR: str = ":"
+SELECTOR_PATH_SEPARATOR: str = "/"
+EMPTY_SELECTOR_PATH: str = ""
+POLYGLOT_CUSTOM_DATA_TYPE_NAME: str = "CUSTOM"
+RUN_DESPITE_UNCHANGED_MINUTE_SUFFIX: str = "m"
+RUN_DESPITE_UNCHANGED_HOUR_SUFFIX: str = "h"
+SQL_FUNCTION_CALL_OPEN_PAREN: str = "("
+SQL_ALIAS_BOUNDARY_CHARACTERS: frozenset[str] = frozenset("),;")
+SQL_ALIAS_KEYWORD: str = "AS"
+SQL_IDENTIFIER_LEADING_CHARACTERS: frozenset[str] = frozenset("[_")
+SOURCE_ALIAS_BOUNDARY_CHARACTERS: frozenset[str] = frozenset(",);")
+SQL_BRACKETED_IDENTIFIER_START: str = "["
+SQL_QUOTED_IDENTIFIER_DELIMITERS: frozenset[str] = frozenset({'"', "`"})
+POLYGLOT_ALIAS_VALUE_KEY: str = "this"
+SOURCE_DEFERRAL_CONTEXT_FIELDS: frozenset[str] = frozenset({"schema", "database"})
+UNIFIED_DIFF_ADDITION_PREFIX: str = "+"
+UNIFIED_DIFF_ADDITION_HEADER_PREFIX: str = "+++"
+UNIFIED_DIFF_REMOVAL_PREFIX: str = "-"
+UNIFIED_DIFF_REMOVAL_HEADER_PREFIX: str = "---"
+SELECTOR_EXPANSION_MARKER: str = "+"
+MODEL_CUSTOM_CONFIG_KEY: str = "config"
+MODEL_PLACEHOLDERS_CONFIG_KEY: str = "placeholders"
+MODEL_PRE_HOOKS_CONFIG_KEY: str = "pre_hooks"
+MODEL_POST_HOOKS_CONFIG_KEY: str = "post_hooks"
+MODEL_CONTRACT_CONFIG_KEY: str = "contract"
 MICROBATCH_START_SENTINEL: str = "__SQB_CURSOR_START__"
 MICROBATCH_END_SENTINEL: str = "__SQB_CURSOR_END__"
 METADATA_NAME_FILTER_LIMIT: int = 250

@@ -2,25 +2,12 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
 from collections.abc import Callable, Sequence
-from typing import NoReturn
 
-from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.cli.commands.classes.sqlbuild_argument_parser import SqlbuildArgumentParser
+from sqlbuild.cli.commands.helpers.entry.constants import NO_COLOR_OPTION
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
-
-
-class SqlbuildArgumentParser(argparse.ArgumentParser):
-    """Argument parser that renders parser failures with a stable code."""
-
-    use_color: bool = False
-
-    def error(self, message: str) -> NoReturn:
-        self.print_usage(sys.stderr)
-        style: CliStyle = CliStyle(use_color=self.use_color)
-        prefix: str = style.error_strong("error[C900]:")
-        self.exit(2, f"{self.prog}: {prefix} {message}\n\n")
 
 
 def build_argument_parser_class(*, use_color: bool) -> type[SqlbuildArgumentParser]:
@@ -47,4 +34,4 @@ def cli_error_use_color(
     supports_color: Callable[[], bool],
 ) -> bool:
     raw_args: Sequence[str] = sys.argv[1:] if argv is None else argv
-    return "--no-color" not in raw_args and supports_color()
+    return NO_COLOR_OPTION not in raw_args and supports_color()

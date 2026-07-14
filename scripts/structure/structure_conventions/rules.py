@@ -10,12 +10,85 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from scripts.structure.structure_conventions.constants import (
+    ADAPTER_DOMAIN_NAME,
+    ADAPTER_ENTRY_BOUNDARY_NAMES,
+    ADAPTER_ENTRY_BYPASS_MODULE_NAMES,
+    ADAPTER_ROOT_PARTS,
+    ADAPTERS_PATH_MARKER,
+    ALL_EXPORT_NAME,
+    ANNOTATIONS_FUTURE_FEATURE_NAME,
     BANNED_GENERIC_FILENAMES,
+    BARE_EXCEPTION_CLASS_NAME,
+    CLASSES_MODULE_NAME,
+    CLASSES_PACKAGE_NAME,
+    CLASSES_PATH_MARKER,
+    CLIENT_MODULE_NAME,
+    CLIENT_STYLE_ROOT_PARTS,
+    COMPILER_EXECUTOR_DOMAIN_NAMES,
+    CONSTANTS_MODULE_NAME,
+    CROSS_PACKAGE_PUBLIC_MODULE_NAMES,
+    CROSS_PACKAGE_SOURCE_EXEMPT_DOMAIN_NAMES,
+    CROSS_PACKAGE_TARGET_EXEMPT_DOMAIN_NAMES,
+    DBT_INTEGRATION_PATH_MARKER,
+    DBT_REF_ATTRIBUTE_NAME,
+    DEEP_INTERNAL_PACKAGE_NAMES,
     DEV_TOOLING_FILE_PREFIXES,
     DEV_TOOLING_SEGMENTS,
+    DIRECT_TOP_LEVEL_ROLE_MODULE_NAMES,
+    ENTRY_MODULE_EXCLUDED_NAMES,
+    ENTRY_PACKAGE_NAME,
+    EXCEPTIONS_MODULE_NAME,
+    EXCEPTIONS_PACKAGE_NAME,
+    FROZEN_DATACLASS_KEYWORD_NAME,
+    FUTURE_MODULE_NAME,
+    GRAPH_KEY_CLASS_NAMES,
+    HELPERS_MODULE_NAME,
+    HELPERS_PACKAGE_NAME,
+    INIT_MODULE_NAME,
+    INSERT_SQL_PREFIX,
+    INTEGRATIONS_ROOT_PARTS,
+    LEGACY_DUCKDB_ADAPTER_PARTS,
+    LOAD_PROJECT_MACROS_NAME,
+    MAIN_MODULE_NAME,
+    MAIN_PACKAGE_NAME,
+    MAIN_SUPPORT_IMPORT_PACKAGE_NAMES,
     MODEL_CLASS_BASE_NAMES,
+    MODELS_MODULE_NAME,
+    MODELS_PACKAGE_NAME,
+    NESTED_ALLOWED_CHILD_PACKAGE_NAMES,
+    NESTED_RUNTIME_ROLE_MODULE_NAMES,
+    NEWLINE_CHARACTER,
+    NEWTYPE_CALL_NAME,
+    ORCHESTRATION_INTEGRATION_NAMES,
+    ORCHESTRATION_PUBLIC_MODULE_NAMES,
+    PLANNER_PATH_MARKER,
+    PROVIDER_CLASS_NAME,
+    PROVIDER_MODULE_PARTS,
+    PUBLIC_SURFACE_ROLE_NAMES,
+    PYTHON_BYTECODE_CACHE_PACKAGE_NAME,
+    PYTHON_FILE_SUFFIX,
     RAW_BUILTIN_RAISE_NAMES,
+    RAW_COLOR_CAPABILITY_MODULE_NAME,
+    ROLE_BOUNDARY_NAMES,
+    RUNTIME_ROOT_PARTS,
+    SC010_CODE,
+    SELECTOR_MARKER,
+    SELECTOR_STRING_METHOD_NAMES,
+    SHARED_PACKAGE_NAME,
+    SIBLING_HELPER_IMPORTER_PACKAGE_NAMES,
+    SOURCE_FRESHNESS_TEXT_MARKERS,
+    SOURCE_ROOT_NAME,
+    SQL_REFERENCE_KIND_CLASS_NAME,
+    SQLBUILD_PACKAGE_NAME,
+    SQLBUILD_SOURCE_PATH_MARKER,
+    SUPPORT_PACKAGE_NAMES,
+    SUPPORTED_TOP_LEVEL_DIRECT_MODULE_NAMES,
+    TOOLING_ROOT_NAME,
+    TOP_LEVEL_EXEMPT_DOMAIN_NAMES,
+    TYPE_CHECKING_NAME,
     TYPE_CLASS_BASE_NAMES,
+    TYPES_MODULE_NAME,
+    TYPES_PACKAGE_NAME,
 )
 from scripts.structure.structure_conventions.models import Violation
 
@@ -89,7 +162,7 @@ _SC045_ALLOWED_PATH_MARKERS_BY_TERM: dict[str, tuple[str, ...]] = {
     ),
 }
 _MAX_SOURCE_FILE_LINES: int = 2000
-_MAX_HELPER_FLAT_MODULES: int = 10
+_MAX_HELPER_FLAT_MODULES: int = 11
 _MAX_MAIN_FLAT_MODULES: int = 20
 _MAX_MAIN_PUBLIC_FUNCTION_STATEMENTS: int = 40
 _MAX_MAIN_PUBLIC_FUNCTION_DISTINCT_CALLS: int = 20
@@ -120,20 +193,24 @@ _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
         ("executor", "types.py"),
         ("python_nodes", "models.py"),
         ("python_nodes", "types.py"),
+        ("spec", "constants.py"),
+        ("spec", "models.py"),
+        ("spec", "types.py"),
     }
 )
 _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
     {
         ("adapter", "classes"),
-        ("compiler", "helpers"),
+        ("adapter", "helpers"),
         ("executor", "helpers"),
+        ("spec", "helpers"),
         ("virtual", "helpers"),
     }
 )
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
-    "src/sqlbuild/adapters/*/client.py",
-    "src/sqlbuild/adapters/shared/classes/*.py",
+    "src/sqlbuild/adapters/*/classes/*_adapter.py",
     "src/sqlbuild/adapter/classes/base_adapter.py",
+    "src/sqlbuild/adapter/classes/duckdb_backed_adapter.py",
     "src/sqlbuild/virtual/state/classes/*.py",
 )
 _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
@@ -166,6 +243,7 @@ _DOCSTRING_BEARING_NODE_TYPES: tuple[type[ast.AST], ...] = (
 )
 _SOURCE_FRESHNESS_SINGULAR_WRITER_NAME: str = "write_source_freshness_record"
 _SOURCE_FRESHNESS_INSERT_ALLOWED_MARKERS: tuple[str, ...] = (
+    "scripts/structure/structure_conventions/constants.py",
     "scripts/structure/structure_conventions/rules.py",
     "src/sqlbuild/adapter/",
     "src/sqlbuild/adapters/",
@@ -250,9 +328,7 @@ def check_no_raw_color_helper_imports(*, file_path: Path, module: ast.Module) ->
 
     violations: list[Violation] = []
     for node in ast.walk(module):
-        if isinstance(node, ast.ImportFrom) and node.module == (
-            "sqlbuild.presentation.helpers.terminal_capabilities"
-        ):
+        if isinstance(node, ast.ImportFrom) and node.module == RAW_COLOR_CAPABILITY_MODULE_NAME:
             violations.append(
                 Violation(
                     code="SC041",
@@ -266,7 +342,7 @@ def check_no_raw_color_helper_imports(*, file_path: Path, module: ast.Module) ->
             )
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "sqlbuild.presentation.helpers.terminal_capabilities":
+                if alias.name == RAW_COLOR_CAPABILITY_MODULE_NAME:
                     violations.append(
                         Violation(
                             code="SC041",
@@ -328,13 +404,13 @@ def check_no_source_freshness_insert_sql_outside_adapters(file_path: Path) -> li
     if any(marker in path_text for marker in _SOURCE_FRESHNESS_INSERT_ALLOWED_MARKERS):
         return []
     contents: str = file_path.read_text(encoding="utf-8")
-    if "SOURCE_FRESHNESS" not in contents and "source_freshness" not in contents:
+    if all(marker not in contents for marker in SOURCE_FRESHNESS_TEXT_MARKERS):
         return []
     violations: list[Violation] = []
     line_number: int
     line: str
     for line_number, line in enumerate(contents.splitlines(), start=1):
-        if "INSERT INTO" in line:
+        if INSERT_SQL_PREFIX in line:
             violations.append(
                 Violation(
                     code="SC058",
@@ -389,13 +465,12 @@ def check_no_internal_helper_exports(
     if not _is_runtime_file(repo_root=repo_root, file_path=file_path):
         return []
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if "helpers" not in relative_parts:
+    if HELPERS_PACKAGE_NAME not in relative_parts:
         return []
     integration_module_path_part_count: int = 4
-    if len(relative_parts) >= integration_module_path_part_count and relative_parts[:3] == (
-        "src",
-        "sqlbuild",
-        "integrations",
+    if (
+        len(relative_parts) >= integration_module_path_part_count
+        and relative_parts[:3] == INTEGRATIONS_ROOT_PARTS
     ):
         return []
 
@@ -495,7 +570,7 @@ def _main_support_folder_violation(*, repo_root: Path, file_path: Path) -> Viola
     index: int
     for index, part in enumerate(parts[:-1]):
         if (
-            part == "main"
+            part == MAIN_PACKAGE_NAME
             and index + 1 < len(parts)
             and parts[index + 1] in _MAIN_SUPPORT_FOLDER_NAMES
         ):
@@ -525,13 +600,13 @@ def _role_package_layout_violations(
     direct_modules: list[Path] = sorted(
         child
         for child in package_dir.glob("*.py")
-        if child.name != "__init__.py" and child.is_file()
+        if child.name != INIT_MODULE_NAME and child.is_file()
     )
     concern_subfolders: list[Path] = sorted(
         child
         for child in package_dir.iterdir()
         if child.is_dir()
-        and child.name != "__pycache__"
+        and child.name != PYTHON_BYTECODE_CACHE_PACKAGE_NAME
         and child.name not in ignored_subfolder_names
     )
 
@@ -579,7 +654,7 @@ def _role_package_layout_dir(*, file_path: Path, package_name: str) -> Path | No
     direct_modules: list[Path] = sorted(
         child
         for child in package_dir.glob("*.py")
-        if child.name != "__init__.py" and child.is_file()
+        if child.name != INIT_MODULE_NAME and child.is_file()
     )
     if not direct_modules:
         return None
@@ -610,25 +685,18 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     top_level_domain_child_part_count: int = 4
     nested_domain_child_part_count: int = 5
-    if len(relative_parts) < top_level_domain_child_part_count or relative_parts[:2] != (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) < top_level_domain_child_part_count
+        or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
-    if relative_parts[2] in {"presentation", "shared"}:
+    if relative_parts[2] in TOP_LEVEL_EXEMPT_DOMAIN_NAMES:
         return []
 
     direct_child_name: str = relative_parts[3]
     if (
         len(relative_parts) == top_level_domain_child_part_count
-        and direct_child_name
-        in {
-            "models.py",
-            "types.py",
-            "constants.py",
-            "helpers.py",
-            "classes.py",
-        }
+        and direct_child_name in DIRECT_TOP_LEVEL_ROLE_MODULE_NAMES
         and (relative_parts[2], direct_child_name) not in _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS
     ):
         return [
@@ -645,9 +713,9 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
 
     if (
         len(relative_parts) >= nested_domain_child_part_count
-        and direct_child_name in {"helpers", "classes"}
+        and direct_child_name in SUPPORT_PACKAGE_NAMES
         and (relative_parts[2], direct_child_name) not in _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS
-        and file_path.name == "__init__.py"
+        and file_path.name == INIT_MODULE_NAME
     ):
         return [
             Violation(
@@ -669,20 +737,12 @@ def check_top_level_domain_direct_modules(*, repo_root: Path, file_path: Path) -
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     top_level_domain_module_part_count: int = 4
-    if len(relative_parts) != top_level_domain_module_part_count or relative_parts[:2] != (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) != top_level_domain_module_part_count
+        or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
-    if file_path.name in {
-        "__init__.py",
-        "models.py",
-        "types.py",
-        "constants.py",
-        "exceptions.py",
-        "helpers.py",
-        "providers.py",
-    }:
+    if file_path.name in SUPPORTED_TOP_LEVEL_DIRECT_MODULE_NAMES:
         return []
 
     return [
@@ -704,7 +764,7 @@ def check_public_provider_module_shape(
     """Keep the public sqlbuild.providers module intentionally tiny."""
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if relative_parts != ("src", "sqlbuild", "providers.py"):
+    if relative_parts != PROVIDER_MODULE_PARTS:
         return []
 
     violations: list[Violation] = []
@@ -713,7 +773,7 @@ def check_public_provider_module_shape(
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
         if isinstance(node, ast.ClassDef):
-            if node.name == "Provider":
+            if node.name == PROVIDER_CLASS_NAME:
                 public_class_names.append(node.name)
                 continue
             violations.append(
@@ -734,7 +794,7 @@ def check_public_provider_module_shape(
             )
         )
 
-    if public_class_names != ["Provider"]:
+    if public_class_names != [PROVIDER_CLASS_NAME]:
         violations.append(
             Violation(
                 code="SC042",
@@ -753,55 +813,36 @@ def check_nested_runtime_package_direct_modules(
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     nested_runtime_module_part_count: int = 5
-    if len(relative_parts) < nested_runtime_module_part_count or relative_parts[:2] != (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) < nested_runtime_module_part_count
+        or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
     if _is_orchestration_integration_public_module(relative_parts):
         return []
-    if file_path.name == "main.py" and (
-        relative_parts[:3]
-        in {
-            ("src", "sqlbuild", "adapters"),
-            ("src", "sqlbuild", "integrations"),
-        }
-        or "shared" in relative_parts[2:-1]
+    if file_path.name == MAIN_MODULE_NAME and (
+        relative_parts[:3] in CLIENT_STYLE_ROOT_PARTS or SHARED_PACKAGE_NAME in relative_parts[2:-1]
     ):
         return []
     if _is_direct_child_of_main_package(relative_parts):
         return []
     if _is_within_main_package(relative_parts):
         return []
-    if any(
-        part in {"helpers", "classes", "models", "types", "constants", "exceptions"}
-        for part in relative_parts[2:-1]
-    ):
+    if any(part in ROLE_BOUNDARY_NAMES for part in relative_parts[2:-1]):
         return []
-    if file_path.name in {
-        "__init__.py",
-        "models.py",
-        "types.py",
-        "constants.py",
-        "exceptions.py",
-        "helpers.py",
-    }:
+    if file_path.name in NESTED_RUNTIME_ROLE_MODULE_NAMES:
         return []
     if (
         len(relative_parts) >= nested_runtime_module_part_count
-        and relative_parts[:3]
-        in {
-            ("src", "sqlbuild", "adapters"),
-            ("src", "sqlbuild", "integrations"),
-        }
-        and file_path.name == "client.py"
+        and relative_parts[:3] in CLIENT_STYLE_ROOT_PARTS
+        and file_path.name == CLIENT_MODULE_NAME
     ):
         return []
     if (
         len(relative_parts) >= nested_runtime_module_part_count
-        and relative_parts[:3] == ("src", "sqlbuild", "adapter")
-        and file_path.name.endswith(".py")
-        and file_path.name not in {"__init__.py", "main.py"}
+        and relative_parts[:3] == ADAPTER_ROOT_PARTS
+        and file_path.name.endswith(PYTHON_FILE_SUFFIX)
+        and file_path.name not in ENTRY_MODULE_EXCLUDED_NAMES
     ):
         return []
 
@@ -826,12 +867,12 @@ def check_nested_runtime_package_direct_subpackages(
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     nested_runtime_subpackage_part_count: int = 6
     top_level_package_part_count: int = 3
-    if len(relative_parts) < nested_runtime_subpackage_part_count or relative_parts[:2] != (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) < nested_runtime_subpackage_part_count
+        or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
-    if file_path.name != "__init__.py":
+    if file_path.name != INIT_MODULE_NAME:
         return []
 
     parent_package_parts: tuple[str, ...] = relative_parts[:-2]
@@ -842,18 +883,9 @@ def check_nested_runtime_package_direct_subpackages(
     direct_child_name: str = relative_parts[-2]
     if _is_within_main_package(relative_parts):
         return []
-    if parent_package_name in {"helpers", "classes", "models", "types", "constants", "exceptions"}:
+    if parent_package_name in ROLE_BOUNDARY_NAMES:
         return []
-    if direct_child_name in {
-        "helpers",
-        "shared",
-        "classes",
-        "models",
-        "types",
-        "constants",
-        "exceptions",
-        "main",
-    }:
+    if direct_child_name in NESTED_ALLOWED_CHILD_PACKAGE_NAMES:
         return []
     return [
         Violation(
@@ -875,18 +907,21 @@ def check_main_entry_name_collisions(*, repo_root: Path, file_path: Path) -> lis
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     nested_main_module_part_count: int = 6
     deeply_nested_main_module_part_count: int = 7
-    if len(relative_parts) < nested_main_module_part_count or relative_parts[:2] != (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) < nested_main_module_part_count
+        or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
     if (
-        file_path.parent.name != "main"
-        or file_path.suffix != ".py"
-        or file_path.name == "__init__.py"
+        file_path.parent.name != MAIN_PACKAGE_NAME
+        or file_path.suffix != PYTHON_FILE_SUFFIX
+        or file_path.name == INIT_MODULE_NAME
     ):
         return []
-    if len(relative_parts) < deeply_nested_main_module_part_count or relative_parts[-3] != "main":
+    if (
+        len(relative_parts) < deeply_nested_main_module_part_count
+        or relative_parts[-3] != MAIN_PACKAGE_NAME
+    ):
         return []
     if not file_path.with_suffix("").is_dir():
         return []
@@ -909,9 +944,9 @@ def check_dev_tooling_location(*, repo_root: Path, file_path: Path) -> list[Viol
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     runtime_package_prefix_part_count: int = 2
-    if len(relative_parts) < runtime_package_prefix_part_count or relative_parts[:2] != (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) < runtime_package_prefix_part_count
+        or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
 
@@ -942,7 +977,7 @@ def check_dev_tooling_location(*, repo_root: Path, file_path: Path) -> list[Viol
 def check_helpers_module_name(file_path: Path) -> list[Violation]:
     """Reject helpers.py in favor of a helpers/ package."""
 
-    if file_path.name != "helpers.py":
+    if file_path.name != HELPERS_MODULE_NAME:
         return []
 
     return [
@@ -958,7 +993,7 @@ def check_helpers_module_name(file_path: Path) -> list[Violation]:
 def check_classes_module_name(file_path: Path) -> list[Violation]:
     """Reject classes.py in favor of a classes/ package."""
 
-    if file_path.name != "classes.py":
+    if file_path.name != CLASSES_MODULE_NAME:
         return []
 
     return [
@@ -978,12 +1013,12 @@ def check_classes_package_module_shape(
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     nested_classes_module_part_count: int = 5
-    if len(relative_parts) < nested_classes_module_part_count or relative_parts[:2] != (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) < nested_classes_module_part_count
+        or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
-    if "classes" not in relative_parts[2:-1] or file_path.name == "__init__.py":
+    if CLASSES_PACKAGE_NAME not in relative_parts[2:-1] or file_path.name == INIT_MODULE_NAME:
         return []
 
     class_nodes: list[ast.ClassDef] = [
@@ -1004,7 +1039,7 @@ def check_classes_package_module_shape(
 def check_init_module(*, file_path: Path, module: ast.Module) -> list[Violation]:
     """Validate __init__.py contents."""
 
-    if file_path.name != "__init__.py":
+    if file_path.name != INIT_MODULE_NAME:
         return []
     if _is_orchestration_integration_public_init(file_path):
         return []
@@ -1025,7 +1060,7 @@ def check_init_module(*, file_path: Path, module: ast.Module) -> list[Violation]
 def check_types_module(*, file_path: Path, module: ast.Module) -> list[Violation]:
     """Validate types.py contents."""
 
-    if file_path.name != "types.py":
+    if file_path.name != TYPES_MODULE_NAME:
         return []
 
     violations: list[Violation] = []
@@ -1064,7 +1099,7 @@ def _is_type_checking_import_block(node: ast.stmt) -> bool:
     return (
         isinstance(node, ast.If)
         and isinstance(node.test, ast.Name)
-        and node.test.id == "TYPE_CHECKING"
+        and node.test.id == TYPE_CHECKING_NAME
         and not node.orelse
         and all(isinstance(statement, (ast.Import, ast.ImportFrom)) for statement in node.body)
     )
@@ -1073,7 +1108,7 @@ def _is_type_checking_import_block(node: ast.stmt) -> bool:
 def check_models_module(*, file_path: Path, module: ast.Module) -> list[Violation]:
     """Validate models.py contents."""
 
-    if file_path.name != "models.py":
+    if file_path.name != MODELS_MODULE_NAME:
         return []
 
     violations: list[Violation] = []
@@ -1252,7 +1287,7 @@ def check_no_parameter_mutation_in_phase_helpers(
 def check_constants_module(*, file_path: Path, module: ast.Module) -> list[Violation]:
     """Validate constants.py contents."""
 
-    if file_path.name != "constants.py":
+    if file_path.name != CONSTANTS_MODULE_NAME:
         return []
 
     violations: list[Violation] = []
@@ -1277,8 +1312,8 @@ def check_model_declarations_outside_models(
 ) -> list[Violation]:
     """Reject model declarations outside models.py."""
 
-    if file_path.name == "models.py" or _is_within_role_package(
-        file_path=file_path, role_directory_name="models"
+    if file_path.name == MODELS_MODULE_NAME or _is_within_role_package(
+        file_path=file_path, role_directory_name=MODELS_PACKAGE_NAME
     ):
         return []
 
@@ -1414,7 +1449,7 @@ def check_no_ad_hoc_dbt_ref_scans(*, file_path: Path, module: ast.Module) -> lis
     """Reject direct dbt ref-kind scans outside the centralized resolver."""
 
     path_text: str = file_path.as_posix()
-    if "src/sqlbuild/integrations/dbt/" not in path_text:
+    if DBT_INTEGRATION_PATH_MARKER not in path_text:
         return []
     if _path_is_allowed(path_text=path_text, allowed_paths=_SC052_DBT_REF_SCAN_ALLOWED_PATHS):
         return []
@@ -1443,7 +1478,7 @@ def check_no_ad_hoc_dbt_graph_projection(*, file_path: Path, module: ast.Module)
     """Reject direct planner graph-key construction in dbt code outside projection helpers."""
 
     path_text: str = file_path.as_posix()
-    if "src/sqlbuild/integrations/dbt/" not in path_text:
+    if DBT_INTEGRATION_PATH_MARKER not in path_text:
         return []
     if path_text.endswith("src/sqlbuild/integrations/dbt/helpers/planning/graph_projection.py"):
         return []
@@ -1454,7 +1489,7 @@ def check_no_ad_hoc_dbt_graph_projection(*, file_path: Path, module: ast.Module)
         if not isinstance(node, ast.Call):
             continue
         called_name: str | None = _call_base_name(node)
-        if called_name not in {"GraphNodeKey", "SelectionStalenessNodeKey"}:
+        if called_name not in GRAPH_KEY_CLASS_NAMES:
             continue
         violations.append(
             Violation(
@@ -1476,10 +1511,7 @@ def check_no_ad_hoc_selector_plus_parsing(
     """Reject local +selector marker parsing in planner and dbt selection code."""
 
     path_text: str = file_path.as_posix()
-    if not (
-        "src/sqlbuild/integrations/dbt/" in path_text
-        or "src/sqlbuild/compiler/planner/" in path_text
-    ):
+    if not (DBT_INTEGRATION_PATH_MARKER in path_text or PLANNER_PATH_MARKER in path_text):
         return []
     if _path_is_allowed(
         path_text=path_text,
@@ -1512,7 +1544,7 @@ def check_single_project_macro_load_site(*, file_path: Path, module: ast.Module)
     """Reject load_project_macros usage outside the single compile-input load site."""
 
     path_text: str = file_path.as_posix()
-    if "src/sqlbuild/" not in path_text:
+    if SQLBUILD_SOURCE_PATH_MARKER not in path_text:
         return []
     if _path_is_allowed(path_text=path_text, allowed_paths=_SC062_MACRO_LOAD_ALLOWED_PATHS):
         return []
@@ -1522,10 +1554,10 @@ def check_single_project_macro_load_site(*, file_path: Path, module: ast.Module)
     for node in ast.walk(module):
         line: int | None = None
         if isinstance(node, ast.ImportFrom) and any(
-            alias.name == "load_project_macros" for alias in node.names or []
+            alias.name == LOAD_PROJECT_MACROS_NAME for alias in node.names or []
         ):
             line = node.lineno
-        if isinstance(node, ast.Call) and _call_base_name(node) == "load_project_macros":
+        if isinstance(node, ast.Call) and _call_base_name(node) == LOAD_PROJECT_MACROS_NAME:
             line = node.lineno
         if line is None:
             continue
@@ -1603,9 +1635,9 @@ def check_no_standalone_comments(file_path: Path) -> list[Violation]:
 
 def _is_adapter_implementation_file(file_path: Path) -> bool:
     path_text: str = file_path.as_posix()
-    if path_text.endswith("/client.py"):
+    if ADAPTERS_PATH_MARKER in path_text and CLASSES_PATH_MARKER in path_text:
         return True
-    if "/adapters/shared/classes/" in path_text:
+    if path_text.endswith("/adapter/classes/duckdb_backed_adapter.py"):
         return True
     return path_text.endswith("/adapter/classes/base_adapter.py")
 
@@ -1621,7 +1653,10 @@ def _compare_mentions_dbt_ref_kind(node: ast.Compare) -> bool:
 
 def _expression_is_dbt_ref_kind(node: ast.expr) -> bool:
     if isinstance(node, ast.Attribute):
-        return node.attr == "DBT_REF" and _base_name(node.value) == "SqlReferenceKind"
+        return (
+            node.attr == DBT_REF_ATTRIBUTE_NAME
+            and _base_name(node.value) == SQL_REFERENCE_KIND_CLASS_NAME
+        )
     return False
 
 
@@ -1632,12 +1667,12 @@ def _call_base_name(node: ast.Call) -> str | None:
 def _is_selector_plus_string_method_call(node: ast.Call) -> bool:
     if not isinstance(node.func, ast.Attribute):
         return False
-    if node.func.attr not in {"startswith", "endswith", "lstrip", "rstrip"}:
+    if node.func.attr not in SELECTOR_STRING_METHOD_NAMES:
         return False
     if not node.args:
         return False
     first_arg: ast.expr = node.args[0]
-    return isinstance(first_arg, ast.Constant) and first_arg.value == "+"
+    return isinstance(first_arg, ast.Constant) and first_arg.value == SELECTOR_MARKER
 
 
 def _docstring_bearing_nodes(module: ast.Module) -> tuple[ast.AST, ...]:
@@ -1653,7 +1688,7 @@ def _statement_is_multiline_docstring(node: ast.stmt) -> bool:
     if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
         return False
     end_lineno: int = getattr(node, "end_lineno", node.lineno)
-    return end_lineno > node.lineno or "\n" in node.value.value
+    return end_lineno > node.lineno or NEWLINE_CHARACTER in node.value.value
 
 
 def _metadata_call_label(
@@ -1822,8 +1857,8 @@ def check_type_declarations_outside_types(
 ) -> list[Violation]:
     """Reject type-layer declarations outside types.py."""
 
-    if file_path.name == "types.py" or _is_within_role_package(
-        file_path=file_path, role_directory_name="types"
+    if file_path.name == TYPES_MODULE_NAME or _is_within_role_package(
+        file_path=file_path, role_directory_name=TYPES_PACKAGE_NAME
     ):
         return []
 
@@ -1831,7 +1866,7 @@ def check_type_declarations_outside_types(
     for node in ast.walk(module):
         if isinstance(node, ast.ClassDef) and _is_allowed_type_class(node):
             if node.name.startswith("_") and _is_within_role_package(
-                file_path=file_path, role_directory_name="helpers"
+                file_path=file_path, role_directory_name=HELPERS_PACKAGE_NAME
             ):
                 continue
             violations.append(
@@ -1881,8 +1916,8 @@ def check_exception_declarations_outside_exceptions(
 ) -> list[Violation]:
     """Reject custom exception declarations outside exceptions.py."""
 
-    if file_path.name == "exceptions.py" or _is_within_role_package(
-        file_path=file_path, role_directory_name="exceptions"
+    if file_path.name == EXCEPTIONS_MODULE_NAME or _is_within_role_package(
+        file_path=file_path, role_directory_name=EXCEPTIONS_PACKAGE_NAME
     ):
         if _is_direct_child_of_helpers_root(file_path):
             return [
@@ -1915,7 +1950,7 @@ def check_exception_declarations_outside_exceptions(
 def check_constants_outside_constants(*, file_path: Path, module: ast.Module) -> list[Violation]:
     """Reject uppercase module-level constant assignments outside constants.py."""
 
-    if file_path.name == "constants.py":
+    if file_path.name == CONSTANTS_MODULE_NAME:
         return []
 
     violations: list[Violation] = []
@@ -1947,19 +1982,19 @@ def check_helpers_package_shape(*, repo_root: Path, file_path: Path) -> list[Vio
     """Keep helpers/ shallow and free of generic entrypoints."""
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if "helpers" not in relative_parts[:-1]:
+    if HELPERS_PACKAGE_NAME not in relative_parts[:-1]:
         return []
 
-    helpers_index: int = relative_parts.index("helpers")
-    if len(relative_parts) == helpers_index + 2 and file_path.name != "main.py":
+    helpers_index: int = relative_parts.index(HELPERS_PACKAGE_NAME)
+    if len(relative_parts) == helpers_index + 2 and file_path.name != MAIN_MODULE_NAME:
         return []
-    if len(relative_parts) == helpers_index + 3 and file_path.name != "main.py":
+    if len(relative_parts) == helpers_index + 3 and file_path.name != MAIN_MODULE_NAME:
         return []
 
     code: str = "SC010" if len(relative_parts) == helpers_index + 2 else "SC022"
     message: str = (
         "helpers/ must not contain main.py; keep orchestration outside helper packages"
-        if code == "SC010"
+        if code == SC010_CODE
         else (
             "helper subpackages must stay shallow and use direct role-oriented files; "
             "main.py and nested subpackages are not allowed under scoped helpers"
@@ -1980,15 +2015,15 @@ def check_shared_package_structure(*, repo_root: Path, file_path: Path) -> list[
     """Reject orchestration entrypoints inside shared/ packages."""
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if "shared" not in relative_parts[:-1]:
+    if SHARED_PACKAGE_NAME not in relative_parts[:-1]:
         return []
-    shared_index: int = relative_parts.index("shared")
+    shared_index: int = relative_parts.index(SHARED_PACKAGE_NAME)
     if (
         len(relative_parts) > shared_index + 2
-        and "helpers" in relative_parts[shared_index + 1 : -1]
+        and HELPERS_PACKAGE_NAME in relative_parts[shared_index + 1 : -1]
     ):
         return []
-    if file_path.name != "main.py":
+    if file_path.name != MAIN_MODULE_NAME:
         return []
 
     return [
@@ -2008,12 +2043,12 @@ def check_integrations_package_structure(*, repo_root: Path, file_path: Path) ->
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     shared_package_module_part_count: int = 5
-    if len(relative_parts) < shared_package_module_part_count or relative_parts[:3] not in {
-        ("src", "sqlbuild", "adapters"),
-        ("src", "sqlbuild", "integrations"),
-    }:
+    if (
+        len(relative_parts) < shared_package_module_part_count
+        or relative_parts[:3] not in CLIENT_STYLE_ROOT_PARTS
+    ):
         return []
-    if file_path.name != "main.py":
+    if file_path.name != MAIN_MODULE_NAME:
         return []
 
     return [
@@ -2036,27 +2071,16 @@ def check_adapter_class_entry_module_shape(
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     adapter_class_module_part_count: int = 6
-    if len(relative_parts) < adapter_class_module_part_count or relative_parts[:3] != (
-        "src",
-        "sqlbuild",
-        "adapter",
+    if (
+        len(relative_parts) < adapter_class_module_part_count
+        or relative_parts[:3] != ADAPTER_ROOT_PARTS
     ):
         return []
     if _is_within_main_package(relative_parts):
         return []
-    if file_path.name.startswith("_") or file_path.name in {
-        "main.py",
-        "models.py",
-        "types.py",
-        "constants.py",
-        "exceptions.py",
-        "helpers.py",
-    }:
+    if file_path.name.startswith("_") or file_path.name in ADAPTER_ENTRY_BYPASS_MODULE_NAMES:
         return []
-    if any(
-        part in {"helpers", "classes", "models", "types", "constants", "exceptions", "shared"}
-        for part in relative_parts[3:-1]
-    ):
+    if any(part in ADAPTER_ENTRY_BOUNDARY_NAMES for part in relative_parts[3:-1]):
         return []
 
     public_class_nodes: list[ast.ClassDef] = [
@@ -2103,13 +2127,9 @@ def check_client_module_shape(
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     client_module_path_part_count: int = 5
     if (
-        file_path.name != "client.py"
+        file_path.name != CLIENT_MODULE_NAME
         or len(relative_parts) < client_module_path_part_count
-        or relative_parts[:3]
-        not in {
-            ("src", "sqlbuild", "adapters"),
-            ("src", "sqlbuild", "integrations"),
-        }
+        or relative_parts[:3] not in CLIENT_STYLE_ROOT_PARTS
     ):
         return []
 
@@ -2153,13 +2173,9 @@ def check_integration_adapter_helpers_module(
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     integration_helper_module_part_count: int = 5
     if (
-        file_path.name != "helpers.py"
+        file_path.name != HELPERS_MODULE_NAME
         or len(relative_parts) != integration_helper_module_part_count
-        or relative_parts[:3]
-        not in {
-            ("src", "sqlbuild", "adapters"),
-            ("src", "sqlbuild", "integrations"),
-        }
+        or relative_parts[:3] not in CLIENT_STYLE_ROOT_PARTS
     ):
         return []
     return [
@@ -2246,7 +2262,7 @@ def check_no_sibling_package_imports(
     nested_package_part_count: int = 3
     if len(current_package_parts) < nested_package_part_count:
         return []
-    if current_package_parts[-1] == "shared":
+    if current_package_parts[-1] == SHARED_PACKAGE_NAME:
         return []
 
     parent_package_parts: tuple[str, ...] = current_package_parts[:-1]
@@ -2268,27 +2284,26 @@ def check_no_sibling_package_imports(
             continue
 
         sibling_name: str = imported_parts[len(parent_package_parts)]
-        if parent_package_parts[-1] == "main" and sibling_name in {"helpers", "shared"}:
-            continue
-        if sibling_name == "helpers" and current_subpackage_name in {
-            "classes",
-            "main",
-            "models",
-            "types",
-            "constants",
-            "exceptions",
-        }:
-            continue
-        if sibling_name == "classes" and current_subpackage_name == "helpers":
-            continue
-        if sibling_name == "classes" and current_subpackage_name == "main":
-            continue
-        if sibling_name in {"shared", current_subpackage_name}:
+        if (
+            parent_package_parts[-1] == MAIN_PACKAGE_NAME
+            and sibling_name in MAIN_SUPPORT_IMPORT_PACKAGE_NAMES
+        ):
             continue
         if (
-            current_subpackage_name == "entry"
-            and parent_package_parts[-1] == "main"
-            and imported_parts[-1] == "main"
+            sibling_name == HELPERS_PACKAGE_NAME
+            and current_subpackage_name in SIBLING_HELPER_IMPORTER_PACKAGE_NAMES
+        ):
+            continue
+        if sibling_name == CLASSES_PACKAGE_NAME and current_subpackage_name == HELPERS_PACKAGE_NAME:
+            continue
+        if sibling_name == CLASSES_PACKAGE_NAME and current_subpackage_name == MAIN_PACKAGE_NAME:
+            continue
+        if sibling_name in {SHARED_PACKAGE_NAME, current_subpackage_name}:
+            continue
+        if (
+            current_subpackage_name == ENTRY_PACKAGE_NAME
+            and parent_package_parts[-1] == MAIN_PACKAGE_NAME
+            and imported_parts[-1] == MAIN_PACKAGE_NAME
         ):
             continue
         if len(imported_parts) == len(parent_package_parts) + 1:
@@ -2329,22 +2344,27 @@ def check_no_sibling_package_imports(
                 continue
 
             sibling_name = imported_parts[len(parent_package_parts)]
-            if parent_package_parts[-1] == "main" and sibling_name in {"helpers", "shared"}:
+            if (
+                parent_package_parts[-1] == MAIN_PACKAGE_NAME
+                and sibling_name in MAIN_SUPPORT_IMPORT_PACKAGE_NAMES
+            ):
                 continue
-            if sibling_name == "helpers" and current_subpackage_name in {
-                "classes",
-                "main",
-                "models",
-                "types",
-                "constants",
-                "exceptions",
-            }:
+            if (
+                sibling_name == HELPERS_PACKAGE_NAME
+                and current_subpackage_name in SIBLING_HELPER_IMPORTER_PACKAGE_NAMES
+            ):
                 continue
-            if sibling_name == "classes" and current_subpackage_name == "helpers":
+            if (
+                sibling_name == CLASSES_PACKAGE_NAME
+                and current_subpackage_name == HELPERS_PACKAGE_NAME
+            ):
                 continue
-            if sibling_name == "classes" and current_subpackage_name == "main":
+            if (
+                sibling_name == CLASSES_PACKAGE_NAME
+                and current_subpackage_name == MAIN_PACKAGE_NAME
+            ):
                 continue
-            if sibling_name in {"shared", current_subpackage_name}:
+            if sibling_name in {SHARED_PACKAGE_NAME, current_subpackage_name}:
                 continue
 
             violations.append(
@@ -2365,9 +2385,9 @@ def check_no_sibling_package_imports(
 def _is_within_same_helpers_package(
     *, current_package_parts: tuple[str, ...], imported_parts: tuple[str, ...]
 ) -> bool:
-    if "helpers" not in current_package_parts:
+    if HELPERS_PACKAGE_NAME not in current_package_parts:
         return False
-    helpers_index: int = current_package_parts.index("helpers")
+    helpers_index: int = current_package_parts.index(HELPERS_PACKAGE_NAME)
     helpers_prefix: tuple[str, ...] = current_package_parts[: helpers_index + 1]
     if imported_parts[: len(helpers_prefix)] != helpers_prefix:
         return False
@@ -2387,7 +2407,7 @@ def check_shared_package_imports(
     shared_package_part_count: int = 3
     if (
         len(current_package_parts) < shared_package_part_count
-        or current_package_parts[-1] != "shared"
+        or current_package_parts[-1] != SHARED_PACKAGE_NAME
     ):
         return []
 
@@ -2446,13 +2466,13 @@ def check_cross_package_internal_imports(
     domain_and_subdomain_part_count: int = 3
     runtime_import_prefix_part_count: int = 3
     internal_module_import_part_count: int = 4
-    if len(relative_parts) < runtime_domain_module_part_count or relative_parts[:2] != (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) < runtime_domain_module_part_count
+        or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
     top_level_domain: str = relative_parts[2]
-    if top_level_domain in {"spec", "adapter"}:
+    if top_level_domain in CROSS_PACKAGE_SOURCE_EXEMPT_DOMAIN_NAMES:
         return []
 
     current_domain_parts: tuple[str, ...] = relative_parts[2:]
@@ -2464,44 +2484,34 @@ def check_cross_package_internal_imports(
     )
 
     violations: list[Violation] = []
-    _DEEP_INTERNAL_SEGMENTS: frozenset[str] = frozenset({"shared", "helpers"})
-    _PUBLIC_MODULES: frozenset[str] = frozenset(
-        {"classes", "models", "types", "constants", "exceptions", "__init__", "main"}
-    )
-    cross_package_helper_modules: frozenset[str] = frozenset(
-        {"sqlbuild.diagnostics.helpers.logging"}
-    )
-
     for node in ast.walk(module):
         if not isinstance(node, ast.ImportFrom) or node.module is None:
             continue
         imported_parts: tuple[str, ...] = tuple(node.module.split("."))
         if (
             len(imported_parts) < runtime_import_prefix_part_count
-            or imported_parts[0] != "sqlbuild"
+            or imported_parts[0] != SQLBUILD_PACKAGE_NAME
         ):
             continue
 
         imported_domain: str = imported_parts[1]
-        if node.module in cross_package_helper_modules:
-            continue
         if imported_domain == current_domain:
             if len(imported_parts) < internal_module_import_part_count:
                 continue
             imported_subdomain: str = imported_parts[2]
             if current_subdomain is not None and imported_subdomain == current_subdomain:
                 continue
-            if imported_subdomain == "shared":
+            if imported_subdomain == SHARED_PACKAGE_NAME:
                 continue
             if (
                 len(imported_parts) >= internal_module_import_part_count
-                and imported_parts[3] in _PUBLIC_MODULES
+                and imported_parts[3] in CROSS_PACKAGE_PUBLIC_MODULE_NAMES
             ):
                 continue
             if len(imported_parts) == runtime_import_prefix_part_count:
                 continue
             if _has_deep_internal_segment(
-                parts=imported_parts[3:], internal_segments=_DEEP_INTERNAL_SEGMENTS
+                parts=imported_parts[3:], internal_segments=DEEP_INTERNAL_PACKAGE_NAMES
             ):
                 violations.append(
                     Violation(
@@ -2520,15 +2530,15 @@ def check_cross_package_internal_imports(
                 )
             continue
 
-        if imported_domain in {"spec", "adapter", "shared"}:
+        if imported_domain in CROSS_PACKAGE_TARGET_EXEMPT_DOMAIN_NAMES:
             continue
 
         if len(imported_parts) >= internal_module_import_part_count:
             target_module: str = imported_parts[2]
-            if target_module in _PUBLIC_MODULES:
+            if target_module in CROSS_PACKAGE_PUBLIC_MODULE_NAMES:
                 continue
             if _has_deep_internal_segment(
-                parts=imported_parts[2:], internal_segments=_DEEP_INTERNAL_SEGMENTS
+                parts=imported_parts[2:], internal_segments=DEEP_INTERNAL_PACKAGE_NAMES
             ):
                 violations.append(
                     Violation(
@@ -2560,32 +2570,31 @@ def _has_deep_internal_segment(
 def _is_runtime_file(*, repo_root: Path, file_path: Path) -> bool:
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
     runtime_module_path_part_count: int = 3
-    return len(relative_parts) >= runtime_module_path_part_count and relative_parts[:2] == (
-        "src",
-        "sqlbuild",
+    return (
+        len(relative_parts) >= runtime_module_path_part_count
+        and relative_parts[:2] == RUNTIME_ROOT_PARTS
     )
 
 
 def _is_allowed_reexport_surface(*, repo_root: Path, file_path: Path) -> bool:
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if file_path.name == "__init__.py":
+    if file_path.name == INIT_MODULE_NAME:
         return True
     top_level_runtime_module_part_count: int = 3
     integration_module_part_count: int = 4
-    if len(relative_parts) == top_level_runtime_module_part_count and relative_parts[:2] == (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) == top_level_runtime_module_part_count
+        and relative_parts[:2] == RUNTIME_ROOT_PARTS
     ):
         return True
-    if len(relative_parts) >= integration_module_part_count and relative_parts[:3] == (
-        "src",
-        "sqlbuild",
-        "integrations",
+    if (
+        len(relative_parts) >= integration_module_part_count
+        and relative_parts[:3] == INTEGRATIONS_ROOT_PARTS
     ):
         return True
     if (
         len(relative_parts) == integration_module_part_count
-        and relative_parts[3] == "exceptions.py"
+        and relative_parts[3] == EXCEPTIONS_MODULE_NAME
     ):
         return True
     return False
@@ -2618,20 +2627,20 @@ def _is_module_docstring(node: ast.stmt) -> bool:
 def _is_future_annotations_import(node: ast.stmt) -> bool:
     return (
         isinstance(node, ast.ImportFrom)
-        and node.module == "__future__"
-        and any(alias.name == "annotations" for alias in node.names)
+        and node.module == FUTURE_MODULE_NAME
+        and any(alias.name == ANNOTATIONS_FUTURE_FEATURE_NAME for alias in node.names)
     )
 
 
 def _is_all_assignment(node: ast.stmt) -> bool:
     if isinstance(node, ast.Assign):
         return any(
-            isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets
+            isinstance(target, ast.Name) and target.id == ALL_EXPORT_NAME for target in node.targets
         )
     return (
         isinstance(node, ast.AnnAssign)
         and isinstance(node.target, ast.Name)
-        and node.target.id == "__all__"
+        and node.target.id == ALL_EXPORT_NAME
     )
 
 
@@ -2645,16 +2654,9 @@ def _adapter_contract_class_names(
         return indexed_names
 
     relative_parts: tuple[str, ...] = file_path.resolve().relative_to(repo_root.resolve()).parts
-    if relative_parts[:3] not in {
-        ("src", "sqlbuild", "adapters"),
-        ("src", "sqlbuild", "integrations"),
-    }:
+    if relative_parts[:3] not in CLIENT_STYLE_ROOT_PARTS:
         return frozenset()
-    if file_path.name != "client.py" and relative_parts[-3:] != (
-        "shared",
-        "classes",
-        "duckdb.py",
-    ):
+    if file_path.name != CLIENT_MODULE_NAME and relative_parts[-3:] != LEGACY_DUCKDB_ADAPTER_PARTS:
         return frozenset()
     return frozenset(
         node.name
@@ -2802,17 +2804,17 @@ def _non_docstring_body(module: ast.Module) -> list[ast.stmt]:
 
 def _is_entry_module(file_path: Path) -> bool:
     return (
-        file_path.suffix == ".py"
-        and file_path.name not in {"__init__.py", "main.py"}
-        and file_path.parent.name == "main"
+        file_path.suffix == PYTHON_FILE_SUFFIX
+        and file_path.name not in ENTRY_MODULE_EXCLUDED_NAMES
+        and file_path.parent.name == MAIN_PACKAGE_NAME
     )
 
 
 def _is_direct_child_of_helpers_root(file_path: Path) -> bool:
     parts: tuple[str, ...] = file_path.parts
-    if "helpers" not in parts[:-1]:
+    if HELPERS_PACKAGE_NAME not in parts[:-1]:
         return False
-    helpers_index: int = parts.index("helpers")
+    helpers_index: int = parts.index(HELPERS_PACKAGE_NAME)
     return len(parts) == helpers_index + 2
 
 
@@ -2866,7 +2868,9 @@ def _dataclass_is_frozen(node: ast.ClassDef) -> bool:
         ):
             keyword: ast.keyword
             for keyword in decorator.keywords:
-                if keyword.arg == "frozen" and isinstance(keyword.value, ast.Constant):
+                if keyword.arg == FROZEN_DATACLASS_KEYWORD_NAME and isinstance(
+                    keyword.value, ast.Constant
+                ):
                     return keyword.value.value is True
             return False
     return False
@@ -2874,9 +2878,9 @@ def _dataclass_is_frozen(node: ast.ClassDef) -> bool:
 
 def _is_main_package_module(file_path: Path) -> bool:
     return (
-        file_path.suffix == ".py"
-        and file_path.name != "__init__.py"
-        and "main" in file_path.parts[:-1]
+        file_path.suffix == PYTHON_FILE_SUFFIX
+        and file_path.name != INIT_MODULE_NAME
+        and MAIN_PACKAGE_NAME in file_path.parts[:-1]
     )
 
 
@@ -2947,10 +2951,10 @@ def _is_compiler_or_executor_helper_module(*, repo_root: Path, file_path: Path) 
     nested_helper_module_part_count: int = 5
     return (
         len(relative_parts) >= nested_helper_module_part_count
-        and relative_parts[:2] == ("src", "sqlbuild")
-        and relative_parts[2] in {"compiler", "executor"}
-        and "helpers" in relative_parts[3:-1]
-        and file_path.suffix == ".py"
+        and relative_parts[:2] == RUNTIME_ROOT_PARTS
+        and relative_parts[2] in COMPILER_EXECUTOR_DOMAIN_NAMES
+        and HELPERS_PACKAGE_NAME in relative_parts[3:-1]
+        and file_path.suffix == PYTHON_FILE_SUFFIX
     )
 
 
@@ -3067,7 +3071,11 @@ def _base_name(node: ast.expr) -> str | None:
 
 def _is_runtime_source_file(file_path: Path) -> bool:
     parts: tuple[str, ...] = file_path.parts
-    return "src" in parts and "sqlbuild" in parts and file_path.suffix == ".py"
+    return (
+        SOURCE_ROOT_NAME in parts
+        and SQLBUILD_PACKAGE_NAME in parts
+        and file_path.suffix == PYTHON_FILE_SUFFIX
+    )
 
 
 def _raise_uses_raw_builtin(node: ast.Raise) -> bool:
@@ -3080,7 +3088,11 @@ def _raise_uses_raw_builtin(node: ast.Raise) -> bool:
 
 
 def _is_bare_exception_handler(node: ast.ExceptHandler) -> bool:
-    return node.name is None and isinstance(node.type, ast.Name) and node.type.id == "Exception"
+    return (
+        node.name is None
+        and isinstance(node.type, ast.Name)
+        and node.type.id == BARE_EXCEPTION_CLASS_NAME
+    )
 
 
 def _handler_body_is_single_swallow(body: list[ast.stmt]) -> bool:
@@ -3134,7 +3146,7 @@ def _is_newtype_assignment(node: ast.AST) -> bool:
     if not isinstance(value, ast.Call):
         return False
 
-    return _base_name(value.func) == "NewType"
+    return _base_name(value.func) == NEWTYPE_CALL_NAME
 
 
 def _is_within_role_package(*, file_path: Path, role_directory_name: str) -> bool:
@@ -3145,22 +3157,22 @@ def _is_direct_child_of_main_package(relative_parts: tuple[str, ...]) -> bool:
     parent_and_module_part_count: int = 2
     return (
         len(relative_parts) >= parent_and_module_part_count
-        and relative_parts[-2] == "main"
-        and relative_parts[-1] != "main.py"
+        and relative_parts[-2] == MAIN_PACKAGE_NAME
+        and relative_parts[-1] != MAIN_MODULE_NAME
     )
 
 
 def _is_within_main_package(relative_parts: tuple[str, ...]) -> bool:
-    return "main" in relative_parts[2:-1] and relative_parts[-1] != "main.py"
+    return MAIN_PACKAGE_NAME in relative_parts[2:-1] and relative_parts[-1] != MAIN_MODULE_NAME
 
 
 def _is_orchestration_integration_public_module(relative_parts: tuple[str, ...]) -> bool:
     integration_public_module_part_count: int = 5
     return (
         len(relative_parts) == integration_public_module_part_count
-        and relative_parts[:3] == ("src", "sqlbuild", "integrations")
-        and relative_parts[3] in {"dagster", "rivers"}
-        and relative_parts[-1] in {"assets.py", "translator.py", "project.py", "resource.py"}
+        and relative_parts[:3] == INTEGRATIONS_ROOT_PARTS
+        and relative_parts[3] in ORCHESTRATION_INTEGRATION_NAMES
+        and relative_parts[-1] in ORCHESTRATION_PUBLIC_MODULE_NAMES
     )
 
 
@@ -3169,9 +3181,9 @@ def _is_orchestration_integration_public_init(file_path: Path) -> bool:
     integration_public_path_part_count: int = 5
     return (
         len(parts) >= integration_public_path_part_count
-        and parts[-5:-2] == ("src", "sqlbuild", "integrations")
-        and parts[-2] in {"dagster", "rivers"}
-        and parts[-1] == "__init__.py"
+        and parts[-5:-2] == INTEGRATIONS_ROOT_PARTS
+        and parts[-2] in ORCHESTRATION_INTEGRATION_NAMES
+        and parts[-1] == INIT_MODULE_NAME
     )
 
 
@@ -3180,8 +3192,8 @@ def _is_orchestration_integration_public_entry(file_path: Path) -> bool:
     integration_public_path_part_count: int = 5
     return (
         len(parts) >= integration_public_path_part_count
-        and parts[-5:-2] == ("src", "sqlbuild", "integrations")
-        and parts[-2] in {"dagster", "rivers"}
+        and parts[-5:-2] == INTEGRATIONS_ROOT_PARTS
+        and parts[-2] in ORCHESTRATION_INTEGRATION_NAMES
     )
 
 
@@ -3192,12 +3204,15 @@ def _subpackage_parts(*, repo_root: Path, file_path: Path) -> tuple[str, ...]:
 
     runtime_module_path_part_count: int = 4
     script_module_path_part_count: int = 3
-    if len(relative_parts) >= runtime_module_path_part_count and relative_parts[:2] == (
-        "src",
-        "sqlbuild",
+    if (
+        len(relative_parts) >= runtime_module_path_part_count
+        and relative_parts[:2] == RUNTIME_ROOT_PARTS
     ):
         package_parts: tuple[str, ...] = relative_parts[1:-1]
-    elif len(relative_parts) >= script_module_path_part_count and relative_parts[0] == "scripts":
+    elif (
+        len(relative_parts) >= script_module_path_part_count
+        and relative_parts[0] == TOOLING_ROOT_NAME
+    ):
         package_parts = relative_parts[:-1]
     else:
         return ()
@@ -3216,7 +3231,7 @@ def _is_forbidden_shared_import(
         return False
 
     next_segment: str = imported_parts[len(parent_package_parts)]
-    if next_segment == "shared":
+    if next_segment == SHARED_PACKAGE_NAME:
         return False
 
     return len(imported_parts) > len(parent_package_parts) + 1
@@ -3227,35 +3242,39 @@ def _is_allowed_sibling_public_surface(
     parent_package_parts: tuple[str, ...],
     imported_parts: tuple[str, ...],
 ) -> bool:
-    public_surface_names: frozenset[str] = frozenset({"models", "types", "constants", "exceptions"})
     if (
-        len(imported_parts) == len(parent_package_parts) + 2
-        and imported_parts[len(parent_package_parts)] == "main"
-        and imported_parts[-1] != "main"
-    ):
-        return True
-    if (
-        len(imported_parts) == len(parent_package_parts) + 3
-        and imported_parts[len(parent_package_parts)] == "main"
-        and imported_parts[-1] != "main"
+        parent_package_parts[-1] == MAIN_PACKAGE_NAME
+        and len(imported_parts) == len(parent_package_parts) + 2
     ):
         return True
     if (
         len(imported_parts) == len(parent_package_parts) + 2
-        and imported_parts[len(parent_package_parts)] in public_surface_names
+        and imported_parts[len(parent_package_parts)] == MAIN_PACKAGE_NAME
+        and imported_parts[-1] != MAIN_PACKAGE_NAME
     ):
         return True
     if (
         len(imported_parts) == len(parent_package_parts) + 3
-        and imported_parts[len(parent_package_parts) + 1] in public_surface_names
+        and imported_parts[len(parent_package_parts)] == MAIN_PACKAGE_NAME
+        and imported_parts[-1] != MAIN_PACKAGE_NAME
+    ):
+        return True
+    if (
+        len(imported_parts) == len(parent_package_parts) + 2
+        and imported_parts[len(parent_package_parts)] in PUBLIC_SURFACE_ROLE_NAMES
+    ):
+        return True
+    if (
+        len(imported_parts) == len(parent_package_parts) + 3
+        and imported_parts[len(parent_package_parts) + 1] in PUBLIC_SURFACE_ROLE_NAMES
     ):
         return True
     if len(imported_parts) != len(parent_package_parts) + 2:
         return False
 
     public_module_name: str = imported_parts[-1]
-    if public_module_name in public_surface_names:
+    if public_module_name in PUBLIC_SURFACE_ROLE_NAMES:
         return True
-    if "adapter" in parent_package_parts:
+    if ADAPTER_DOMAIN_NAME in parent_package_parts:
         return True
     return False

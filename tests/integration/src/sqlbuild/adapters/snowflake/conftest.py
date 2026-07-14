@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_snowflake_connection_config,
     build_unique_schema_name,

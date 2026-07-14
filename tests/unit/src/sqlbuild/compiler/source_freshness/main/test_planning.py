@@ -8,7 +8,7 @@ import pytest
 
 from sqlbuild.adapter.models import TableFreshnessMetadata, TableFreshnessRequest
 from sqlbuild.adapter.types import FrameworkType
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -21,8 +21,12 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRenderers,
     StandardSourceFreshnessPlanningResult,
 )
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessAgePolicy, SourceFreshnessConfig
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.models import (
+    SourceEntry,
+    SourceFreshnessAgePolicy,
+    SourceFreshnessConfig,
+)
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     StandardSourceFreshnessAdapterDefaultTestCase,
     StandardSourceFreshnessAgePolicyTestCase,

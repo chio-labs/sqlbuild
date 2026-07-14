@@ -25,9 +25,10 @@ from sqlbuild.compiler.planner.models import (
     StandardReuseFromTargetModelSnapshot,
     StandardReuseFromTargetSnapshot,
 )
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
-from sqlbuild.spec.models.targets import resolve_target_config
+from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
+from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 
@@ -264,7 +265,7 @@ def _read_reuse_origin_cursor_max(
     materialized: str | None = _get_config_str(model=model, key="materialized")
     if (
         cursor_column is None
-        or materialized != "incremental"
+        or materialized != MaterializationType.INCREMENTAL
         or reuse_origin.qualified_name is None
     ):
         return None

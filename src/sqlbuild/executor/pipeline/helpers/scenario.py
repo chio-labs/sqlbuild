@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.planning.scenario import build_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
 from sqlbuild.errors.contracts.main.error_message import error_message
@@ -36,7 +36,9 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.models.project import scenario_local_type_overrides_for_dialect
+from sqlbuild.spec.resolution.main.scenario_local_type_overrides_for_dialect import (
+    scenario_local_type_overrides_for_dialect,
+)
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 _SCENARIO_INTERNAL_ERROR_HELP: str = (

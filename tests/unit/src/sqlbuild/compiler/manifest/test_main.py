@@ -16,8 +16,7 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
 from sqlbuild.compiler.manifest.helpers.shared import build_fqn
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
-from sqlbuild.spec.models.schema import SchemaColumn
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,
     ManifestAuditNodeTestCase,

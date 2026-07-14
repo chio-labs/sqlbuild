@@ -29,8 +29,8 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.spec.models.schema import SchemaSeedEntry, SeedCsvSettings, default_seed_csv_settings
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
+from sqlbuild.spec.contracts.models import SchemaSeedEntry, SeedCsvSettings, SourceEntry
 
 
 class FakeJanitorAdapter(BaseAdapter):
@@ -268,7 +268,7 @@ class FakeJanitorAdapter(BaseAdapter):
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
-        csv_settings: SeedCsvSettings = default_seed_csv_settings,
+        csv_settings: SeedCsvSettings = DEFAULT_SEED_CSV_SETTINGS,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,

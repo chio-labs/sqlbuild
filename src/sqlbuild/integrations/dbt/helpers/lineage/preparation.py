@@ -12,12 +12,14 @@ from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
+    DbtCompileReferenceResolver,
+)
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.helpers.cli.mode import enforce_dbt_interop_standard_mode
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
 from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
 from sqlbuild.integrations.dbt.helpers.lineage.args import parse_dbt_lineage_args
-from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
 from sqlbuild.integrations.dbt.helpers.manifest.core import load_dbt_manifest_index
 from sqlbuild.integrations.dbt.helpers.planning.runtime import (
     resolve_dbt_interop_adapter,
@@ -33,7 +35,9 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineageArgs,
     DbtLineagePreparation,
 )
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 
 def prepare_dbt_lineage_inputs(

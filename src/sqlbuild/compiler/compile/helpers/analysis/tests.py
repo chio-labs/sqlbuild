@@ -4,6 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.compiler.compile.constants import (
+    POLYGLOT_COLUMN_EXPRESSION_NAME,
+    POLYGLOT_SELECT_EXPRESSION_NAME,
+    POLYGLOT_UNION_EXPRESSION_NAME,
+    POLYGLOT_WRAPPER_EXPRESSION_NAMES,
+    SQL_CLOSE_PAREN_TOKEN,
+    SQL_IDENTIFIER_EXTRA_TOKEN,
+    SQL_OPEN_PAREN_TOKEN,
+    SQL_QUOTE_TOKENS,
+    SQL_SET_OPERATION_KEYWORDS,
+    SQL_UNION_ALL_KEYWORD,
+    SQL_UNION_KEYWORD,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
@@ -35,14 +48,14 @@ def extract_expected_branch_column_names_with_sql_analysis(
 
 def _extract_branch_names(*, expression: Any, file_label: str) -> tuple[tuple[str, ...], ...]:
     expression = _unwrap_expression(expression=expression)
-    if expression.__class__.__name__ == "Union":
+    if expression.__class__.__name__ == POLYGLOT_UNION_EXPRESSION_NAME:
         left_expression: Any = expression.args["left"]
         right_expression: Any = expression.args["right"]
         return (
             *_extract_branch_names(expression=left_expression, file_label=file_label),
             *_extract_branch_names(expression=right_expression, file_label=file_label),
         )
-    if expression.__class__.__name__ == "Select":
+    if expression.__class__.__name__ == POLYGLOT_SELECT_EXPRESSION_NAME:
         return (_extract_select_names(expression=expression, file_label=file_label),)
     raise CompileInputError(
         f"SQL test '{file_label}' must define each __expected__<model> set-operation "
@@ -51,7 +64,7 @@ def _extract_branch_names(*, expression: Any, file_label: str) -> tuple[tuple[st
 
 
 def _unwrap_expression(*, expression: Any) -> Any:
-    while expression.__class__.__name__ in {"Subquery", "Paren"}:
+    while expression.__class__.__name__ in POLYGLOT_WRAPPER_EXPRESSION_NAMES:
         expression = expression.this
     return expression
 
@@ -68,7 +81,7 @@ def _extract_select_names(*, expression: Any, file_label: str) -> tuple[str, ...
         if alias_name:
             names.append(alias_name)
             continue
-        if projection.__class__.__name__ == "Column":
+        if projection.__class__.__name__ == POLYGLOT_COLUMN_EXPRESSION_NAME:
             names.append(str(projection.name))
             continue
         raise CompileInputError(
@@ -94,15 +107,15 @@ def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
                 quote = None
             index += 1
             continue
-        if character in {"'", '"', "`"}:
+        if character in SQL_QUOTE_TOKENS:
             quote = character
             index += 1
             continue
-        if character == "(":
+        if character == SQL_OPEN_PAREN_TOKEN:
             depth += 1
             index += 1
             continue
-        if character == ")":
+        if character == SQL_CLOSE_PAREN_TOKEN:
             depth = max(0, depth - 1)
             index += 1
             continue
@@ -123,18 +136,20 @@ def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
 
 def _consume_set_operation(*, sql: str, start: int) -> int | None:
     keyword: str
-    for keyword in ("UNION", "INTERSECT", "EXCEPT"):
+    for keyword in SQL_SET_OPERATION_KEYWORDS:
         end: int = start + len(keyword)
         if sql[start:end].upper() != keyword:
             continue
-        if start > 0 and (sql[start - 1].isalnum() or sql[start - 1] == "_"):
+        if start > 0 and (sql[start - 1].isalnum() or sql[start - 1] == SQL_IDENTIFIER_EXTRA_TOKEN):
             continue
-        if end < len(sql) and (sql[end].isalnum() or sql[end] == "_"):
+        if end < len(sql) and (sql[end].isalnum() or sql[end] == SQL_IDENTIFIER_EXTRA_TOKEN):
             continue
         index: int = _skip_whitespace(sql=sql, start=end)
-        if keyword == "UNION" and sql[index : index + 3].upper() == "ALL":
+        if keyword == SQL_UNION_KEYWORD and sql[index : index + 3].upper() == SQL_UNION_ALL_KEYWORD:
             all_end: int = index + 3
-            if all_end == len(sql) or not (sql[all_end].isalnum() or sql[all_end] == "_"):
+            if all_end == len(sql) or not (
+                sql[all_end].isalnum() or sql[all_end] == SQL_IDENTIFIER_EXTRA_TOKEN
+            ):
                 index = _skip_whitespace(sql=sql, start=all_end)
         return index
     return None

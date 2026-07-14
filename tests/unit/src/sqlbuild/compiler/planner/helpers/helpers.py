@@ -89,14 +89,15 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     StandardSourceFreshnessPlanningResult,
 )
-from sqlbuild.spec.models.schema import (
+from sqlbuild.spec.contracts.models import (
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
     SeedCsvSettings,
+    SourceColumnEntry,
+    SourceEntry,
 )
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
-from sqlbuild.spec.models.types import (
+from sqlbuild.spec.contracts.types import (
     SourceFreshnessStrategy,
     SourceWriteStrategy,
 )

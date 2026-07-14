@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledPro
 from sqlbuild.compiler.planner.helpers.graph.loader_dag import (
     build_intermediate_source_map as _build_intermediate_source_map,
 )
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_intermediate_source_map(

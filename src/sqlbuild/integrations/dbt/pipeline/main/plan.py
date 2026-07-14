@@ -10,8 +10,8 @@ from typing import Any, TextIO
 from sqlbuild.cli.commands.main.commands.connection_progress import (
     build_connection_progress_reporter,
 )
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
+from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtInteropCompiledProject,
@@ -20,6 +20,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropPlanResolution,
 )
+from sqlbuild.integrations.dbt.pipeline.constants import DBT_FULL_REFRESH_FLAG
 from sqlbuild.integrations.dbt.pipeline.helpers.execute import append_manifest_seed_warnings
 from sqlbuild.integrations.dbt.pipeline.helpers.interop_prologue import (
     compile_dbt_interop_project,
@@ -102,7 +103,7 @@ def plan_dbt_interop_from_project(
         compiled=compiled,
         manifest=manifest,
         graph=resolution.graph,
-        full_refresh="--full-refresh" in invocation.routed.dbt_args,
+        full_refresh=DBT_FULL_REFRESH_FLAG in invocation.routed.dbt_args,
         force=invocation.effective_force,
         connection_progress=connection_progress,
         on_progress=on_progress,

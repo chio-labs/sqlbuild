@@ -22,7 +22,10 @@ from sqlbuild.compiler.python_nodes.types import (
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
-from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
+from sqlbuild.executor.python_nodes.constants import (
+    MISSING_DEFAULT,
+    PYTHON_NODE_RELATION_QUALIFIER_SEPARATOR,
+)
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.python_nodes.models import SqlResourceRef
@@ -222,7 +225,7 @@ class BasePythonNodeContext:
     ) -> str:
         """Return a qualified relation name, preserving already-qualified input."""
 
-        if "." in name:
+        if PYTHON_NODE_RELATION_QUALIFIER_SEPARATOR in name:
             return name
         return resolve_qualified_name_parts(
             adapter=self.adapter,

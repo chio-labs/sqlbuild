@@ -23,6 +23,8 @@ skill_frontmatter: str = f"""---
 name: sqlbuild
 description: {skill_description}
 ---"""
+_INTRODUCTION_PAGE_NAME: str = "index"
+_FRONTMATTER_DELIMITER: str = "---"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,7 +59,11 @@ def clone_docs_repo(*, repo_url: str, clone_dir: Path) -> Path:
 def build_skill_markdown(*, docs_root: Path, include_introduction: bool = True) -> str:
     page_paths: list[Path] = list_ordered_page_paths(docs_root=docs_root)
     if not include_introduction:
-        page_paths = [path for path in page_paths if path.with_suffix("").as_posix() != "index"]
+        page_paths = [
+            path
+            for path in page_paths
+            if path.with_suffix("").as_posix() != _INTRODUCTION_PAGE_NAME
+        ]
 
     sections: list[str] = [_render_skill_header(page_paths=page_paths)]
     for page_path in page_paths:
@@ -135,13 +141,13 @@ def _parse_mdx_page(contents: str) -> dict[str, str]:
 
 def _split_frontmatter(contents: str) -> tuple[dict[str, str], str]:
     lines: list[str] = contents.splitlines()
-    if not lines or lines[0].strip() != "---":
+    if not lines or lines[0].strip() != _FRONTMATTER_DELIMITER:
         return {}, contents
 
     frontmatter: dict[str, str] = {}
     end_index: int = 0
     for index, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
+        if line.strip() == _FRONTMATTER_DELIMITER:
             end_index = index
             break
         key, separator, value = line.partition(":")

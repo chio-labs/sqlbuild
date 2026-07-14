@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 import sqlbuild.virtual.executor.helpers.build as virtual_build_module
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput

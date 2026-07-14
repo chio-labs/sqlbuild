@@ -10,7 +10,8 @@ from typing import Any
 from sqlbuild.compiler.compile.models.core import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
-from sqlbuild.virtual.helpers.encoding import decode_state_text, encode_state_text
+from sqlbuild.virtual.state.main.encoding.decode_state_text import decode_state_text
+from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
 from sqlbuild.virtual.state.models import FunctionVersionRecord
 from sqlbuild.virtual.state.types import ModelVersionStatus
 

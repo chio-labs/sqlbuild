@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+SQL_ESCAPABLE_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
+SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({*SQL_ESCAPABLE_QUOTE_CHARACTERS, "`"})
+SQL_OPEN_PARENTHESIS: str = "("
+SQL_CLOSE_PARENTHESIS: str = ")"
+SQL_IDENTIFIER_PREFIX: str = "_"
+
 POLYGLOT_KIND_ALIAS: str = "alias"
 POLYGLOT_KIND_ARRAY_AGG: str = "array_agg"
 POLYGLOT_KIND_AVG: str = "avg"

@@ -11,7 +11,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.models.targets import resolve_target_name
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.state.main.checkpoints.list_checkpoints import (
     list_virtual_environment_checkpoints,
 )
@@ -23,6 +23,10 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentSeedRefRecord,
 )
+
+_LIST_CHECKPOINTS_COMMAND: str = "list"
+_SHOW_CHECKPOINT_COMMAND: str = "show"
+_DIFF_CHECKPOINT_COMMAND: str = "diff"
 
 
 def run_state_checkpoints(
@@ -52,7 +56,7 @@ def run_state_checkpoints(
             code="C903",
         )
     style: CliStyle = CliStyle(use_color=not no_color and supports_color())
-    if command == "list":
+    if command == _LIST_CHECKPOINTS_COMMAND:
         checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...] = (
             list_virtual_environment_checkpoints(
                 project_dir=effective_project_dir,
@@ -68,7 +72,7 @@ def run_state_checkpoints(
             )
         )
         return 0
-    if command == "show":
+    if command == _SHOW_CHECKPOINT_COMMAND:
         if checkpoint_id is None:
             raise CliUserError("state checkpoints show requires checkpoint id", code="C904")
         refs, seed_refs = _read_checkpoint_refs(
@@ -87,7 +91,7 @@ def run_state_checkpoints(
             )
         )
         return 0
-    if command == "diff":
+    if command == _DIFF_CHECKPOINT_COMMAND:
         if checkpoint_id is None:
             raise CliUserError("state checkpoints diff requires checkpoint id", code="C907")
         checkpoint_model_refs, checkpoint_seed_refs = _read_checkpoint_refs(

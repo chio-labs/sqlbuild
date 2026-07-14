@@ -9,7 +9,7 @@ from sqlbuild.adapter.models import (
     SchemaDiffResult,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.models.schema import SeedCsvSettings
+from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 @dataclass(frozen=True)

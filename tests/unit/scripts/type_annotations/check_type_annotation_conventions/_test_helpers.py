@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent
 
-from scripts.type_annotations.type_annotation_conventions.checker import check_paths
+from scripts.type_annotations.type_annotation_conventions.main.check_paths import check_paths
 from scripts.type_annotations.type_annotation_conventions.models import Violation
 
 

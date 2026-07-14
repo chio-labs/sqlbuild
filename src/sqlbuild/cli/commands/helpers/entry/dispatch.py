@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
 from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands.helpers.check.models import CheckCommandRequest
@@ -17,7 +18,13 @@ from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands.helpers.diff.models import DiffCommandRequest
 from sqlbuild.cli.commands.helpers.diff.validation import parse_diff_name_range
-from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers, CliNamespace
+from sqlbuild.cli.commands.helpers.entry.constants import (
+    DBT_INIT_COMMAND,
+    SCENARIO_CAPTURE_COMMAND,
+    SCENARIO_TEST_COMMAND,
+    SKILLS_UPDATE_COMMAND,
+)
+from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers
 from sqlbuild.cli.commands.helpers.entry.parsing import read_selector_files
 from sqlbuild.cli.commands.helpers.entry.types import CliCommand
 from sqlbuild.cli.commands.helpers.freshness.models import FreshnessCommandRequest
@@ -44,6 +51,7 @@ from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.presentation.main.supports_color import supports_color
 
 
@@ -54,7 +62,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     if args.command is not None and not (
         args.command == CliCommand.DBT
-        and args.dbt_command != "init"
+        and args.dbt_command != DBT_INIT_COMMAND
         and not (effective_project_dir / PROJECT_CONFIG_FILENAME).exists()
     ):
         _ = configure_diagnostics(
@@ -417,7 +425,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             )
         )
     if args.command == CliCommand.SKILLS:
-        if args.skills_command == "update":
+        if args.skills_command == SKILLS_UPDATE_COMMAND:
             return handlers.run_skills_update(
                 project_dir=project_dir,
                 global_install=args.skills_global,
@@ -442,7 +450,7 @@ def _dispatch_dbt_command(
     project_dir: Path | None,
     effective_project_dir: Path,
 ) -> int:
-    if args.dbt_command == "init":
+    if args.dbt_command == DBT_INIT_COMMAND:
         return handlers.run_dbt_init(
             DbtInitCommandRequest(
                 cwd=effective_project_dir,
@@ -457,23 +465,23 @@ def _dispatch_dbt_command(
                 production_git_ref=args.dbt_prod_git_ref,
             )
         )
-    if args.dbt_command == "plan":
+    if args.dbt_command == DbtInteropCommand.PLAN:
         return handlers.run_dbt_plan(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == "run":
+    if args.dbt_command == DbtInteropCommand.RUN:
         return handlers.run_dbt_run(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == "build":
+    if args.dbt_command == DbtInteropCommand.BUILD:
         return handlers.run_dbt_build(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == "test":
+    if args.dbt_command == DbtInteropCommand.TEST:
         return handlers.run_dbt_test(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == "scenario":
+    if args.dbt_command == DbtInteropCommand.SCENARIO:
         return handlers.run_dbt_scenario(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == "debug":
+    if args.dbt_command == DbtInteropCommand.DEBUG:
         return handlers.run_dbt_debug(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == "lineage":
+    if args.dbt_command == DbtInteropCommand.LINEAGE:
         return handlers.run_dbt_lineage(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == "diff":
+    if args.dbt_command == DbtInteropCommand.DIFF:
         return handlers.run_dbt_diff(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == "clone":
+    if args.dbt_command == DbtInteropCommand.CLONE:
         return handlers.run_dbt_clone(project_dir, tuple(args.dbt_args), args.no_color)
     raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
 
@@ -486,7 +494,7 @@ def _dispatch_scenario_command(
     select: tuple[str, ...],
 ) -> int:
     scenario_select: tuple[str, ...] = (*tuple(args.scenario_selector), *select)
-    if args.scenario_command == "test":
+    if args.scenario_command == SCENARIO_TEST_COMMAND:
         if args.scenario_local and args.scenario_retain:
             raise CliUserError(
                 "scenario test --local does not support --retain",
@@ -525,7 +533,7 @@ def _dispatch_scenario_command(
                 json_output_path=args.json_output,
             ),
         )
-    if args.scenario_command == "capture":
+    if args.scenario_command == SCENARIO_CAPTURE_COMMAND:
         return handlers.run_scenario_capture(
             ScenarioCaptureCommandRequest(
                 project_dir=project_dir,

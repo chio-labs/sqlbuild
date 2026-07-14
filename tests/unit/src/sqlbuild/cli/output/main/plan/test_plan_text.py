@@ -25,7 +25,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonRunPhase,
 )
 from sqlbuild.presentation.models import DisplayOptions
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.cli.output.main.plan._test_types import (
     FormatPlanColorTestCase,
     FormatPlanTestCase,

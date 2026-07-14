@@ -7,7 +7,7 @@ import pytest
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import ColumnInfo, QueryResult
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
 from tests.integration.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerBuildFlowTestCase,

@@ -14,7 +14,7 @@ from sqlbuild.compiler.planner.helpers.reuse.standard_reuse_from_target import (
     build_standard_reuse_from_target_snapshot,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, StandardReuseFromTargetSnapshot
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
 from tests.unit.src.sqlbuild.compiler.planner.helpers._test_types import (
     StandardReuseFromTargetMultiSchemaTestCase,
     StandardReuseFromTargetNoConfigTestCase,

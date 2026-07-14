@@ -47,7 +47,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorStateCandidates,
 )
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.spec.models.targets import resolve_target_config
+from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
     DetachedVirtualEnvironmentInspection,

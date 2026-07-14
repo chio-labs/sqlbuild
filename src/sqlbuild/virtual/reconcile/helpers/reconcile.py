@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sqlbuild.adapter.capabilities.relation_type import normalize_relation_type
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.main.normalize_relation_type import normalize_relation_type
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.models import RelationInfo, RelationLookup
 from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
@@ -20,8 +20,10 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.spec.models.targets import resolve_target_config, resolve_target_name
+from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
+from sqlbuild.virtual.reconcile.constants import RECONCILE_REPAIR_VIEW_COMMAND
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.main.locks.locks import acquire_virtual_environment_lease
 from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
@@ -118,7 +120,7 @@ def run_virtual_reconcile(
             if relation is not None:
                 seed_physical_map[ref.seed_name] = relation
 
-        if command == "repair-view":
+        if command == RECONCILE_REPAIR_VIEW_COMMAND:
             if (model_name is None) == (seed_name is None):
                 raise PlannerInputError(
                     "reconcile repair-view requires exactly one of --model or --seed",
@@ -190,7 +192,7 @@ def run_virtual_reconcile(
                 "  result  repaired"
             )
 
-        if command == "attach":
+        if command == ReconcileAction.ATTACH:
             if model_name is None or physical_relation_name is None:
                 raise PlannerInputError(
                     "reconcile attach requires --model and --physical-relation",

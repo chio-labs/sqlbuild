@@ -30,7 +30,6 @@ from sqlbuild.compiler.fingerprints.constants import (
 )
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.helpers.sources import render_source_relation
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.helpers.graph.buildability import check_buildability
@@ -45,10 +44,11 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
+from sqlbuild.spec.contracts.models import SourceEntry
 
 _CURSOR_BATCH_SIZE: int = 100
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")

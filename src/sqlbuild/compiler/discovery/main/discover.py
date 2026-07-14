@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_SETTING_KEY
 from sqlbuild.compiler.discovery.helpers.filesystem.aggregation import (
     build_discovered_project_inputs,
 )
@@ -13,7 +14,7 @@ from sqlbuild.compiler.discovery.helpers.yml.project import (
     load_project_config,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
 def discover_project_inputs(
@@ -28,7 +29,7 @@ def discover_project_inputs(
         if sql_analysis_enabled_override is not None
         else (
             local_config.settings.sql_analysis
-            if "sql_analysis" in local_config.setting_overrides
+            if SQL_ANALYSIS_SETTING_KEY in local_config.setting_overrides
             else project_config.settings.sql_analysis
         )
     )

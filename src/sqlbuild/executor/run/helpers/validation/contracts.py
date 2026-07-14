@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.capabilities.type_normalization import types_equal
+from sqlbuild.adapter.main.types_equal import types_equal
 from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.adapter.types import TypeDialect
 from sqlbuild.compiler.planner.models import ModelPlanEntry

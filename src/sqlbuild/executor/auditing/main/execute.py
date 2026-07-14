@@ -16,9 +16,9 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
     assert_no_unresolved_sql_markers,
 )
-from sqlbuild.diagnostics.helpers.logging import diagnostics_context
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_audit(

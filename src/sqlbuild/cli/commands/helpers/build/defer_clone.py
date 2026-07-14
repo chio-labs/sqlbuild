@@ -39,6 +39,7 @@ from sqlbuild.compiler.planner.main.planning.resolve_skipped_view_chain import (
 )
 from sqlbuild.compiler.planner.main.planning.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
+from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
@@ -88,7 +89,10 @@ def _scope_is_view(*, scope: PlannerScope, key: CompiledObjectKey) -> bool:
     model: CompiledModel | None = scope.models_by_name.get(key.name)
     if model is None:
         return False
-    return str(model.config.values.get("materialized", "view")).lower() == "view"
+    return (
+        str(model.config.values.get("materialized", MaterializationType.VIEW)).lower()
+        == MaterializationType.VIEW
+    )
 
 
 def _scope_is_clonable(key: CompiledObjectKey) -> bool:

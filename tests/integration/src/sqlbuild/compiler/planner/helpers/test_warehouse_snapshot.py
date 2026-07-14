@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.models import ColumnInfo
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
     CompiledProject,

@@ -5,7 +5,10 @@ import pytest
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.exceptions import CliUserError
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, resolve_effective_adapter_name
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     ResolveAdapterErrorTestCase,
     ResolveAdapterTestCase,

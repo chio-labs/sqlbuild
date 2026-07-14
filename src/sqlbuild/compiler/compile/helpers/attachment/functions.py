@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from sqlbuild.compiler.compile.constants import (
     PRESERVE_TARGET_VALUE,
+    TABLE_FUNCTION_RETURN_KEYS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.helpers.analysis.validation import (
@@ -46,7 +47,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlFunctionFile,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     SettingsConfig,
     TargetConfig,
@@ -433,7 +434,7 @@ def _parse_sql_function_returns(
             context_label=f"SQL function {function_file.relative_path} returns",
         )
         return returns, ()
-    if isinstance(raw_returns, dict) and set(raw_returns) == {"table"}:
+    if isinstance(raw_returns, dict) and set(raw_returns) == TABLE_FUNCTION_RETURN_KEYS:
         table_returns: dict[str, object] = cast(dict[str, object], raw_returns)
         raw_columns: object = table_returns["table"]
         if not isinstance(raw_columns, dict) or not raw_columns:

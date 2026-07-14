@@ -11,7 +11,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
-from sqlbuild.spec.models.targets import resolve_target_name
+from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import SourceFreshnessRecord as VirtualSourceFreshnessRecord
 

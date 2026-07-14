@@ -7,7 +7,7 @@ import pytest
 from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
 from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     RenderAuditSqlTestCase,
 )

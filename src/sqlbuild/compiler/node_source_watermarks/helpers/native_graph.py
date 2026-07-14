@@ -30,7 +30,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_native_node_source_watermark_inputs(

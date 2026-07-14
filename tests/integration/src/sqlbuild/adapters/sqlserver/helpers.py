@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 
 
 def build_unique_schema_name(*, prefix: str) -> str:

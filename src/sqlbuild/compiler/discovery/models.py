@@ -12,10 +12,16 @@ from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    ProjectConfig,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SourceColumnEntry,
+    SourceEntry,
+    SourceLocation,
+)
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)

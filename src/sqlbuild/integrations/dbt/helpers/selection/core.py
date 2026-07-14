@@ -18,6 +18,7 @@ from sqlbuild.integrations.dbt.helpers.graph.core import (
     expand_combined_upstream,
     sqlbuild_model_graph_key,
 )
+from sqlbuild.integrations.dbt.helpers.selection.constants import DBT_PATH_SELECTOR_SEPARATOR
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
@@ -139,7 +140,7 @@ def _resolve_path_between_keys(
     parsed: SelectorExpansion,
     raw_term: str,
 ) -> frozenset[DbtCombinedGraphKey] | None:
-    if "~" not in parsed.core:
+    if DBT_PATH_SELECTOR_SEPARATOR not in parsed.core:
         return None
     start_name, end_name = _path_endpoint_names(term=parsed.core, raw_term=raw_term)
     start_key: DbtCombinedGraphKey = _resolve_path_endpoint_key(
@@ -158,7 +159,7 @@ def _resolve_path_between_keys(
 
 
 def _path_endpoint_names(*, term: str, raw_term: str) -> tuple[str, str]:
-    start_name, end_name = (part.strip() for part in term.split("~", 1))
+    start_name, end_name = (part.strip() for part in term.split(DBT_PATH_SELECTOR_SEPARATOR, 1))
     if not start_name or not end_name:
         raise DbtInteropArgumentError(
             f"path selector '{raw_term}' requires names on both sides of '~'",

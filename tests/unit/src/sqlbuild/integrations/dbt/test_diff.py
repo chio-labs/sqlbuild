@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropConfigError
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

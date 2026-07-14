@@ -22,7 +22,9 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredProvider
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 _SECRET_CONNECTION_KEYS: frozenset[str] = frozenset(
     {

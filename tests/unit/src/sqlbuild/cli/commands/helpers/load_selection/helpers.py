@@ -9,8 +9,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
 )
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.source import IntegrationLoaderConfig, SourceEntry
+from sqlbuild.spec.contracts.models import (
+    IntegrationLoaderConfig,
+    LocalConfig,
+    ProjectConfig,
+    SourceEntry,
+)
 
 
 def fetch_orders(_ctx: object) -> list[dict[str, object]]:

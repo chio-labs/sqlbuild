@@ -612,7 +612,9 @@ def test_given_invalid_path_selector_when_resolving_then_raises_with_message(
 def test_given_model_paths_when_building_path_index_then_returns_expected_folders(
     test_case: BuildPathIndexTestCase,
 ) -> None:
-    from sqlbuild.compiler.helpers.selector_indexes import build_model_path_index
+    from sqlbuild.compiler.planner.main.planning.build_model_path_index import (
+        build_model_path_index,
+    )
 
     project: CompiledProject = build_test_project(
         model_deps={name: () for name in test_case.model_paths},

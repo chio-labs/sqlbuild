@@ -10,6 +10,10 @@ from collections.abc import Sequence
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.planner.main.planning.query_diff import format_query_diff
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.integrations.dbt.helpers.planning.constants import (
+    DBT_SELECT_FLAG,
+    DBT_UNIT_TEST_LABEL,
+)
 from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropSelectionResult,
@@ -457,7 +461,7 @@ def _format_count_breakdown(resource_counts: Counter[str]) -> str:
 def _pluralize(*, label: str, count: int) -> str:
     if count == 1:
         return label
-    if label == "unit test":
+    if label == DBT_UNIT_TEST_LABEL:
         return "unit tests"
     return f"{label}s"
 
@@ -749,7 +753,7 @@ def _format_display_argv(*, argv: tuple[str, ...], display_options: DisplayOptio
     if _is_verbose(display_options):
         return " ".join(argv)
     max_terms: int | None = display_options.max_entries_per_section
-    if max_terms is None or "--select" not in argv:
+    if max_terms is None or DBT_SELECT_FLAG not in argv:
         return " ".join(argv)
     display: list[str] = []
     index: int = 0
@@ -757,7 +761,7 @@ def _format_display_argv(*, argv: tuple[str, ...], display_options: DisplayOptio
         token: str = argv[index]
         display.append(token)
         index += 1
-        if token != "--select":
+        if token != DBT_SELECT_FLAG:
             continue
         select_terms: list[str] = []
         while index < len(argv) and not argv[index].startswith("--"):

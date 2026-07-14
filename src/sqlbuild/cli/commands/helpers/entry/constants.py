@@ -1,3 +1,10 @@
 """CLI entrypoint constants."""
 
 SQLBUILD_CONCURRENCY_ENV_VAR: str = "SQLBUILD_CONCURRENCY"
+EMPTY_ENV_VALUE: str = ""
+NO_COLOR_OPTION: str = "--no-color"
+DEBUG_OPTION: str = "--debug"
+DBT_INIT_COMMAND: str = "init"
+SKILLS_UPDATE_COMMAND: str = "update"
+SCENARIO_TEST_COMMAND: str = "test"
+SCENARIO_CAPTURE_COMMAND: str = "capture"

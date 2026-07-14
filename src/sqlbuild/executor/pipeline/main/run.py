@@ -45,8 +45,7 @@ from sqlbuild.executor.pipeline.helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
 from sqlbuild.executor.pipeline.models import ResolvedBuildInputs
-from sqlbuild.spec.models.project import SettingsConfig
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SettingsConfig, SourceEntry
 
 
 def run_build_pipeline(

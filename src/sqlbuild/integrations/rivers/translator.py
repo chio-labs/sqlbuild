@@ -7,6 +7,12 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from sqlbuild.integrations.rivers.constants import (
+    RIVERS_DIRECT_ASSET_KINDS,
+    RIVERS_MODEL_KIND,
+    RIVERS_VIEW_MATERIALIZATION,
+)
+
 
 class SqlBuildRiversTranslator:
     """Default mapping from SQLBuild DAG records to Rivers metadata."""
@@ -28,12 +34,12 @@ class SqlBuildRiversTranslator:
 
     def get_kinds(self, node: Mapping[str, Any]) -> list[str]:
         kind: str = str(node.get("kind"))
-        if kind == "model":
+        if kind == RIVERS_MODEL_KIND:
             materialization_type: str = str(node.get("materialization_type") or "table")
-            if materialization_type == "view":
+            if materialization_type == RIVERS_VIEW_MATERIALIZATION:
                 return ["sqlbuild", "view"]
             return ["sqlbuild", "table"]
-        if kind in {"source", "loader", "seed", "udf", "table_fn", "task", "asset"}:
+        if kind in RIVERS_DIRECT_ASSET_KINDS:
             return ["sqlbuild", kind]
         return ["sqlbuild"]
 

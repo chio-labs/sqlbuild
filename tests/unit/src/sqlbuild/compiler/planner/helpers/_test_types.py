@@ -41,7 +41,7 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)

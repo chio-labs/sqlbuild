@@ -17,25 +17,35 @@ from sqlbuild.cli.commands.main.commands.dbt_sqlbuild_work import (
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.planner.models import GraphNodeKey, PlanOutput
-from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import (
-    build_dbt_fingerprint_destination,
-    try_write_dbt_node_fingerprint,
-)
-from sqlbuild.integrations.dbt.helpers.planning.graph_projection import dbt_graph_node_key
-from sqlbuild.integrations.dbt.helpers.planning.model_identity import (
-    build_dbt_write_identity_hashes,
-)
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+from sqlbuild.integrations.dbt.main.graph.dbt_graph_node_key import dbt_graph_node_key
+from sqlbuild.integrations.dbt.main.planning.build_expected_model_version_hashes import (
     build_expected_dbt_model_version_hashes,
 )
-from sqlbuild.integrations.dbt.helpers.planning.orchestration import resolve_sqlbuild_test_actions
-from sqlbuild.integrations.dbt.helpers.profile.connection import resolve_connection_config
-from sqlbuild.integrations.dbt.helpers.runtime.node_source_watermarks import (
+from sqlbuild.integrations.dbt.main.planning.build_write_identity_hashes import (
+    build_dbt_write_identity_hashes,
+)
+from sqlbuild.integrations.dbt.main.profile.resolve_connection_config import (
+    resolve_connection_config,
+)
+from sqlbuild.integrations.dbt.main.runtime.build_fingerprint_destination import (
+    build_dbt_fingerprint_destination,
+)
+from sqlbuild.integrations.dbt.main.runtime.build_node_source_watermark_context import (
     build_dbt_node_source_watermark_context,
+)
+from sqlbuild.integrations.dbt.main.runtime.record_node_source_watermark import (
     record_dbt_successful_node_source_watermark,
+)
+from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime.write_node_fingerprint import (
+    try_write_dbt_node_fingerprint,
+)
+from sqlbuild.integrations.dbt.main.runtime.write_node_source_watermarks import (
     write_dbt_node_source_watermark_records,
 )
-from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
+from sqlbuild.integrations.dbt.main.selection.resolve_test_actions import (
+    resolve_sqlbuild_test_actions,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
@@ -58,6 +68,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtTrackedExecution,
     DbtWriteIdentities,
 )
+from sqlbuild.integrations.dbt.pipeline.constants import DBT_FULL_REFRESH_FLAG
 from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import (
     resolve_dbt_defer_clone_from,
     resolve_defer_clone_unique_ids,
@@ -206,7 +217,7 @@ def resolve_dbt_planned_work(
             )
         ),
         selected_unique_ids=plan.dbt_selected_unique_ids,
-        full_refresh="--full-refresh" in invocation.routed.dbt_args,
+        full_refresh=DBT_FULL_REFRESH_FLAG in invocation.routed.dbt_args,
         force=invocation.effective_force,
         hooks=ConnectionHooks(
             on_progress=request.on_progress,

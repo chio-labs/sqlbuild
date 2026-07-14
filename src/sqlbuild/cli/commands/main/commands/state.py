@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from sqlbuild.cli.commands.constants import STATE_CHECKPOINTS_COMMAND
 from sqlbuild.cli.commands.helpers.state.checkpoints import run_state_checkpoints
 from sqlbuild.cli.commands.helpers.state.interactive_operation import (
     run_interactive_state_operation,
@@ -45,7 +46,7 @@ def run_state(
             allow_copy=allow_copy,
             no_color=no_color,
         )
-    if state_command == "checkpoints":
+    if state_command == STATE_CHECKPOINTS_COMMAND:
         return run_state_checkpoints(
             project_dir=project_dir,
             command=checkpoint_command,

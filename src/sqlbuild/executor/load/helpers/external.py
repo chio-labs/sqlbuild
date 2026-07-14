@@ -25,7 +25,7 @@ from sqlbuild.provider.main.runtime import (
     invoke_with_providers,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_external_source_load(

@@ -15,6 +15,7 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.types import ExecutionStatus
 
 
 def append_eligible_standard_source_freshness_records(
@@ -38,7 +39,7 @@ def append_eligible_standard_source_freshness_records(
     successful_model_names: frozenset[str] = frozenset(
         model_result.model_name
         for model_result in result.model_results
-        if getattr(model_result.status, "value", model_result.status) == "success"
+        if getattr(model_result.status, "value", model_result.status) == ExecutionStatus.SUCCESS
     )
     observed_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = {
         record.identity: record for record in source_freshness.observed_records

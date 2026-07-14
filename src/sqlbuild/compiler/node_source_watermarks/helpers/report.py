@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
+from sqlbuild.compiler.node_source_watermarks.constants import REPORT_BLANK_LINE
 from sqlbuild.compiler.node_source_watermarks.models import (
     NodeSourceWatermarkStaleness,
     NodeSourceWatermarkStalenessReport,
@@ -71,10 +72,10 @@ def format_node_source_watermark_staleness_report(
         )
         if not section_lines:
             continue
-        if lines[-1] != "":
+        if lines[-1] != REPORT_BLANK_LINE:
             lines.append("")
         lines.extend(section_lines)
-    if lines[-1] != "":
+    if lines[-1] != REPORT_BLANK_LINE:
         lines.append("")
     lines.append("  To refresh these inputs:")
     lines.append("    rebuild the upstream closure for the selected model(s)")

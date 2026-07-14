@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from scripts.testing.test_conventions.constants import PYTHON_FILE_SUFFIX, TEST_FUNCTION_PREFIX
+
 
 def resolve_repo_root(paths: Iterable[Path]) -> Path:
     """Return the repository root for the given target paths."""
@@ -28,12 +30,14 @@ def iter_python_files(paths: Iterable[Path]) -> list[Path]:
     files: set[Path] = set()
     for path in paths:
         resolved: Path = path.resolve()
-        if resolved.is_file() and resolved.suffix == ".py":
+        if resolved.is_file() and resolved.suffix == PYTHON_FILE_SUFFIX:
             files.add(resolved)
             continue
 
         if resolved.is_dir():
-            files.update(file_path.resolve() for file_path in resolved.rglob("*.py"))
+            files.update(
+                file_path.resolve() for file_path in resolved.rglob(f"*{PYTHON_FILE_SUFFIX}")
+            )
 
     return sorted(files)
 
@@ -44,7 +48,8 @@ def discover_test_directories(python_files: Iterable[Path]) -> list[Path]:
     directories: set[Path] = {
         file_path.parent
         for file_path in python_files
-        if file_path.name.startswith("test_") and file_path.suffix == ".py"
+        if file_path.name.startswith(TEST_FUNCTION_PREFIX)
+        and file_path.suffix == PYTHON_FILE_SUFFIX
     }
     return sorted(directories)
 

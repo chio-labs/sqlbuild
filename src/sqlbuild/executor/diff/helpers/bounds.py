@@ -7,6 +7,11 @@ from typing import Any
 
 from sqlbuild.adapter.models import CursorValue
 from sqlbuild.adapter.types import CursorKind
+from sqlbuild.executor.diff.constants import (
+    BOUNDED_DIFF_DAY_UNIT,
+    BOUNDED_DIFF_HOUR_UNIT,
+    BOUNDED_DIFF_MINUTE_UNIT,
+)
 from sqlbuild.executor.exceptions import ExecutorInputError
 
 
@@ -75,11 +80,11 @@ def _parse_duration_bound(raw: str) -> timedelta:
         ) from error
     if amount <= 0:
         raise ExecutorInputError("bounded diff duration must be positive", code="X104")
-    if unit == "d":
+    if unit == BOUNDED_DIFF_DAY_UNIT:
         return timedelta(days=amount)
-    if unit == "h":
+    if unit == BOUNDED_DIFF_HOUR_UNIT:
         return timedelta(hours=amount)
-    if unit == "m":
+    if unit == BOUNDED_DIFF_MINUTE_UNIT:
         return timedelta(minutes=amount)
     raise ExecutorInputError(
         "timestamp cursor bounded diff requires duration like 30d, 12h, or 15m",

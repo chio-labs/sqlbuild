@@ -17,7 +17,9 @@ from sqlbuild.compiler.compile.main.effective_runtime import build_effective_run
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.provider.main.session import build_provider_session
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 
 def prepare_load_execution(

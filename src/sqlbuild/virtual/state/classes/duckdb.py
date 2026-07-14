@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
 from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
 from sqlbuild.executor.node_results.models import (
@@ -15,6 +16,9 @@ from sqlbuild.executor.node_results.models import (
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
+    DUCKDB_DATETIME_TYPE_TOKEN,
+    DUCKDB_INTEGER_TYPE_TOKEN,
+    DUCKDB_TIMESTAMP_TYPE_TOKEN,
     FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
     MODEL_VERSION_TABLE,
@@ -25,6 +29,7 @@ from sqlbuild.virtual.state.constants import (
     RECONCILE_EVENT_TABLE,
     SEED_VERSION_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
+    STATE_BOOLEAN_TRUE,
     STATE_MIGRATION_EVENTS_TABLE,
     STATE_OPERATION_EVENT_TABLE,
     STATE_OPERATION_TABLE,
@@ -989,7 +994,10 @@ class DuckDbStateBackend(StateBackend):
     ) -> None:
         ref: VirtualEnvironmentFunctionRefRecord
         for ref in refs:
-            if ref.node_type not in {"udf", "table_fn"}:
+            if ref.node_type not in {
+                CompiledResourceType.UDF,
+                CompiledResourceType.TABLE_FN,
+            }:
                 raise StateBackendConfigError("Function ref node_type must be 'udf' or 'table_fn'")
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]] = {}
         for node_type in ("udf", "table_fn"):
@@ -1769,7 +1777,7 @@ class DuckDbStateBackend(StateBackend):
     def _parse_materialized(self, value: object) -> bool | None:
         if value is None:
             return None
-        return str(value).lower() == "true"
+        return str(value).lower() == STATE_BOOLEAN_TRUE
 
     def _quote_identifier(self, identifier: str) -> str:
         return '"' + identifier.replace('"', '""') + '"'
@@ -1917,9 +1925,9 @@ class DuckDbStateBackend(StateBackend):
         actual: str = actual_type.lower()
         match expected_type:
             case StateColumnType.INTEGER:
-                return "int" in actual
+                return DUCKDB_INTEGER_TYPE_TOKEN in actual
             case StateColumnType.TEXT:
                 return any(token in actual for token in ("text", "varchar", "character", "string"))
             case StateColumnType.TIMESTAMP:
-                return "timestamp" in actual or "datetime" in actual
+                return DUCKDB_TIMESTAMP_TYPE_TOKEN in actual or DUCKDB_DATETIME_TYPE_TOKEN in actual
         return False

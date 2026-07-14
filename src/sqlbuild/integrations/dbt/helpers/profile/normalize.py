@@ -4,6 +4,19 @@ from __future__ import annotations
 
 from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
+from sqlbuild.integrations.dbt.helpers.profile.constants import (
+    DBT_BIGQUERY_SUPPORTED_METHODS,
+    DBT_BIGQUERY_UNSUPPORTED_METHODS,
+    DBT_DATABRICKS_PAT_AUTH_TYPE,
+    DBT_DUCKDB_UNSUPPORTED_PROFILE_KEYS,
+    DBT_PROFILE_HOST_KEY,
+    DBT_PROFILE_HTTP_PATH_KEY,
+    DBT_PROFILE_KEYFILE_KEY,
+    DBT_PROFILE_LOCATION_KEY,
+    DBT_PROFILE_SCHEMA_KEY,
+    DBT_PROFILE_TOKEN_KEY,
+    DBT_SQLSERVER_SQL_AUTHENTICATION,
+)
 from sqlbuild.integrations.dbt.models import (
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
@@ -58,25 +71,7 @@ def _normalize_duckdb(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtPro
             connection[key] = output[key]
     warnings: list[str] = []
     unsupported_keys: tuple[str, ...] = tuple(
-        sorted(
-            key
-            for key in output
-            if key
-            in {
-                "secrets",
-                "filesystems",
-                "remote",
-                "plugins",
-                "module_paths",
-                "retries",
-                "is_ducklake",
-                "use_credential_provider",
-                "config_options",
-                "external_root",
-                "disable_transactions",
-                "keep_open",
-            }
-        )
+        sorted(key for key in output if key in DBT_DUCKDB_UNSUPPORTED_PROFILE_KEYS)
     )
     if unsupported_keys:
         warnings.append(
@@ -144,7 +139,7 @@ def _normalize_snowflake(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbt
 def _normalize_bigquery(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtProfileConnection:
     output: dict[str, object] = dict(resolved.output)
     method: str | None = _string_or_none(output.get("method"))
-    if method in {"oauth-secrets", "service-account-json", "external-oauth-wif"}:
+    if method in DBT_BIGQUERY_UNSUPPORTED_METHODS:
         raise DbtProfileError(
             "dbt BigQuery profile method "
             f"'{method}' is not supported by SQLBuild dbt-profile normalization yet. "
@@ -154,11 +149,11 @@ def _normalize_bigquery(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtP
     connection: dict[str, object] = {}
     if project is not None:
         connection["project"] = project
-    if "location" in output:
-        connection["location"] = output["location"]
-    if "keyfile" in output:
-        connection["credentials_path"] = output["keyfile"]
-    if method is not None and method not in {"oauth", "service-account"}:
+    if DBT_PROFILE_LOCATION_KEY in output:
+        connection["location"] = output[DBT_PROFILE_LOCATION_KEY]
+    if DBT_PROFILE_KEYFILE_KEY in output:
+        connection["credentials_path"] = output[DBT_PROFILE_KEYFILE_KEY]
+    if method is not None and method not in DBT_BIGQUERY_SUPPORTED_METHODS:
         raise DbtProfileError(
             "dbt BigQuery profile method "
             f"'{method}' is not supported by SQLBuild dbt-profile normalization yet. "
@@ -189,7 +184,7 @@ def _normalize_databricks(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDb
         )
     )
     auth_type: str | None = _string_or_none(output.get("auth_type"))
-    if auth_type is not None and auth_type != "pat":
+    if auth_type is not None and auth_type != DBT_DATABRICKS_PAT_AUTH_TYPE:
         raise DbtProfileError(
             "dbt Databricks profile auth_type "
             f"'{auth_type}' is not supported by SQLBuild dbt-profile normalization yet. "
@@ -201,18 +196,18 @@ def _normalize_databricks(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDb
             "dbt-profile normalization yet: " + ", ".join(unsupported_auth_keys)
         )
     connection: dict[str, object] = {}
-    if "host" in output:
-        connection["server_hostname"] = output["host"]
-    if "http_path" in output:
-        connection["http_path"] = output["http_path"]
-    if "token" in output:
-        connection["token"] = output["token"]
+    if DBT_PROFILE_HOST_KEY in output:
+        connection["server_hostname"] = output[DBT_PROFILE_HOST_KEY]
+    if DBT_PROFILE_HTTP_PATH_KEY in output:
+        connection["http_path"] = output[DBT_PROFILE_HTTP_PATH_KEY]
+    if DBT_PROFILE_TOKEN_KEY in output:
+        connection["token"] = output[DBT_PROFILE_TOKEN_KEY]
     catalog: object | None = output.get("catalog", output.get("database"))
     if catalog is None:
         catalog = "hive_metastore"
     connection["catalog"] = catalog
-    if "schema" in output:
-        connection["schema"] = output["schema"]
+    if DBT_PROFILE_SCHEMA_KEY in output:
+        connection["schema"] = output[DBT_PROFILE_SCHEMA_KEY]
     return NormalizedDbtProfileConnection(
         adapter=BuiltinAdapter.DATABRICKS.value,
         connection=connection,
@@ -229,7 +224,7 @@ def _normalize_sqlserver(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbt
             "dbt-profile normalization yet"
         )
     authentication: str | None = _string_or_none(output.get("authentication", output.get("auth")))
-    if authentication is not None and authentication.lower() != "sql":
+    if authentication is not None and authentication.lower() != DBT_SQLSERVER_SQL_AUTHENTICATION:
         raise DbtProfileError(
             "dbt SQL Server authentication mode "
             f"'{authentication}' is not supported by SQLBuild dbt-profile normalization yet. "

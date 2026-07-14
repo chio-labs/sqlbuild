@@ -11,8 +11,10 @@ from sqlbuild.executor.clone.main.prephase_cause_annotation import (
 from sqlbuild.executor.clone.main.write_prephase_header import (
     write_prephase_header,
 )
-from sqlbuild.integrations.dbt.helpers.cli.runner import build_dbt_command_argv
-from sqlbuild.integrations.dbt.helpers.runtime.event_stream import execute_dbt_json_event_stream
+from sqlbuild.integrations.dbt.main.cli.build_command_argv import build_dbt_command_argv
+from sqlbuild.integrations.dbt.main.runtime.execute_json_event_stream import (
+    execute_dbt_json_event_stream,
+)
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,

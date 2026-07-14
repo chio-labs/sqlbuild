@@ -11,7 +11,7 @@ from sqlbuild.adapter.types import TablePromotionMode
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import RelationReuseKind
-from sqlbuild.diagnostics.helpers.logging import diagnostics_context
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run.helpers.execution.final_audits import run_final_model_audits

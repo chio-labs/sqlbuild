@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.diagnostics.helpers.logging import diagnostics_context
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run.helpers.execution.results import (

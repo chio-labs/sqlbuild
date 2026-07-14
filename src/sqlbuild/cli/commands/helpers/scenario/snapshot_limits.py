@@ -10,7 +10,7 @@ from sqlbuild.cli.commands.helpers.scenario.constants import (
 )
 from sqlbuild.cli.commands.helpers.scenario.models import ScenarioSnapshotLimitInputs
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
-from sqlbuild.spec.models.project import ScenarioConfig
+from sqlbuild.spec.contracts.models import ScenarioConfig
 
 
 def build_scenario_snapshot_capture_limits(

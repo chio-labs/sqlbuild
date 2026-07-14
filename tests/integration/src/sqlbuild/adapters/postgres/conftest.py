@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.postgres.client import PostgresAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from tests.integration.src.sqlbuild.adapters.postgres.helpers import build_unique_schema_name
 
 

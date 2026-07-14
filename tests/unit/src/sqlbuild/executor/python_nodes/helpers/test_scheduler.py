@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.helpers.python_node_scheduler import (
-    build_python_node_in_degree,
-    build_python_node_ready_queue,
-)
+from sqlbuild.executor.scheduling.main.build_in_degree import build_python_node_in_degree
+from sqlbuild.executor.scheduling.main.build_ready_queue import build_python_node_ready_queue
 from tests.unit.src.sqlbuild.executor.python_nodes.helpers._test_types import (
     PythonNodeSchedulerTestCase,
 )

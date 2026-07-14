@@ -17,8 +17,9 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSeed,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.constants import DEFERRED_TARGET_CONTEXT_KEYS
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.spec.models.project import TargetConfig
+from sqlbuild.spec.contracts.models import TargetConfig
 
 _CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")
 _VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
@@ -158,7 +159,7 @@ def _resolve_target_field(
 
     def _replace_ctx(match: re.Match[str]) -> str:
         ctx_key: str = match.group(1)
-        if ctx_key in ("schema", "database"):
+        if ctx_key in DEFERRED_TARGET_CONTEXT_KEYS:
             return logical_value if logical_value is not None else ""
         return match.group(0)
 

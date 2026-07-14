@@ -8,6 +8,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.integrations.rivers.constants import (
+    RIVERS_DEPLOYMENT_ENVIRONMENT_VARIABLE,
+    RIVERS_DEVELOPMENT_DEPLOYMENT,
+)
 from sqlbuild.integrations.rivers.exceptions import RiversProjectPrepareError
 
 
@@ -62,5 +66,5 @@ class SqlBuildProject:
     def prepare_if_dev(self) -> None:
         """Generate the DAG artifact when running under Rivers local development."""
 
-        if os.getenv("RIVERS_DEPLOYMENT") == "dev":
+        if os.getenv(RIVERS_DEPLOYMENT_ENVIRONMENT_VARIABLE) == RIVERS_DEVELOPMENT_DEPLOYMENT:
             self.prepare()

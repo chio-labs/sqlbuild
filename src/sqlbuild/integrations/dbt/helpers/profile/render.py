@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
+from sqlbuild.integrations.dbt.helpers.profile.constants import (
+    DBT_FALSE_VALUES,
+    DBT_JINJA_MARKERS,
+    DBT_NUMBER_DECIMAL_SEPARATOR,
+    DBT_TRUE_VALUES,
+)
 from sqlbuild.integrations.dbt.models import ResolvedDbtProfileOutput, SelectedDbtProfileOutput
 
 
@@ -97,7 +103,7 @@ def _render_string(
     target: _TargetContext,
     cli_vars: Mapping[str, object],
 ) -> object:
-    if "{{" not in value and "{%" not in value and "{#" not in value:
+    if all(marker not in value for marker in DBT_JINJA_MARKERS):
         return value
     try:
         from jinja2 import StrictUndefined
@@ -152,9 +158,9 @@ def _as_bool(value: object) -> bool:
         return value
     if isinstance(value, str):
         normalized: str = value.strip().lower()
-        if normalized in {"true", "1", "yes", "y", "on"}:
+        if normalized in DBT_TRUE_VALUES:
             return True
-        if normalized in {"false", "0", "no", "n", "off"}:
+        if normalized in DBT_FALSE_VALUES:
             return False
     raise DbtProfileError(f"Cannot coerce {value!r} to bool")
 
@@ -167,7 +173,7 @@ def _as_number(value: object) -> int | float:
     if isinstance(value, str):
         stripped: str = value.strip()
         try:
-            if "." in stripped:
+            if DBT_NUMBER_DECIMAL_SEPARATOR in stripped:
                 return float(stripped)
             return int(stripped)
         except ValueError as error:

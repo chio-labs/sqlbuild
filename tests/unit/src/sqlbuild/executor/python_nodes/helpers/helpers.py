@@ -31,16 +31,15 @@ from sqlbuild.compiler.python_nodes.models import (
 )
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.helpers.python_node_scheduler import unlock_downstream_python_nodes
-from sqlbuild.executor.models.lifecycle_scheduler import LifecycleExecutionNode
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
+from sqlbuild.executor.scheduling.main.unlock_downstream import unlock_downstream_python_nodes
+from sqlbuild.executor.scheduling.models import LifecycleExecutionNode
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.refs import model
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry
 from sqlbuild.tasks import TaskContext, task
 from tests.unit.src.sqlbuild.compiler.python_nodes.helpers.helpers import (
     build_intermediate_loader_asset_dependency_python_node_graph,

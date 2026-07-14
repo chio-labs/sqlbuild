@@ -19,13 +19,14 @@ from sqlbuild.adapter.types import LoaderLogicalType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
 from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.load.constants import LOADER_RELATION_QUALIFIER_SEPARATOR
 from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -203,7 +204,7 @@ class LoaderContext:
     ) -> str:
         """Return a fully-qualified relation name, preserving already-qualified input."""
 
-        if "." in name:
+        if LOADER_RELATION_QUALIFIER_SEPARATOR in name:
             return name
         return resolve_qualified_name_parts(
             adapter=self.adapter,

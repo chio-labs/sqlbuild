@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+from sqlbuild.cli.commands.classes.load_progress_reporter import format_load_footer
 from sqlbuild.cli.commands.helpers.load.models import (
     LoadCommandRequest,
     LoadExecutionPreparation,
     LoadInvocation,
     LoadRunOutcome,
 )
-from sqlbuild.cli.commands.helpers.load.progress import format_load_footer
 from sqlbuild.cli.output.main.load_execution_json import format_load_execution_json
 from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def write_load_ready_output(*, invocation: LoadInvocation) -> None:

@@ -35,7 +35,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.diagnostics.helpers.logging import log_debug_event
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 _CEREMONIAL_SELECT_PATTERN: re.Pattern[str] = re.compile(r"\bSELECT\s+1\s*;?\s*$", re.IGNORECASE)

@@ -12,6 +12,7 @@ from typing import Any, cast
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.constants import PYTHON_IDENTIFIER_REPLACEMENT, PYTHON_INIT_FILE_NAME
 from sqlbuild.adapter.discovery.models import DiscoveredAdapter
 from sqlbuild.adapter.exceptions import AdapterUserError
 
@@ -61,7 +62,7 @@ def _iter_adapter_files(adapters_dir: Path) -> tuple[Path, ...]:
 
 def _is_public_adapter_file(*, adapters_dir: Path, file_path: Path) -> bool:
     relative_path: Path = file_path.relative_to(adapters_dir)
-    if file_path.name == "__init__.py":
+    if file_path.name == PYTHON_INIT_FILE_NAME:
         return False
     return not any(part.startswith("_") for part in relative_path.parts)
 
@@ -101,7 +102,10 @@ def _module_name_for_path(*, project_dir: Path, file_path: Path) -> str:
 
 def _normalize_module_part(part: str) -> str:
     return "".join(
-        character if character.isalnum() or character == "_" else "_" for character in part
+        character
+        if character.isalnum() or character == PYTHON_IDENTIFIER_REPLACEMENT
+        else PYTHON_IDENTIFIER_REPLACEMENT
+        for character in part
     )
 
 
