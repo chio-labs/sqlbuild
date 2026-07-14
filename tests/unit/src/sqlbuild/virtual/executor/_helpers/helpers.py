@@ -82,11 +82,12 @@ def build_bound_physical_relation(*, model_name: str, version_hash: str) -> Phys
 def build_optional_bound_physical_relations(
     *, model_name: str, version_hash: str | None
 ) -> dict[str, PhysicalRelationRecord]:
-    if version_hash is None:
-        return {}
-    return {
-        model_name: build_bound_physical_relation(model_name=model_name, version_hash=version_hash)
+    relations: dict[str, PhysicalRelationRecord] = {
+        model_name: build_bound_physical_relation(
+            model_name=model_name, version_hash=version_hash or ""
+        )
     }
+    return ({}, relations)[version_hash is not None]
 
 
 def build_adapter() -> DuckDbAdapter:
@@ -102,11 +103,13 @@ def build_seeded_incremental_plan_output(
     cursor_bounds: CursorBounds | None = None,
     include_cursor_bounds: bool = True,
 ) -> PlanOutput:
-    effective_cursor_bounds: CursorBounds | None = cursor_bounds
-    if effective_cursor_bounds is None and include_cursor_bounds:
-        effective_cursor_bounds = CursorBounds(
-            start="2026-01-02T00:00:00", end="2026-01-04T00:00:00"
-        )
+    default_cursor_bounds: CursorBounds | None = (
+        None,
+        CursorBounds(start="2026-01-02T00:00:00", end="2026-01-04T00:00:00"),
+    )[include_cursor_bounds]
+    effective_cursor_bounds: CursorBounds | None = (default_cursor_bounds, cursor_bounds)[
+        cursor_bounds is not None
+    ]
     entry: ModelPlanEntry = ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         name="orders",

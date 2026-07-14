@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import cast
+from collections import defaultdict
+from typing import Any, cast
 
 import pytest
 
@@ -129,14 +130,19 @@ def test_given_sources_when_observing_freshness_then_classifies_sources(
     }
     assert statuses == test_case.expected_statuses
     assert {
-        name: version for name, version in versions.items() if name in test_case.expected_versions
+        name: versions[name] for name in test_case.expected_versions
     } == test_case.expected_versions
-    age_statuses: dict[str, str] = {
-        source.name: source.age_status.value
-        for source in result.sources
-        if source.age_status is not None
-    }
-    assert age_statuses == (test_case.expected_age_statuses or {})
+    sources_by_age_status_presence: defaultdict[bool, list[str]] = defaultdict(list)
+    for source in result.sources:
+        sources_by_age_status_presence[source.age_status is not None].append(source.name)
+    expected_age_statuses: dict[str, str] = test_case.expected_age_statuses or {}
+    assert set(sources_by_age_status_presence[True]) == set(expected_age_statuses)
+    sources_by_name: dict[str, Any] = {source.name: source for source in result.sources}
+    assert len(sources_by_name) == len(result.sources)
+    for name, expected_age_status in expected_age_statuses.items():
+        age_status: Any = sources_by_name[name].age_status
+        assert age_status is not None
+        assert age_status.value == expected_age_status
 
 
 @pytest.mark.parametrize(

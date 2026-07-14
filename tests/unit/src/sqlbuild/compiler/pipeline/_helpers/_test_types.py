@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
@@ -10,7 +11,7 @@ from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
 @dataclass(frozen=True)
 class DeferredTargetTestCase:
     description: str
-    adapter_name: str
+    render_qualified_name: Callable[..., str | None]
     logical_schema: str | None
     logical_database: str | None
     env_schema: str | None

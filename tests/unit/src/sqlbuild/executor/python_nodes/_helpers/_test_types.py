@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlbuild.compiler.python_nodes.types import (
@@ -107,6 +108,7 @@ class PythonNodeExecutorTestCase:
     expected_payloads: tuple[object | None, ...]
     expected_materialized: tuple[bool | None, ...]
     expected_error_fragments: tuple[str | None, ...]
+    skip_function: Callable[..., object] | None = None
 
 
 @dataclass(frozen=True)
@@ -191,6 +193,7 @@ class PythonCheckExecutorTestCase:
     expected_passed: bool
     expected_severity: PythonCheckSeverity
     expected_message: str | None
+    upstream_skip_mode: SkipMode | None
     expected_error_fragment: str | None = None
     upstream_status: PythonNodeStatus = PythonNodeStatus.SUCCESS
     upstream_skip_reason: str | None = None

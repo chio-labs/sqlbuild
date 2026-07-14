@@ -62,9 +62,7 @@ def test_given_transient_write_conflicts_when_writing_fingerprint_then_retries_u
     )
 
     insert_count: int = sum(
-        1
-        for sql in execute.executed_sql
-        if sql.startswith("INSERT INTO main._sqlbuild_fingerprints")
+        sql.startswith("INSERT INTO main._sqlbuild_fingerprints") for sql in execute.executed_sql
     )
     assert execute.create_attempts == test_case.expected_create_attempts
     assert insert_count == test_case.expected_insert_count
@@ -109,9 +107,7 @@ def test_given_persistent_write_conflicts_when_writing_fingerprint_then_raises_a
         )
 
     insert_count: int = sum(
-        1
-        for sql in execute.executed_sql
-        if sql.startswith("INSERT INTO main._sqlbuild_fingerprints")
+        sql.startswith("INSERT INTO main._sqlbuild_fingerprints") for sql in execute.executed_sql
     )
     assert test_case.expected_error_fragment in str(error_info.value)
     assert execute.create_attempts == test_case.expected_create_attempts

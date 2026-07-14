@@ -583,6 +583,7 @@ def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_down
             ),
             expected_materialized=(None, None, None, True),
             expected_error_fragments=(None, None, None, None),
+            skip_function=skip_empty_orders,
         ),
         PythonNodeExecutorTestCase(
             description="skips downstream when hard-skipped branch has successful sibling",
@@ -601,6 +602,7 @@ def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_down
             expected_payloads=(None, {"status": "ready"}, None, None),
             expected_materialized=(None, None, None, None),
             expected_error_fragments=(None, None, None, None),
+            skip_function=hard_skip_empty_orders,
         ),
     ),
     ids=lambda case: case.description,
@@ -608,11 +610,8 @@ def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_down
 def test_given_mixed_python_skips_when_executing_nodes_then_fan_in_matches_mode(
     test_case: PythonNodeExecutorTestCase,
 ) -> None:
-    skip_function: Callable[..., object] = (
-        skip_empty_orders
-        if test_case.expected_statuses[-1] == PythonNodeStatus.SUCCESS
-        else hard_skip_empty_orders
-    )
+    skip_function: Callable[..., object] | None = test_case.skip_function
+    assert skip_function is not None
     nodes: tuple[DiscoveredTaskFunction | DiscoveredAssetFunction, ...] = (
         DiscoveredTaskFunction(
             file_path=Path("/project/tasks/orders.py"),

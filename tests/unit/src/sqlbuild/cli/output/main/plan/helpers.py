@@ -153,7 +153,7 @@ def build_plan_output(
         selected_keys=selected_keys,
         warnings=warnings,
         provider_usages=provider_usages,
-        metadata={} if metadata is None else metadata,
+        metadata=metadata or {},
     )
 
 
@@ -185,7 +185,7 @@ def build_existing_destination_input_entry(
         ),
         status=status,
         expected_version_hash="expected_hash",
-        destination_version_hash=("expected_hash" if status == "current" else "old_hash"),
+        destination_version_hash={"current": "expected_hash", "stale": "old_hash"}[status],
     )
 
 

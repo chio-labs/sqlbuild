@@ -104,7 +104,8 @@ def write_standard_model_state(
 
 
 def model_definition_hash(project: CompiledProject, name: str) -> str:
-    model: CompiledModel = next(model for model in project.models if model.name == name)
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    model: CompiledModel = models_by_name[name]
     return compute_query_hash(model.query_sql)
 
 
@@ -158,7 +159,7 @@ def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
 
     def grouped(model: type) -> dict[str, Any]:
         names: frozenset[str] = frozenset(field.name for field in fields(model))
-        return {name: kwargs.pop(name) for name in list(kwargs) if name in names}
+        return {name: kwargs.pop(name) for name in names & kwargs.keys()}
 
     selection: PlannerSelection = PlannerSelection(**grouped(PlannerSelection))
     overrides: PlannerOverrides = PlannerOverrides(**grouped(PlannerOverrides))

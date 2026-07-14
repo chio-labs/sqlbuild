@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import re
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, cast
 
 import pytest
 
@@ -25,12 +27,51 @@ _ENV_KEYS: tuple[str, ...] = (
 )
 
 
+def _missing_env_key(key: str) -> tuple[str, ...]:
+    return (key,)
+
+
+def _present_env_key(key: str) -> tuple[str, ...]:
+    del key
+    return ()
+
+
+def _skip_missing_env(missing: tuple[str, ...]) -> None:
+    pytest.skip("Snowflake credentials not configured: " + ", ".join(sorted(missing)))
+
+
+def _accept_env(missing: tuple[str, ...]) -> None:
+    del missing
+
+
+def _configured_schema(schema: str | None) -> str:
+    return cast(str, schema)
+
+
+def _default_schema(schema: str | None) -> str:
+    del schema
+    return os.environ["SQB_TEST_SNOWFLAKE_SCHEMA"]
+
+
+_ENV_KEY_RESULTS: MappingProxyType[bool, Callable[[str], tuple[str, ...]]] = MappingProxyType(
+    {False: _missing_env_key, True: _present_env_key}
+)
+_ENV_VALIDATORS: MappingProxyType[bool, Callable[[tuple[str, ...]], None]] = MappingProxyType(
+    {False: _accept_env, True: _skip_missing_env}
+)
+_SCHEMA_BUILDERS: MappingProxyType[bool, Callable[[str | None], str]] = MappingProxyType(
+    {False: _configured_schema, True: _default_schema}
+)
+
+
 def build_snowflake_connection_config(*, schema: str | None = None) -> dict[str, object]:
     """Return Snowflake connection config from required env vars or skip."""
 
-    missing: list[str] = [key for key in _ENV_KEYS if not os.environ.get(key)]
-    if missing:
-        pytest.skip("Snowflake credentials not configured: " + ", ".join(sorted(missing)))
+    missing: tuple[str, ...] = sum(
+        (_ENV_KEY_RESULTS[bool(os.environ.get(key))](key) for key in _ENV_KEYS),
+        (),
+    )
+    _ENV_VALIDATORS[bool(missing)](missing)
     return {
         "account": os.environ["SQB_TEST_SNOWFLAKE_ACCOUNT"],
         "user": os.environ["SQB_TEST_SNOWFLAKE_USER"],
@@ -39,7 +80,7 @@ def build_snowflake_connection_config(*, schema: str | None = None) -> dict[str,
         "role": os.environ["SQB_TEST_SNOWFLAKE_ROLE"],
         "warehouse": os.environ["SQB_TEST_SNOWFLAKE_WAREHOUSE"],
         "database": os.environ["SQB_TEST_SNOWFLAKE_DATABASE"],
-        "schema": schema if schema is not None else os.environ["SQB_TEST_SNOWFLAKE_SCHEMA"],
+        "schema": _SCHEMA_BUILDERS[schema is None](schema),
     }
 
 

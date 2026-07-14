@@ -123,6 +123,7 @@ class BuildProgressLoadSkipOutputTestCase:
 @dataclass(frozen=True)
 class ConnectionProgressTestCase:
     description: str
+    adapter_name: str
     connection_count: int
     elapsed_seconds: float
     expected_start: str

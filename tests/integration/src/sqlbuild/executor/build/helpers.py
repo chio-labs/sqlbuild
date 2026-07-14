@@ -45,10 +45,8 @@ def run_build_for_project(
     plan: PlanOutput = pipeline_result.plan_output
 
     settings_mode: str | None = discovered.project_config.settings.table_promotion_mode
-    promotion_mode: TablePromotionMode = (
-        TablePromotionMode(settings_mode)
-        if settings_mode
-        else TablePromotionMode(adapter.default_table_promotion_mode())
+    promotion_mode: TablePromotionMode = TablePromotionMode(
+        settings_mode or adapter.default_table_promotion_mode()
     )
 
     return execute_build_plan(
@@ -77,8 +75,6 @@ def verify_model_statuses(
 ) -> None:
     """Assert per-model execution statuses match expected."""
 
-    if not test_case.expected_model_statuses:
-        return
     actual_statuses: dict[str, ExecutionStatus] = {
         r.model_name: r.status for r in result.model_results
     }
@@ -109,12 +105,6 @@ def verify_function_statuses(
 ) -> None:
     """Assert per-function execution statuses and error fragments match expected."""
 
-    if (
-        not test_case.expected_function_statuses
-        and not test_case.expected_function_error_fragments
-        and not test_case.expected_function_error_codes
-    ):
-        return
     actual_statuses: dict[str, ExecutionStatus] = {
         r.function_name: r.status for r in result.function_results
     }
@@ -187,11 +177,13 @@ def verify_warehouse_state(
 
     relation: str
     for relation in test_case.expected_missing_relations:
-        parts: list[str] = relation.split(".")
-        schema: str | None = parts[0] if len(parts) > 1 else None
-        name: str = parts[-1]
+        schema: str
+        name: str
+        schema, _, name = relation.rpartition(".")
+        name = name or schema
+        schema = schema.removesuffix(name)
         cursor = connection.execute(
             "SELECT 1 FROM information_schema.tables "
-            f"WHERE table_name = '{name}'" + (f" AND table_schema = '{schema}'" if schema else "")
+            f"WHERE table_name = '{name}'" + f" AND table_schema = '{schema}'" * bool(schema)
         )
         assert cursor.fetchone() is None, f"Relation {relation} should not exist but was found"

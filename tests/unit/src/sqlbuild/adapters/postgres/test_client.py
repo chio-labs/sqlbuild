@@ -27,6 +27,7 @@ from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
 from tests.unit.src.sqlbuild.adapters.postgres.helpers import (
     FakePostgresConnection,
     FakePostgresCursor,
+    describe_equivalent_numeric_relation,
 )
 
 
@@ -574,11 +575,7 @@ def test_given_equivalent_types_when_diffing_schema_then_postgres_ignores_alias_
     monkeypatch.setattr(
         adapter,
         "describe_relation",
-        lambda connection, relation: (
-            (ColumnInfo(name="total", type="NUMERIC(10,2)"),)
-            if relation == "left_relation"
-            else (ColumnInfo(name="total", type="numeric(10,2)"),)
-        ),
+        describe_equivalent_numeric_relation,
     )
 
     result: SchemaDiffResult = adapter.diff_schema(

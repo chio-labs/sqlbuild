@@ -485,5 +485,5 @@ def test_given_trigger_names_when_formatting_stale_warning_then_caps_and_structu
         assert fragment in message
     for fragment in test_case.unexpected_fragments:
         assert fragment not in message
-    bullet_count: int = sum(1 for line in message.splitlines() if line.strip().startswith("- "))
+    bullet_count: int = sum(line.strip().startswith("- ") for line in message.splitlines())
     assert bullet_count == test_case.expected_bullet_count

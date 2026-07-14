@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from collections import defaultdict
 from typing import Any, cast
 
 import pytest
@@ -32,11 +33,13 @@ from tests.unit.src.sqlbuild.adapter.classes.strict_adapter.helpers import (
 def test_given_base_adapter_public_methods_when_checking_strict_contract_then_all_are_abstract(
     test_case: StrictAdapterContractTestCase,
 ) -> None:
-    base_public_methods: frozenset[str] = frozenset(
-        name
-        for name, value in BaseAdapter.__dict__.items()
-        if not name.startswith("_") and inspect.isfunction(value)
-    )
+    attributes_by_function_status: defaultdict[bool, list[str]] = defaultdict(list)
+    for name, value in BaseAdapter.__dict__.items():
+        attributes_by_function_status[inspect.isfunction(value)].append(name)
+    methods_by_private_status: defaultdict[bool, set[str]] = defaultdict(set)
+    for name in attributes_by_function_status[True]:
+        methods_by_private_status[name.startswith("_")].add(name)
+    base_public_methods: frozenset[str] = frozenset(methods_by_private_status[False])
 
     abstract_methods: frozenset[str] = cast(Any, StrictAdapter).__abstractmethods__
     missing_methods: frozenset[str] = base_public_methods.difference(abstract_methods)

@@ -117,8 +117,7 @@ class BigQueryRenderDeleteInsertTestCase:
 class BigQuerySchemaDiffTestCase:
     description: str
     expected_result: SchemaDiffResult
-    left_relation_columns: tuple[ColumnInfo, ...] | None = None
-    right_relation_columns: tuple[ColumnInfo, ...] | None = None
+    relation_columns: dict[str, tuple[ColumnInfo, ...]]
 
 
 @dataclass(frozen=True)

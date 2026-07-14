@@ -72,7 +72,7 @@ class RealDbtSeedContentIdentityTestCase:
 class RealDbtInteropPlanTestCase:
     description: str
     args: tuple[str, ...]
-    sqlbuild_model_sql_by_relative_path: dict[str, str]
+    sqlbuild_model_contents_by_relative_path: dict[str, str]
     expected_sqlbuild_model_names: tuple[str, ...]
     expected_sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
     expected_dbt_selected_unique_ids: tuple[str, ...]

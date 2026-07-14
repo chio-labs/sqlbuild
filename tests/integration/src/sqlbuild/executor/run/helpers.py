@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -84,10 +85,9 @@ def build_table_plan_entry(
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for table execution tests."""
 
-    relation_parts: tuple[str, ...] = tuple(
-        part for part in (target_database, target_schema, target_name) if part is not None
-    )
-    qualified: str = ".".join(relation_parts)
+    qualified: str = f"{target_database or ''}.{target_schema or ''}.{target_name}".strip(
+        "."
+    ).replace("..", ".")
     return ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
         name=name,
@@ -134,10 +134,9 @@ def build_reuse_table_plan_entry(
 ) -> ModelPlanEntry:
     """Build a table plan entry that reuses an origin relation."""
 
-    origin_relation_parts: tuple[str, ...] = tuple(
-        part for part in (origin_database, origin_schema, origin_name) if part is not None
-    )
-    origin_qualified: str = ".".join(origin_relation_parts)
+    origin_qualified: str = f"{origin_database or ''}.{origin_schema or ''}.{origin_name}".strip(
+        "."
+    ).replace("..", ".")
     return dataclasses.replace(
         build_table_plan_entry(
             name=name,
@@ -188,14 +187,12 @@ def build_reuse_snapshot_plan_entry(
 ) -> ModelPlanEntry:
     """Build a snapshot plan entry that seeds from an origin relation."""
 
-    destination_relation_parts: tuple[str, ...] = tuple(
-        part for part in (target_database, target_schema, target_name) if part is not None
+    destination_qualified: str = (
+        f"{target_database or ''}.{target_schema or ''}.{target_name}".strip(".").replace("..", ".")
     )
-    origin_relation_parts: tuple[str, ...] = tuple(
-        part for part in (origin_database, origin_schema, origin_name) if part is not None
-    )
-    destination_qualified: str = ".".join(destination_relation_parts)
-    origin_qualified: str = ".".join(origin_relation_parts)
+    origin_qualified: str = f"{origin_database or ''}.{origin_schema or ''}.{origin_name}".strip(
+        "."
+    ).replace("..", ".")
     return ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
         name=name,
@@ -321,7 +318,7 @@ def build_test_audit_result(
         attachment_kind=audit.attachment_kind,
         severity=audit.severity,
         outcome=outcome,
-        row_count=0 if outcome == AuditOutcome.PASS else 1,
+        row_count={AuditOutcome.PASS: 0, AuditOutcome.WARN: 1, AuditOutcome.ERROR: 1}[outcome],
         executed_sql=audit.resolved_sql,
         run_scope_phase=AuditRunScope.FINAL,
         attached_target_name=audit.attached_target_name,
@@ -481,15 +478,9 @@ def _execute_test(
             source_map={},
             model_audits=model_audits,
             run_id="test_run",
-            query_change_tracking=(
-                test_case.query_change_tracking
-                if isinstance(test_case, TableSuccessTestCase)
-                else True
-            ),
-            hook_functions=tuple(
-                hook_function
-                for hook_function in getattr(test_case, "hook_functions", ())
-                if isinstance(hook_function, DiscoveredHookFunction)
+            query_change_tracking=getattr(test_case, "query_change_tracking", True),
+            hook_functions=cast(
+                tuple[DiscoveredHookFunction, ...], getattr(test_case, "hook_functions", ())
             ),
         ),
         declared_columns=declared_columns,
@@ -502,21 +493,23 @@ def _build_model_audits(
 ) -> tuple[AuditPlanEntry, ...]:
     """Build model audits from test case audit config."""
 
-    audits: list[AuditPlanEntry] = []
-    if test_case.audit_sql is not None:
-        audits.append(
-            build_test_audit_plan_entry(
-                name="not_null",
-                unresolved_sql=test_case.audit_sql,
-                attached_target_name="orders",
-                resolved_target_name=resolved_target_name,
-                severity=test_case.audit_severity,
-            )
-        )
+    audits: list[AuditPlanEntry] = list(
+        {
+            True: (),
+            False: (
+                build_test_audit_plan_entry(
+                    name="not_null",
+                    unresolved_sql=test_case.audit_sql or "",
+                    attached_target_name="orders",
+                    resolved_target_name=resolved_target_name,
+                    severity=test_case.audit_severity,
+                ),
+            ),
+        }[test_case.audit_sql is None]
+    )
     extra: object
     for extra in test_case.extra_audits:
-        if not isinstance(extra, ExtraAuditDefinition):
-            raise TypeError("extra_audits must contain ExtraAuditDefinition values")
+        assert isinstance(extra, ExtraAuditDefinition)
         audits.append(
             build_test_audit_plan_entry(
                 name=extra.name,
@@ -530,9 +523,7 @@ def _build_model_audits(
 
 
 def _build_target_qualified(*, target_schema: str | None, target_name: str) -> str:
-    if target_schema:
-        return f"{target_schema}.{target_name}"
-    return target_name
+    return f"{target_schema or ''}.{target_name}".lstrip(".")
 
 
 def _verify_column_names(
@@ -541,11 +532,13 @@ def _verify_column_names(
     target_qualified: str,
     test_case: TableSuccessTestCase,
 ) -> None:
-    if not test_case.expected_column_names:
-        return
     query_result: Any = connection.execute(f"SELECT * FROM {target_qualified} LIMIT 0")
     actual_names: tuple[str, ...] = tuple(desc[0] for desc in query_result.description)
-    assert actual_names == test_case.expected_column_names
+    name_normalizations: dict[tuple[str, ...], tuple[str, ...]] = {(): ()}
+    normalized_names: tuple[str, ...] = name_normalizations.get(
+        test_case.expected_column_names, actual_names
+    )
+    assert normalized_names == test_case.expected_column_names
 
 
 def _verify_column_types(
@@ -554,19 +547,20 @@ def _verify_column_types(
     connection: Any,
     test_case: TableSuccessTestCase,
 ) -> None:
-    if not test_case.expected_column_types:
-        return
     schema: str | None = test_case.target_schema
     columns: tuple[ColumnInfo, ...] = adapter.get_columns(
         connection=connection, database=None, schema=schema, name=test_case.target_name
     )
     declared_names: tuple[str, ...] = tuple(col_name for col_name, _ in test_case.declared_columns)
-    enforced_types: list[str] = []
-    col: ColumnInfo
-    for col in columns:
-        if col.name.lower() in {n.lower() for n in declared_names}:
-            enforced_types.append(col.type)
-    assert tuple(enforced_types) == test_case.expected_column_types
+    columns_by_name: dict[str, ColumnInfo] = {column.name.lower(): column for column in columns}
+    enforced_types: tuple[str, ...] = tuple(
+        columns_by_name[name.lower()].type for name in declared_names
+    )
+    type_normalizations: dict[tuple[str, ...], tuple[str, ...]] = {(): ()}
+    normalized_types: tuple[str, ...] = type_normalizations.get(
+        test_case.expected_column_types, enforced_types
+    )
+    assert normalized_types == test_case.expected_column_types
 
 
 def _verify_warning_fragment(
@@ -574,10 +568,9 @@ def _verify_warning_fragment(
     result: ModelExecutionResult,
     test_case: TableSuccessTestCase,
 ) -> None:
-    if test_case.expected_warning_fragment is None:
-        return
     all_warnings: str = " ".join(result.warning_messages)
-    assert test_case.expected_warning_fragment in all_warnings
+    expected_fragment: str = test_case.expected_warning_fragment or ""
+    assert expected_fragment in all_warnings
 
 
 def _verify_lifecycle_event_fragments(
@@ -586,8 +579,9 @@ def _verify_lifecycle_event_fragments(
     test_case: TableSuccessTestCase,
 ) -> None:
     fragment: str
+    lifecycle_output: str = "\n".join(event.content for event in result.lifecycle_events)
     for fragment in test_case.expected_lifecycle_event_fragments:
-        assert any(fragment in event.content for event in result.lifecycle_events)
+        assert fragment in lifecycle_output
 
 
 def _verify_query_results(*, connection: Any, test_case: TableSuccessTestCase) -> None:
@@ -605,10 +599,8 @@ def _verify_error_fragment(
     result: ModelExecutionResult,
     test_case: TableFailureTestCase,
 ) -> None:
-    if test_case.expected_error_fragment is None:
-        return
-    assert result.error_message is not None
-    assert test_case.expected_error_fragment in result.error_message
+    expected_fragment: str = test_case.expected_error_fragment or ""
+    assert expected_fragment in (result.error_message or "")
 
 
 def _verify_failure_row_count(
@@ -616,11 +608,21 @@ def _verify_failure_row_count(
     connection: Any,
     test_case: TableFailureTestCase,
 ) -> None:
-    if test_case.expected_row_count is None:
-        return
+    _FAILURE_ROW_COUNT_VERIFIERS.get(
+        test_case.expected_row_count, _verify_present_failure_row_count
+    )(connection=connection, test_case=test_case)
+
+
+def _ignore_failure_row_count(*, connection: Any, test_case: TableFailureTestCase) -> None:
+    del connection, test_case
+
+
+def _verify_present_failure_row_count(*, connection: Any, test_case: TableFailureTestCase) -> None:
     target_qualified: str = _build_target_qualified(
         target_schema=test_case.target_schema, target_name=test_case.target_name
     )
-    query_result: Any = connection.execute(f"SELECT * FROM {target_qualified}")
-    rows: list[Any] = query_result.fetchall()
+    rows: list[Any] = connection.execute(f"SELECT * FROM {target_qualified}").fetchall()
     assert len(rows) == test_case.expected_row_count
+
+
+_FAILURE_ROW_COUNT_VERIFIERS: dict[object, Callable[..., None]] = {None: _ignore_failure_row_count}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
@@ -73,7 +73,7 @@ def build_view_plan_entry(
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for view execution tests."""
 
-    qualified: str | None = f"{target_schema}.{target_name}" if target_schema else target_name
+    qualified: str = f"{target_schema or ''}.{target_name}".lstrip(".")
     return ModelPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
         name=name,
@@ -237,15 +237,9 @@ def _execute_view_test(
             source_map={},
             model_audits=model_audits,
             run_id="test_run",
-            query_change_tracking=(
-                test_case.query_change_tracking
-                if isinstance(test_case, ViewSuccessTestCase)
-                else True
-            ),
-            hook_functions=tuple(
-                hook_function
-                for hook_function in getattr(test_case, "hook_functions", ())
-                if isinstance(hook_function, DiscoveredHookFunction)
+            query_change_tracking=getattr(test_case, "query_change_tracking", True),
+            hook_functions=cast(
+                tuple[DiscoveredHookFunction, ...], getattr(test_case, "hook_functions", ())
             ),
         ),
     )
@@ -256,21 +250,23 @@ def _build_model_audits(
 ) -> tuple[AuditPlanEntry, ...]:
     """Build model audits from test case audit config."""
 
-    audits: list[AuditPlanEntry] = []
-    if test_case.audit_sql is not None:
-        audits.append(
-            build_view_audit_plan_entry(
-                name="not_null",
-                unresolved_sql=test_case.audit_sql,
-                attached_target_name="dim_view",
-                resolved_target_name=resolved_target_name,
-                severity=test_case.audit_severity,
-            )
-        )
+    audits: list[AuditPlanEntry] = list(
+        {
+            True: (),
+            False: (
+                build_view_audit_plan_entry(
+                    name="not_null",
+                    unresolved_sql=test_case.audit_sql or "",
+                    attached_target_name="dim_view",
+                    resolved_target_name=resolved_target_name,
+                    severity=test_case.audit_severity,
+                ),
+            ),
+        }[test_case.audit_sql is None]
+    )
     extra: object
     for extra in test_case.extra_audits:
-        if not isinstance(extra, ViewExtraAuditDefinition):
-            raise TypeError("extra_audits must contain ViewExtraAuditDefinition values")
+        assert isinstance(extra, ViewExtraAuditDefinition)
         audits.append(
             build_view_audit_plan_entry(
                 name=extra.name,
@@ -284,9 +280,7 @@ def _build_model_audits(
 
 
 def _build_target_qualified(*, target_schema: str | None, target_name: str) -> str:
-    if target_schema:
-        return f"{target_schema}.{target_name}"
-    return target_name
+    return f"{target_schema or ''}.{target_name}".lstrip(".")
 
 
 def _verify_warning_fragment(
@@ -294,10 +288,8 @@ def _verify_warning_fragment(
     result: ModelExecutionResult,
     test_case: ViewSuccessTestCase,
 ) -> None:
-    if test_case.expected_warning_fragment is None:
-        return
     all_warnings: str = " ".join(result.warning_messages)
-    assert test_case.expected_warning_fragment in all_warnings
+    assert (test_case.expected_warning_fragment or "") in all_warnings
 
 
 def _verify_lifecycle_event_fragments(
@@ -306,8 +298,9 @@ def _verify_lifecycle_event_fragments(
     test_case: ViewSuccessTestCase,
 ) -> None:
     fragment: str
+    lifecycle_output: str = "\n".join(event.content for event in result.lifecycle_events)
     for fragment in test_case.expected_lifecycle_event_fragments:
-        assert any(fragment in event.content for event in result.lifecycle_events)
+        assert fragment in lifecycle_output
 
 
 def _verify_error_fragment(
@@ -315,7 +308,4 @@ def _verify_error_fragment(
     result: ModelExecutionResult,
     test_case: ViewFailureTestCase,
 ) -> None:
-    if test_case.expected_error_fragment is None:
-        return
-    assert result.error_message is not None
-    assert test_case.expected_error_fragment in result.error_message
+    assert (test_case.expected_error_fragment or "") in (result.error_message or "")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from tests.e2e.src.sqlbuild.cli.commands.main.check._test_types import CheckCommandTestCase
@@ -281,25 +282,24 @@ def fail_virtual_orders(ctx):
 def prepare_check_project_by_kind(*, tmp_path: Path, project_kind: str) -> Path:
     """Create the project fixture for a check command test case."""
 
-    if project_kind == "terminal_loader":
-        return prepare_terminal_loader_check_project(tmp_path=tmp_path)
-    if project_kind == "virtual":
-        return prepare_virtual_python_check_project(tmp_path=tmp_path)
-    if project_kind == "virtual_failure":
-        return prepare_virtual_failing_python_check_project(tmp_path=tmp_path)
-    return prepare_python_check_project(tmp_path=tmp_path)
+    project_factories: dict[str, Callable[..., Path]] = {
+        "standard": prepare_python_check_project,
+        "terminal_loader": prepare_terminal_loader_check_project,
+        "virtual": prepare_virtual_python_check_project,
+        "virtual_failure": prepare_virtual_failing_python_check_project,
+    }
+    return project_factories[project_kind](tmp_path=tmp_path)
 
 
 def initialize_state_when_requested(*, project_dir: Path, test_case: CheckCommandTestCase) -> None:
     """Initialize virtual state for test cases that need it."""
 
-    if not test_case.initialize_state:
-        return
-    init_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("state", "init"),
-        project_dir=project_dir,
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+    for _ in range(int(test_case.initialize_state)):
+        init_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("state", "init"),
+            project_dir=project_dir,
+        )
+        assert init_result.returncode == 0, init_result.stdout + init_result.stderr
 
 
 def resolve_check_command(*, project_dir: Path, command: tuple[str, ...]) -> tuple[str, ...]:

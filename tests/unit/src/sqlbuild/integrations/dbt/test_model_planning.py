@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from collections import defaultdict
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -362,8 +363,13 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
         adapter.close(connection)
 
     seed_relation_names: frozenset[str] = frozenset(test_case.seed_names)
+    existence_calls_by_seed_status: defaultdict[bool, list[tuple[str | None, str | None, str]]] = (
+        defaultdict(list)
+    )
+    for call in adapter.relation_exists_calls:
+        existence_calls_by_seed_status[call[2] in seed_relation_names].append(call)
     seed_existence_calls: tuple[tuple[str | None, str | None, str], ...] = tuple(
-        call for call in adapter.relation_exists_calls if call[2] in seed_relation_names
+        existence_calls_by_seed_status[True]
     )
     assert len(seed_existence_calls) == test_case.expected_seed_relation_exists_call_count
     listed_name_set: set[str] = set()

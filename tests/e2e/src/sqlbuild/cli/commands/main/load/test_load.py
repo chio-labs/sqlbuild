@@ -602,12 +602,18 @@ def test_given_chained_loader_project_when_running_source_model_then_runs_loader
             command=("--no-color", "load", "--select", "raw_events"),
             expected_return_code=1,
             expected_error_fragment="No persisted result found for Python node 'prepare_events'",
+            dependency_dir="tasks",
+            decorator_import="from sqlbuild.tasks import task\n",
+            decorator_name="task",
         ),
         SourceOnlyComplexIngressE2ETestCase(
             description="source-only load fails when loader reads unselected asset payload",
             command=("--no-color", "load", "--select", "raw_events"),
             expected_return_code=1,
             expected_error_fragment="No persisted result found for Python node 'prepare_events'",
+            dependency_dir="assets",
+            decorator_import="from sqlbuild.assets import asset\n",
+            decorator_name="asset",
         ),
     ],
     ids=lambda case: case.description,
@@ -617,15 +623,7 @@ def test_given_source_loader_reads_unselected_task_payload_when_loading_then_run
     test_case: SourceOnlyComplexIngressE2ETestCase,
 ) -> None:
     assert test_case.expected_error_fragment is not None
-    is_asset_case: bool = "asset payload" in test_case.description
-    dependency_dir: str = "assets" if is_asset_case else "tasks"
-    decorator_import: str = (
-        "from sqlbuild.assets import asset\n"
-        if is_asset_case
-        else "from sqlbuild.tasks import task\n"
-    )
-    decorator_name: str = "asset" if is_asset_case else "task"
-    dependency_file: str = f"{dependency_dir}/prepare.py"
+    dependency_file: str = f"{test_case.dependency_dir}/prepare.py"
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="source_loader_schema_behavior",
@@ -642,7 +640,7 @@ def test_given_source_loader_reads_unselected_task_payload_when_loading_then_run
                 ),
                 loader_py=(
                     "from sqlbuild.loaders import loader\n"
-                    f"from {dependency_dir}.prepare import prepare_events\n\n"
+                    f"from {test_case.dependency_dir}.prepare import prepare_events\n\n"
                     "@loader(depends_on=[prepare_events])\n"
                     "def raw_events(ctx):\n"
                     "    payload = ctx.result_of(prepare_events).payload\n"
@@ -650,8 +648,8 @@ def test_given_source_loader_reads_unselected_task_payload_when_loading_then_run
                 ),
             ),
             dependency_file: (
-                f"{decorator_import}\n"
-                f"@{decorator_name}\n"
+                f"{test_case.decorator_import}\n"
+                f"@{test_case.decorator_name}\n"
                 "def prepare_events(ctx):\n"
                 "    return ctx.result(payload={'event_id': 1}, materialized=True)\n"
             ),

@@ -33,7 +33,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt.helpers import (
     [
         DbtPlanProgressTestCase(
             description="human output writes progress and plan to stdout",
-            json_output=False,
+            args=(),
             expected_stdout_fragments=(
                 "Compiling dbt project...",
                 "Generated dbt interop plan.",
@@ -43,7 +43,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt.helpers import (
         ),
         DbtPlanProgressTestCase(
             description="json output writes progress to stderr and json to stdout",
-            json_output=True,
+            args=("--json",),
             expected_stdout_fragments=('"command": "plan"',),
             expected_stderr_fragments=(
                 "Compiling dbt project...",
@@ -76,19 +76,22 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
         "sqlbuild.cli.commands.main.commands.dbt.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
+
+    def ensure_existing_sqlbuild_project(
+        *, project_dir: Path | None, args: tuple[str, ...], no_color: bool
+    ) -> tuple[Path, tuple[str, ...]]:
+        del no_color
+        assert project_dir is not None
+        return project_dir, args
+
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.commands.dbt.ensure_sqlbuild_project_for_dbt_command",
-        lambda *, project_dir, args, no_color: (
-            project_dir if project_dir is not None else Path.cwd(),
-            args,
-        ),
+        ensure_existing_sqlbuild_project,
     )
-    args: tuple[str, ...] = ("--json",) if test_case.json_output else ()
-
     exit_code: int = run_dbt_command(
         command=DbtInteropCommand.PLAN,
         project_dir=Path("/project"),
-        args=args,
+        args=test_case.args,
         no_color=True,
     )
 
@@ -108,21 +111,21 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
             command_name="run",
             args=("--json", "--verbose", "--select", "tag:nightly"),
             expected_forwarded_args=("--select", "tag:nightly"),
-            expected_progress_stream_name="stderr",
+            expected_progress_stream=sys.stderr,
         ),
         DbtExecutionWrapperTestCase(
             description="dbt build keeps human output on stdout",
             command_name="build",
             args=("--select", "tag:nightly"),
             expected_forwarded_args=("--select", "tag:nightly"),
-            expected_progress_stream_name="stdout",
+            expected_progress_stream=sys.stdout,
         ),
         DbtExecutionWrapperTestCase(
             description="dbt test strips local json and verbose flags before execution",
             command_name="test",
             args=("--json", "--verbose", "--select", "test_type:data"),
             expected_forwarded_args=("--select", "test_type:data"),
-            expected_progress_stream_name="stderr",
+            expected_progress_stream=sys.stderr,
         ),
     ],
     ids=lambda case: case.description,
@@ -141,12 +144,17 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
         "sqlbuild.cli.commands.main.commands.dbt.execute_dbt_interop_from_project",
         execute_dbt_interop_from_project,
     )
+
+    def ensure_existing_sqlbuild_project(
+        *, project_dir: Path | None, args: tuple[str, ...], no_color: bool
+    ) -> tuple[Path, tuple[str, ...]]:
+        del no_color
+        assert project_dir is not None
+        return project_dir, args
+
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.commands.dbt.ensure_sqlbuild_project_for_dbt_command",
-        lambda *, project_dir, args, no_color: (
-            project_dir if project_dir is not None else Path.cwd(),
-            args,
-        ),
+        ensure_existing_sqlbuild_project,
     )
 
     exit_code: int = run_dbt_command(
@@ -158,10 +166,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
 
     assert exit_code == 0
     assert captured_calls[0][1] == test_case.expected_forwarded_args
-    expected_stream: object = (
-        sys.stderr if test_case.expected_progress_stream_name == "stderr" else sys.stdout
-    )
-    assert captured_calls[0][2] is expected_stream
+    assert captured_calls[0][2] is test_case.expected_progress_stream
 
 
 @pytest.mark.parametrize(
@@ -173,6 +178,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
             expected_dbt_args=("--project-dir", "dbt_project", "--no-connection"),
             expected_sqlbuild_no_connection=True,
             expected_exit_code=0,
+            dbt_exit_code=0,
             expected_stderr_fragments=(
                 "Running dbt debug...",
                 "Running SQLBuild diagnostics...",
@@ -187,6 +193,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
             expected_dbt_args=("--project-dir", "dbt_project"),
             expected_sqlbuild_no_connection=False,
             expected_exit_code=1,
+            dbt_exit_code=1,
         ),
     ],
     ids=lambda case: case.description,
@@ -207,7 +214,7 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
         stderr_stream: object,
     ) -> int:
         dbt_calls.append((project_dir, args, stdout_stream, stderr_stream))
-        return 1 if "fails" in test_case.description else 0
+        return test_case.dbt_exit_code
 
     def run_sqlbuild_debug(
         project_dir: Path | None,
@@ -225,12 +232,17 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.commands.dbt_debug.run_sqlbuild_debug", run_sqlbuild_debug
     )
+
+    def ensure_existing_sqlbuild_project(
+        *, project_dir: Path | None, args: tuple[str, ...], no_color: bool
+    ) -> tuple[Path, tuple[str, ...]]:
+        del no_color
+        assert project_dir is not None
+        return project_dir, args
+
     monkeypatch.setattr(
         "sqlbuild.cli.commands.main.commands.dbt.ensure_sqlbuild_project_for_dbt_command",
-        lambda *, project_dir, args, no_color: (
-            project_dir if project_dir is not None else Path.cwd(),
-            args,
-        ),
+        ensure_existing_sqlbuild_project,
     )
 
     exit_code: int = run_dbt_command(
@@ -439,9 +451,9 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
     assert bool(init_requests) is test_case.expected_init_called
     request: DbtInitRequest = init_requests[0]
     assert request.dbt_project_dir.name == test_case.expected_request_dbt_project_dir_name
-    assert (
-        None if request.profiles_dir is None else request.profiles_dir.as_posix()
-    ) == test_case.expected_request_profiles_dir
+    assert getattr(request.profiles_dir, "as_posix", lambda: None)() == (
+        test_case.expected_request_profiles_dir
+    )
     assert request.target_name == test_case.expected_request_target_name
     assert request.sqb_output_dir is not None
     assert request.sqb_output_dir.name == "sqlbuild_project"

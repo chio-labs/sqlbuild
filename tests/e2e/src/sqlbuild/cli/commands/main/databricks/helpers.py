@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -90,10 +90,9 @@ def build_databricks_virtual_project_toml(
     *, project_name: str, schema_name: str, unsuffixed_virtual_env: str | None = None
 ) -> str:
     catalog_name: str = str(build_databricks_connection_config(schema=schema_name)["catalog"])
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         f'name = "{project_name}"\n'
@@ -176,9 +175,22 @@ def prepare_databricks_source_loader_strategies(*, tmp_path: Path) -> tuple[Path
 def databricks_e2e_timing(label: str) -> Iterator[None]:
     """Print opt-in coarse timing for slow real-warehouse e2e phases."""
 
-    if os.environ.get("SQB_E2E_TIMING") != "1":
+    timing_contexts: dict[bool, Callable[[str], AbstractContextManager[None]]] = {
+        False: _unreported_databricks_timing,
+        True: _reported_databricks_timing,
+    }
+    with timing_contexts[os.environ.get("SQB_E2E_TIMING") == "1"](label):
         yield
-        return
+
+
+@contextmanager
+def _unreported_databricks_timing(label: str) -> Iterator[None]:
+    del label
+    yield
+
+
+@contextmanager
+def _reported_databricks_timing(label: str) -> Iterator[None]:
     start: float = time.perf_counter()
     try:
         yield

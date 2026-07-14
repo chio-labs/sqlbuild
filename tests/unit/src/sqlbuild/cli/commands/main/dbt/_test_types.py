@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TextIO
 
 
 @dataclass(frozen=True)
 class DbtPlanProgressTestCase:
     description: str
-    json_output: bool
+    args: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...]
     expected_stderr_fragments: tuple[str, ...]
 
@@ -17,7 +18,7 @@ class DbtExecutionWrapperTestCase:
     command_name: str
     args: tuple[str, ...]
     expected_forwarded_args: tuple[str, ...]
-    expected_progress_stream_name: str
+    expected_progress_stream: TextIO
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class DbtDebugWrapperTestCase:
     expected_dbt_args: tuple[str, ...]
     expected_sqlbuild_no_connection: bool
     expected_exit_code: int
+    dbt_exit_code: int
     expected_stderr_fragments: tuple[str, ...] = ()
 
 

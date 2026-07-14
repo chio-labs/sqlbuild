@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from types import MappingProxyType
+from typing import Any, cast
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 
@@ -10,7 +12,7 @@ class RecordingCursor:
         self.rows: tuple[tuple[Any, ...], ...] = rows
 
     def fetchone(self) -> tuple[Any, ...] | None:
-        return self.rows[0] if self.rows else None
+        return next(iter(self.rows), None)
 
     def fetchall(self) -> list[tuple[Any, ...]]:
         return list(self.rows)
@@ -32,9 +34,23 @@ class RecordingBaseAdapter(BaseAdapter):
         return object()
 
     def execute(self, connection: object, sql: str) -> object:
-        if not isinstance(connection, RecordingConnection):
-            raise TypeError("expected RecordingConnection")
-        return connection.execute(sql)
+        _CONNECTION_VALIDATORS[isinstance(connection, RecordingConnection)](connection)
+        recording_connection: RecordingConnection = cast(RecordingConnection, connection)
+        return recording_connection.execute(sql)
 
     def close(self, connection: object) -> None:
         del connection
+
+
+def _accept_recording_connection(connection: object) -> None:
+    del connection
+
+
+def _reject_recording_connection(connection: object) -> None:
+    del connection
+    raise TypeError("expected RecordingConnection")
+
+
+_CONNECTION_VALIDATORS: MappingProxyType[bool, Callable[[object], None]] = MappingProxyType(
+    {False: _reject_recording_connection, True: _accept_recording_connection}
+)

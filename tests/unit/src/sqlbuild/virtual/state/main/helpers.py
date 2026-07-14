@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.virtual.state.models import (
     PythonNodeVersionRecord,
@@ -23,9 +23,10 @@ class RecordingStateBackend:
         operation_id: str,
     ) -> StateOperationRecord | None:
         del connection, schema
-        if self.operation is None or self.operation.operation_id != operation_id:
-            return None
-        return self.operation
+        operations_by_id: dict[str, StateOperationRecord] = {
+            getattr(self.operation, "operation_id", ""): cast(StateOperationRecord, self.operation)
+        }
+        return operations_by_id.get(operation_id)
 
     def upsert_state_operation(
         self,
@@ -85,6 +86,9 @@ class RecordingPythonIdentityStateBackend:
         self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentPythonNodeRefRecord, ...]:
         del connection, schema
-        return tuple(
-            ref for key, ref in sorted(self.refs.items()) if key[0] == virtual_environment_name
-        )
+        refs_by_environment: dict[str, list[VirtualEnvironmentPythonNodeRefRecord]] = {}
+        key: tuple[str, str, str]
+        ref: VirtualEnvironmentPythonNodeRefRecord
+        for key, ref in sorted(self.refs.items()):
+            refs_by_environment.setdefault(key[0], []).append(ref)
+        return tuple(refs_by_environment.get(virtual_environment_name, ()))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import cast
 
 import pytest
@@ -166,7 +167,10 @@ def test_given_eligible_source_freshness_when_appending_then_reuses_plan_time_ob
         run_id="successful-build-run",
     )
 
-    insert_sql: str = next(sql for sql in adapter.executed_sql if sql.strip().startswith("INSERT"))
+    sql_by_insert_status: defaultdict[bool, list[str]] = defaultdict(list)
+    for sql in adapter.executed_sql:
+        sql_by_insert_status[sql.strip().startswith("INSERT")].append(sql)
+    insert_sql: str = next(iter(sql_by_insert_status[True]))
     assert adapter.insert_count == test_case.expected_insert_count
     assert "successful-build-run" in insert_sql
     assert "planning-run" not in insert_sql

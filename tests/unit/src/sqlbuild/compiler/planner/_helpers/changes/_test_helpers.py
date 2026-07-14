@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.adapter.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models.core import (
@@ -66,15 +67,16 @@ def build_model_from_metadata_test_case(
         destination=CompiledRelationLocation(
             database=None, schema="staging", name="orders", qualified_name=None
         ),
-        schema_entry=SchemaModelEntry(
-            name="orders",
-            columns=tuple(
-                SchemaColumn(name=column[0], type=column[1], nullable=column[2])
-                for column in test_case.schema_columns
+        schema_entry=(
+            None,
+            SchemaModelEntry(
+                name="orders",
+                columns=tuple(
+                    SchemaColumn(name=column[0], type=column[1], nullable=column[2])
+                    for column in test_case.schema_columns
+                ),
             ),
-        )
-        if test_case.schema_columns
-        else None,
+        )[bool(test_case.schema_columns)],
     )
 
 
@@ -203,18 +205,15 @@ def build_snapshot_from_test_case(test_case: DetectModelChangesTestCase) -> Ware
 
 def _build_schema_entry(test_case: DetectModelChangesTestCase) -> SchemaModelEntry | None:
     schema_cols: tuple[tuple[str, str | None], ...] = test_case.schema_columns
-    if not schema_cols:
-        return None
-    return SchemaModelEntry(
+    schema_entry: SchemaModelEntry = SchemaModelEntry(
         name=test_case.model_name,
         columns=tuple(SchemaColumn(name=c[0], type=c[1]) for c in schema_cols),
     )
+    return (None, schema_entry)[bool(schema_cols)]
 
 
 def _build_relations(test_case: DetectModelChangesTestCase) -> dict[str, RelationInfo]:
-    if not test_case.relation_exists:
-        return {}
-    return {
+    relations: dict[str, RelationInfo] = {
         test_case.model_name: RelationInfo(
             database=None,
             schema="staging",
@@ -222,29 +221,28 @@ def _build_relations(test_case: DetectModelChangesTestCase) -> dict[str, Relatio
             relation_type="BASE TABLE",
         )
     }
+    return ({}, relations)[test_case.relation_exists]
 
 
 def _build_columns(
     test_case: DetectModelChangesTestCase,
 ) -> dict[str, tuple[ColumnInfo, ...]]:
-    if not test_case.warehouse_column_names:
-        return {}
-    return {
+    columns: dict[str, tuple[ColumnInfo, ...]] = {
         test_case.model_name: tuple(
             ColumnInfo(name=c[0], type=c[1]) for c in test_case.warehouse_column_names
         )
     }
+    return ({}, columns)[bool(test_case.warehouse_column_names)]
 
 
 def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fingerprint]:
-    if test_case.fingerprint_query_hash is None:
-        return {}
-    fingerprint_config_values: dict[str, object] = (
-        test_case.config_values
-        if test_case.fingerprint_config_values is None
-        else test_case.fingerprint_config_values
+    fingerprint_config_values: dict[str, object] = cast(
+        dict[str, object],
+        (test_case.config_values, test_case.fingerprint_config_values)[
+            test_case.fingerprint_config_values is not None
+        ],
     )
-    return {
+    fingerprints: dict[str, Fingerprint] = {
         test_case.model_name: Fingerprint(
             node_type="model",
             node_name=test_case.model_name,
@@ -252,7 +250,7 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
             target_schema=None,
             target_name=test_case.model_name,
             run_id="run_001",
-            definition_hash=test_case.fingerprint_query_hash,
+            definition_hash=test_case.fingerprint_query_hash or "",
             schema_fingerprint="schema_a",
             definition="SELECT 1",
             metadata_json=build_version_identity_metadata_json(
@@ -262,3 +260,4 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
             ts=_STUB_TS,
         )
     }
+    return ({}, fingerprints)[test_case.fingerprint_query_hash is not None]

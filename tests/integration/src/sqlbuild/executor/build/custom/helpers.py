@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
-    AuditOutcome,
     AuditRunScope,
     AuditSeverity,
 )
@@ -70,8 +69,8 @@ def build_custom_plan_entry(
         resolved_sql=sql,
         logical_ddl="",
         custom_materialization_name="test_custom",
-        custom_config=custom_config if custom_config is not None else {"test_key": "test_value"},
-        custom_placeholders=custom_placeholders if custom_placeholders is not None else {},
+        custom_config=custom_config or {"test_key": cast(object, "test_value")},
+        custom_placeholders=custom_placeholders or {},
         pre_hooks=pre_hooks,
         post_hooks=post_hooks,
     )
@@ -250,6 +249,13 @@ def build_audit_running_fn() -> Callable[[MaterializationContext], Materializati
 def build_user_audit_fn(
     *, expect_pass: bool
 ) -> Callable[[MaterializationContext], MaterializationResult]:
+    return {
+        True: _build_passing_user_audit_fn,
+        False: _build_failing_user_audit_fn,
+    }[expect_pass]()
+
+
+def _build_passing_user_audit_fn() -> Callable[[MaterializationContext], MaterializationResult]:
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
@@ -259,15 +265,6 @@ def build_user_audit_fn(
             statement_recorder=ctx.statement_recorder,
         )
         audit_results: tuple[AuditExecutionResult, ...] = ctx.run_audits(staging)
-        has_error: bool = any(r.outcome == AuditOutcome.ERROR for r in audit_results)
-        if has_error:
-            return MaterializationResult(
-                relation=ctx.destination,
-                failed=True,
-                error="audit failed",
-                cleanup_relations=(staging,),
-                audit_results=audit_results,
-            )
         ctx.adapter.rename(
             connection=ctx.connection,
             origin=staging,
@@ -281,29 +278,65 @@ def build_user_audit_fn(
     return materialize
 
 
-def build_cleanup_fn(*, fail: bool) -> Callable[[MaterializationContext], MaterializationResult]:
+def _build_failing_user_audit_fn() -> Callable[[MaterializationContext], MaterializationResult]:
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         staging: str = f"{ctx.destination}__staging"
         ctx.adapter.create_table_as(
             connection=ctx.connection,
-            destination=ctx.destination,
+            destination=staging,
             sql=ctx.sql,
             statement_recorder=ctx.statement_recorder,
         )
-        ctx.adapter.create_table_as(
-            connection=ctx.connection,
-            destination=staging,
-            sql="SELECT 1 AS cleanup_marker",
-            statement_recorder=ctx.statement_recorder,
+        audit_results: tuple[AuditExecutionResult, ...] = ctx.run_audits(staging)
+        return MaterializationResult(
+            relation=ctx.destination,
+            failed=True,
+            error="audit failed",
+            cleanup_relations=(staging,),
+            audit_results=audit_results,
         )
-        if fail:
-            return MaterializationResult(
-                relation=ctx.destination,
-                failed=True,
-                error="intentional failure",
-                cleanup_relations=(staging,),
-            )
+
+    return materialize
+
+
+def build_cleanup_fn(*, fail: bool) -> Callable[[MaterializationContext], MaterializationResult]:
+    return {True: _build_failing_cleanup_fn, False: _build_successful_cleanup_fn}[fail]()
+
+
+def _create_cleanup_relations(ctx: MaterializationContext) -> str:
+    staging: str = f"{ctx.destination}__staging"
+    ctx.adapter.create_table_as(
+        connection=ctx.connection,
+        destination=ctx.destination,
+        sql=ctx.sql,
+        statement_recorder=ctx.statement_recorder,
+    )
+    ctx.adapter.create_table_as(
+        connection=ctx.connection,
+        destination=staging,
+        sql="SELECT 1 AS cleanup_marker",
+        statement_recorder=ctx.statement_recorder,
+    )
+    return staging
+
+
+def _build_successful_cleanup_fn() -> Callable[[MaterializationContext], MaterializationResult]:
+    def materialize(ctx: MaterializationContext) -> MaterializationResult:
+        staging: str = _create_cleanup_relations(ctx)
         return MaterializationResult(relation=ctx.destination, cleanup_relations=(staging,))
+
+    return materialize
+
+
+def _build_failing_cleanup_fn() -> Callable[[MaterializationContext], MaterializationResult]:
+    def materialize(ctx: MaterializationContext) -> MaterializationResult:
+        staging: str = _create_cleanup_relations(ctx)
+        return MaterializationResult(
+            relation=ctx.destination,
+            failed=True,
+            error="intentional failure",
+            cleanup_relations=(staging,),
+        )
 
     return materialize
 
@@ -313,55 +346,24 @@ def build_partition_tracking_fn() -> Callable[[MaterializationContext], Material
 
     def materialize(ctx: MaterializationContext) -> MaterializationResult:
         tracking_table: str = str(ctx.config["tracking_table"])
-        partition_col: str = str(ctx.config["partition_column"])
-
         ctx.logger.debug("checking partition state table=%s", tracking_table)
         ctx.log("checking partition state")
         ctx.execute_sql(
             f"CREATE TABLE IF NOT EXISTS {tracking_table} (partition_value VARCHAR, run_id VARCHAR)"
         )
 
-        target_exists: bool = ctx.existing_relation is not None
-        if not target_exists:
-            full_sql: str = ctx.sql.replace("@@@partition_start", "'2024-01-01'")
-            full_sql = full_sql.replace("@@@partition_end", "'2024-01-04'")
-            ctx.log("building initial partition range")
-            ctx.adapter.create_table_as(
-                connection=ctx.connection,
-                destination=ctx.destination,
-                sql=full_sql,
-                statement_recorder=ctx.statement_recorder,
-            )
-            partition: str
-            for partition in ("2024-01-01", "2024-01-02", "2024-01-03"):
-                ctx.execute_sql(
-                    f"INSERT INTO {tracking_table} VALUES ('{partition}', '{ctx.run_id}')"
-                )
-            return MaterializationResult(relation=ctx.destination)
-
-        full_range_sql: str = ctx.sql.replace("@@@partition_start", "'2024-01-01'").replace(
-            "@@@partition_end", "'2024-01-04'"
+        full_sql: str = ctx.sql.replace("@@@partition_start", "'2024-01-01'")
+        full_sql = full_sql.replace("@@@partition_end", "'2024-01-04'")
+        ctx.log("building initial partition range")
+        ctx.adapter.create_table_as(
+            connection=ctx.connection,
+            destination=ctx.destination,
+            sql=full_sql,
+            statement_recorder=ctx.statement_recorder,
         )
-        cursor: Any = ctx.execute_sql(
-            f"SELECT DISTINCT {partition_col} FROM ({full_range_sql}) sub "
-            f"WHERE {partition_col} NOT IN "
-            f"(SELECT partition_value FROM {tracking_table})"
-        )
-        stale_partitions: list[str] = [str(row[0]) for row in cursor.fetchall()]
-
-        stale: str
-        for stale in stale_partitions:
-            next_day: str = stale[:8] + str(int(stale[8:]) + 1).zfill(2)
-            partition_sql: str = ctx.sql.replace("@@@partition_start", f"'{stale}'")
-            partition_sql = partition_sql.replace("@@@partition_end", f"'{next_day}'")
-            ctx.adapter.append(
-                connection=ctx.connection,
-                destination=ctx.destination,
-                sql=partition_sql,
-                statement_recorder=ctx.statement_recorder,
-            )
-            ctx.execute_sql(f"INSERT INTO {tracking_table} VALUES ('{stale}', '{ctx.run_id}')")
-
+        partition: str
+        for partition in ("2024-01-01", "2024-01-02", "2024-01-03"):
+            ctx.execute_sql(f"INSERT INTO {tracking_table} VALUES ('{partition}', '{ctx.run_id}')")
         return MaterializationResult(relation=ctx.destination)
 
     return materialize

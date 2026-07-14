@@ -1,4 +1,7 @@
+from collections.abc import Callable
 from dataclasses import dataclass
+
+from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
@@ -17,6 +20,7 @@ class BaseAdapterExpressionInferenceProfileTestCase:
 @dataclass(frozen=True)
 class BaseAdapterSqlAnalysisDialectTestCase:
     description: str
+    adapter_factory: Callable[[], BaseAdapter]
     expected_sql_analysis_dialect: str | None
 
 

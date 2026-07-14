@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from types import MappingProxyType
 
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.constants import (
@@ -97,16 +98,15 @@ def build_test_and_project(
     for name, body in test_case.helper_ctes.items():
         authored_ctes.append(CompileSqlTestCte(name=name, sql_body=body))
 
-    sql_body: str = test_case.sql_body
-    if not sql_body:
-        sql_body = _build_test_sql_body(
-            test_case.mock_ref_ctes,
-            test_case.mock_source_ctes,
-            test_case.mock_seed_ctes,
-            test_case.mock_dbt_ref_ctes,
-            test_case.helper_ctes,
-            test_case.expected_cte_bodies,
-        )
+    generated_sql_body: str = _build_test_sql_body(
+        test_case.mock_ref_ctes,
+        test_case.mock_source_ctes,
+        test_case.mock_seed_ctes,
+        test_case.mock_dbt_ref_ctes,
+        test_case.helper_ctes,
+        test_case.expected_cte_bodies,
+    )
+    sql_body: str = (generated_sql_body, test_case.sql_body)[bool(test_case.sql_body)]
 
     loaded_macros: dict[str, LoadedMacro] = _build_loaded_macros(test_case.loaded_macro_outputs)
     compiled_test: CompiledSqlTest = CompiledSqlTest(
@@ -212,8 +212,15 @@ def _build_model_query_overrides(
     """Build model query overrides for planner tests with macro mocks."""
 
     overrides: dict[str, str] = dict(test_case.model_query_overrides)
-    if not test_case.macro_mocks:
-        return overrides
+    _MACRO_OVERRIDE_BUILDERS[bool(test_case.macro_mocks)](overrides, test_case, loaded_macros)
+    return overrides
+
+
+def _expand_model_query_overrides(
+    overrides: dict[str, str],
+    test_case: PlanTestChainTestCase,
+    loaded_macros: dict[str, LoadedMacro],
+) -> None:
     model_name: str
     query_sql: str
     for model_name, query_sql in test_case.model_macro_source_queries.items():
@@ -224,7 +231,20 @@ def _build_model_query_overrides(
             macro_overrides=test_case.macro_mocks,
             macro_context=_MACRO_CONTEXT,
         )
-    return overrides
+
+
+def _keep_model_query_overrides(
+    overrides: dict[str, str],
+    test_case: PlanTestChainTestCase,
+    loaded_macros: dict[str, LoadedMacro],
+) -> None:
+    del overrides, test_case, loaded_macros
+
+
+_MACRO_OVERRIDE_BUILDERS: MappingProxyType[
+    bool,
+    Callable[[dict[str, str], PlanTestChainTestCase, dict[str, LoadedMacro]], None],
+] = MappingProxyType({False: _keep_model_query_overrides, True: _expand_model_query_overrides})
 
 
 def _build_loaded_macros(macro_outputs: dict[str, str]) -> dict[str, LoadedMacro]:
@@ -278,6 +298,4 @@ def _build_test_sql_body(
         parts.append(f"{name} AS ({body})")
     for name, body in expected_bodies.items():
         parts.append(f"{EXPECTED_TEST_CTE_PREFIX}{name} AS ({body})")
-    if not parts:
-        return "SELECT 1"
-    return "WITH " + ", ".join(parts) + " SELECT 1"
+    return ("WITH " + ", ".join(parts) + " SELECT 1", "SELECT 1")[not parts]

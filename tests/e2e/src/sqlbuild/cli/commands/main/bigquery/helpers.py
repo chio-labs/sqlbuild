@@ -84,10 +84,9 @@ def build_bigquery_virtual_seed_project_toml(
 ) -> str:
     project_id: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
     location: str = str(build_bigquery_connection_config(schema=dataset_name)["location"])
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         f'name = "{project_name}"\n'

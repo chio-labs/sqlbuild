@@ -46,6 +46,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeDescribeCursor,
     FakeSnowflakeMetadataConnection,
     FakeSnowflakeMetadataCursor,
+    describe_equivalent_numeric_relation,
     install_fake_snowflake_connector,
 )
 
@@ -705,11 +706,7 @@ def test_given_equivalent_types_when_diffing_schema_then_snowflake_ignores_alias
     monkeypatch.setattr(
         adapter,
         "describe_relation",
-        lambda connection, relation: (
-            (ColumnInfo(name="id", type="NUMBER(38,0)"),)
-            if relation == "left_relation"
-            else (ColumnInfo(name="id", type="DECIMAL(38,0)"),)
-        ),
+        describe_equivalent_numeric_relation,
     )
 
     result: SchemaDiffResult = adapter.diff_schema(

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import time
+from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
+from threading import Event
+from types import MappingProxyType
 from typing import Any
 
 from dagster import (
@@ -169,12 +173,34 @@ def wait_for_captured_stdout_fragment(
     """Wait until pytest capture has received a stdout fragment."""
 
     rendered_stdout: str = ""
-    while time.monotonic() < deadline:
-        rendered_stdout += capsys.readouterr().out
-        if expected_fragment in rendered_stdout:
-            return rendered_stdout
-        time.sleep(0.01)
+    poll_wait: Event = Event()
+    try:
+        while time.monotonic() < deadline:
+            rendered_stdout += capsys.readouterr().out
+            _STDOUT_POLL_OUTCOMES[expected_fragment in rendered_stdout](rendered_stdout, poll_wait)
+    except _CapturedStdout as captured:
+        return captured.rendered_stdout
     return rendered_stdout
+
+
+class _CapturedStdout(Exception):
+    def __init__(self, rendered_stdout: str) -> None:
+        self.rendered_stdout = rendered_stdout
+
+
+def _finish_stdout_poll(rendered_stdout: str, poll_wait: Event) -> None:
+    del poll_wait
+    raise _CapturedStdout(rendered_stdout)
+
+
+def _continue_stdout_poll(rendered_stdout: str, poll_wait: Event) -> None:
+    del rendered_stdout
+    poll_wait.wait(0.01)
+
+
+_STDOUT_POLL_OUTCOMES: MappingProxyType[bool, Callable[[str, Event], None]] = MappingProxyType(
+    {False: _continue_stdout_poll, True: _finish_stdout_poll}
+)
 
 
 def add_failing_daily_revenue_audits(*, project_dir: Path) -> None:
@@ -218,13 +244,14 @@ def materialization_metadata_keys(
     """Return metadata keys for a materialized asset in a Dagster e2e result."""
 
     expected_asset_key: AssetKey = AssetKey(list(asset_key))
-    for event in result.all_events:
-        if not event.is_step_materialization:
-            continue
+    metadata_keys_by_asset: dict[AssetKey, frozenset[str]] = {}
+    for event in result.get_asset_materialization_events():
         materialization: AssetMaterialization = event.step_materialization_data.materialization
-        if materialization.asset_key == expected_asset_key:
-            return frozenset(str(key) for key in materialization.metadata)
-    return frozenset()
+        metadata_keys_by_asset.setdefault(
+            materialization.asset_key,
+            frozenset(str(key) for key in materialization.metadata),
+        )
+    return metadata_keys_by_asset.get(expected_asset_key, frozenset())
 
 
 def check_names_for_asset(
@@ -233,16 +260,10 @@ def check_names_for_asset(
     """Return Dagster check names emitted for one asset in an e2e result."""
 
     expected_asset_key: AssetKey = AssetKey(list(asset_key))
-    names: set[str] = set()
-    for event in result.all_events:
-        if event.event_type_value != "ASSET_CHECK_EVALUATION":
-            continue
-        evaluation: AssetCheckEvaluation = event.asset_check_evaluation_data
-        if evaluation is None:
-            continue
-        if evaluation.asset_key == expected_asset_key:
-            names.add(evaluation.check_name)
-    return frozenset(names)
+    names_by_asset: defaultdict[AssetKey, set[str]] = defaultdict(set)
+    for evaluation in result.get_asset_check_evaluations():
+        names_by_asset[evaluation.asset_key].add(evaluation.check_name)
+    return frozenset(names_by_asset[expected_asset_key])
 
 
 def check_severity_for_asset(
@@ -251,13 +272,12 @@ def check_severity_for_asset(
     """Return Dagster-native severity for one emitted asset check."""
 
     expected_asset_key: AssetKey = AssetKey(list(asset_key))
-    for event in result.all_events:
-        if event.event_type_value != "ASSET_CHECK_EVALUATION":
-            continue
-        evaluation: AssetCheckEvaluation = event.asset_check_evaluation_data
-        if evaluation.asset_key == expected_asset_key and evaluation.check_name == check_name:
-            return evaluation.severity
-    return None
+    severity_by_check: dict[tuple[AssetKey, str], AssetCheckSeverity] = {}
+    for evaluation in result.get_asset_check_evaluations():
+        severity_by_check.setdefault(
+            (evaluation.asset_key, evaluation.check_name), evaluation.severity
+        )
+    return severity_by_check.get((expected_asset_key, check_name))
 
 
 def failed_check_severities_for_asset(
@@ -266,11 +286,27 @@ def failed_check_severities_for_asset(
     """Return failed Dagster check severities for one asset."""
 
     expected_asset_key: AssetKey = AssetKey(list(asset_key))
-    severities: dict[str, AssetCheckSeverity] = {}
-    for event in result.all_events:
-        if event.event_type_value != "ASSET_CHECK_EVALUATION":
-            continue
-        evaluation: AssetCheckEvaluation = event.asset_check_evaluation_data
-        if evaluation.asset_key == expected_asset_key and not evaluation.passed:
-            severities[evaluation.check_name] = evaluation.severity
-    return severities
+    severities_by_asset: defaultdict[AssetKey, dict[str, AssetCheckSeverity]] = defaultdict(dict)
+    for evaluation in result.get_asset_check_evaluations():
+        _CHECK_EVALUATION_COLLECTORS[evaluation.passed](severities_by_asset, evaluation)
+    return severities_by_asset[expected_asset_key]
+
+
+def _record_failed_check(
+    severities_by_asset: defaultdict[AssetKey, dict[str, AssetCheckSeverity]],
+    evaluation: AssetCheckEvaluation,
+) -> None:
+    severities_by_asset[evaluation.asset_key][evaluation.check_name] = evaluation.severity
+
+
+def _ignore_passed_check(
+    severities_by_asset: defaultdict[AssetKey, dict[str, AssetCheckSeverity]],
+    evaluation: AssetCheckEvaluation,
+) -> None:
+    del severities_by_asset, evaluation
+
+
+_CHECK_EVALUATION_COLLECTORS: MappingProxyType[
+    bool,
+    Callable[[defaultdict[AssetKey, dict[str, AssetCheckSeverity]], AssetCheckEvaluation], None],
+] = MappingProxyType({False: _record_failed_check, True: _ignore_passed_check})

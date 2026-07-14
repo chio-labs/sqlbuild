@@ -78,6 +78,7 @@ def direct_changes_only_orders_model_sql(
     columns_fragment: str,
     extra_select_fragment: str = "",
 ) -> str:
+    columns_separator: str = {False: "", True: ","}[bool(columns_fragment)]
     return (
         "MODEL (\n"
         "  materialized incremental,\n"
@@ -86,7 +87,7 @@ def direct_changes_only_orders_model_sql(
         "  cursor_type integer,\n"
         "  unique_key id"
         f"{policy_fragment}"
-        f"{',' if columns_fragment else ''}\n"
+        f"{columns_separator}\n"
         f"  {columns_fragment}\n"
         ");\n\n"
         "SELECT\n"
@@ -188,15 +189,16 @@ def prepare_virtual_run_despite_unchanged_project(
     source_freshness_type: str = "timestamp",
     warehouse_column_type: str = "TIMESTAMP",
 ) -> Path:
-    freshness_fragment: str = (
-        "\n"
-        "    freshness:\n"
-        "      strategy: column\n"
-        "      column: order_ts\n"
-        f"      type: {source_freshness_type}"
-        if include_freshness
-        else ""
-    )
+    freshness_fragment: str = {
+        False: "",
+        True: (
+            "\n"
+            "    freshness:\n"
+            "      strategy: column\n"
+            "      column: order_ts\n"
+            f"      type: {source_freshness_type}"
+        ),
+    }[include_freshness]
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name=project_name,
@@ -313,9 +315,7 @@ def seed_matching_virtual_refs(
 ) -> None:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     adapter: DuckDbAdapter = DuckDbAdapter()
-    effective_source_project_dir: Path = (
-        source_project_dir if source_project_dir is not None else project_dir
-    )
+    effective_source_project_dir: Path = source_project_dir or project_dir
     source_discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_source_project_dir
     )

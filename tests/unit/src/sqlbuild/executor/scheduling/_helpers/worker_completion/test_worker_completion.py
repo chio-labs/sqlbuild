@@ -27,7 +27,7 @@ from tests.unit.src.sqlbuild.executor.scheduling._helpers.worker_completion.help
             description="publishes success completion and returns connection",
             key="node_a",
             connection="connection_a",
-            result="ok",
+            execute=successful_execute("ok"),
             expected_completion=("node_a", "ok"),
             expected_connection="connection_a",
         ),
@@ -35,10 +35,9 @@ from tests.unit.src.sqlbuild.executor.scheduling._helpers.worker_completion.help
             description="publishes failure completion and returns connection",
             key="node_b",
             connection="connection_b",
-            result=None,
+            execute=failing_execute("worker exploded"),
             expected_completion=("node_b", "worker exploded"),
             expected_connection="connection_b",
-            expected_error_fragment="worker exploded",
         ),
     ],
     ids=lambda case: case.description,
@@ -48,11 +47,7 @@ def test_given_worker_execution_when_running_with_completion_then_publishes_one_
 ) -> None:
     connection_pool: queue.Queue[str] = build_connection_pool(test_case.connection)
     completion_queue: queue.Queue[tuple[str, str]] = queue.Queue()
-    execute: Callable[[object], str] = (
-        failing_execute(test_case.expected_error_fragment)
-        if test_case.expected_error_fragment is not None
-        else successful_execute(test_case.result or "")
-    )
+    execute: Callable[[object], str] = test_case.execute
 
     run_worker_with_completion(
         key=test_case.key,

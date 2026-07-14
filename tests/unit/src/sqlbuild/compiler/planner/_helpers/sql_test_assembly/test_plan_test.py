@@ -89,7 +89,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
             expected_chain_length=1,
             expected_warning_count=1,
             expected_warning_severity=WarningSeverity.ERROR,
-            expected_error_fragment="__dbt_ref__stripe__payments which has no mock",
+            expected_error_fragments=("__dbt_ref__stripe__payments which has no mock",),
             expected_cte_bodies={
                 "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
             },
@@ -464,20 +464,17 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
 
     model_name: str
     expected_fragment: str
+    chain_by_model_name: dict[str, ChainStep] = {step.model_name: step for step in entry.chain}
+    assert len(chain_by_model_name) == len(entry.chain)
     for model_name, expected_fragment in test_case.expected_sql_fragments.items():
-        matching: list[ChainStep] = [s for s in entry.chain if s.model_name == model_name]
-        assert len(matching) == 1
-        assert expected_fragment in matching[0].resolved_sql
+        assert expected_fragment in chain_by_model_name[model_name].resolved_sql
 
     assert len(warnings) == test_case.expected_warning_count
     expected_sev: WarningSeverity | None = test_case.expected_warning_severity
     actual_sevs: tuple[WarningSeverity, ...] = tuple(w.severity for w in warnings)
     assert (expected_sev is None) or all(s == expected_sev for s in actual_sevs)
-    expected_error_fragments: tuple[str, ...] = (
-        () if test_case.expected_error_fragment is None else (test_case.expected_error_fragment,)
-    )
     expected_error_fragment: str
-    for expected_error_fragment in expected_error_fragments:
+    for expected_error_fragment in test_case.expected_error_fragments:
         assert any(expected_error_fragment in w.message for w in warnings)
 
 
@@ -841,7 +838,7 @@ def test_given_sql_analysis_enabled_when_planning_test_then_it_uses_top_level_ge
             helper_ctes={},
             expected_model_names=("orders",),
             expected_chain_length=1,
-            expected_error_fragment="conflicts with the generated source CTE",
+            expected_error_fragments=("conflicts with the generated source CTE",),
             expected_cte_bodies={"orders": "SELECT 1 AS id"},
         )
     ],
@@ -854,8 +851,7 @@ def test_given_sql_analysis_enabled_when_generated_cte_name_conflicts_then_it_ra
     project: CompiledProject
     compiled_test, project = build_test_and_project(test_case)
 
-    assert test_case.expected_error_fragment is not None
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+    with pytest.raises(ValueError, match=test_case.expected_error_fragments[0]):
         plan_test(
             test=compiled_test,
             project=project,

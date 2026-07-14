@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_json_output_file_behavior,
     assert_positional_selector_behavior,
-    assert_select_file_behavior,
+    assert_select_file_selector_behavior,
     write_dagster_test_dag,
     write_fake_sqb_command,
 )
@@ -161,12 +162,13 @@ def test_given_execution_json_when_streaming_then_yields_structured_dagster_even
 
     results: list[Any] = list(resource.cli(args=["build"], context=context).stream())
 
-    materialize_results: list[Any] = [
-        result for result in results if isinstance(result, dg.MaterializeResult)
-    ]
-    check_results: list[Any] = [
-        result for result in results if isinstance(result, dg.AssetCheckResult)
-    ]
+    materialize_results_by_status: defaultdict[bool, list[Any]] = defaultdict(list)
+    check_results_by_status: defaultdict[bool, list[Any]] = defaultdict(list)
+    for result in results:
+        materialize_results_by_status[isinstance(result, dg.MaterializeResult)].append(result)
+        check_results_by_status[isinstance(result, dg.AssetCheckResult)].append(result)
+    materialize_results: list[Any] = materialize_results_by_status[True]
+    check_results: list[Any] = check_results_by_status[True]
     assert tuple(tuple(result.asset_key.path) for result in materialize_results) == (
         test_case.expected_asset_keys
     )
@@ -217,48 +219,42 @@ def test_given_sqlbuild_cli_resource_when_waiting_failed_invocation_then_raises_
             selected_asset_keys=(("analytics", "orders"),),
             command_args=("build",),
             expected_selectors=("orders",),
-            expected_uses_select_file=True,
-            expected_uses_json_output=True,
+            assert_selector_transport=assert_select_file_selector_behavior,
         ),
         DagsterCliSelectionTestCase(
             description="explicit SQLBuild selector is preserved",
             selected_asset_keys=(("analytics", "orders"),),
             command_args=("build", "--select", "manual_selector"),
             expected_selectors=(),
-            expected_uses_select_file=False,
-            expected_uses_json_output=True,
+            assert_selector_transport=assert_positional_selector_behavior,
         ),
         DagsterCliSelectionTestCase(
             description="selected Dagster asset appends attached scenario selectors",
             selected_asset_keys=(("analytics", "orders"),),
             command_args=("scenario", "test"),
             expected_selectors=("orders_minimal",),
-            expected_uses_select_file=False,
-            expected_uses_json_output=True,
+            assert_selector_transport=assert_positional_selector_behavior,
         ),
         DagsterCliSelectionTestCase(
             description="explicit scenario selector is preserved",
             selected_asset_keys=(("analytics", "orders"),),
             command_args=("scenario", "test", "manual_scenario"),
             expected_selectors=(),
-            expected_uses_select_file=False,
-            expected_uses_json_output=True,
+            assert_selector_transport=assert_positional_selector_behavior,
         ),
         DagsterCliSelectionTestCase(
             description="selected loader asset appends load selector",
             selected_asset_keys=(("shared_order_feed",),),
             command_args=("load",),
             expected_selectors=("shared_order_feed",),
-            expected_uses_select_file=True,
-            expected_uses_json_output=True,
+            assert_selector_transport=assert_select_file_selector_behavior,
         ),
         DagsterCliSelectionTestCase(
             description="selected model asset is ignored for load selector",
             selected_asset_keys=(("analytics", "orders"),),
             command_args=("load",),
             expected_selectors=(),
-            expected_uses_select_file=False,
-            expected_uses_json_output=True,
+            assert_selector_transport=assert_positional_selector_behavior,
         ),
     ],
     ids=lambda case: case.description,
@@ -291,16 +287,8 @@ def test_given_selected_dagster_assets_when_invoking_cli_then_applies_sqlbuild_s
 
     assert invocation.is_successful()
     assert invocation.selection == test_case.expected_selectors
-    assert_positional_selector_behavior(
+    test_case.assert_selector_transport(
         command=invocation.command,
         selectors=test_case.expected_selectors,
-        uses_select_file=test_case.expected_uses_select_file,
     )
-    assert_select_file_behavior(
-        command=invocation.command,
-        expected_uses_select_file=test_case.expected_uses_select_file,
-    )
-    assert_json_output_file_behavior(
-        command=invocation.command,
-        expected_uses_json_output=test_case.expected_uses_json_output,
-    )
+    assert_json_output_file_behavior(command=invocation.command)

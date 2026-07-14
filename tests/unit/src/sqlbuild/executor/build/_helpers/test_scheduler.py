@@ -63,6 +63,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
         BuildSchedulerSourceLoadTestCase(
             description="failed managed source blocks downstream model",
             source_status=ExecutionStatus.FAILED,
+            loader_factory=build_failing_discovered_source_loader,
             expected_load_status=ExecutionStatus.FAILED,
             expected_model_status=ExecutionStatus.SKIPPED,
             expected_execution_order=("raw_orders",),
@@ -70,6 +71,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
         BuildSchedulerSourceLoadTestCase(
             description="successful managed source runs before downstream model",
             source_status=ExecutionStatus.SUCCESS,
+            loader_factory=build_discovered_source_loader,
             expected_load_status=ExecutionStatus.SUCCESS,
             expected_model_status=ExecutionStatus.SUCCESS,
             expected_execution_order=("raw_orders", "stg_orders"),
@@ -87,11 +89,7 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
     loader_name: str = "raw_orders_loader"
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: object = adapter.connect({"database": str(tmp_path / "scheduler.duckdb")})
-    loader_function: DiscoveredLoaderFunction = (
-        build_discovered_source_loader(loader_name=loader_name)
-        if test_case.source_status == ExecutionStatus.SUCCESS
-        else build_failing_discovered_source_loader(loader_name=loader_name)
-    )
+    loader_function: DiscoveredLoaderFunction = test_case.loader_factory(loader_name=loader_name)
     node_starts: list[str] = []
     plan: PlanOutput = PlanOutput(
         execution_order=(source_key, model_key),

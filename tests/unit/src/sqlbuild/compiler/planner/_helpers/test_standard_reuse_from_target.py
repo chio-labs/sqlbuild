@@ -26,6 +26,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_standard_reuse_from_target_fingerprint_row,
     build_standard_reuse_from_target_project,
     build_standard_reuse_from_target_scope,
+    build_standard_reuse_from_target_test_adapter,
 )
 
 
@@ -75,7 +76,7 @@ def test_given_reuse_from_target_when_building_snapshot_then_reads_fingerprints_
 ) -> None:
     project: CompiledProject = build_standard_reuse_from_target_project()
     scope: PlannerScope = build_standard_reuse_from_target_scope()
-    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = build_standard_reuse_from_target_test_adapter(
         fingerprint_rows=test_case.fingerprint_rows,
         existing_relations=test_case.existing_relations,
     )
@@ -140,7 +141,7 @@ def test_given_reuse_from_target_when_building_snapshot_then_reads_fingerprints_
 def test_given_missing_reuse_origin_fingerprint_state_when_building_snapshot_then_it_raises(
     test_case: StandardReuseFromTargetSnapshotErrorTestCase,
 ) -> None:
-    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = build_standard_reuse_from_target_test_adapter(
         fingerprint_rows=(),
         existing_relations=frozenset(),
         fingerprint_table_exists=test_case.fingerprint_table_exists,
@@ -209,7 +210,7 @@ def test_given_missing_reuse_origin_fingerprint_state_when_building_snapshot_the
 def test_given_templated_reuse_from_target_when_building_snapshot_then_resolves_namespace(
     test_case: StandardReuseFromTargetSnapshotTestCase,
 ) -> None:
-    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = build_standard_reuse_from_target_test_adapter(
         fingerprint_rows=test_case.fingerprint_rows,
         existing_relations=test_case.existing_relations,
     )
@@ -266,7 +267,7 @@ def test_given_templated_reuse_from_target_when_building_snapshot_then_resolves_
 def test_given_shorthand_ctx_in_reuse_from_target_when_building_snapshot_then_it_raises(
     test_case: StandardReuseFromTargetSnapshotErrorTestCase,
 ) -> None:
-    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = build_standard_reuse_from_target_test_adapter(
         fingerprint_rows=(),
         existing_relations=frozenset(),
         fingerprint_table_exists=test_case.fingerprint_table_exists,
@@ -333,7 +334,7 @@ def test_given_multi_schema_reuse_from_when_building_snapshot_then_tracks_origin
         selected_keys=frozenset(model.key for model in project.models),
         execution_order=tuple(model.key for model in project.models),
     )
-    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = build_standard_reuse_from_target_test_adapter(
         fingerprint_rows=(
             build_standard_reuse_from_target_fingerprint_row(
                 model_name="orders",
@@ -409,7 +410,7 @@ def test_given_multi_schema_reuse_from_when_building_snapshot_then_tracks_origin
 def test_given_scoped_plan_when_building_snapshot_then_includes_only_selected_models(
     test_case: StandardReuseFromTargetSnapshotTestCase,
 ) -> None:
-    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = build_standard_reuse_from_target_test_adapter(
         fingerprint_rows=test_case.fingerprint_rows,
         existing_relations=test_case.existing_relations,
     )
@@ -456,7 +457,7 @@ def test_given_scoped_plan_when_building_snapshot_then_includes_only_selected_mo
 def test_given_reuse_from_without_resolved_schema_when_building_snapshot_then_it_raises(
     test_case: StandardReuseFromTargetSnapshotErrorTestCase,
 ) -> None:
-    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = build_standard_reuse_from_target_test_adapter(
         fingerprint_rows=(),
         existing_relations=frozenset(),
         fingerprint_table_exists=test_case.fingerprint_table_exists,
@@ -513,7 +514,7 @@ def test_given_reuse_from_without_resolved_schema_when_building_snapshot_then_it
 def test_given_no_reuse_from_when_building_snapshot_then_it_returns_none(
     test_case: StandardReuseFromTargetNoConfigTestCase,
 ) -> None:
-    adapter: StandardReuseFromTargetTestAdapter = StandardReuseFromTargetTestAdapter(
+    adapter: StandardReuseFromTargetTestAdapter = build_standard_reuse_from_target_test_adapter(
         fingerprint_rows=(),
         existing_relations=frozenset(),
     )

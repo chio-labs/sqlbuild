@@ -9,4 +9,5 @@ class RelationReuseValidationTestCase:
     materialization_type: MaterializationType
     action: PlanAction
     reuse_kind: RelationReuseKind
+    incremental_strategy: str | None
     expected_error_fragment: str

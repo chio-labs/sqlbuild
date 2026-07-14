@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -365,46 +366,43 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
         test_case.expected_unique_keys, actual_unique_keys
     )
     actual_freshness_strategies: tuple[str | None, ...] = tuple(
-        None if entry.freshness is None else entry.freshness.strategy for entry in source_entries
+        getattr(entry.freshness, "strategy", None) for entry in source_entries
     )
     assert actual_freshness_strategies == expected_or_actual(
         test_case.expected_freshness_strategies, actual_freshness_strategies
     )
     actual_freshness_value_kinds: tuple[str | None, ...] = tuple(
-        None if entry.freshness is None else entry.freshness.value_kind for entry in source_entries
+        getattr(entry.freshness, "value_kind", None) for entry in source_entries
     )
     assert actual_freshness_value_kinds == expected_or_actual(
         test_case.expected_freshness_value_kinds, actual_freshness_value_kinds
     )
     actual_freshness_columns: tuple[str | None, ...] = tuple(
-        None if entry.freshness is None else entry.freshness.column for entry in source_entries
+        getattr(entry.freshness, "column", None) for entry in source_entries
     )
     assert actual_freshness_columns == expected_or_actual(
         test_case.expected_freshness_columns, actual_freshness_columns
     )
     actual_freshness_queries: tuple[str | None, ...] = tuple(
-        None if entry.freshness is None else entry.freshness.query for entry in source_entries
+        getattr(entry.freshness, "query", None) for entry in source_entries
     )
     assert actual_freshness_queries == expected_or_actual(
         test_case.expected_freshness_queries, actual_freshness_queries
     )
     actual_freshness_filters: tuple[str | None, ...] = tuple(
-        None if entry.freshness is None else entry.freshness.filter for entry in source_entries
+        getattr(entry.freshness, "filter", None) for entry in source_entries
     )
     assert actual_freshness_filters == expected_or_actual(
         test_case.expected_freshness_filters, actual_freshness_filters
     )
     actual_freshness_lag_tolerances: tuple[str | None, ...] = tuple(
-        None if entry.freshness is None else entry.freshness.lag_tolerance
-        for entry in source_entries
+        getattr(entry.freshness, "lag_tolerance", None) for entry in source_entries
     )
     assert actual_freshness_lag_tolerances == expected_or_actual(
         test_case.expected_freshness_lag_tolerances, actual_freshness_lag_tolerances
     )
     actual_freshness_age_policy_warn_afters: tuple[str | None, ...] = tuple(
-        None
-        if entry.freshness is None or entry.freshness.age_policy is None
-        else entry.freshness.age_policy.warn_after
+        getattr(getattr(entry.freshness, "age_policy", None), "warn_after", None)
         for entry in source_entries
     )
     assert actual_freshness_age_policy_warn_afters == expected_or_actual(
@@ -412,9 +410,7 @@ def test_given_sources_yaml_variants_when_parsing_then_it_returns_expected_raw_m
         actual_freshness_age_policy_warn_afters,
     )
     actual_freshness_age_policy_error_afters: tuple[str | None, ...] = tuple(
-        None
-        if entry.freshness is None or entry.freshness.age_policy is None
-        else entry.freshness.age_policy.error_after
+        getattr(getattr(entry.freshness, "age_policy", None), "error_after", None)
         for entry in source_entries
     )
     assert actual_freshness_age_policy_error_afters == expected_or_actual(
@@ -515,27 +511,24 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
     assert tuple(entry.loader for entry in source_entries) == test_case.expected_loaders
     assert all(entry.managed for entry in source_entries)
     assert all(entry.integration_loader is not None for entry in source_entries)
-    assert tuple(
-        entry.integration_loader.kind for entry in source_entries if entry.integration_loader
-    ) == (
+    assert tuple(cast(Any, entry.integration_loader).kind for entry in source_entries) == (
         test_case.expected_kind,
         test_case.expected_kind,
     )
     configs: tuple[object, ...] = tuple(
-        entry.integration_loader.config for entry in source_entries if entry.integration_loader
+        cast(Any, entry.integration_loader).config for entry in source_entries
     )
     assert all(isinstance(config, DltSourceConfig) for config in configs)
-    assert tuple(
-        config.resource.dlt_name for config in configs if isinstance(config, DltSourceConfig)
-    ) == (test_case.expected_dlt_names)
-    assert tuple(entry.schema for entry in source_entries) == test_case.expected_schemas
+    typed_configs: tuple[DltSourceConfig, ...] = cast(tuple[DltSourceConfig, ...], configs)
     assert (
-        tuple(config.resource.schema for config in configs if isinstance(config, DltSourceConfig))
-        == test_case.expected_schemas
+        tuple(config.resource.dlt_name for config in typed_configs) == test_case.expected_dlt_names
     )
-    assert tuple(
-        config.destination for config in configs if isinstance(config, DltSourceConfig)
-    ) == (test_case.expected_destination_config, test_case.expected_destination_config)
+    assert tuple(entry.schema for entry in source_entries) == test_case.expected_schemas
+    assert tuple(config.resource.schema for config in typed_configs) == test_case.expected_schemas
+    assert tuple(config.destination for config in typed_configs) == (
+        test_case.expected_destination_config,
+        test_case.expected_destination_config,
+    )
 
 
 @pytest.mark.parametrize(

@@ -66,22 +66,19 @@ class ScenarioLocalPipelineTestAdapter(ScenarioPipelineTestAdapter):
     def connect(self, config: dict[str, object]) -> object:
         database: object = config.get("database", "")
         self.events.append(f"connect:{database}")
-        if database:
-            Path(str(database)).touch()
+        Path(str(database)).touch()
         return object()
 
 
 class SeedPipelineTestAdapter(BaseAdapter):
     """Adapter that records seed pipeline connection and load calls."""
 
-    def __init__(self, *, barrier_targets: tuple[str, ...] = ()) -> None:
+    def __init__(self, *, barrier_targets: tuple[str, ...]) -> None:
         self.connections: list[object] = []
         self.closed_connections: list[object] = []
         self.loads: list[tuple[str, object]] = []
         self.barrier_targets: frozenset[str] = frozenset(barrier_targets)
-        self.barrier: threading.Barrier | None = None
-        if self.barrier_targets:
-            self.barrier = threading.Barrier(len(self.barrier_targets))
+        self.barrier = threading.Barrier(len(self.barrier_targets))
 
     def connect(self, config: dict[str, object]) -> object:
         del config
@@ -119,8 +116,7 @@ class SeedPipelineTestAdapter(BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         del file_path, columns, csv_settings, replace, infer_types, statement_recorder
-        if self.barrier is not None and destination in self.barrier_targets:
-            self.barrier.wait(timeout=1)
+        self.barrier.wait(timeout=1)
         self.loads.append((destination, connection))
 
 
@@ -140,9 +136,14 @@ class ScenarioPipelinePlanBuilder:
         project_name: str,
     ) -> ScenarioExecutionPlan:
         del pipeline_result, adapter, project_name
-        if scenario.name == self.planning_failure_name:
-            raise RuntimeError(self.error_message)
-        return build_scenario_pipeline_plan(scenario=scenario)
+        strategy: Callable[..., ScenarioExecutionPlan] = {
+            self.planning_failure_name: self._raise_planning_error,
+        }.get(scenario.name, build_scenario_pipeline_plan)
+        return strategy(scenario=scenario)
+
+    def _raise_planning_error(self, *, scenario: CompiledSqlScenario) -> ScenarioExecutionPlan:
+        del scenario
+        raise RuntimeError(self.error_message)
 
 
 def build_scenario_pipeline_result(*, scenario_names: tuple[str, ...]) -> CompilePipelineResult:
@@ -232,12 +233,7 @@ def local_snapshot_loader_for_test_case(
 ) -> Callable[..., ScenarioLocalSnapshotLoadResult]:
     """Build a local snapshot loader stub for one pipeline test case."""
 
-    def load_snapshot(**_kwargs: object) -> ScenarioLocalSnapshotLoadResult:
-        if test_case.load_error_message is not None:
-            raise ExecutorInputError(
-                test_case.load_error_message,
-                code=SCENARIO_LOCAL_JSONL_INVALID,
-            )
+    def load_snapshot_success(**_kwargs: object) -> ScenarioLocalSnapshotLoadResult:
         return ScenarioLocalSnapshotLoadResult(
             scenario_name="local_scenario",
             manifest=ScenarioSnapshotManifest(
@@ -253,4 +249,13 @@ def local_snapshot_loader_for_test_case(
             ),
         )
 
-    return load_snapshot
+    def load_snapshot_failure(**_kwargs: object) -> ScenarioLocalSnapshotLoadResult:
+        raise ExecutorInputError(
+            test_case.load_error_message or "",
+            code=SCENARIO_LOCAL_JSONL_INVALID,
+        )
+
+    return {
+        True: load_snapshot_success,
+        False: load_snapshot_failure,
+    }[test_case.load_error_message is None]

@@ -285,11 +285,13 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert tuple(provider.settings.__class__ for provider in discovered_inputs.providers) == tuple(
         provider.provider_class for provider in discovered_inputs.providers
     )
+    adapter_paths: tuple[str | None, ...] = (
+        None,
+        str(getattr(discovered_inputs.adapter_file, "relative_path", "")),
+    )
     assert (
-        None
-        if discovered_inputs.adapter_file is None
-        else str(discovered_inputs.adapter_file.relative_path)
-    ) == test_case.expected_adapter_path
+        adapter_paths[discovered_inputs.adapter_file is not None] == test_case.expected_adapter_path
+    )
     assert discovered_inputs.project_config.name == "demo"
     assert discovered_inputs.project_config.adapter == "duckdb"
     assert discovered_inputs.local_config.target == "dev"

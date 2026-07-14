@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from types import MappingProxyType
 from typing import Any
 
 from sqlbuild.adapter.models import ColumnInfo
@@ -57,11 +59,14 @@ def build_row_diff_execute(executed_sql: list[str]) -> Any:
     def fake_execute(connection: object, sql: str) -> StubCursor:
         del connection
         executed_sql.append(sql)
-        if "WHERE id IS NULL" in sql:
-            return StubCursor(row=(0,))
-        if "HAVING COUNT(*) > 1" in sql:
-            return StubCursor(row=(0,))
-        return StubCursor(row=(3, 3, 4, 1, 1, 1, 1, 1))
+        rows_by_query_kind: dict[tuple[bool, bool], tuple[object, ...]] = {
+            (True, False): (0,),
+            (False, True): (0,),
+            (False, False): (3, 3, 4, 1, 1, 1, 1, 1),
+        }
+        return StubCursor(
+            row=rows_by_query_kind[("WHERE id IS NULL" in sql, "HAVING COUNT(*) > 1" in sql)]
+        )
 
     return fake_execute
 
@@ -69,13 +74,19 @@ def build_row_diff_execute(executed_sql: list[str]) -> Any:
 def build_sample_rows_execute() -> Any:
     def fake_execute(connection: object, sql: str) -> StubCursor:
         del connection
-        if "WHERE id IS NULL" in sql:
-            return StubCursor(row=(0,))
-        if "HAVING COUNT(*) > 1" in sql:
-            return StubCursor(row=(0,))
-        if "__right.id IS NULL" in sql:
-            return StubCursor(rows=[(1,)])
-        return StubCursor(rows=[(1, "a", "x")])
+        cursors_by_query_kind: dict[tuple[bool, bool, bool], StubCursor] = {
+            (True, False, False): StubCursor(row=(0,)),
+            (False, True, False): StubCursor(row=(0,)),
+            (False, False, True): StubCursor(rows=[(1,)]),
+            (False, False, False): StubCursor(rows=[(1, "a", "x")]),
+        }
+        return cursors_by_query_kind[
+            (
+                "WHERE id IS NULL" in sql,
+                "HAVING COUNT(*) > 1" in sql,
+                "__right.id IS NULL" in sql,
+            )
+        ]
 
     return fake_execute
 
@@ -135,28 +146,43 @@ class FakeBigQueryClient:
         self,
         *,
         rows: FakeBigQueryRows | None = None,
-        missing_dataset: bool = False,
         statement_type: str | None = "SELECT",
-        query_error: Exception | None = None,
     ) -> None:
         self.rows: FakeBigQueryRows = rows or FakeBigQueryRows(columns=(), rows=())
-        self.missing_dataset: bool = missing_dataset
         self.statement_type: str | None = statement_type
-        self.query_error: Exception | None = query_error
         self.queries: list[tuple[str, str | None]] = []
         self.dataset_ids: list[str] = []
 
     def query(self, sql: str, *, location: str | None) -> FakeBigQueryJob | FakeBigQueryFailingJob:
         self.queries.append((sql, location))
-        if self.query_error is not None:
-            return FakeBigQueryFailingJob(self.query_error)
         return FakeBigQueryJob(self.rows, statement_type=self.statement_type)
 
     def get_dataset(self, dataset_id: str) -> object:
         self.dataset_ids.append(dataset_id)
-        if self.missing_dataset:
-            raise FakeGoogleNotFound()
         return object()
+
+
+class FakeBigQueryFailingClient(FakeBigQueryClient):
+    def __init__(self, *, query_error: Exception) -> None:
+        super().__init__()
+        self.query_error = query_error
+
+    def query(self, sql: str, *, location: str | None) -> FakeBigQueryFailingJob:
+        self.queries.append((sql, location))
+        return FakeBigQueryFailingJob(self.query_error)
+
+
+class FakeBigQueryMissingDatasetClient(FakeBigQueryClient):
+    def get_dataset(self, dataset_id: str) -> object:
+        self.dataset_ids.append(dataset_id)
+        raise FakeGoogleNotFound()
+
+
+def build_fake_bigquery_schema_client(*, missing_dataset: bool) -> FakeBigQueryClient:
+    client_classes: MappingProxyType[bool, Callable[[], FakeBigQueryClient]] = MappingProxyType(
+        {False: FakeBigQueryClient, True: FakeBigQueryMissingDatasetClient}
+    )
+    return client_classes[missing_dataset]()
 
 
 class FakeGoogleNotFound(Exception):

@@ -156,6 +156,7 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
                 " AND event_time < TIMESTAMP '2024-02-01')"
             ),
             cursor_type=CursorKind.TIMESTAMP,
+            cursor_bounds=_CURSOR_BOUNDS,
         ),
         RefResolutionTestCase(
             description="only wraps refs that have cursor inputs",
@@ -169,6 +170,7 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
                 "JOIN staging.customers b ON a.id = b.id"
             ),
             cursor_type=CursorKind.TIMESTAMP,
+            cursor_bounds=_CURSOR_BOUNDS,
         ),
         RefResolutionTestCase(
             description="renders integer cursor bounds without quotes",
@@ -179,6 +181,7 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
                 " AND event_time < 20)"
             ),
             cursor_type=CursorKind.INTEGER,
+            cursor_bounds=_INTEGER_CURSOR_BOUNDS,
         ),
     ],
     ids=lambda case: case.description,
@@ -190,11 +193,7 @@ def test_given_refs_with_cursor_when_resolving_then_returns_expected_sql(
         query_sql=test_case.query_sql,
         model_locations=_MODEL_TARGETS,
         seed_locations=_SEED_TARGETS,
-        cursor_bounds=(
-            _INTEGER_CURSOR_BOUNDS
-            if test_case.cursor_type == CursorKind.INTEGER
-            else _CURSOR_BOUNDS
-        ),
+        cursor_bounds=test_case.cursor_bounds,
         cursor_inputs=_CURSOR_INPUTS,
         adapter=DuckDbAdapter(),
         cursor_type=test_case.cursor_type,
@@ -216,6 +215,7 @@ def test_given_refs_with_cursor_when_resolving_then_returns_expected_sql(
                 " AND event_time < TIMESTAMP '2024-02-01')"
             ),
             cursor_type=CursorKind.TIMESTAMP,
+            cursor_bounds=_CURSOR_BOUNDS,
         )
     ],
     ids=lambda case: case.description,
@@ -227,7 +227,7 @@ def test_given_refs_with_exclusive_cursor_when_resolving_then_returns_expected_s
         query_sql=test_case.query_sql,
         model_locations=_MODEL_TARGETS,
         seed_locations=_SEED_TARGETS,
-        cursor_bounds=_CURSOR_BOUNDS,
+        cursor_bounds=test_case.cursor_bounds,
         cursor_inputs=_CURSOR_INPUTS,
         adapter=DuckDbAdapter(),
         cursor_type=test_case.cursor_type,

@@ -70,10 +70,9 @@ def verify_test_result(
     """Verify SQL test execution result fields."""
 
     assert len(result.step_results) == test_case.expected_step_count
-    if test_case.expected_error_fragment is not None:
-        assert result.error_message is not None
-        assert test_case.expected_error_fragment in result.error_message
-    failed_models: tuple[str, ...] = tuple(
-        r.model_name for r in result.step_results if r.outcome == SqlTestOutcome.FAIL
-    )
+    assert (test_case.expected_error_fragment or "") in (result.error_message or "")
+    models_by_outcome: dict[SqlTestOutcome, list[str]] = {outcome: [] for outcome in SqlTestOutcome}
+    for step_result in result.step_results:
+        models_by_outcome[step_result.outcome].append(step_result.model_name)
+    failed_models: tuple[str, ...] = tuple(models_by_outcome[SqlTestOutcome.FAIL])
     assert failed_models == test_case.expected_failed_models

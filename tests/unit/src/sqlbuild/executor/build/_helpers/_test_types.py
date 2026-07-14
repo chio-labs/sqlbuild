@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.types import ExecutionStatus
@@ -27,6 +29,7 @@ class BuildOutputTestCase:
 class BuildSchedulerSourceLoadTestCase:
     description: str
     source_status: ExecutionStatus
+    loader_factory: Callable[..., DiscoveredLoaderFunction]
     expected_load_status: ExecutionStatus
     expected_model_status: ExecutionStatus
     expected_execution_order: tuple[str, ...] = ()

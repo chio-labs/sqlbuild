@@ -25,9 +25,7 @@ def build_single_model_project(
 ) -> CompiledProject:
     """Build a project with one model for deferred target testing."""
 
-    qualified: str | None = None
-    if physical_schema is not None:
-        qualified = f"{physical_schema}.test_model"
+    qualified: str | None = (None, f"{physical_schema}.test_model")[physical_schema is not None]
 
     model: CompiledModel = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
@@ -57,12 +55,10 @@ def build_single_model_project(
 def build_previous_python_identity_map(
     *, previous_version_hash: str | None, current_version_hash: str
 ) -> dict[tuple[str, str], Fingerprint]:
-    if previous_version_hash is None:
-        return {}
-    resolved_version_hash: str = (
-        current_version_hash if previous_version_hash == "current" else previous_version_hash
-    )
-    return {
+    resolved_version_hash: str | None = {
+        "current": current_version_hash,
+    }.get(str(previous_version_hash), previous_version_hash)
+    identity_map: dict[tuple[str, str], Fingerprint] = {
         ("task", "prepare_orders"): Fingerprint(
             node_type="task",
             node_name="prepare_orders",
@@ -71,7 +67,7 @@ def build_previous_python_identity_map(
             target_name=None,
             run_id="run_001",
             definition_hash="definition",
-            version_hash=resolved_version_hash,
+            version_hash=resolved_version_hash or "",
             schema_fingerprint="schema",
             definition='{"source_text": "def prepare_orders(ctx):\\n    return old_helper()\\n"}',
             metadata_json=(
@@ -82,3 +78,4 @@ def build_previous_python_identity_map(
             ts=datetime(2026, 1, 15, 12, 0, 0),
         )
     }
+    return ({}, identity_map)[previous_version_hash is not None]

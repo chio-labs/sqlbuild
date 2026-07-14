@@ -41,6 +41,7 @@ from tests.integration.src.sqlbuild.compiler.auditing.main._test_types import (
             model_locations={"orders": "main.orders"},
             source_map={},
             expected_row_count=0,
+            relation_overrides=None,
         ),
         ExecuteRenderedAuditTestCase(
             description="source render executes against source table",
@@ -58,6 +59,7 @@ from tests.integration.src.sqlbuild.compiler.auditing.main._test_types import (
                 ),
             },
             expected_row_count=2,
+            relation_overrides=None,
         ),
     ],
     ids=lambda case: case.description,
@@ -85,7 +87,7 @@ def test_given_rendered_audit_sql_when_executing_then_returns_expected_rows(
         model_locations=model_locations,
         seed_locations={},
         source_map=test_case.source_map,
-        relation_overrides=test_case.relation_overrides if test_case.relation_overrides else None,
+        relation_overrides=test_case.relation_overrides,
     )
 
     query_result: Any = connection.execute(rendered_sql)

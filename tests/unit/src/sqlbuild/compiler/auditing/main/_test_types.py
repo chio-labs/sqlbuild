@@ -10,7 +10,7 @@ class RenderAuditSqlTestCase:
     model_locations: dict[str, str]
     source_map_entries: dict[str, tuple[str | None, str | None, str | None]]
     expected_sql_fragment: str
-    relation_overrides: dict[str, str] = field(default_factory=dict)
+    relation_overrides: dict[str, str] | None = None
     seed_locations: dict[str, str] = field(default_factory=dict)
     adapter_name: str | None = None
 

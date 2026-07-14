@@ -89,16 +89,13 @@ def test_given_model_and_overrides_when_resolving_then_returns_expected(
         v is not None
         for v in (test_case.start_ts, test_case.end_ts, test_case.start_int, test_case.end_int)
     )
-    overrides: CursorOverrides | None = (
-        CursorOverrides(
-            start_ts=test_case.start_ts,
-            end_ts=test_case.end_ts,
-            start_int=test_case.start_int,
-            end_int=test_case.end_int,
-        )
-        if has_typed
-        else None
+    typed_overrides: CursorOverrides = CursorOverrides(
+        start_ts=test_case.start_ts,
+        end_ts=test_case.end_ts,
+        start_int=test_case.start_int,
+        end_int=test_case.end_int,
     )
+    overrides: CursorOverrides | None = (None, typed_overrides)[has_typed]
 
     start: str | None
     end: str | None

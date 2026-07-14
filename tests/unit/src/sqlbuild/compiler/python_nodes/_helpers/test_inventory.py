@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -212,11 +213,7 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
             "annotation_module": SlackProvider.__module__,
         },
     )
-    assert (
-        tuple(
-            (edge.upstream_name, edge.downstream_name)
-            for edge in graph.dependency_edges
-            if edge.downstream_name == "notify_orders"
-        )
-        == ()
-    )
+    edges_by_downstream: defaultdict[str, list[tuple[str, str]]] = defaultdict(list)
+    for edge in graph.dependency_edges:
+        edges_by_downstream[edge.downstream_name].append((edge.upstream_name, edge.downstream_name))
+    assert tuple(edges_by_downstream["notify_orders"]) == ()

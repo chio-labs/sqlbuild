@@ -6,6 +6,8 @@ import sys
 from types import ModuleType
 from typing import Any
 
+from sqlbuild.adapter.models import ColumnInfo
+
 
 class FakeSnowflakeDescribeCursor:
     """Cursor double exposing Snowflake-style description metadata."""
@@ -79,6 +81,17 @@ class FakeSnowflakeMetadataConnection:
 
     def cursor(self) -> FakeSnowflakeMetadataCursor:
         return self._cursor
+
+
+def describe_equivalent_numeric_relation(
+    connection: object, relation: str
+) -> tuple[ColumnInfo, ...]:
+    del connection
+    columns_by_relation: dict[str, tuple[ColumnInfo, ...]] = {
+        "left_relation": (ColumnInfo(name="id", type="NUMBER(38,0)"),),
+        "right_relation": (ColumnInfo(name="id", type="DECIMAL(38,0)"),),
+    }
+    return columns_by_relation[relation]
 
 
 class FakeSnowflakeRawConnection:

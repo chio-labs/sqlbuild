@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 
 
@@ -6,6 +7,7 @@ class BuildQualifiedTableNameTestCase:
     description: str
     database: str | None
     schema: str
+    render_qualified_name: Callable[..., str | None]
     expected_name: str
 
 

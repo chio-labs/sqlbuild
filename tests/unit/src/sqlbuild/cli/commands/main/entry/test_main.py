@@ -1829,6 +1829,14 @@ def test_given_skills_update_command_when_running_then_it_dispatches_handler(
                 "grants": {"role": "analyst"},
                 "roles": ["reporter"],
             },
+            expected_command_vars={
+                "schema": "analytics",
+                "limit": 10,
+                "enabled": True,
+                "optional": None,
+                "grants": {"role": "analyst"},
+                "roles": ["reporter"],
+            },
         ),
     ],
     ids=lambda case: case.description,
@@ -1890,7 +1898,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             test_case.expected_dag,
             False,
             test_case.expected_compile_lineage_mode,
-            {} if test_case.expected_vars is None else test_case.expected_vars,
+            test_case.expected_command_vars,
             False,
             False,
             False,
@@ -1913,6 +1921,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             argv=["dag", "--vars", '{"schema":"analytics"}'],
             expected_exit_code=3,
             expected_vars={"schema": "analytics"},
+            expected_command_vars={"schema": "analytics"},
         ),
     ],
     ids=lambda case: case.description,
@@ -1942,7 +1951,7 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
             test_case.expected_project_dir,
             test_case.expected_no_sql_validation,
             "--json" in test_case.argv,
-            {} if test_case.expected_vars is None else test_case.expected_vars,
+            test_case.expected_command_vars,
         )
     ]
 

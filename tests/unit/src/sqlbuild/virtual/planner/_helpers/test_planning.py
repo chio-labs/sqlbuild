@@ -1319,21 +1319,19 @@ def test_given_current_vde_versions_and_runtime_stale_model_when_semantics_then_
             VirtualEnvironmentModelRefRecord(
                 virtual_environment_name="dev",
                 model_name=model_name,
-                version_hash=version_hash,
+                version_hash=expected_version_hashes[model_name],
             )
-            for model_name, version_hash in expected_version_hashes.items()
-            if model_name in model_names
+            for model_name in model_names
         ),
         bound_model_versions={
             model_name: ModelVersionRecord(
                 model_name=model_name,
                 version_hash=expected_version_hashes[model_name],
-                definition_identity_hash=local_hash,
+                definition_identity_hash=expected_local_hashes[model_name],
                 identity_metadata_hash="metadata-hash",
                 status=ModelVersionStatus.READY,
             )
-            for model_name, local_hash in expected_local_hashes.items()
-            if model_name in model_names
+            for model_name in model_names
         },
         source_freshness_records=source_records,
     )

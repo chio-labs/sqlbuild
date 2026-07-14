@@ -23,8 +23,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             description="slash path selector works on build",
             command=("--no-color", "build", "--select", "/models/marts", "--force"),
             expected_exit_code=0,
-            expected_fragments=("Plan ready (10 selected)", "hourly_activity_with_daily_context"),
-            expected_stream="stdout",
+            expected_stdout_fragments=(
+                "Plan ready (10 selected)",
+                "hourly_activity_with_daily_context",
+            ),
+            expected_stderr_fragments=(),
             pre_commands=(("--no-color", "build"),),
         ),
         SelectorSurfaceBuildE2ETestCase(
@@ -37,7 +40,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "--force",
             ),
             expected_exit_code=0,
-            expected_fragments=(
+            expected_stdout_fragments=(
                 "Plan ready (9 selected, 1 source to load)",
                 "Sources to load (1)",
                 "raw_orders",
@@ -49,22 +52,22 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "daily_activity_rollup",
                 "hourly_activity_with_daily_context",
             ),
-            expected_stream="stdout",
+            expected_stderr_fragments=(),
             pre_commands=(("--no-color", "build"),),
         ),
         SelectorSurfaceBuildE2ETestCase(
             description="malformed path selector with internal plus fails clearly",
             command=("--no-color", "plan", "--select", "+fact_orders~+daily_activity_rollup"),
             expected_exit_code=1,
-            expected_fragments=("contains '+' in an unsupported position",),
-            expected_stream="stderr",
+            expected_stdout_fragments=(),
+            expected_stderr_fragments=("contains '+' in an unsupported position",),
         ),
         SelectorSurfaceBuildE2ETestCase(
             description="malformed path selector missing rhs fails clearly",
             command=("--no-color", "plan", "--select", "fact_orders~"),
             expected_exit_code=1,
-            expected_fragments=("requires names on both sides of '~'",),
-            expected_stream="stderr",
+            expected_stdout_fragments=(),
+            expected_stderr_fragments=("requires names on both sides of '~'",),
         ),
     ],
     ids=lambda case: case.description,
@@ -87,7 +90,8 @@ def test_given_selector_commands_when_running_cli_then_behavior_matches_expectat
     )
 
     assert result.returncode == test_case.expected_exit_code
-    rendered: str = result.stdout if test_case.expected_stream == "stdout" else result.stderr
     fragment: str
-    for fragment in test_case.expected_fragments:
-        assert fragment in rendered, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout + result.stderr
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr, result.stdout + result.stderr

@@ -1475,11 +1475,10 @@ def test_given_shallow_waffle_shop_snapshots_when_sources_change_then_cli_reruns
     )
     plan_payload: dict[str, object] = json.loads(plan_result.stdout)
     model_entries: list[dict[str, object]] = plan_payload["models"]
-    snapshot_reasons: dict[str, str] = {
-        str(entry["name"]): str(entry["reason"])
-        for entry in model_entries
-        if str(entry["name"]).endswith("_snapshot")
+    model_entries_by_name: dict[str, dict[str, object]] = {
+        str(entry["name"]): entry for entry in model_entries
     }
+    assert len(model_entries_by_name) == len(model_entries)
     snapshot_model_name: str
     for snapshot_model_name in (
         "customer_plan_timestamp_snapshot",
@@ -1487,7 +1486,7 @@ def test_given_shallow_waffle_shop_snapshots_when_sources_change_then_cli_reruns
         "customer_plan_historical_snapshot",
         "customer_plan_change_records_snapshot",
     ):
-        assert snapshot_reasons[snapshot_model_name] != "query_changed"
+        assert str(model_entries_by_name[snapshot_model_name]["reason"]) != "query_changed"
 
 
 @pytest.mark.parametrize(

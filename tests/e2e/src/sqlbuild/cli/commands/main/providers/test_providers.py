@@ -411,9 +411,7 @@ def test_given_project_with_provider_when_running_commands_then_provider_is_inje
     for result in (run_result, build_result, check_result, load_result):
         assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
 
-    marker_entries: tuple[str, ...] = tuple(
-        line for line in marker_path.read_text(encoding="utf-8").splitlines() if line
-    )
+    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
     assert marker_entries == test_case.expected_marker_entries
     loaded_rows: list[tuple[object, ...]] = query_duckdb(
         db_path=project_dir / "provider_command_project.duckdb",

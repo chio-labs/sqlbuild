@@ -65,35 +65,39 @@ class FreshnessRecordingAdapter:
     def query(self, *, connection: object, sql: str, limit: int | None = None) -> QueryResult:
         del connection, limit
         self.queries.append(sql)
-        if "raw_error" in sql:
-            return QueryResult(columns=("left", "right"), rows=((1, 2),))
-        if "raw_orders" in sql:
-            return QueryResult(columns=("data_version",), rows=((1,),))
-        if "raw_payments" in sql:
-            return QueryResult(columns=("data_version",), rows=((2,),))
-        if "raw_lag" in sql:
-            return QueryResult(
+        results_by_sql: dict[str, QueryResult] = {
+            "SELECT 1 AS left, 2 AS right FROM raw_error": QueryResult(
+                columns=("left", "right"), rows=((1, 2),)
+            ),
+            "SELECT 1 AS data_version FROM raw_orders": QueryResult(
+                columns=("data_version",), rows=((1,),)
+            ),
+            "SELECT 2 AS data_version FROM raw_payments": QueryResult(
+                columns=("data_version",), rows=((2,),)
+            ),
+            "SELECT TIMESTAMP '2026-01-01 00:05:00' AS data_version FROM raw_lag": QueryResult(
                 columns=("data_version",),
                 rows=((datetime(2026, 1, 1, 0, 5, 0),),),
-            )
-        if "raw_age_error" in sql:
-            return QueryResult(
+            ),
+            (
+                "SELECT TIMESTAMP '2025-12-31 21:00:00' AS data_version FROM raw_age_error"
+            ): QueryResult(
                 columns=("data_version",),
                 rows=((datetime(2025, 12, 31, 21, 0, 0),),),
-            )
-        if "raw_age_warn" in sql:
-            return QueryResult(
+            ),
+            "SELECT TIMESTAMP '2025-12-31 22:30:00' AS data_version FROM raw_age_warn": QueryResult(
                 columns=("data_version",),
                 rows=((datetime(2025, 12, 31, 22, 30, 0),),),
-            )
-        if "raw_age_pass" in sql:
-            return QueryResult(
+            ),
+            "SELECT TIMESTAMP '2025-12-31 23:30:00' AS data_version FROM raw_age_pass": QueryResult(
                 columns=("data_version",),
                 rows=((datetime(2025, 12, 31, 23, 30, 0),),),
-            )
-        if "raw_age_unknown" in sql:
-            return QueryResult(columns=("data_version",), rows=((42,),))
-        return QueryResult(columns=("data_version",), rows=((0,),))
+            ),
+            "SELECT 42 AS data_version FROM raw_age_unknown": QueryResult(
+                columns=("data_version",), rows=((42,),)
+            ),
+        }
+        return results_by_sql[sql]
 
 
 def freshness_sources() -> tuple[SourceEntry, ...]:
@@ -207,8 +211,7 @@ def source_freshness_record(
         value_kind=value_kind,
         data_version=data_version,
         data_version_hash=data_version_hash
-        if data_version_hash is not None
-        else source_freshness_data_version_hash(
+        or source_freshness_data_version_hash(
             source_name=source_name,
             strategy="sql",
             value_kind=value_kind,

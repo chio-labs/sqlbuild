@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -8,9 +9,11 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
+    CompiledProject,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
+from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.node_source_watermarks.models import (
     NodeSourceWatermarkIdentity,
     NodeSourceWatermarkRecord,
@@ -163,6 +166,7 @@ class NodeSourceWatermarkWarningTestCase:
     source_names: tuple[str, ...]
     watermark_records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord]
     expected_warning_fragments: tuple[str, ...]
+    expected_warning_count: int
     unexpected_warning_fragments: tuple[str, ...] = ()
 
 
@@ -474,9 +478,8 @@ class BuildModelWarningsTestCase:
     schema_actions: tuple[SchemaAction, ...]
     on_schema_change: OnSchemaChange | None
     type_enforcement: bool
-    expected_severity: WarningSeverity | None
     expected_warning_count: int
-    expected_severities: tuple[WarningSeverity, ...] = field(default_factory=tuple)
+    expected_severities: tuple[WarningSeverity, ...]
 
 
 @dataclass(frozen=True)
@@ -557,7 +560,7 @@ class ScenarioRelationMapTestCase:
     description: str
     artifacts: tuple[ScenarioArtifactIdentity, ...]
     expected_relation_map: ScenarioRelationMap
-    normalize_case: bool = False
+    normalize_identifier: Callable[[str], str] | None = None
 
 
 @dataclass(frozen=True)
@@ -572,7 +575,7 @@ class ScenarioRelationMapErrorTestCase:
     description: str
     artifacts: tuple[ScenarioArtifactIdentity, ...]
     expected_error_fragment: str
-    normalize_case: bool = False
+    normalize_identifier: Callable[[str], str] | None = None
 
 
 @dataclass(frozen=True)
@@ -632,7 +635,7 @@ class ScenarioExecutionPlanTestCase:
 class ScenarioUnmockedSeedExecutionPlanTestCase:
     description: str
     graph_plan: ScenarioGraphPlan
-    include_unrelated_project_seed: bool
+    project: CompiledProject
     expected_seed_fixture_names: frozenset[str]
     expected_seed_entry_targets: dict[str, str]
 
@@ -768,12 +771,11 @@ class ResolveCascadeRootCauseTestCase:
 class DetectFunctionChangeTestCase:
     description: str
     body_sql: str
-    previous_query_sql: str
+    existing_function_fingerprints: dict[str, Fingerprint]
     replay_on_change: str | None
     expected_reason: PlanReason
     expected_action: BackfillAction
     expected_duration: str | None = None
-    existing_fingerprint: bool = True
     target_schema: str = "main"
 
 

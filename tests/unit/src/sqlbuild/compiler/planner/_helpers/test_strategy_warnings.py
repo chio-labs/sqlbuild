@@ -84,8 +84,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=OnSchemaChange.FAIL,
             type_enforcement=False,
-            expected_severity=WarningSeverity.ERROR,
             expected_warning_count=1,
+            expected_severities=(WarningSeverity.ERROR,),
         ),
         BuildModelWarningsTestCase(
             description="enforced type mismatch produces warning",
@@ -98,8 +98,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
             type_enforcement=True,
-            expected_severity=WarningSeverity.WARNING,
             expected_warning_count=1,
+            expected_severities=(WarningSeverity.WARNING,),
         ),
         BuildModelWarningsTestCase(
             description="sql_analysis type change produces info warning",
@@ -112,8 +112,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
             type_enforcement=False,
-            expected_severity=WarningSeverity.INFO,
             expected_warning_count=1,
+            expected_severities=(WarningSeverity.INFO,),
         ),
         BuildModelWarningsTestCase(
             description="query changed without backfill policy produces warning",
@@ -126,8 +126,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=None,
             type_enforcement=False,
-            expected_severity=WarningSeverity.WARNING,
             expected_warning_count=1,
+            expected_severities=(WarningSeverity.WARNING,),
         ),
         BuildModelWarningsTestCase(
             description="on_schema_change ignore with findings produces info",
@@ -140,8 +140,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=OnSchemaChange.IGNORE,
             type_enforcement=False,
-            expected_severity=WarningSeverity.INFO,
             expected_warning_count=1,
+            expected_severities=(WarningSeverity.INFO,),
         ),
         BuildModelWarningsTestCase(
             description="no findings and no query change produces no warnings",
@@ -154,8 +154,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=None,
             type_enforcement=False,
-            expected_severity=None,
             expected_warning_count=0,
+            expected_severities=(),
         ),
         BuildModelWarningsTestCase(
             description="sql_analysis added column produces info warning",
@@ -168,8 +168,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
             type_enforcement=False,
-            expected_severity=WarningSeverity.INFO,
             expected_warning_count=1,
+            expected_severities=(WarningSeverity.INFO,),
         ),
         BuildModelWarningsTestCase(
             description="query changed with configured backfill produces no warning",
@@ -182,8 +182,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=None,
             type_enforcement=False,
-            expected_severity=None,
             expected_warning_count=0,
+            expected_severities=(),
         ),
         BuildModelWarningsTestCase(
             description="query changed on table model produces no warn-only policy warning",
@@ -196,8 +196,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=None,
             type_enforcement=False,
-            expected_severity=None,
             expected_warning_count=0,
+            expected_severities=(),
         ),
         BuildModelWarningsTestCase(
             description="column removed finding produces no warning",
@@ -210,8 +210,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
             type_enforcement=False,
-            expected_severity=None,
             expected_warning_count=0,
+            expected_severities=(),
         ),
         BuildModelWarningsTestCase(
             description=(
@@ -226,7 +226,6 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(),
             on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
             type_enforcement=True,
-            expected_severity=None,
             expected_warning_count=2,
             expected_severities=(
                 WarningSeverity.WARNING,
@@ -244,8 +243,8 @@ _ADD_ACTION: SchemaAction = SchemaAction(
             schema_actions=(_ADD_ACTION,),
             on_schema_change=OnSchemaChange.APPEND_NEW_COLUMNS,
             type_enforcement=True,
-            expected_severity=None,
             expected_warning_count=0,
+            expected_severities=(),
         ),
     ],
     ids=lambda case: case.description,
@@ -266,10 +265,4 @@ def test_given_model_state_when_building_warnings_then_matches_expected(
 
     assert len(result) == test_case.expected_warning_count
     actual_severities: tuple[WarningSeverity, ...] = tuple(w.severity for w in result)
-    expected: tuple[WarningSeverity, ...]
-    expected = test_case.expected_severities or (
-        (test_case.expected_severity,) * test_case.expected_warning_count
-        if test_case.expected_severity is not None
-        else ()
-    )
-    assert actual_severities == expected
+    assert actual_severities == test_case.expected_severities

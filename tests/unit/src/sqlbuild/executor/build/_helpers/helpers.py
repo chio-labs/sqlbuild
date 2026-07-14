@@ -128,7 +128,11 @@ def build_audit_result(
     return AuditExecutionResult(
         audit_name=name,
         attachment_kind=AuditAttachmentKind.MODEL,
-        severity=AuditSeverity.WARN if outcome == AuditOutcome.WARN else AuditSeverity.ERROR,
+        severity={
+            AuditOutcome.PASS: AuditSeverity.ERROR,
+            AuditOutcome.WARN: AuditSeverity.WARN,
+            AuditOutcome.ERROR: AuditSeverity.ERROR,
+        }[outcome],
         outcome=outcome,
         row_count=row_count,
         executed_sql="SELECT 1",

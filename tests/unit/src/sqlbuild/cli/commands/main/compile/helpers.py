@@ -384,14 +384,14 @@ def build_linear_compile_output_graph(*, model_count: int) -> ProjectGraph:
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
         model.key: () for model in graph.project.models
     }
-    previous_key: CompiledObjectKey | None = None
-    for model in graph.project.models:
-        if previous_key is None:
-            upstream_deps[model.key] = ()
-        else:
-            upstream_deps[model.key] = (previous_key,)
-            downstream_deps[previous_key] = (*downstream_deps[previous_key], model.key)
-        previous_key = model.key
+    first_model: CompiledModel = graph.project.models[0]
+    upstream_deps[first_model.key] = ()
+    for previous_model, model in zip(graph.project.models, graph.project.models[1:], strict=False):
+        upstream_deps[model.key] = (previous_model.key,)
+        downstream_deps[previous_model.key] = (
+            *downstream_deps[previous_model.key],
+            model.key,
+        )
     return ProjectGraph(
         project=graph.project,
         upstream_deps=upstream_deps,
@@ -405,13 +405,13 @@ def build_linear_compile_output_graph(*, model_count: int) -> ProjectGraph:
 def build_compile_output_model_names(model_count: int) -> tuple[str, ...]:
     """Build model names for compile output formatter cases."""
 
-    if model_count == 3:
-        return (
-            "short",
-            "hourly_activity_with_daily_context",
-            "extremely_long_model_name_that_should_be_truncated_in_human_output",
-        )
-    return tuple(f"model_{index:03d}" for index in range(model_count))
+    special_names: tuple[str, ...] = (
+        "short",
+        "hourly_activity_with_daily_context",
+        "extremely_long_model_name_that_should_be_truncated_in_human_output",
+    )
+    generated_names: tuple[str, ...] = tuple(f"model_{index:03d}" for index in range(model_count))
+    return {3: special_names}.get(model_count, generated_names)
 
 
 def build_runtime_target_execution_result() -> BuildExecutionResult:

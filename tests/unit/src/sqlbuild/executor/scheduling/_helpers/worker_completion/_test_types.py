@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 
@@ -10,7 +11,6 @@ class WorkerCompletionTestCase:
     description: str
     key: str
     connection: str
-    result: str | None
+    execute: Callable[[object], str]
     expected_completion: tuple[str, str]
     expected_connection: str
-    expected_error_fragment: str | None = None

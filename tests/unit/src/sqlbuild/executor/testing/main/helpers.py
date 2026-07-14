@@ -95,10 +95,9 @@ def build_assertion_test_entry(*, sql_analysis_enabled: bool = True) -> SqlTestP
 def build_comparison_test_adapter(
     adapter_name: str,
 ) -> DuckDbAdapter | SnowflakeAdapter | BigQueryAdapter | DatabricksAdapter:
-    if adapter_name == "bigquery":
-        return BigQueryAdapter()
-    if adapter_name == "databricks":
-        return DatabricksAdapter()
-    if adapter_name == "snowflake":
-        return SnowflakeAdapter()
-    return DuckDbAdapter()
+    return {
+        "bigquery": BigQueryAdapter,
+        "databricks": DatabricksAdapter,
+        "snowflake": SnowflakeAdapter,
+        "duckdb": DuckDbAdapter,
+    }[adapter_name]()

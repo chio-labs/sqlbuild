@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -2056,16 +2057,17 @@ def test_given_prior_python_task_result_when_later_task_reads_result_then_uses_p
     )
     assert len(result_rows) == 3
     assert result_rows[0][1] == test_case.expected_failed_status
+    rows_by_status: defaultdict[str, list[tuple[Any, ...]]] = defaultdict(list)
+    for row in result_rows:
+        rows_by_status[str(row[1])].append(row)
     successful_values: tuple[int, ...] = tuple(
         int(json.loads(base64.b64decode(row[2]).decode("utf-8"))["value"])
-        for row in result_rows
-        if row[1] == "success"
+        for row in rows_by_status["success"]
     )
     assert successful_values == test_case.expected_success_values
     successful_metadata: tuple[object, ...] = tuple(
         json.loads(base64.b64decode(row[3]).decode("utf-8"))["source"]
-        for row in result_rows
-        if row[1] == "success"
+        for row in rows_by_status["success"]
     )
     assert successful_metadata == ("second", "first")
 
