@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,

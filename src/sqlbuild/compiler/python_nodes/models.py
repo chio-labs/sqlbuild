@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase

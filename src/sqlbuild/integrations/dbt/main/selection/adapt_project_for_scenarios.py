@@ -1,6 +1,6 @@
 """Adapt a project for dbt scenarios."""
 
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
     adapt_project_for_dbt_scenarios as _adapt,
 )

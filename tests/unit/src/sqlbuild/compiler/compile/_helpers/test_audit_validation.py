@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile._helpers.attachment.audits import (
 )
 from sqlbuild.compiler.compile._helpers.attachment.references import validate_audit_references
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import CompileSqlReference
+from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.discovery.models import DiscoveredAuditFile
 from sqlbuild.compiler.references.types import SqlReferenceKind

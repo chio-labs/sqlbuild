@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import MissingUpstream, WarehouseSnapshot
 

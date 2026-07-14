@@ -8,7 +8,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,

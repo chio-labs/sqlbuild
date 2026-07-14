@@ -1,6 +1,6 @@
 """Inspect combined graph view materialization."""
 
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt._helpers.graph.core import combined_graph_node_is_view as _check
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCombinedGraphKey

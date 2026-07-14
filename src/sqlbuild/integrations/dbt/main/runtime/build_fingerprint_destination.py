@@ -1,6 +1,6 @@
 """Build the dbt fingerprint destination."""
 
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt._helpers.manifest.fingerprinting import (
     build_dbt_fingerprint_destination as _build,
 )

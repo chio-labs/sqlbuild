@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 
 from sqlbuild.compiler.compile.constants import SQL_WILDCARD_TOKEN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import CompileModelConfig
+from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.compiler.planner.types import (
     ContractPolicy,
     CursorGrain,

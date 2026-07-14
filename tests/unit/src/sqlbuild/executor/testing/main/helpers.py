@@ -2,7 +2,7 @@ from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestAssertionStep, SqlTestPlanEntry
 

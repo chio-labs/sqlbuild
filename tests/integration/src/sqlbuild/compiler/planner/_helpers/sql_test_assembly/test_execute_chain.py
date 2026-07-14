@@ -6,12 +6,10 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledDirectLogicSqlTestPayload,
     CompiledSqlTest,
     CompileSqlTestCte,
 )

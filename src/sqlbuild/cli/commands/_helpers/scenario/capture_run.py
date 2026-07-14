@@ -12,7 +12,7 @@ from sqlbuild.cli.commands._helpers.scenario.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands._helpers.scenario.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands._helpers.scenario.result_output import render_result_error
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
+from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.build.models import SeedExecutionResult

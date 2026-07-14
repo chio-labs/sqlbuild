@@ -52,7 +52,7 @@ from sqlbuild.compiler.compile.constants import (
     PRESERVE_TARGET_VALUE,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileModelInput,
     CompileSeedInput,

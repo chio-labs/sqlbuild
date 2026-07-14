@@ -9,7 +9,7 @@ from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
 from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry

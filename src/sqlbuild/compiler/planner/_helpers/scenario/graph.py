@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -299,6 +299,7 @@ def _collect_upstream_requirements(
     """Walk target model upstreams and collect required fixtures and functions."""
 
     def _walk(
+        *,
         model_name: str,
         requirements: _UpstreamRequirements,
     ) -> _UpstreamRequirements:
@@ -363,7 +364,7 @@ def _collect_upstream_requirements(
                         ),
                     )
                     continue
-                requirements = _walk(dep_key.name, requirements)
+                requirements = _walk(model_name=dep_key.name, requirements=requirements)
                 continue
             if dep_key.resource_type == CompiledResourceType.SOURCE:
                 requirements = _UpstreamRequirements(
@@ -424,7 +425,7 @@ def _collect_upstream_requirements(
     )
     target_model_name: str
     for target_model_name in target_model_names:
-        requirements = _walk(target_model_name, requirements)
+        requirements = _walk(model_name=target_model_name, requirements=requirements)
 
     return requirements
 

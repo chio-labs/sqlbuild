@@ -25,7 +25,7 @@ from sqlbuild.compiler.compile.constants import (
     SQL_OPEN_PAREN_TOKEN,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
 )

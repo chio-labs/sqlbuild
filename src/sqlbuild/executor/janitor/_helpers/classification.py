@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.models import RelationInfo, RelationLookup
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.planner.main.planning.is_scenario_artifact_physical_name import (
     is_scenario_artifact_physical_name,

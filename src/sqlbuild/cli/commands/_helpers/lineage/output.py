@@ -14,7 +14,7 @@ from sqlbuild.cli.commands._helpers.lineage.models import (
     LineageGraph,
     LineageNode,
 )
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.main.render_column_trace_limit_note import (
     render_column_trace_limit_note,

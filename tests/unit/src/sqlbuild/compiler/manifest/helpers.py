@@ -10,7 +10,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,

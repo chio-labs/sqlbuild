@@ -14,7 +14,7 @@ from sqlbuild.cli.output.main.scenario_execution_json import (
 )
 from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
+from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.pipeline.main.run import run_scenario_test_pipeline
 from sqlbuild.executor.scenario.models import ScenarioRunResult

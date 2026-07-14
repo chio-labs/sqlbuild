@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import timedelta
 
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.changes.policy import resolve_replay_on_change
 from sqlbuild.compiler.planner.models import (

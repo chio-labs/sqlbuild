@@ -3,7 +3,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild.compiler.compile.models.sql_tests import (
+from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestInputPayload,
     CompileModelSqlTestInputPayload,
     CompileSqlTestInput,

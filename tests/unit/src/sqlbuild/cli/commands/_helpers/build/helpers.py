@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason

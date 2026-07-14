@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,

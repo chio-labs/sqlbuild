@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,

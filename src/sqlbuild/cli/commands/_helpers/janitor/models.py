@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.executor.janitor.models import JanitorPlan
 from sqlbuild.virtual.state.models import (

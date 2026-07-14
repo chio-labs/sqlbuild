@@ -10,7 +10,7 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import Any, cast
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,

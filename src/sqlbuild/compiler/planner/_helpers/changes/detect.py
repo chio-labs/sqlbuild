@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from sqlbuild.adapter.models import ColumnInfo
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,

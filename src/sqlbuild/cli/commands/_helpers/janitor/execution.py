@@ -13,7 +13,7 @@ from sqlbuild.cli.commands._helpers.janitor.models import (
     JanitorPlanningResult,
     JanitorRetentionInspection,
 )
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.models import JanitorExecutionResult
 from sqlbuild.virtual.executor.main.virtual_target import build_virtual_destination

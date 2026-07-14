@@ -28,7 +28,7 @@ from sqlbuild.cli.commands._helpers.lineage.models import (
     ParsedLineageSelector,
 )
 from sqlbuild.cli.exceptions import CliUserError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
 )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any, cast
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
@@ -13,9 +14,8 @@ from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_n
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.auditing.types import AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, SchemaFinding
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main.execute import execute_audit
@@ -25,7 +25,6 @@ from sqlbuild.executor.custom.models import (
     MaterializationResult,
     PrepareVersionContext,
 )
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run._helpers.execution.final_audits import run_final_scope_audits
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks
 from sqlbuild.executor.run._helpers.execution.results import (
@@ -35,19 +34,18 @@ from sqlbuild.executor.run._helpers.execution.results import (
 from sqlbuild.executor.run._helpers.reuse.core import read_current_reuse_origin_fingerprint
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.models import (
+    CustomLifecyclePhaseOutcome,
+    CustomLifecycleState,
+    CustomMaterializationPhaseOutcome,
+    CustomMaterializationSetup,
     FinalAuditRun,
-    HookExecutionResult,
     HookRunContext,
     ModelExecutionResult,
     ModelMaterializationContext,
 )
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.provider.main.runtime import (
-    ProviderContainer,
-    _empty_provider_container,
-    invoke_with_providers,
-)
+from sqlbuild.provider.main.runtime import _empty_provider_container, invoke_with_providers
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -67,327 +65,434 @@ def execute_custom_entry(
     entry: ModelPlanEntry = context.entry
     adapter: BaseAdapter = context.adapter
     connection: Any = context.connection
-    model_locations: dict[str, CompiledRelationLocation] = context.model_locations
-    seed_locations: dict[str, CompiledRelationLocation] = context.seed_locations
-    source_map: dict[str, SourceEntry] = context.source_map
-    model_audits: tuple[AuditPlanEntry, ...] = context.model_audits
-    run_id: str = context.run_id
-    query_change_tracking: bool = context.query_change_tracking
-    hook_functions: tuple[DiscoveredHookFunction, ...] = context.hook_functions
-    effective_target_name: str | None = context.effective_target_name
-    providers: ProviderContainer | None = context.providers
-    python_identity_recorder: PythonIdentityRecorder | None = context.python_identity_recorder
     destination_database: str | None = entry.destination.database
     destination_schema: str | None = entry.destination.schema
-    destination_name: str = entry.destination.name
     destination_qualified: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
     )
-    warnings: list[str] = []
-    audit_results: list[AuditExecutionResult] = []
-    hook_results: list[HookExecutionResult] = []
-    statement_recorder: StatementRecorder = StatementRecorder()
+    state: CustomLifecycleState = CustomLifecycleState(
+        warnings=[],
+        audit_results=[],
+        hook_results=[],
+        statement_recorder=StatementRecorder(),
+    )
 
     adapter.ensure_schema(
         connection=connection,
         database=destination_database,
         schema=destination_schema,
-        statement_recorder=statement_recorder,
+        statement_recorder=state.statement_recorder,
+    )
+    pre_hook_exit: ModelExecutionResult | None = _run_custom_pre_hooks(
+        context=context,
+        effective_vars=effective_vars,
+        state=state,
+    )
+    if pre_hook_exit is not None:
+        return pre_hook_exit
+    setup: CustomMaterializationSetup = CustomMaterializationSetup(
+        destination_qualified=destination_qualified,
+        config=dict(entry.custom_config),
+        placeholders=dict(entry.custom_placeholders),
+    )
+    prepare_version_exit: ModelExecutionResult | None = _prepare_custom_version(
+        context=context,
+        declared_columns=declared_columns,
+        prepare_version_fn=prepare_version_fn,
+        target=target,
+        effective_vars=effective_vars,
+        setup=setup,
+        state=state,
+    )
+    if prepare_version_exit is not None:
+        return prepare_version_exit
+    materialization_outcome: CustomMaterializationPhaseOutcome = _run_custom_materialization(
+        context=context,
+        declared_columns=declared_columns,
+        materialize_fn=materialize_fn,
+        target=target,
+        effective_vars=effective_vars,
+        existing_relation=existing_relation,
+        setup=setup,
+        on_progress=on_progress,
+        state=state,
+    )
+    if materialization_outcome.failure is not None:
+        return materialization_outcome.failure
+    materialization_result: MaterializationResult = cast(
+        MaterializationResult, materialization_outcome.result
+    )
+    audit_outcome: CustomLifecyclePhaseOutcome = _run_custom_final_audits(
+        context=context,
+        materialization_result=materialization_result,
+        state=state,
+    )
+    state = audit_outcome.state
+    if audit_outcome.failure is not None:
+        return audit_outcome.failure
+    post_hook_exit: ModelExecutionResult | None = _run_custom_post_hooks(
+        context=context,
+        effective_vars=effective_vars,
+        materialization_result=materialization_result,
+        state=state,
+    )
+    if post_hook_exit is not None:
+        return post_hook_exit
+    return _complete_custom_materialization(
+        context=context,
+        materialization_result=materialization_result,
+        state=state,
     )
 
+
+def _run_custom_pre_hooks(
+    *,
+    context: ModelMaterializationContext,
+    effective_vars: dict[str, object],
+    state: CustomLifecycleState,
+) -> ModelExecutionResult | None:
+    entry: ModelPlanEntry = context.entry
     try:
         with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
             pre_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
+                connection=context.connection,
+                adapter=context.adapter,
                 hooks=entry.pre_hooks,
                 phase=HookPhase.PRE_HOOKS,
-                hook_functions=hook_functions,
-                hook_results=hook_results,
+                hook_functions=context.hook_functions,
+                hook_results=state.hook_results,
                 hook_run=HookRunContext(
                     model_name=entry.name,
                     destination=entry.destination,
-                    run_id=run_id,
-                    target=effective_target_name,
+                    run_id=context.run_id,
+                    target=context.effective_target_name,
                     effective_vars=effective_vars,
-                    statement_recorder=statement_recorder,
-                    providers=providers,
-                    python_identity_recorder=python_identity_recorder,
+                    statement_recorder=state.statement_recorder,
+                    providers=context.providers,
+                    python_identity_recorder=context.python_identity_recorder,
                 ),
             )
         if pre_hook_skipped:
             return build_skipped_result(
                 entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
+                warnings=state.warnings,
+                audit_results=state.audit_results,
+                statement_recorder=state.statement_recorder,
+                hook_results=state.hook_results,
             )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.PRE_HOOK,
             error=str(exc),
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-            hook_results=hook_results,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+            hook_results=state.hook_results,
         )
+    return None
 
-    config_dict: dict[str, Any] = dict(entry.custom_config)
-    placeholders_dict: dict[str, str] = dict(entry.custom_placeholders)
-    context_providers: ProviderContainer = providers or _empty_provider_container()
 
-    if (
-        entry.relation_reuse is not None
-        and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
-    ):
-        if prepare_version_fn is None:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-                error=(
-                    f"custom materialization '{entry.custom_materialization_name}' cannot use "
-                    "baseline reuse without prepare_version(ctx)"
-                ),
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-            )
-        try:
-            read_current_reuse_origin_fingerprint(
-                adapter=adapter,
-                connection=connection,
-                model_name=entry.name,
-                expected_version_hash=entry.fingerprint_version_hash,
-                reuse_from_target_name=entry.relation_reuse.reuse_from_target_name,
-                reuse_origin_fingerprint_database=entry.relation_reuse.fingerprint_database,
-                reuse_origin_fingerprint_schema=entry.relation_reuse.fingerprint_schema,
-            )
-            with diagnostics_context(
-                sqlbuild_phase="prepare_version", sqlbuild_action_name="custom"
-            ):
-                invoke_with_providers(
-                    function=prepare_version_fn,
-                    context=PrepareVersionContext(
-                        adapter=adapter,
-                        connection=connection,
-                        origin_relation=resolve_relation_location_qualified_name(
-                            adapter=adapter,
-                            location=entry.relation_reuse.origin,
-                        ),
-                        destination=destination_qualified,
-                        destination_database=destination_database,
-                        destination_schema=destination_schema,
-                        destination_name=destination_name,
-                        config=config_dict,
-                        placeholders=placeholders_dict,
-                        run_id=run_id,
-                        environment=effective_target_name or target,
-                        vars=effective_vars,
-                        unique_key=entry.unique_key,
-                        declared_columns=declared_columns,
-                        statement_recorder=statement_recorder,
-                    ),
-                    providers=providers,
-                )
-        except Exception as exc:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-                error=str(exc),
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-            )
-
-    run_audits_fn: Callable[[str], tuple[AuditExecutionResult, ...]] = _build_run_audits(
-        model_audits=model_audits,
-        adapter=adapter,
-        connection=connection,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        source_map=source_map,
-        model_name=entry.name,
-    )
-
-    is_first_run: bool = existing_relation is None
-    is_full_refresh: bool = entry.reason == PlanReason.FULL_REFRESH
-    query_changed: bool = entry.reason == PlanReason.QUERY_CHANGED
-    schema_findings: tuple[SchemaFinding, ...] = entry.schema_findings
-
-    ctx: MaterializationContext = MaterializationContext(
-        adapter=adapter,
-        connection=connection,
-        destination=destination_qualified,
-        destination_database=destination_database,
-        destination_schema=destination_schema,
-        destination_name=destination_name,
-        sql=entry.resolved_sql,
-        config=config_dict,
-        placeholders=placeholders_dict,
-        existing_relation=existing_relation,
-        run_id=run_id,
-        build_target=target,
-        vars=effective_vars,
-        unique_key=entry.unique_key,
-        declared_columns=declared_columns,
-        is_first_run=is_first_run,
-        is_full_refresh=is_full_refresh,
-        query_changed=query_changed,
-        schema_findings=schema_findings,
-        run_audits=run_audits_fn,
-        on_progress=on_progress,
-        logger=logging.getLogger(f"sqlbuild.materialization.{entry.name}"),
-        statement_recorder=statement_recorder,
-        providers=context_providers,
-    )
-
+def _prepare_custom_version(
+    *,
+    context: ModelMaterializationContext,
+    declared_columns: tuple[ColumnInfo, ...],
+    prepare_version_fn: Callable[[PrepareVersionContext], None] | None,
+    target: str,
+    effective_vars: dict[str, object],
+    setup: CustomMaterializationSetup,
+    state: CustomLifecycleState,
+) -> ModelExecutionResult | None:
+    entry: ModelPlanEntry = context.entry
+    relation_reuse: RelationReusePlan | None = entry.relation_reuse
+    if relation_reuse is None or relation_reuse.kind != RelationReuseKind.SEEDED_RELATION_REUSE:
+        return None
+    if prepare_version_fn is None:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
+            error=(
+                f"custom materialization '{entry.custom_materialization_name}' cannot use "
+                "baseline reuse without prepare_version(ctx)"
+            ),
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+            hook_results=state.hook_results,
+        )
     try:
-        with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="custom"):
-            result: object = invoke_with_providers(
-                function=materialize_fn,
-                context=ctx,
-                providers=providers,
+        read_current_reuse_origin_fingerprint(
+            adapter=context.adapter,
+            connection=context.connection,
+            model_name=entry.name,
+            expected_version_hash=entry.fingerprint_version_hash,
+            reuse_from_target_name=relation_reuse.reuse_from_target_name,
+            reuse_origin_fingerprint_database=relation_reuse.fingerprint_database,
+            reuse_origin_fingerprint_schema=relation_reuse.fingerprint_schema,
+        )
+        with diagnostics_context(sqlbuild_phase="prepare_version", sqlbuild_action_name="custom"):
+            invoke_with_providers(
+                function=prepare_version_fn,
+                context=PrepareVersionContext(
+                    adapter=context.adapter,
+                    connection=context.connection,
+                    origin_relation=resolve_relation_location_qualified_name(
+                        adapter=context.adapter,
+                        location=relation_reuse.origin,
+                    ),
+                    destination=setup.destination_qualified,
+                    destination_database=entry.destination.database,
+                    destination_schema=entry.destination.schema,
+                    destination_name=entry.destination.name,
+                    config=setup.config,
+                    placeholders=setup.placeholders,
+                    run_id=context.run_id,
+                    environment=context.effective_target_name or target,
+                    vars=effective_vars,
+                    unique_key=entry.unique_key,
+                    declared_columns=declared_columns,
+                    statement_recorder=state.statement_recorder,
+                ),
+                providers=context.providers,
             )
-            materialization_result: MaterializationResult = cast(MaterializationResult, result)
     except Exception as exc:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
             error=str(exc),
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+            hook_results=state.hook_results,
         )
+    return None
 
+
+def _run_custom_materialization(
+    *,
+    context: ModelMaterializationContext,
+    declared_columns: tuple[ColumnInfo, ...],
+    materialize_fn: Callable[[MaterializationContext], MaterializationResult],
+    target: str,
+    effective_vars: dict[str, object],
+    existing_relation: RelationInfo | None,
+    setup: CustomMaterializationSetup,
+    on_progress: Callable[[str], None] | None,
+    state: CustomLifecycleState,
+) -> CustomMaterializationPhaseOutcome:
+    entry: ModelPlanEntry = context.entry
+    run_audits_fn: Callable[[str], tuple[AuditExecutionResult, ...]] = _build_run_audits(
+        model_audits=context.model_audits,
+        adapter=context.adapter,
+        connection=context.connection,
+        model_locations=context.model_locations,
+        seed_locations=context.seed_locations,
+        source_map=context.source_map,
+        model_name=entry.name,
+    )
+    materialization_context: MaterializationContext = MaterializationContext(
+        adapter=context.adapter,
+        connection=context.connection,
+        destination=setup.destination_qualified,
+        destination_database=entry.destination.database,
+        destination_schema=entry.destination.schema,
+        destination_name=entry.destination.name,
+        sql=entry.resolved_sql,
+        config=setup.config,
+        placeholders=setup.placeholders,
+        existing_relation=existing_relation,
+        run_id=context.run_id,
+        build_target=target,
+        vars=effective_vars,
+        unique_key=entry.unique_key,
+        declared_columns=declared_columns,
+        is_first_run=existing_relation is None,
+        is_full_refresh=entry.reason == PlanReason.FULL_REFRESH,
+        query_changed=entry.reason == PlanReason.QUERY_CHANGED,
+        schema_findings=entry.schema_findings,
+        run_audits=run_audits_fn,
+        on_progress=on_progress,
+        logger=logging.getLogger(f"sqlbuild.materialization.{entry.name}"),
+        statement_recorder=state.statement_recorder,
+        providers=context.providers or _empty_provider_container(),
+    )
+    try:
+        with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="custom"):
+            result: object = invoke_with_providers(
+                function=materialize_fn,
+                context=materialization_context,
+                providers=context.providers,
+            )
+            materialization_result: MaterializationResult = cast(MaterializationResult, result)
+    except Exception as exc:
+        return CustomMaterializationPhaseOutcome(
+            failure=build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
+                error=str(exc),
+                warnings=state.warnings,
+                audit_results=state.audit_results,
+                statement_recorder=state.statement_recorder,
+            )
+        )
     if materialization_result.failed:
         user_audit_results: list[AuditExecutionResult] = (
             list(materialization_result.audit_results)
             if materialization_result.audit_results is not None
             else []
         )
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-            error=materialization_result.error or "custom materialization reported failure",
-            warnings=warnings,
-            audit_results=user_audit_results,
-            statement_recorder=statement_recorder,
-        )
-
-    if materialization_result.audit_results is not None:
-        audit_results.extend(materialization_result.audit_results)
-    else:
-        final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
-        audit_results.extend(final_audit_run.results)
-
-        if final_audit_run.has_error:
-            _cleanup_relations(
-                adapter=adapter,
-                connection=connection,
-                relations=materialization_result.cleanup_relations,
-                keep=True,
-                statement_recorder=statement_recorder,
-            )
-            return build_failed_result(
+        return CustomMaterializationPhaseOutcome(
+            failure=build_failed_result(
                 entry=entry,
-                phase=ExecutionPhase.AUDIT,
-                error=(
-                    f"final audit for '{entry.name}' failed after materialization "
-                    "with severity level: error"
-                ),
-                promoted_relation=materialization_result.relation,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
+                phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
+                error=materialization_result.error or "custom materialization reported failure",
+                warnings=state.warnings,
+                audit_results=user_audit_results,
+                statement_recorder=state.statement_recorder,
             )
+        )
+    return CustomMaterializationPhaseOutcome(result=materialization_result)
 
+
+def _run_custom_final_audits(
+    *,
+    context: ModelMaterializationContext,
+    materialization_result: MaterializationResult,
+    state: CustomLifecycleState,
+) -> CustomLifecyclePhaseOutcome:
+    if materialization_result.audit_results is not None:
+        return CustomLifecyclePhaseOutcome(
+            state=replace(
+                state,
+                audit_results=[*state.audit_results, *materialization_result.audit_results],
+            )
+        )
+    final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
+    updated_state: CustomLifecycleState = replace(
+        state,
+        audit_results=[*state.audit_results, *final_audit_run.results],
+    )
+    if not final_audit_run.has_error:
+        return CustomLifecyclePhaseOutcome(state=updated_state)
+    _cleanup_relations(
+        adapter=context.adapter,
+        connection=context.connection,
+        relations=materialization_result.cleanup_relations,
+        keep=True,
+        statement_recorder=updated_state.statement_recorder,
+    )
+    return CustomLifecyclePhaseOutcome(
+        state=updated_state,
+        failure=build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.AUDIT,
+            error=(
+                f"final audit for '{context.entry.name}' failed after materialization "
+                "with severity level: error"
+            ),
+            promoted_relation=materialization_result.relation,
+            warnings=updated_state.warnings,
+            audit_results=updated_state.audit_results,
+            statement_recorder=updated_state.statement_recorder,
+        ),
+    )
+
+
+def _run_custom_post_hooks(
+    *,
+    context: ModelMaterializationContext,
+    effective_vars: dict[str, object],
+    materialization_result: MaterializationResult,
+    state: CustomLifecycleState,
+) -> ModelExecutionResult | None:
+    entry: ModelPlanEntry = context.entry
     try:
         with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
             post_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
+                connection=context.connection,
+                adapter=context.adapter,
                 hooks=entry.post_hooks,
                 phase=HookPhase.POST_HOOKS,
-                hook_functions=hook_functions,
-                hook_results=hook_results,
+                hook_functions=context.hook_functions,
+                hook_results=state.hook_results,
                 hook_run=HookRunContext(
                     model_name=entry.name,
                     destination=entry.destination,
-                    run_id=run_id,
-                    target=effective_target_name,
+                    run_id=context.run_id,
+                    target=context.effective_target_name,
                     effective_vars=effective_vars,
-                    statement_recorder=statement_recorder,
-                    providers=providers,
-                    python_identity_recorder=python_identity_recorder,
+                    statement_recorder=state.statement_recorder,
+                    providers=context.providers,
+                    python_identity_recorder=context.python_identity_recorder,
                 ),
             )
         if post_hook_skipped:
             _cleanup_relations(
-                adapter=adapter,
-                connection=connection,
+                adapter=context.adapter,
+                connection=context.connection,
                 relations=materialization_result.cleanup_relations,
                 keep=False,
-                statement_recorder=statement_recorder,
+                statement_recorder=state.statement_recorder,
             )
             return build_skipped_result(
                 entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
+                warnings=state.warnings,
+                audit_results=state.audit_results,
+                statement_recorder=state.statement_recorder,
+                hook_results=state.hook_results,
                 promoted_relation=materialization_result.relation,
             )
     except Exception as exc:
         _cleanup_relations(
-            adapter=adapter,
-            connection=connection,
+            adapter=context.adapter,
+            connection=context.connection,
             relations=materialization_result.cleanup_relations,
             keep=True,
-            statement_recorder=statement_recorder,
+            statement_recorder=state.statement_recorder,
         )
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.POST_HOOK,
             error=str(exc),
             promoted_relation=materialization_result.relation,
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-            hook_results=hook_results,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+            hook_results=state.hook_results,
         )
+    return None
 
-    warnings.extend(
-        try_write_fingerprint(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            run_id=run_id,
-            query_change_tracking=query_change_tracking,
-            model_audits=model_audits,
-            audit_results=tuple(audit_results),
-        )
+
+def _complete_custom_materialization(
+    *,
+    context: ModelMaterializationContext,
+    materialization_result: MaterializationResult,
+    state: CustomLifecycleState,
+) -> ModelExecutionResult:
+    fingerprint_warnings: tuple[str, ...] = try_write_fingerprint(
+        entry=context.entry,
+        adapter=context.adapter,
+        connection=context.connection,
+        run_id=context.run_id,
+        query_change_tracking=context.query_change_tracking,
+        model_audits=context.model_audits,
+        audit_results=tuple(state.audit_results),
     )
-
     _cleanup_relations(
-        adapter=adapter,
-        connection=connection,
+        adapter=context.adapter,
+        connection=context.connection,
         relations=materialization_result.cleanup_relations,
         keep=False,
-        statement_recorder=statement_recorder,
+        statement_recorder=state.statement_recorder,
     )
-
     return ModelExecutionResult(
-        model_name=entry.name,
+        model_name=context.entry.name,
         status=ExecutionStatus.SUCCESS,
         promoted_relation=materialization_result.relation,
-        audit_results=tuple(audit_results),
-        warning_messages=tuple(warnings),
-        lifecycle_events=statement_recorder.snapshot(),
-        hook_results=tuple(hook_results),
+        audit_results=tuple(state.audit_results),
+        warning_messages=(*state.warnings, *fingerprint_warnings),
+        lifecycle_events=state.statement_recorder.snapshot(),
+        hook_results=tuple(state.hook_results),
     )
 
 

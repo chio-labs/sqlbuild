@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
 from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_template_data,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
     LoadedMacro,
     MacroContext,

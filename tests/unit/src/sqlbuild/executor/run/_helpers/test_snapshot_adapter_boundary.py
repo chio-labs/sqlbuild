@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (

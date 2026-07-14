@@ -6,7 +6,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.python_nodes.models import SqlResourceRef

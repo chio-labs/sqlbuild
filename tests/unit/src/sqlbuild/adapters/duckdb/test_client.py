@@ -5,7 +5,7 @@ import pytest
 from sqlbuild.adapter.models import ExpressionInferenceProfile
 from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
 )

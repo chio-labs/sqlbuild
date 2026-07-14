@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.models import LifeCycleEvent, RelationInfo
 from sqlbuild.adapter.types import TablePromotionMode
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,

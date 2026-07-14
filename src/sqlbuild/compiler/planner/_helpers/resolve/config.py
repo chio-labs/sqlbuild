@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlbuild.compiler.compile.models.core import CompiledModel
+from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.planner.types import IncrementalStrategy
 
 

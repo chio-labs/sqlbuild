@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import build_scenario_inputs
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCtes,
     CompileSqlScenarioInput,
     MacroContext,

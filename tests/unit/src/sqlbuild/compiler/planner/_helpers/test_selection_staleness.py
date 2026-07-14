@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint

@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.sql_tests import CompileSqlTestCte
+from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.planner._helpers.scenario.relations import (
     _replace_relation_markers_in_polyglot_dict,
 )
@@ -38,8 +38,136 @@ class _TestAssemblyState:
     def add_reached(self, name: str) -> None:
         self.reached.add(name)
 
-    def setdefault_cte(self, name: str, sql: str) -> None:
+    def setdefault_cte(self, *, name: str, sql: str) -> None:
         self.ctes.setdefault(name, sql)
+
+
+class _TestMarkerResolver:
+    def __init__(
+        self,
+        *,
+        state: _TestAssemblyState,
+        mock_refs: dict[str, str],
+        mock_sources: dict[str, str],
+        mock_seeds: dict[str, str],
+        mock_dbt_refs: dict[str, str],
+        function_locations: dict[str, str],
+        helper_ctes: tuple[CompileSqlTestCte, ...],
+        resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
+        file_label: str,
+    ) -> None:
+        self.state = state
+        self.mock_refs = mock_refs
+        self.mock_sources = mock_sources
+        self.mock_seeds = mock_seeds
+        self.mock_dbt_refs = mock_dbt_refs
+        self.function_locations = function_locations
+        self.helper_ctes = helper_ctes
+        self.resolved_chain = resolved_chain
+        self.file_label = file_label
+
+    def __call__(self, *, function_name: str, referenced_name: str) -> str | None:
+        if function_name == SqlReferenceKind.REF.function_name:
+            resolved_target: str | None = self._resolved_ref_target(referenced_name=referenced_name)
+            if resolved_target is not None:
+                return resolved_target
+            return self._mock_target(
+                generated_name=f"{REF_TEST_CTE_PREFIX}{referenced_name}",
+                referenced_name=referenced_name,
+                referenced_kind="ref",
+                mocks=self.mock_refs,
+            )
+        if function_name == SqlReferenceKind.SOURCE.function_name:
+            return self._mock_target(
+                generated_name=f"{SOURCE_TEST_CTE_PREFIX}{referenced_name}",
+                referenced_name=referenced_name,
+                referenced_kind="source",
+                mocks=self.mock_sources,
+            )
+        if function_name == SqlReferenceKind.SEED.function_name:
+            return self._mock_target(
+                generated_name=f"{SEED_TEST_CTE_PREFIX}{referenced_name}",
+                referenced_name=referenced_name,
+                referenced_kind="seed",
+                mocks=self.mock_seeds,
+            )
+        if function_name == SqlReferenceKind.DBT_REF.function_name:
+            return self._mock_target(
+                generated_name=f"{DBT_REF_TEST_CTE_PREFIX}{referenced_name}",
+                referenced_name=referenced_name,
+                referenced_kind="dbt_ref",
+                mocks=self.mock_dbt_refs,
+            )
+        if function_name == SqlReferenceKind.UDF.function_name:
+            return self.function_locations.get(referenced_name)
+        return None
+
+    def _resolved_ref_target(self, *, referenced_name: str) -> str | None:
+        chain_sql: SqlAnalysisResolvedTestSql | None = self.resolved_chain.get(referenced_name)
+        if chain_sql is None:
+            return None
+        generated_name: str = f"{REF_TEST_CTE_PREFIX}{referenced_name}"
+        self._ensure_available(
+            generated_name=generated_name,
+            referenced_name=referenced_name,
+            referenced_kind="ref",
+        )
+        dependency_name: str
+        dependency_sql: str
+        for dependency_name, dependency_sql in chain_sql.generated_ctes.items():
+            self.state.setdefault_cte(name=dependency_name, sql=dependency_sql)
+            self.state.add_name(dependency_name)
+        self.state.setdefault_cte(name=generated_name, sql=chain_sql.cte_body_sql)
+        return generated_name
+
+    def _mock_target(
+        self,
+        *,
+        generated_name: str,
+        referenced_name: str,
+        referenced_kind: str,
+        mocks: dict[str, str],
+    ) -> str | None:
+        mock_body: str | None = mocks.get(referenced_name)
+        if mock_body is None:
+            return None
+        self.state.add_reached(referenced_name)
+        self._ensure_available(
+            generated_name=generated_name,
+            referenced_name=referenced_name,
+            referenced_kind=referenced_kind,
+        )
+        self.state.setdefault_cte(
+            name=generated_name, sql=self._wrap_mock_body(mock_body=mock_body)
+        )
+        return generated_name
+
+    def _ensure_available(
+        self,
+        *,
+        generated_name: str,
+        referenced_name: str,
+        referenced_kind: str,
+    ) -> None:
+        if generated_name not in self.state.names:
+            self.state.add_name(generated_name)
+            return
+        if generated_name in self.state.ctes:
+            return
+        raise CompileInputError(
+            f"SQL test '{self.file_label}' defines CTE '{generated_name}', which conflicts with "
+            "the "
+            f"generated {referenced_kind} CTE for '{referenced_name}'"
+        )
+
+    def _wrap_mock_body(self, *, mock_body: str) -> str:
+        if not self.helper_ctes:
+            return mock_body
+        helper_parts: list[str] = []
+        helper_cte: CompileSqlTestCte
+        for helper_cte in self.helper_ctes:
+            helper_parts.append(f"{helper_cte.name} AS ({helper_cte.sql_body})")
+        return f"WITH {', '.join(helper_parts)} {mock_body}"
 
 
 def try_resolve_test_model_sql_with_sql_analysis(
@@ -59,148 +187,33 @@ def try_resolve_test_model_sql_with_sql_analysis(
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
         return None
-    try:
-        parsed: Any = polyglot_module.parse_one(query_sql, dialect="generic")
-    except Exception as error:
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="sql test assembly parse failed; falling back",
-            sqlbuild_error=str(error),
-        )
+    parsed_dict: dict[str, Any] | None = _try_parse_test_query(
+        polyglot_module=polyglot_module,
+        query_sql=query_sql,
+    )
+    if parsed_dict is None:
         return None
-
-    parsed_dict: dict[str, Any] = parsed.to_dict()
     state: _TestAssemblyState = _TestAssemblyState(_collect_existing_cte_names(parsed_dict))
-
-    def _ensure_available(
-        *,
-        generated_name: str,
-        referenced_name: str,
-        referenced_kind: str,
-        assembly_state: _TestAssemblyState = state,
-    ) -> None:
-        if generated_name not in assembly_state.names:
-            assembly_state.add_name(generated_name)
-            return
-        if generated_name in assembly_state.ctes:
-            return
-        raise CompileInputError(
-            f"SQL test '{file_label}' defines CTE '{generated_name}', which conflicts with the "
-            f"generated {referenced_kind} CTE for '{referenced_name}'"
-        )
-
-    def _wrap_mock_body(mock_body: str) -> str:
-        if not helper_ctes:
-            return mock_body
-        helper_parts: list[str] = []
-        helper_cte: CompileSqlTestCte
-        for helper_cte in helper_ctes:
-            helper_parts.append(f"{helper_cte.name} AS ({helper_cte.sql_body})")
-        return f"WITH {', '.join(helper_parts)} {mock_body}"
-
-    def _target_for_marker(
-        *,
-        function_name: str,
-        referenced_name: str,
-        assembly_state: _TestAssemblyState = state,
-    ) -> str | None:
-        if function_name == SqlReferenceKind.REF.function_name:
-            generated_name: str = f"{REF_TEST_CTE_PREFIX}{referenced_name}"
-            if referenced_name in resolved_chain:
-                _ensure_available(
-                    generated_name=generated_name,
-                    referenced_name=referenced_name,
-                    referenced_kind="ref",
-                )
-                chain_sql: SqlAnalysisResolvedTestSql = resolved_chain[referenced_name]
-                dependency_name: str
-                dependency_sql: str
-                for dependency_name, dependency_sql in chain_sql.generated_ctes.items():
-                    assembly_state.setdefault_cte(dependency_name, dependency_sql)
-                    assembly_state.add_name(dependency_name)
-                assembly_state.setdefault_cte(generated_name, chain_sql.cte_body_sql)
-                return generated_name
-            if referenced_name in mock_refs:
-                assembly_state.add_reached(referenced_name)
-                _ensure_available(
-                    generated_name=generated_name,
-                    referenced_name=referenced_name,
-                    referenced_kind="ref",
-                )
-                assembly_state.setdefault_cte(
-                    generated_name, _wrap_mock_body(mock_refs[referenced_name])
-                )
-                return generated_name
-            return None
-
-        if function_name == SqlReferenceKind.SOURCE.function_name:
-            generated_name = f"{SOURCE_TEST_CTE_PREFIX}{referenced_name}"
-            if referenced_name in mock_sources:
-                assembly_state.add_reached(referenced_name)
-                _ensure_available(
-                    generated_name=generated_name,
-                    referenced_name=referenced_name,
-                    referenced_kind="source",
-                )
-                assembly_state.setdefault_cte(
-                    generated_name,
-                    _wrap_mock_body(mock_sources[referenced_name]),
-                )
-                return generated_name
-            return None
-
-        if function_name == SqlReferenceKind.SEED.function_name:
-            generated_name = f"{SEED_TEST_CTE_PREFIX}{referenced_name}"
-            if referenced_name in mock_seeds:
-                assembly_state.add_reached(referenced_name)
-                _ensure_available(
-                    generated_name=generated_name,
-                    referenced_name=referenced_name,
-                    referenced_kind="seed",
-                )
-                assembly_state.setdefault_cte(
-                    generated_name,
-                    _wrap_mock_body(mock_seeds[referenced_name]),
-                )
-                return generated_name
-            return None
-
-        if function_name == SqlReferenceKind.DBT_REF.function_name:
-            generated_name = f"{DBT_REF_TEST_CTE_PREFIX}{referenced_name}"
-            if referenced_name in mock_dbt_refs:
-                assembly_state.add_reached(referenced_name)
-                _ensure_available(
-                    generated_name=generated_name,
-                    referenced_name=referenced_name,
-                    referenced_kind="dbt_ref",
-                )
-                assembly_state.setdefault_cte(
-                    generated_name,
-                    _wrap_mock_body(mock_dbt_refs[referenced_name]),
-                )
-                return generated_name
-            return None
-
-        if function_name == SqlReferenceKind.UDF.function_name:
-            target: str | None = function_locations.get(referenced_name)
-            if target is not None:
-                return target
-            return None
-
-        return None
-
+    target_for_marker: _TestMarkerResolver = _TestMarkerResolver(
+        state=state,
+        mock_refs=mock_refs,
+        mock_sources=mock_sources,
+        mock_seeds=mock_seeds,
+        mock_dbt_refs=mock_dbt_refs,
+        function_locations=function_locations,
+        helper_ctes=helper_ctes,
+        resolved_chain=resolved_chain,
+        file_label=file_label,
+    )
     _replace_relation_markers_in_polyglot_dict(
         node=parsed_dict,
         polyglot_module=polyglot_module,
         sql_analysis_dialect=None,
-        target_for_marker=_target_for_marker,
+        target_for_marker=target_for_marker,
     )
-    transformed_without_with: dict[str, Any] = deepcopy(parsed_dict)
-    without_with_select: dict[str, Any] | None = _root_select(transformed_without_with)
-    if without_with_select is not None:
-        without_with_select["with"] = None
-    outer_sql: str | None = _generate_one(
-        polyglot_module=polyglot_module, expression=transformed_without_with
+    outer_sql: str | None = _render_test_outer_sql(
+        polyglot_module=polyglot_module,
+        parsed_dict=parsed_dict,
     )
     if outer_sql is None:
         return None
@@ -212,6 +225,27 @@ def try_resolve_test_model_sql_with_sql_analysis(
         outer_sql=outer_sql,
         reachable_mocks=state.reached,
     )
+
+
+def _try_parse_test_query(*, polyglot_module: Any, query_sql: str) -> dict[str, Any] | None:
+    try:
+        parsed: Any = polyglot_module.parse_one(query_sql, dialect="generic")
+    except Exception as error:
+        log_debug_event(
+            logger=_DEBUG_LOGGER,
+            message="sql test assembly parse failed; falling back",
+            sqlbuild_error=str(error),
+        )
+        return None
+    return parsed.to_dict()
+
+
+def _render_test_outer_sql(*, polyglot_module: Any, parsed_dict: dict[str, Any]) -> str | None:
+    transformed_without_with: dict[str, Any] = deepcopy(parsed_dict)
+    without_with_select: dict[str, Any] | None = _root_select(transformed_without_with)
+    if without_with_select is not None:
+        without_with_select["with"] = None
+    return _generate_one(polyglot_module=polyglot_module, expression=transformed_without_with)
 
 
 def _assemble_resolved_test_sql(

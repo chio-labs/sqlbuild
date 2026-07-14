@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
-from sqlbuild.executor.python_nodes._helpers.read_side_execution import (
+from sqlbuild.executor.python_nodes.classes.read_side_python_execution_tracker import (
     ReadSidePythonExecutionTracker,
 )
 from sqlbuild.executor.python_nodes.models import PythonNodeRuntime

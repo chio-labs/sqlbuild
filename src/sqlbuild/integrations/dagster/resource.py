@@ -8,10 +8,8 @@ from typing import Any
 
 from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
-from sqlbuild.integrations.dagster._helpers.invocation import (
-    SqlBuildCliInvocation,
-    start_sqlbuild_cli_invocation,
-)
+from sqlbuild.integrations.dagster._helpers.invocation_factory import start_sqlbuild_cli_invocation
+from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
 from sqlbuild.integrations.dagster.models import SqlBuildProject
 
 

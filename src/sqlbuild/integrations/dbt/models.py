@@ -9,7 +9,7 @@ from typing import Any, TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import (

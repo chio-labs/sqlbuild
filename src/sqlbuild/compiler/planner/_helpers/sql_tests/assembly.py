@@ -13,15 +13,13 @@ from sqlbuild.compiler.compile.constants import (
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledDirectLogicSqlTestPayload,
-    CompiledModelSqlTestPayload,
     CompiledSqlTest,
     CompileSqlTestCte,
 )
@@ -611,17 +609,17 @@ def _topo_sort_expected(
     ordered: list[str] = []
     visited: set[str] = set()
 
-    def _visit(node: str, seen: set[str], result: list[str]) -> tuple[set[str], list[str]]:
+    def _visit(*, node: str, seen: set[str], result: list[str]) -> tuple[set[str], list[str]]:
         if node in seen:
             return seen, result
         seen = seen | {node}
         dep: str
         for dep in sorted(deps.get(node, set())):
-            seen, result = _visit(dep, seen, result)
+            seen, result = _visit(node=dep, seen=seen, result=result)
         return seen, [*result, node]
 
     for name in sorted(expected_names):
-        visited, ordered = _visit(name, visited, ordered)
+        visited, ordered = _visit(node=name, seen=visited, result=ordered)
 
     return tuple(ordered)
 

@@ -11,7 +11,7 @@ from typing import Any, TextIO
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project

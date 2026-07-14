@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.virtual.planner._helpers.targets import build_destination_from_physical_relation
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.adapter.models import ColumnInfo, RelationInfo
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,

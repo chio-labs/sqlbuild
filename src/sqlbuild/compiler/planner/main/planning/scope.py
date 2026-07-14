@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope as _build
 from sqlbuild.compiler.planner.models import PlannerScope
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.models import ColumnLineage, ColumnLineageSource, PhysicalResource
 from sqlbuild.compiler.lineage.types import (

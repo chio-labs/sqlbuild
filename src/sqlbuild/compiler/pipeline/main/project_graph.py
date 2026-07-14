@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
 )

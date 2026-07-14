@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict
 from typing import Any
 
-from sqlbuild.compiler.compile.models.core import FunctionArgument, FunctionReturnColumn
+from sqlbuild.compiler.compile.models import FunctionArgument, FunctionReturnColumn
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
 from sqlbuild.virtual.state.main.encoding.decode_state_text import decode_state_text

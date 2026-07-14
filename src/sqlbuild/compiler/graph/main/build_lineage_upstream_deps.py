@@ -1,6 +1,6 @@
 """Compiled project upstream lineage entrypoint."""
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.graph._helpers.lineage import build_lineage_upstream_deps_impl
 
 

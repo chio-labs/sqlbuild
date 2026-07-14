@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -424,7 +424,7 @@ def _upstream_identity_scope_is_complete(
     visited: set[CompiledObjectKey] = set()
 
     def visit(
-        upstream_key: CompiledObjectKey, seen: set[CompiledObjectKey]
+        *, upstream_key: CompiledObjectKey, seen: set[CompiledObjectKey]
     ) -> tuple[bool, set[CompiledObjectKey]]:
         if upstream_key in seen:
             return True, seen
@@ -432,13 +432,13 @@ def _upstream_identity_scope_is_complete(
         if upstream_key.resource_type in _RUN_PARENT_TYPES and upstream_key not in selected_keys:
             return False, seen
         for parent_key in upstream_deps.get(upstream_key, ()):
-            complete, seen = visit(parent_key, seen)
+            complete, seen = visit(upstream_key=parent_key, seen=seen)
             if not complete:
                 return False, seen
         return True, seen
 
     for upstream_key in upstream_deps.get(key, ()):
-        complete, visited = visit(upstream_key, visited)
+        complete, visited = visit(upstream_key=upstream_key, seen=visited)
         if not complete:
             return False
     return True

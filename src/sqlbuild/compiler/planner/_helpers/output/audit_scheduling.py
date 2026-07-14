@@ -6,7 +6,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledObjectKey,
     CompileSqlReference,

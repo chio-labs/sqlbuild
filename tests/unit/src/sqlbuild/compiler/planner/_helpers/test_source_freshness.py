@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner._helpers.warehouse.source_freshness import (
     build_planner_source_freshness_result,
 )

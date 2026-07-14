@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams

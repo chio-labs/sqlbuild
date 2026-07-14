@@ -13,7 +13,7 @@ from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_n
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.cli.exceptions import CliUserError
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.relation_targets import (
     build_python_relation_targets,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledProject,
 )
 from sqlbuild.compiler.planner.main.planning.selector_expansion import split_selector_expansion

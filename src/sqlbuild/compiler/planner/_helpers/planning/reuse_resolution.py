@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner._helpers.reuse.standard_reuse_decisions import (
     is_standard_reuse_decision_reusable,
 )

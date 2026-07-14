@@ -9,17 +9,15 @@ from pathlib import Path
 from sqlbuild.cli.commands._helpers.compile.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands._helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledSeed,
     CompiledSource,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledModelSqlTestPayload,
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType

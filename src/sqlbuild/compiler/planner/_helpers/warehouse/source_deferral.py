@@ -6,7 +6,7 @@ import re
 from dataclasses import replace
 
 from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledModel,

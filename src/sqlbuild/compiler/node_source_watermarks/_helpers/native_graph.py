@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.node_source_watermarks.main.frontier import (
     build_materialized_watermark_frontier,

@@ -8,7 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.compiler.compile.models.core import CompiledSeed
+from sqlbuild.compiler.compile.models import CompiledSeed
 from sqlbuild.compiler.planner._helpers.identity.hashing import stable_version_identity_hash
 from sqlbuild.spec.contracts.models import SchemaColumn, SeedCsvSettings
 

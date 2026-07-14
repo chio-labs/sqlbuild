@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import CompileSqlReference
+from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )

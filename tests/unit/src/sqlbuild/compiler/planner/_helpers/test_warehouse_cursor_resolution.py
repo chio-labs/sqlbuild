@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledRelationLocation,
     CompileSqlReference,

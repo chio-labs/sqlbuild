@@ -7,7 +7,7 @@ from typing import Any
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.models import ColumnInfo, QueryResult
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
 )

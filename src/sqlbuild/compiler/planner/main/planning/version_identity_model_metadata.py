@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.compiler.compile.models.core import CompiledModel
+from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.constants import (
     MODEL_CONTRACT_CONFIG_KEY,

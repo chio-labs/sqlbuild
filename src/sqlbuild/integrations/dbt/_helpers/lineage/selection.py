@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.integrations.dbt._helpers.graph.core import (
     dbt_model_graph_key,

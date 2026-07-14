@@ -17,7 +17,7 @@ from sqlbuild.adapter.models import (
 )
 from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
 )

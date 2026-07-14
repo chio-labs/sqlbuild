@@ -11,7 +11,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
     assert_no_unresolved_sql_markers,

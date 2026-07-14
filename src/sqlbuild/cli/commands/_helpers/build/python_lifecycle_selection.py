@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.load.models import LoadExecutionResult

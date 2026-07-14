@@ -8,8 +8,10 @@ from typing import Any, cast
 from sqlbuild.executor.load.models import LoaderContext
 from sqlbuild.integrations.dlt._helpers.config import resolve_dlt_config
 from sqlbuild.integrations.dlt._helpers.destination import build_dlt_destination
-from sqlbuild.integrations.dlt._helpers.progress import SqlbuildDltProgressCollector
 from sqlbuild.integrations.dlt._helpers.source import build_dlt_source
+from sqlbuild.integrations.dlt.classes.sqlbuild_dlt_progress_collector import (
+    SqlbuildDltProgressCollector,
+)
 from sqlbuild.integrations.dlt.exceptions import DltIntegrationError
 from sqlbuild.integrations.dlt.models import DltDestinationConfig, DltSourceConfig
 

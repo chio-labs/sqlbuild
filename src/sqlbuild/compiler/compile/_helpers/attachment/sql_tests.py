@@ -21,22 +21,20 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
 from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_ctes
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import (
-    CompileSqlReference,
-    CompileSqlScenarioCte,
-    CompileSqlScenarioCtes,
-    CompileSqlScenarioInput,
-    LoadedMacro,
-    MacroContext,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
+from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestCtes,
     CompileDirectLogicSqlTestInputPayload,
     CompileModelSqlTestCtes,
     CompileModelSqlTestInputPayload,
+    CompileSqlReference,
+    CompileSqlScenarioCte,
+    CompileSqlScenarioCtes,
+    CompileSqlScenarioInput,
     CompileSqlTestCte,
     CompileSqlTestCtes,
     CompileSqlTestInput,
+    LoadedMacro,
+    MacroContext,
 )
 from sqlbuild.compiler.compile.types import (
     SqlTestMode,

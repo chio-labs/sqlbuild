@@ -13,7 +13,7 @@ from typing import Any, cast
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,

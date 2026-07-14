@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models.core import CompiledModel
+from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.manifest._helpers.shared import (
     build_columns_dict,

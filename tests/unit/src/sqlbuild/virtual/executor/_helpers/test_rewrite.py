@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.virtual.executor._helpers.rewrite import (
     build_physical_destination,
     build_rewritten_model_locations,

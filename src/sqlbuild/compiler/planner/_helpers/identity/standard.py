@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledFunction, CompiledModel, CompiledSeed
+from sqlbuild.compiler.compile.models import CompiledFunction, CompiledModel, CompiledSeed
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.identity.hashing import (
     compose_native_graph_identity,

@@ -23,7 +23,7 @@ from sqlbuild.compiler.compile.constants import (
     GENERIC_AUDIT_RAW_PARAMETER_PATTERN,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompileModelInput,
     CompileSourceInput,

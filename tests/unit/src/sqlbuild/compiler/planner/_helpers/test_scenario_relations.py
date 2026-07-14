@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlScenario,
     CompileSqlScenarioCte,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 

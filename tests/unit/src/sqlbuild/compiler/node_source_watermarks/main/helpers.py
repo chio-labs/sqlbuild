@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.node_source_watermarks.main.record_successful import (
     record_successful_node_source_watermark,

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import CompileSqlReference
+from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.integrations.dbt.main.manifest.resolve_reference_relation import (
     resolve_dbt_reference_relation,
 )
