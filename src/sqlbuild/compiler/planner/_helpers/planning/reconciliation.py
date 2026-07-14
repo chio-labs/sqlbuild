@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner._helpers.identity.honest import (
     merge_recomputed_model_changes,
     with_honest_model_write_hashes,

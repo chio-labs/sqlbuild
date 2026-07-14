@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.identity.standard import (
     build_standard_model_version_identities,

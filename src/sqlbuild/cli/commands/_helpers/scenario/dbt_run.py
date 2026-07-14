@@ -32,7 +32,7 @@ from sqlbuild.cli.commands._helpers.scenario.snapshot_limits import (
 from sqlbuild.cli.commands._helpers.scenario.warehouse_run import run_warehouse_scenarios
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
-from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
+from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import DbtScenarioBuild

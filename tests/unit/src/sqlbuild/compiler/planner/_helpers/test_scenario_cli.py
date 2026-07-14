@@ -5,7 +5,7 @@ from typing import ClassVar
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
+from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.scenario.cli import build_cli_scenario_plan
 from sqlbuild.compiler.planner.models import ScenarioArtifactName, ScenarioExecutionPlan

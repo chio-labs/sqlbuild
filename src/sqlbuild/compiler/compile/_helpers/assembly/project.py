@@ -26,36 +26,34 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME, PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompiledAudit,
+    CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
+    CompileDirectLogicSqlTestInputPayload,
     CompiledLineageColumnFact,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
+    CompiledSqlTest,
     CompileModelInput,
+    CompileModelSqlTestInputPayload,
     CompileProjectInputs,
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
+    CompileSqlTestCte,
+    CompileSqlTestInput,
     InferredColumn,
     MacroContext,
     PolyglotAnalysisResult,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledDirectLogicSqlTestPayload,
-    CompileDirectLogicSqlTestInputPayload,
-    CompiledModelSqlTestPayload,
-    CompiledSqlTest,
-    CompileModelSqlTestInputPayload,
-    CompileSqlTestCte,
-    CompileSqlTestInput,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,

@@ -13,7 +13,7 @@ from sqlbuild.executor.build._helpers.node_source_watermarks import (
     write_native_node_source_watermark_records,
 )
 from sqlbuild.executor.build._helpers.output import aggregate_build_result
-from sqlbuild.executor.build._helpers.scheduler import BuildScheduler
+from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,

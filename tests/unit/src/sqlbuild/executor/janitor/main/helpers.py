@@ -18,7 +18,7 @@ from sqlbuild.adapter.models import (
     SchemaDiffResult,
 )
 from sqlbuild.adapter.types import TablePromotionMode
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,

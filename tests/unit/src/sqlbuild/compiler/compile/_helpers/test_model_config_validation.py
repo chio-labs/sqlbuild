@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_snapshot_config,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import CompileModelConfig
+from sqlbuild.compiler.compile.models import CompileModelConfig
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ContractConfigErrorTestCase,
     ContractConfigValidTestCase,

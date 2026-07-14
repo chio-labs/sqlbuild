@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 
 
 def build_target(qualified: str | None, name: str) -> CompiledRelationLocation:

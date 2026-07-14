@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime, timedelta
 
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.constants import (
     RUN_DESPITE_UNCHANGED_HOUR_SUFFIX,

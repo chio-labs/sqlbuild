@@ -19,7 +19,7 @@ from sqlbuild.compiler.compile.constants import (
     SQL_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )

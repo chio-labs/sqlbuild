@@ -12,7 +12,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.models import RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.planning.display_plan import build_display_only_sqlbuild_plan

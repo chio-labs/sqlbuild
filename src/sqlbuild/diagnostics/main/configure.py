@@ -9,11 +9,9 @@ from sqlbuild.diagnostics._helpers.constants import LOG_FILE_NAME
 from sqlbuild.diagnostics._helpers.logging import (
     get_diagnostics_logger,
 )
-from sqlbuild.diagnostics._helpers.logging_formatters import (
-    DiagnosticsConsoleFormatter,
-    DiagnosticsFileFormatter,
-)
-from sqlbuild.diagnostics._helpers.logging_handlers import DynamicStderrHandler
+from sqlbuild.diagnostics.classes.diagnostics_console_formatter import DiagnosticsConsoleFormatter
+from sqlbuild.diagnostics.classes.diagnostics_file_formatter import DiagnosticsFileFormatter
+from sqlbuild.diagnostics.classes.dynamic_stderr_handler import DynamicStderrHandler
 
 
 def configure_diagnostics(*, target_dir: Path, debug: bool, use_color: bool = False) -> None:

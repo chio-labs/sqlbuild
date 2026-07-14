@@ -37,10 +37,10 @@ from sqlbuild.compiler.compile.constants import (
     UDF_EXPECTED_TEST_CTE_NAME,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import CompileSqlReference
-from sqlbuild.compiler.compile.models.sql_tests import (
+from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestCtes,
     CompileModelSqlTestCtes,
+    CompileSqlReference,
     CompileSqlTestCte,
     CompileSqlTestCtes,
 )

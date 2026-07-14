@@ -5,14 +5,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledDirectLogicSqlTestPayload,
     CompiledSqlTest,
     CompileSqlTestCte,
 )

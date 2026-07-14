@@ -26,7 +26,7 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import write_static_co
 from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.compiler.compile.main.load_macros import load_macros
-from sqlbuild.compiler.compile.models.core import LoadedMacro
+from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.dag.main.build import build_dag_json

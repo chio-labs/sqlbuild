@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.models import ColumnInfo
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner._helpers.output.strategy import build_logical_ddl
 from sqlbuild.compiler.planner.types import PlanAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (

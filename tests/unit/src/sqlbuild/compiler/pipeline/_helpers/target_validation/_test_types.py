@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner._helpers.identity.hashing import (
     build_model_version_identity_hash as _build_model_version_identity_hash,
 )

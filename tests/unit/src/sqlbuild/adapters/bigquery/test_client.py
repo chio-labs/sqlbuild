@@ -21,7 +21,7 @@ from sqlbuild.adapter.models import (
 from sqlbuild.adapter.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
 )

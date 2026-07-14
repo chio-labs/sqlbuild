@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from sqlbuild.compiler.compile.models.core import CompiledFunction
+from sqlbuild.compiler.compile.models import CompiledFunction
 
 
 def build_function_local_hashes(

@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import (
     infer_columns_with_sql_analysis,
     substitute_placeholder_defaults,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,

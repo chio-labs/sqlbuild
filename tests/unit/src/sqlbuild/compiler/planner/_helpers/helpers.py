@@ -13,26 +13,24 @@ from typing import Any, cast
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledAudit,
+    CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
+    CompiledSqlTest,
     CompileModelConfig,
     CompileSqlReference,
     CompileSqlScenarioCte,
-    FunctionArgument,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledDirectLogicSqlTestPayload,
-    CompiledModelSqlTestPayload,
-    CompiledSqlTest,
     CompileSqlTestCte,
+    FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,

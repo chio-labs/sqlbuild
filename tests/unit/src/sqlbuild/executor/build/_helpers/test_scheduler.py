@@ -11,7 +11,7 @@ import pytest
 
 from sqlbuild.adapter.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, DiscoveredLoaderFunction
 from sqlbuild.compiler.hooks.models import PythonHookEntry

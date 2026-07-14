@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -62,7 +62,10 @@ from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_t
 from sqlbuild.executor.run.models import (
     BatchWindow,
     FinalAuditRun,
-    HookExecutionResult,
+    MicrobatchLifecycleState,
+    MicrobatchPhaseOutcome,
+    MicrobatchSchemaPhaseOutcome,
+    MicrobatchTargets,
     ModelExecutionResult,
     ModelMaterializationContext,
     PostHookPhaseOutcome,
@@ -93,332 +96,484 @@ def execute_microbatch_entry(
 ) -> ModelExecutionResult:
     """Execute one microbatch incremental model through batched delta/DML."""
 
-    entry: ModelPlanEntry = context.entry
-    adapter: BaseAdapter = context.adapter
-    connection: Any = context.connection
-    target_database: str | None = entry.destination.database
-    target_schema: str | None = entry.destination.schema
-    target_table: str = entry.destination.name
-    target_qualified: str = resolve_relation_location_qualified_name(
-        adapter=adapter, location=entry.destination
+    targets: MicrobatchTargets = _resolve_microbatch_targets(context=context)
+    state: MicrobatchLifecycleState = MicrobatchLifecycleState(
+        warnings=[],
+        audit_results=[],
+        hook_results=[],
+        statement_recorder=StatementRecorder(),
     )
-    delta_table: str = f"{target_table}__delta"
-    delta_qualified: str = resolve_qualified_name_parts(
-        adapter=adapter,
-        database=target_database,
-        schema=target_schema,
-        name=delta_table,
-    )
-    warnings: list[str] = []
-    audit_results: list[AuditExecutionResult] = []
-    hook_results: list[HookExecutionResult] = []
-    statement_recorder: StatementRecorder = StatementRecorder()
-
     pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
         context=context,
-        warnings=warnings,
-        audit_results=audit_results,
-        hook_results=hook_results,
-        statement_recorder=statement_recorder,
+        warnings=state.warnings,
+        audit_results=state.audit_results,
+        hook_results=state.hook_results,
+        statement_recorder=state.statement_recorder,
     )
     if pre_hook_exit is not None:
         return pre_hook_exit
-
     batch_plan: _MicrobatchPlan = _plan_microbatch_windows(
         context=context,
         is_full_refresh=is_full_refresh,
-        target_qualified=target_qualified,
-        warnings=warnings,
-        audit_results=audit_results,
-        statement_recorder=statement_recorder,
+        target_qualified=targets.target_qualified,
+        warnings=state.warnings,
+        audit_results=state.audit_results,
+        statement_recorder=state.statement_recorder,
     )
     if batch_plan.early_exit is not None:
         return batch_plan.early_exit
-    batches: tuple[BatchWindow, ...] = batch_plan.batches
-
     full_refresh_exit: ModelExecutionResult | None = _drop_target_for_full_refresh(
         context=context,
         is_full_refresh=is_full_refresh,
-        target_qualified=target_qualified,
-        warnings=warnings,
-        audit_results=audit_results,
-        statement_recorder=statement_recorder,
+        target_qualified=targets.target_qualified,
+        warnings=state.warnings,
+        audit_results=state.audit_results,
+        statement_recorder=state.statement_recorder,
     )
     if full_refresh_exit is not None:
         return full_refresh_exit
-
-    schema_checked: bool = False
-    completed_batches: int = 0
-    batch: BatchWindow
-    for batch in batches:
-        window_text: str = f"{batch.start}..{batch.end}"
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="",
-            sqlbuild_subject="model",
-            sqlbuild_name=entry.name,
-            sqlbuild_event="batch_start",
-            sqlbuild_phase="batch",
-            sqlbuild_window=window_text,
-        )
-        batch_sql: str = _substitute_sentinels(
-            sql=entry.resolved_sql,
-            batch_start=batch.start,
-            batch_end=batch.end,
-        )
-
-        try:
-            with diagnostics_context(
-                sqlbuild_phase="materialize",
-                sqlbuild_action_name="create_delta",
-                sqlbuild_window=window_text,
-            ):
-                adapter.drop(
-                    connection=connection,
-                    destination=delta_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-                adapter.create_table_as(
-                    connection=connection,
-                    destination=delta_qualified,
-                    sql=batch_sql,
-                    statement_recorder=statement_recorder,
-                )
-        except Exception as exc:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.STAGING,
-                error=f"batch {batch.index}: {exc}",
-                staging_relation=delta_qualified,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
-
-        if not schema_checked and not is_full_refresh:
-            try:
-                with diagnostics_context(
-                    sqlbuild_phase="schema_change",
-                    sqlbuild_action_name="inspect",
-                    sqlbuild_window=window_text,
-                ):
-                    delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                        connection=connection,
-                        database=target_database,
-                        schema=target_schema,
-                        name=delta_table,
-                    )
-                    target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                        connection=connection,
-                        database=target_database,
-                        schema=target_schema,
-                        name=target_table,
-                    )
-                    warnings.extend(
-                        _apply_schema_change(
-                            adapter=adapter,
-                            connection=connection,
-                            target_qualified=target_qualified,
-                            target_columns=target_columns,
-                            delta_columns=delta_columns,
-                            on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
-                            statement_recorder=statement_recorder,
-                        )
-                    )
-            except Exception as exc:
-                return build_failed_result(
-                    entry=entry,
-                    phase=ExecutionPhase.SCHEMA_CHANGE,
-                    error=str(exc),
-                    staging_relation=delta_qualified,
-                    warnings=warnings,
-                    audit_results=audit_results,
-                    statement_recorder=statement_recorder,
-                )
-            schema_checked = True
-
-        if entry.type_enforcement and declared_columns:
-            try:
-                with diagnostics_context(
-                    sqlbuild_phase="type_enforcement",
-                    sqlbuild_action_name="rebuild_delta",
-                    sqlbuild_window=window_text,
-                ):
-                    enforce_types_staged(
-                        adapter=adapter,
-                        connection=connection,
-                        staging_qualified=delta_qualified,
-                        staging_database=target_database,
-                        staging_schema=target_schema,
-                        staging_table=delta_table,
-                        declared_columns=declared_columns,
-                        statement_recorder=statement_recorder,
-                    )
-            except Exception as exc:
-                return build_failed_result(
-                    entry=entry,
-                    phase=ExecutionPhase.TYPE_ENFORCEMENT,
-                    error=f"batch {batch.index}: {exc}",
-                    staging_relation=delta_qualified,
-                    warnings=warnings,
-                    audit_results=audit_results,
-                    statement_recorder=statement_recorder,
-                )
-
-        delta_audit_run: FinalAuditRun = run_delta_scope_audits(
-            context=context, delta_qualified=delta_qualified
-        )
-        audit_results.extend(delta_audit_run.results)
-
-        if delta_audit_run.has_error:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.AUDIT,
-                error=(
-                    f"batch {batch.index}: delta audit for '{entry.name}' failed before "
-                    "target update with severity level: error"
-                ),
-                staging_relation=delta_qualified,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
-
-        try:
-            with diagnostics_context(
-                sqlbuild_phase="dml",
-                sqlbuild_action_name="apply",
-                sqlbuild_window=window_text,
-            ):
-                target_columns_for_dml: tuple[ColumnInfo, ...] = (
-                    adapter.get_columns(
-                        connection=connection,
-                        database=target_database,
-                        schema=target_schema,
-                        name=target_table,
-                    )
-                    if not is_full_refresh or completed_batches > 0
-                    else ()
-                )
-                delta_columns_for_dml: tuple[ColumnInfo, ...] = adapter.get_columns(
-                    connection=connection,
-                    database=target_database,
-                    schema=target_schema,
-                    name=delta_table,
-                )
-                _validate_cursor_output_columns(entry=entry, delta_columns=delta_columns_for_dml)
-                if is_full_refresh and completed_batches == 0:
-                    adapter.create_table_as(
-                        connection=connection,
-                        destination=target_qualified,
-                        sql=f"SELECT * FROM {delta_qualified}",
-                        statement_recorder=statement_recorder,
-                    )
-                else:
-                    _execute_dml(
-                        adapter=adapter,
-                        connection=connection,
-                        target_qualified=target_qualified,
-                        delta_qualified=delta_qualified,
-                        target_columns=target_columns_for_dml,
-                        delta_columns=delta_columns_for_dml,
-                        entry=entry,
-                        cursor_start=batch.start,
-                        cursor_end=batch.end,
-                        statement_recorder=statement_recorder,
-                    )
-        except Exception as exc:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.DML,
-                error=f"batch {batch.index}: {exc}",
-                staging_relation=delta_qualified,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
-
-        with diagnostics_context(
-            sqlbuild_phase="cleanup",
-            sqlbuild_action_name="drop_delta",
-            sqlbuild_window=window_text,
-        ):
-            adapter.drop(
-                connection=connection,
-                destination=delta_qualified,
-                if_exists=True,
-                statement_recorder=statement_recorder,
-            )
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="",
-            sqlbuild_subject="model",
-            sqlbuild_name=entry.name,
-            sqlbuild_event="batch_complete",
-            sqlbuild_phase="batch",
-            sqlbuild_window=window_text,
-            sqlbuild_status="ok",
-        )
-        completed_batches += 1
-
+    batch_outcome: MicrobatchPhaseOutcome = _execute_microbatch_batches(
+        context=context,
+        declared_columns=declared_columns,
+        is_full_refresh=is_full_refresh,
+        batches=batch_plan.batches,
+        targets=targets,
+        state=state,
+    )
+    state = batch_outcome.state
+    if batch_outcome.failure is not None:
+        return batch_outcome.failure
     final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
-    audit_results.extend(final_audit_run.results)
-
+    state.audit_results.extend(final_audit_run.results)
     if final_audit_run.has_error:
         return build_failed_result(
-            entry=entry,
+            entry=context.entry,
             phase=ExecutionPhase.AUDIT,
             error=(
-                f"final audit for '{entry.name}' failed after target update "
+                f"final audit for '{context.entry.name}' failed after target update "
                 "with severity level: error"
             ),
-            promoted_relation=target_qualified,
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
+            promoted_relation=targets.target_qualified,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
         )
-
     post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
         context=context,
-        warnings=warnings,
-        audit_results=audit_results,
-        hook_results=hook_results,
-        statement_recorder=statement_recorder,
-        promoted_relation=target_qualified,
+        warnings=state.warnings,
+        audit_results=state.audit_results,
+        hook_results=state.hook_results,
+        statement_recorder=state.statement_recorder,
+        promoted_relation=targets.target_qualified,
     )
     if post_hook_outcome.failure is not None:
         return post_hook_outcome.failure
     if post_hook_outcome.skipped:
         return build_skipped_result(
-            entry=entry,
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-            hook_results=hook_results,
-            promoted_relation=target_qualified,
+            entry=context.entry,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+            hook_results=state.hook_results,
+            promoted_relation=targets.target_qualified,
         )
-
-    warnings.extend(
+    state.warnings.extend(
         try_write_fingerprint(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
+            entry=context.entry,
+            adapter=context.adapter,
+            connection=context.connection,
             run_id=context.run_id,
             query_change_tracking=context.query_change_tracking,
             model_audits=context.model_audits,
-            audit_results=tuple(audit_results),
+            audit_results=tuple(state.audit_results),
         )
     )
-
     return ModelExecutionResult(
-        model_name=entry.name,
+        model_name=context.entry.name,
         status=ExecutionStatus.SUCCESS,
-        promoted_relation=target_qualified,
-        audit_results=tuple(audit_results),
-        warning_messages=tuple(warnings),
-        lifecycle_events=statement_recorder.snapshot(),
-        hook_results=tuple(hook_results),
+        promoted_relation=targets.target_qualified,
+        audit_results=tuple(state.audit_results),
+        warning_messages=tuple(state.warnings),
+        lifecycle_events=state.statement_recorder.snapshot(),
+        hook_results=tuple(state.hook_results),
+    )
+
+
+def _resolve_microbatch_targets(*, context: ModelMaterializationContext) -> MicrobatchTargets:
+    entry: ModelPlanEntry = context.entry
+    target_table: str = entry.destination.name
+    delta_table: str = f"{target_table}__delta"
+    return MicrobatchTargets(
+        target_database=entry.destination.database,
+        target_schema=entry.destination.schema,
+        target_table=target_table,
+        target_qualified=resolve_relation_location_qualified_name(
+            adapter=context.adapter,
+            location=entry.destination,
+        ),
+        delta_table=delta_table,
+        delta_qualified=resolve_qualified_name_parts(
+            adapter=context.adapter,
+            database=entry.destination.database,
+            schema=entry.destination.schema,
+            name=delta_table,
+        ),
+    )
+
+
+def _execute_microbatch_batches(
+    *,
+    context: ModelMaterializationContext,
+    declared_columns: tuple[ColumnInfo, ...],
+    is_full_refresh: bool,
+    batches: tuple[BatchWindow, ...],
+    targets: MicrobatchTargets,
+    state: MicrobatchLifecycleState,
+) -> MicrobatchPhaseOutcome:
+    schema_checked: bool = False
+    completed_batches: int = 0
+    batch: BatchWindow
+    for batch in batches:
+        window_text: str = f"{batch.start}..{batch.end}"
+        stage_failure: ModelExecutionResult | None = _stage_microbatch_delta(
+            context=context,
+            batch=batch,
+            window_text=window_text,
+            targets=targets,
+            state=state,
+        )
+        if stage_failure is not None:
+            return MicrobatchPhaseOutcome(state=state, failure=stage_failure)
+        schema_outcome: MicrobatchSchemaPhaseOutcome = _apply_microbatch_schema_change(
+            context=context,
+            is_full_refresh=is_full_refresh,
+            schema_checked=schema_checked,
+            window_text=window_text,
+            targets=targets,
+            state=state,
+        )
+        state = schema_outcome.state
+        if schema_outcome.failure is not None:
+            return MicrobatchPhaseOutcome(state=state, failure=schema_outcome.failure)
+        schema_checked = schema_outcome.schema_checked
+        type_failure: ModelExecutionResult | None = _enforce_microbatch_types(
+            context=context,
+            declared_columns=declared_columns,
+            batch=batch,
+            window_text=window_text,
+            targets=targets,
+            state=state,
+        )
+        if type_failure is not None:
+            return MicrobatchPhaseOutcome(state=state, failure=type_failure)
+        audit_outcome: MicrobatchPhaseOutcome = _run_microbatch_delta_audits(
+            context=context,
+            batch=batch,
+            targets=targets,
+            state=state,
+        )
+        state = audit_outcome.state
+        if audit_outcome.failure is not None:
+            return audit_outcome
+        dml_failure: ModelExecutionResult | None = _apply_microbatch_dml(
+            context=context,
+            batch=batch,
+            completed_batches=completed_batches,
+            is_full_refresh=is_full_refresh,
+            window_text=window_text,
+            targets=targets,
+            state=state,
+        )
+        if dml_failure is not None:
+            return MicrobatchPhaseOutcome(state=state, failure=dml_failure)
+        _complete_microbatch_batch(
+            context=context,
+            window_text=window_text,
+            targets=targets,
+            state=state,
+        )
+        completed_batches += 1
+    return MicrobatchPhaseOutcome(state=state)
+
+
+def _stage_microbatch_delta(
+    *,
+    context: ModelMaterializationContext,
+    batch: BatchWindow,
+    window_text: str,
+    targets: MicrobatchTargets,
+    state: MicrobatchLifecycleState,
+) -> ModelExecutionResult | None:
+    log_debug_event(
+        logger=_DEBUG_LOGGER,
+        message="",
+        sqlbuild_subject="model",
+        sqlbuild_name=context.entry.name,
+        sqlbuild_event="batch_start",
+        sqlbuild_phase="batch",
+        sqlbuild_window=window_text,
+    )
+    batch_sql: str = _substitute_sentinels(
+        sql=context.entry.resolved_sql,
+        batch_start=batch.start,
+        batch_end=batch.end,
+    )
+    try:
+        with diagnostics_context(
+            sqlbuild_phase="materialize",
+            sqlbuild_action_name="create_delta",
+            sqlbuild_window=window_text,
+        ):
+            context.adapter.drop(
+                connection=context.connection,
+                destination=targets.delta_qualified,
+                if_exists=True,
+                statement_recorder=state.statement_recorder,
+            )
+            context.adapter.create_table_as(
+                connection=context.connection,
+                destination=targets.delta_qualified,
+                sql=batch_sql,
+                statement_recorder=state.statement_recorder,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.STAGING,
+            error=f"batch {batch.index}: {exc}",
+            staging_relation=targets.delta_qualified,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+        )
+    return None
+
+
+def _apply_microbatch_schema_change(
+    *,
+    context: ModelMaterializationContext,
+    is_full_refresh: bool,
+    schema_checked: bool,
+    window_text: str,
+    targets: MicrobatchTargets,
+    state: MicrobatchLifecycleState,
+) -> MicrobatchSchemaPhaseOutcome:
+    if schema_checked or is_full_refresh:
+        return MicrobatchSchemaPhaseOutcome(state=state, schema_checked=schema_checked)
+    try:
+        with diagnostics_context(
+            sqlbuild_phase="schema_change",
+            sqlbuild_action_name="inspect",
+            sqlbuild_window=window_text,
+        ):
+            delta_columns: tuple[ColumnInfo, ...] = context.adapter.get_columns(
+                connection=context.connection,
+                database=targets.target_database,
+                schema=targets.target_schema,
+                name=targets.delta_table,
+            )
+            target_columns: tuple[ColumnInfo, ...] = context.adapter.get_columns(
+                connection=context.connection,
+                database=targets.target_database,
+                schema=targets.target_schema,
+                name=targets.target_table,
+            )
+            schema_warnings: tuple[str, ...] = _apply_schema_change(
+                adapter=context.adapter,
+                connection=context.connection,
+                target_qualified=targets.target_qualified,
+                target_columns=target_columns,
+                delta_columns=delta_columns,
+                on_schema_change=context.entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                statement_recorder=state.statement_recorder,
+            )
+    except Exception as exc:
+        return MicrobatchSchemaPhaseOutcome(
+            state=state,
+            schema_checked=False,
+            failure=build_failed_result(
+                entry=context.entry,
+                phase=ExecutionPhase.SCHEMA_CHANGE,
+                error=str(exc),
+                staging_relation=targets.delta_qualified,
+                warnings=state.warnings,
+                audit_results=state.audit_results,
+                statement_recorder=state.statement_recorder,
+            ),
+        )
+    return MicrobatchSchemaPhaseOutcome(
+        state=replace(state, warnings=[*state.warnings, *schema_warnings]),
+        schema_checked=True,
+    )
+
+
+def _enforce_microbatch_types(
+    *,
+    context: ModelMaterializationContext,
+    declared_columns: tuple[ColumnInfo, ...],
+    batch: BatchWindow,
+    window_text: str,
+    targets: MicrobatchTargets,
+    state: MicrobatchLifecycleState,
+) -> ModelExecutionResult | None:
+    if not context.entry.type_enforcement or not declared_columns:
+        return None
+    try:
+        with diagnostics_context(
+            sqlbuild_phase="type_enforcement",
+            sqlbuild_action_name="rebuild_delta",
+            sqlbuild_window=window_text,
+        ):
+            enforce_types_staged(
+                adapter=context.adapter,
+                connection=context.connection,
+                staging_qualified=targets.delta_qualified,
+                staging_database=targets.target_database,
+                staging_schema=targets.target_schema,
+                staging_table=targets.delta_table,
+                declared_columns=declared_columns,
+                statement_recorder=state.statement_recorder,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.TYPE_ENFORCEMENT,
+            error=f"batch {batch.index}: {exc}",
+            staging_relation=targets.delta_qualified,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+        )
+    return None
+
+
+def _run_microbatch_delta_audits(
+    *,
+    context: ModelMaterializationContext,
+    batch: BatchWindow,
+    targets: MicrobatchTargets,
+    state: MicrobatchLifecycleState,
+) -> MicrobatchPhaseOutcome:
+    delta_audit_run: FinalAuditRun = run_delta_scope_audits(
+        context=context,
+        delta_qualified=targets.delta_qualified,
+    )
+    updated_state: MicrobatchLifecycleState = replace(
+        state,
+        audit_results=[*state.audit_results, *delta_audit_run.results],
+    )
+    if not delta_audit_run.has_error:
+        return MicrobatchPhaseOutcome(state=updated_state)
+    return MicrobatchPhaseOutcome(
+        state=updated_state,
+        failure=build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.AUDIT,
+            error=(
+                f"batch {batch.index}: delta audit for '{context.entry.name}' failed before "
+                "target update with severity level: error"
+            ),
+            staging_relation=targets.delta_qualified,
+            warnings=updated_state.warnings,
+            audit_results=updated_state.audit_results,
+            statement_recorder=updated_state.statement_recorder,
+        ),
+    )
+
+
+def _apply_microbatch_dml(
+    *,
+    context: ModelMaterializationContext,
+    batch: BatchWindow,
+    completed_batches: int,
+    is_full_refresh: bool,
+    window_text: str,
+    targets: MicrobatchTargets,
+    state: MicrobatchLifecycleState,
+) -> ModelExecutionResult | None:
+    try:
+        with diagnostics_context(
+            sqlbuild_phase="dml",
+            sqlbuild_action_name="apply",
+            sqlbuild_window=window_text,
+        ):
+            target_columns: tuple[ColumnInfo, ...] = (
+                context.adapter.get_columns(
+                    connection=context.connection,
+                    database=targets.target_database,
+                    schema=targets.target_schema,
+                    name=targets.target_table,
+                )
+                if not is_full_refresh or completed_batches > 0
+                else ()
+            )
+            delta_columns: tuple[ColumnInfo, ...] = context.adapter.get_columns(
+                connection=context.connection,
+                database=targets.target_database,
+                schema=targets.target_schema,
+                name=targets.delta_table,
+            )
+            _validate_cursor_output_columns(entry=context.entry, delta_columns=delta_columns)
+            if is_full_refresh and completed_batches == 0:
+                context.adapter.create_table_as(
+                    connection=context.connection,
+                    destination=targets.target_qualified,
+                    sql=f"SELECT * FROM {targets.delta_qualified}",
+                    statement_recorder=state.statement_recorder,
+                )
+            else:
+                _execute_dml(
+                    adapter=context.adapter,
+                    connection=context.connection,
+                    target_qualified=targets.target_qualified,
+                    delta_qualified=targets.delta_qualified,
+                    target_columns=target_columns,
+                    delta_columns=delta_columns,
+                    entry=context.entry,
+                    cursor_start=batch.start,
+                    cursor_end=batch.end,
+                    statement_recorder=state.statement_recorder,
+                )
+    except Exception as exc:
+        return build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.DML,
+            error=f"batch {batch.index}: {exc}",
+            staging_relation=targets.delta_qualified,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+        )
+    return None
+
+
+def _complete_microbatch_batch(
+    *,
+    context: ModelMaterializationContext,
+    window_text: str,
+    targets: MicrobatchTargets,
+    state: MicrobatchLifecycleState,
+) -> None:
+    with diagnostics_context(
+        sqlbuild_phase="cleanup",
+        sqlbuild_action_name="drop_delta",
+        sqlbuild_window=window_text,
+    ):
+        context.adapter.drop(
+            connection=context.connection,
+            destination=targets.delta_qualified,
+            if_exists=True,
+            statement_recorder=state.statement_recorder,
+        )
+    log_debug_event(
+        logger=_DEBUG_LOGGER,
+        message="",
+        sqlbuild_subject="model",
+        sqlbuild_name=context.entry.name,
+        sqlbuild_event="batch_complete",
+        sqlbuild_phase="batch",
+        sqlbuild_window=window_text,
+        sqlbuild_status="ok",
     )
 
 

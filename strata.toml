@@ -5,3 +5,43 @@ select = ["SF"]
 
 [thresholds]
 max_positional_args = 1
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapter/classes/base_adapter.py"
+reason = "The adapter contract intentionally keeps its overrideable methods on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapter/classes/duckdb_backed_adapter.py"
+reason = "The shared DuckDB-backed adapter intentionally keeps overrideable methods on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/bigquery/classes/bigquery_adapter.py"
+reason = "The BigQuery adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/databricks/classes/databricks_adapter.py"
+reason = "The Databricks adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/postgres/classes/postgres_adapter.py"
+reason = "The Postgres adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/snowflake/classes/snowflake_adapter.py"
+reason = "The Snowflake adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/sqlserver/classes/sqlserver_adapter.py"
+reason = "The SQL Server adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/virtual/state/classes/postgres.py"
+reason = "The Postgres state backend intentionally keeps its transactional storage contract on one class."

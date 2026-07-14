@@ -24,20 +24,18 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlTest,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledModelSqlTestPayload,
-    CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (

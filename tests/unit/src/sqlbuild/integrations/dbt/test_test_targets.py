@@ -5,8 +5,7 @@ from functools import partial
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.compile.models.sql_tests import CompiledModelSqlTestPayload
+from sqlbuild.compiler.compile.models import CompiledModelSqlTestPayload, CompiledProject
 from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
     adapt_project_for_dbt_sql_tests,
     resolve_dbt_sql_test_target_names,

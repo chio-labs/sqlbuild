@@ -4,11 +4,11 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
-from sqlbuild.compiler.compile.models.core import LoadedMacro
-from sqlbuild.compiler.compile.models.sql_tests import (
+from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
     CompiledSqlTest,
+    LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 

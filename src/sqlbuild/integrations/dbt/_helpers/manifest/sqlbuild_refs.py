@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.integrations.dbt._helpers.manifest.core import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel

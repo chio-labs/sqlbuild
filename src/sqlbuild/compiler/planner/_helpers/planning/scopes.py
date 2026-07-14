@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner._helpers.reuse.dependency_baseline import (
     build_dependency_baseline_candidate_keys,

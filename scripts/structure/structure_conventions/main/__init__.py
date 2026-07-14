@@ -1,1 +1,0 @@
-"""Structure convention checker entries."""

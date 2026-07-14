@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.executor.janitor._helpers.classification import (
     classify_janitor_relations,
     collect_direct_state_prune_candidates,

@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.pruning.standard_scope import (
     build_standard_identity_stale_model_names,

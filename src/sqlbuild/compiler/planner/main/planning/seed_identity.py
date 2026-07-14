@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledSeed
+from sqlbuild.compiler.compile.models import CompiledSeed
 from sqlbuild.compiler.planner._helpers.identity.seed import (
     build_seed_identity as _build_seed_identity,
 )

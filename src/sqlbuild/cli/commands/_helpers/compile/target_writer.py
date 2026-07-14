@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.compile.models import WrittenTarget
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.main.planning.sql_test_assembly import build_sql_test_plan_entry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry

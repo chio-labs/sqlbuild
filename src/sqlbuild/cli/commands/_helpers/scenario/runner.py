@@ -47,7 +47,7 @@ from sqlbuild.cli.output.main.write_execution_json_output import write_execution
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
-from sqlbuild.compiler.compile.models.core import CompiledSqlScenario
+from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline

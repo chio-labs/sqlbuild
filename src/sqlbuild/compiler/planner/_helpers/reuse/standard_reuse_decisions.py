@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.compiler.compile.models.core import CompiledModel
+from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.output.strategy import get_materialization_type
 from sqlbuild.compiler.planner._helpers.reuse.policy import decide_reuse_for_node

@@ -67,6 +67,7 @@ def _changed_upstream_names(
     stale_by_key: dict[SelectionStalenessNodeKey, bool] = {}
 
     def visit(
+        *,
         upstream_key: SelectionStalenessNodeKey,
         found_names: set[str],
         visiting_keys: set[SelectionStalenessNodeKey],
@@ -92,7 +93,10 @@ def _changed_upstream_names(
                 parent_key: SelectionStalenessNodeKey
                 for parent_key in graph.upstream_deps.get(upstream_key, ()):
                     parent_stale, found_names, visiting_keys, stale_cache = visit(
-                        parent_key, found_names, visiting_keys, stale_cache
+                        upstream_key=parent_key,
+                        found_names=found_names,
+                        visiting_keys=visiting_keys,
+                        stale_cache=stale_cache,
                     )
                     ancestor_stale = parent_stale or ancestor_stale
                     if _run_parent_changed(graph=graph, parent_key=parent_key):
@@ -117,7 +121,12 @@ def _changed_upstream_names(
 
     upstream_key: SelectionStalenessNodeKey
     for upstream_key in graph.upstream_deps.get(model_key, ()):
-        _, names, visiting, stale_by_key = visit(upstream_key, names, visiting, stale_by_key)
+        _, names, visiting, stale_by_key = visit(
+            upstream_key=upstream_key,
+            found_names=names,
+            visiting_keys=visiting,
+            stale_cache=stale_by_key,
+        )
     return tuple(sorted(names))
 
 

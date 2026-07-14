@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledModel
+from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.hooks.models import SqlHookEntry

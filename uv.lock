@@ -4203,7 +4203,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff", specifier = ">=0.12.0" },
-    { name = "stratalint", specifier = ">=0.10.0" },
+    { name = "stratalint", specifier = ">=0.11.0" },
     { name = "testcontainers", specifier = ">=4.8.1" },
     { name = "ty", specifier = ">=0.0.1a19" },
 ]
@@ -4250,11 +4250,11 @@ wheels = [
 
 [[package]]
 name = "stratalint"
-version = "0.10.0"
+version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e0/fd/d089b3273ad3e8d379b334efe70752334b59b391672453f8444f8352c184/stratalint-0.10.0.tar.gz", hash = "sha256:bf41b21830734344ff121187f4c9583c5ccb9cb8eb4724a357f56605402a4706", size = 835678, upload-time = "2026-07-13T22:12:32.259Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/00/70fe45c77e4c2f29274dc433fbe948fcd106c24ab18d617a3be21222fb99/stratalint-0.11.0.tar.gz", hash = "sha256:df04afd2db50752cc9d842d10609ee7cfb5f261fd29b3d7ff4a3d0753f5402a4", size = 879979, upload-time = "2026-07-14T08:38:52.375Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/65/5da7b0dab8284995214f07c5f006997addbaee5cab7297d291d7933ab56d/stratalint-0.10.0-py3-none-any.whl", hash = "sha256:9dc8998eca7ebaac1a6a7e93e28da29976860cf635d463e3d54ea5b21de2c9e2", size = 329062, upload-time = "2026-07-13T22:12:30.633Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/c2/88fa42a69e9caa9525b3d2c8824ef9c324193ead269cbb587a8b0bc6daa4/stratalint-0.11.0-py3-none-any.whl", hash = "sha256:744bba871034409887f37095a848919825404d3b817758b11c86a28705c3d404", size = 336400, upload-time = "2026-07-14T08:38:50.749Z" },
 ]
 
 [[package]]

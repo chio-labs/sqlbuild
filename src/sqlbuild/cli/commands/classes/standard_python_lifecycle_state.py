@@ -12,7 +12,7 @@ from sqlbuild.cli.commands._helpers.build.python_lifecycle_selection import (
     sql_loader_functions_for_lifecycle_handoff,
 )
 from sqlbuild.cli.commands._helpers.build.python_node_output import write_python_node_results
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus

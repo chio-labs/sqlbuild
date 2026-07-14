@@ -11,7 +11,7 @@ from sqlbuild.adapter.models import (
 )
 from sqlbuild.adapter.types import FunctionNullabilityRule, LoaderLogicalType
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
 )

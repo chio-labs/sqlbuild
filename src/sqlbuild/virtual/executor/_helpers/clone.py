@@ -18,7 +18,7 @@ from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_n
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.adapter.types import BuiltinAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompiledRelationLocation,

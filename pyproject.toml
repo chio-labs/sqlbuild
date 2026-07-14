@@ -52,9 +52,10 @@ rivers = [
 [project.scripts]
 sqb = "sqlbuild.cli.commands.main.commands.entry:main"
 sqlbuild = "sqlbuild.cli.commands.main.commands.entry:main"
-check-test-conventions = "scripts.testing.check_test_conventions:main"
-check-structure-conventions = "scripts.structure.check_structure_conventions:main"
-check-type-annotation-conventions = "scripts.type_annotations.check_type_annotation_conventions:main"
+check-test-conventions = "scripts.testing.main.check_test_conventions:check_test_conventions"
+check-structure-conventions = "scripts.structure.main.check_structure_conventions:check_structure_conventions"
+check-type-annotation-conventions = "scripts.type_annotations.main.check_type_annotation_conventions:check_type_annotation_conventions"
+update-structure-skill = "scripts.skills.main.update_structure_skill:update_structure_skill"
 
 [dependency-groups]
 dev = [
@@ -74,7 +75,7 @@ dev = [
   "pytest-cov>=7.0.0",
   "pytest-xdist>=3.8.0",
   "ruff>=0.12.0",
-  "stratalint>=0.10.0",
+  "stratalint>=0.11.0",
   "testcontainers>=4.8.1",
   "ty>=0.0.1a19",
 ]

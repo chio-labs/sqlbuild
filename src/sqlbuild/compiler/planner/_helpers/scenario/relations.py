@@ -17,7 +17,7 @@ from sqlbuild.compiler.compile.constants import (
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
@@ -833,6 +833,7 @@ def _replace_relation_markers_in_polyglot_dict(
     relation_cache: dict[str, dict[str, Any] | None] = {}
 
     def _cached_relation(
+        *,
         target_name: str,
         cache: dict[str, dict[str, Any] | None],
     ) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any] | None]]:
@@ -848,6 +849,7 @@ def _replace_relation_markers_in_polyglot_dict(
         return cache[target_name], cache
 
     def _replacement(
+        *,
         expression: Any,
         cache: dict[str, dict[str, Any] | None],
     ) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any] | None]]:
@@ -856,7 +858,8 @@ def _replace_relation_markers_in_polyglot_dict(
         alias_payload: Any | None = expression.get("alias")
         if isinstance(alias_payload, dict) and POLYGLOT_ALIAS_VALUE_KEY in alias_payload:
             inner_replacement, cache = _replacement(
-                alias_payload.get(POLYGLOT_ALIAS_VALUE_KEY), cache
+                expression=alias_payload.get(POLYGLOT_ALIAS_VALUE_KEY),
+                cache=cache,
             )
             if inner_replacement is None:
                 return None, cache
@@ -879,10 +882,11 @@ def _replace_relation_markers_in_polyglot_dict(
         )
         if target_name is None:
             return None, cache
-        relation, cache = _cached_relation(target_name, cache)
+        relation, cache = _cached_relation(target_name=target_name, cache=cache)
         return (None if relation is None else deepcopy(relation)), cache
 
     def _walk(
+        *,
         walk_node: Any,
         cache: dict[str, dict[str, Any] | None],
     ) -> tuple[bool, dict[str, dict[str, Any] | None]]:
@@ -893,7 +897,7 @@ def _replace_relation_markers_in_polyglot_dict(
                 expressions: Any = from_clause.get("expressions")
                 if isinstance(expressions, list):
                     for index, expression in enumerate(expressions):
-                        replacement, cache = _replacement(expression, cache)
+                        replacement, cache = _replacement(expression=expression, cache=cache)
                         if replacement is not None:
                             expressions[index] = replacement
                             changed = True
@@ -903,24 +907,24 @@ def _replace_relation_markers_in_polyglot_dict(
                 for join in joins:
                     if not isinstance(join, dict):
                         continue
-                    replacement, cache = _replacement(join.get("this"), cache)
+                    replacement, cache = _replacement(expression=join.get("this"), cache=cache)
                     if replacement is not None:
                         join["this"] = replacement
                         changed = True
             value: Any
             for value in walk_node.values():
                 if isinstance(value, dict | list):
-                    child_changed, cache = _walk(value, cache)
+                    child_changed, cache = _walk(walk_node=value, cache=cache)
                     changed = child_changed or changed
         elif isinstance(walk_node, list):
             item: Any
             for item in walk_node:
                 if isinstance(item, dict | list):
-                    child_changed, cache = _walk(item, cache)
+                    child_changed, cache = _walk(walk_node=item, cache=cache)
                     changed = child_changed or changed
         return changed, cache
 
-    changed, relation_cache = _walk(node, relation_cache)
+    changed, relation_cache = _walk(walk_node=node, cache=relation_cache)
     return changed
 
 

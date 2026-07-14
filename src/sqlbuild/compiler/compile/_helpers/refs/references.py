@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.constants import (
     SQL_REFERENCE_NAME_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import CompileSqlReference
+from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main.skip_block_comment import skip_block_comment

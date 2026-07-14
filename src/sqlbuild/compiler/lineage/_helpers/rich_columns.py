@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from sqlbuild.adapter.types import BuiltinAdapter, TypeDialect
-from sqlbuild.compiler.compile.models.core import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage._helpers.columns import (
     _build_schema_mapping,

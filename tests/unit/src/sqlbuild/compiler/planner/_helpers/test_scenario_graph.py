@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlScenario,
 )

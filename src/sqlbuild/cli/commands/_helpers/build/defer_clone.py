@@ -21,7 +21,7 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_target_connection_config,
 )
 from sqlbuild.cli.exceptions import CliUserError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,

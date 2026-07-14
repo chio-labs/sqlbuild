@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     build_plan_entries,

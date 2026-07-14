@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
+from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
 from sqlbuild.compiler.planner.models import PlanWarning, SqlTestPlanEntry
 

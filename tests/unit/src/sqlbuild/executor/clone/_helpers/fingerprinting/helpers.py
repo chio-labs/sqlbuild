@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot
 from sqlbuild.spec.contracts.models import SourceEntry

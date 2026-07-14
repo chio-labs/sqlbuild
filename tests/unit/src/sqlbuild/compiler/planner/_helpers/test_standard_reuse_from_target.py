@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompiledRelationLocation,

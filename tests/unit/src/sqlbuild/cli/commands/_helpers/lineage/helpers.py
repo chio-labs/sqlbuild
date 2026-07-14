@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.lineage.models import ColumnLineageTrace, LineageNode
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,

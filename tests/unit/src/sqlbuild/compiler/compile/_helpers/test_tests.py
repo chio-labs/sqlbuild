@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     CompileSqlTestCtes,
     extract_sql_test_ctes,
 )
-from sqlbuild.compiler.compile.models.sql_tests import (
+from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestCtes,
     CompileModelSqlTestCtes,
 )

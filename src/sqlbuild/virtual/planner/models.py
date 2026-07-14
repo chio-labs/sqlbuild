@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import CursorOverrides, RunDespiteUnchangedPlanningResult
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver

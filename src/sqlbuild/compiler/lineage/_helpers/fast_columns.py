@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
 )
@@ -457,7 +457,7 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
         return ()
     refs: list[tuple[str, str]] = []
 
-    def visit(node: object, collected_refs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    def visit(*, node: object, collected_refs: list[tuple[str, str]]) -> list[tuple[str, str]]:
         if isinstance(node, dict):
             node_dict: dict[str, object] = cast(dict[str, object], node)
             column_payload: object = node_dict.get("column")
@@ -471,13 +471,13 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
                     table_name = _polyglot_name_payload_value(table_dict.get("name"))
                 return [*collected_refs, (column_name, table_name)]
             for value in node_dict.values():
-                collected_refs = visit(value, collected_refs)
+                collected_refs = visit(node=value, collected_refs=collected_refs)
         elif isinstance(node, list):
             for value in node:
-                collected_refs = visit(value, collected_refs)
+                collected_refs = visit(node=value, collected_refs=collected_refs)
         return collected_refs
 
-    refs = visit(payload, refs)
+    refs = visit(node=payload, collected_refs=refs)
     return tuple(refs)
 
 
@@ -517,7 +517,7 @@ def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
     columns: list[Any] = []
     seen: set[int] = set()
 
-    def visit(node: Any, visited: set[int], found: list[Any]) -> tuple[set[int], list[Any]]:
+    def visit(*, node: Any, visited: set[int], found: list[Any]) -> tuple[set[int], list[Any]]:
         node_id: int = id(node)
         if node_id in visited:
             return visited, found
@@ -525,10 +525,10 @@ def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
         if str(getattr(node, "kind", "")) == POLYGLOT_KIND_COLUMN:
             return visited, [*found, node]
         for child in _polyglot_child_expressions(node):
-            visited, found = visit(child, visited, found)
+            visited, found = visit(node=child, visited=visited, found=found)
         return visited, found
 
-    seen, columns = visit(expression, seen, columns)
+    seen, columns = visit(node=expression, visited=seen, found=columns)
     return tuple(columns)
 
 

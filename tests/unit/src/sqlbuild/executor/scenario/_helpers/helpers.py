@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
 )

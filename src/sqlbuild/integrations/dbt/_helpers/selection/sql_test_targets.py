@@ -6,18 +6,19 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
+    CompiledSqlTest,
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.models.sql_tests import CompiledModelSqlTestPayload, CompiledSqlTest
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,

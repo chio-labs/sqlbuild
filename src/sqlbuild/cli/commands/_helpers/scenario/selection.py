@@ -13,7 +13,7 @@ from sqlbuild.cli.commands._helpers.scenario.constants import (
     SQL_FILE_SUFFIX,
 )
 from sqlbuild.cli.exceptions import CliUserError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlScenario,
 )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import LoadedMacro
+from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.manifest.constants import RESOURCE_TYPE_MACRO
 
 

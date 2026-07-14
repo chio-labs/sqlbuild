@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlScenario,

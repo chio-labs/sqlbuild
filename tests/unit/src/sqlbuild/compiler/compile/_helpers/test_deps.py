@@ -7,7 +7,7 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     model_build_deps,
     sql_test_scope_deps,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompileSqlReference,
 )

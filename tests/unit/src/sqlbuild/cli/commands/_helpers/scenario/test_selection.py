@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.cli.commands._helpers.scenario.selection import select_scenarios
 from sqlbuild.cli.exceptions import CliUserError
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledSqlScenario
+from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlScenario
 from tests.unit.src.sqlbuild.cli.commands._helpers.scenario._test_types import (
     SelectScenariosErrorTestCase,
     SelectScenariosTestCase,

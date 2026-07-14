@@ -14,20 +14,18 @@ from sqlbuild.compiler.compile.constants import (
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSqlTest,
     CompileModelConfig,
+    CompileSqlTestCte,
     LoadedMacro,
     MacroContext,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledModelSqlTestPayload,
-    CompiledSqlTest,
-    CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (

@@ -8,7 +8,7 @@ from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapter.models import FunctionDefinition, RelationLookup
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
     CompiledRelationLocation,

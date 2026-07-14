@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.planning.buildability import (
     check_selected_scope_buildability,

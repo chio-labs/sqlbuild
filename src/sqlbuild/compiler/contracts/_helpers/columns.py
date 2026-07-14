@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.main.types_equal import types_equal
 from sqlbuild.adapter.types import TypeDialect
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     InferredColumn,
 )

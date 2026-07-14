@@ -11,7 +11,7 @@ from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 from sqlbuild.virtual.executor._helpers.rewrite import (
     build_destination_from_physical_relation,

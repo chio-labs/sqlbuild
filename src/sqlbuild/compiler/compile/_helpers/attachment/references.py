@@ -6,7 +6,7 @@ import re
 
 from sqlbuild.compiler.compile.constants import TABLE_FUNCTION_RETURN_KEYS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.discovery.models import (

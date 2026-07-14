@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject, CompiledSource
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSource
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.compiler.pipeline.main.relation_targets import (

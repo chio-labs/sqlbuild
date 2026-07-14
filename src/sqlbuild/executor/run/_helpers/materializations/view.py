@@ -11,7 +11,7 @@ from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_n
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context

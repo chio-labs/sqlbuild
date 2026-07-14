@@ -16,7 +16,7 @@ from sqlbuild.cli.commands._helpers.build.python_node_output import write_python
 from sqlbuild.cli.commands.classes.standard_python_lifecycle_state import (
     StandardPythonLifecycleState,
 )
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.relation_targets import (

@@ -7,7 +7,7 @@ import pytest
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.exceptions import AdapterUserError
 from sqlbuild.adapter.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.models.core import FunctionArgument
+from sqlbuild.compiler.compile.models import FunctionArgument
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from tests.unit.src.sqlbuild.adapter.classes.base_adapter._test_types import (
     BaseAdapterDurableCloneTestCase,

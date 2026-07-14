@@ -12,7 +12,7 @@ from sqlbuild.cli.commands._helpers.janitor.models import (
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import resolve_connection_config
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (

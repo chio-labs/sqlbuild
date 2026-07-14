@@ -1,1 +1,0 @@
-"""Test convention checker package."""

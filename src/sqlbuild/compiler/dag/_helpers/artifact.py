@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict
 
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledModel,
@@ -16,8 +16,8 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
+    CompiledSqlTest,
 )
-from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 from sqlbuild.compiler.dag.constants import REQUIRED_DAG_COLLECTION_KEYS
 from sqlbuild.compiler.dag.models import (
