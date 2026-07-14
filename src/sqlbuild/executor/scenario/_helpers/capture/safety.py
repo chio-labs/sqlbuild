@@ -5,8 +5,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.models import QueryResult
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import QueryResult
 from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_CAPTURE_INTERNAL,
     SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,

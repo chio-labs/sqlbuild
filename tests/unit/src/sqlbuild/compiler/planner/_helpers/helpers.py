@@ -11,8 +11,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledDirectLogicSqlTestPayload,

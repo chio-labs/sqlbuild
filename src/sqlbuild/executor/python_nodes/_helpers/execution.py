@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.assets import get_asset_definition
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction
 from sqlbuild.compiler.python_nodes.types import (

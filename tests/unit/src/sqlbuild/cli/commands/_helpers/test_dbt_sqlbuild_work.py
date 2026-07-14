@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.dbt import sqlbuild_work as work_module
 from sqlbuild.cli.commands._helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands._helpers.dbt.sqlbuild_work import execute_sqlbuild_test_work

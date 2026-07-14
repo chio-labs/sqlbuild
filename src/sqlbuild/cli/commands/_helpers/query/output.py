@@ -8,7 +8,7 @@ import json
 from decimal import Decimal
 from typing import Any
 
-from sqlbuild.adapter.models import QueryResult
+from sqlbuild.adapter.contract.models import QueryResult
 from sqlbuild.cli.exceptions import CliUserError
 
 _LONG_OUTPUT_FORMAT: str = "long"

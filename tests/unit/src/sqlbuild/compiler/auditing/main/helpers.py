@@ -6,7 +6,7 @@ from collections.abc import Callable
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,

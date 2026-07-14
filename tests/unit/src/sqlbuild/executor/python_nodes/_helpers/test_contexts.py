@@ -8,8 +8,8 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.models import LifeCycleEvent
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.assets import AssetContext
 from sqlbuild.assets import SkipMode as AssetSkipMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode

@@ -5,9 +5,9 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Any
 
-from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationLookup
-from sqlbuild.adapter.types import FrameworkType
+from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType

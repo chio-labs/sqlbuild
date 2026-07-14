@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 
 _ENV_KEYS: tuple[str, ...] = (

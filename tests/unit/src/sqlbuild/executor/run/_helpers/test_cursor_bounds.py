@@ -6,7 +6,7 @@ from typing import cast
 import duckdb
 import pytest
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation
 from sqlbuild.compiler.planner.types import CursorType
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds

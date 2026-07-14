@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.cli.commands._helpers.runtime import connection as connection_core
 from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_connection_config,

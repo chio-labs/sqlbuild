@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.integrations.dbt._helpers.manifest.fingerprinting import (
     try_write_dbt_node_fingerprint as _write,
 )

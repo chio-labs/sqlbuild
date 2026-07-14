@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from sqlbuild.adapter.models import LifeCycleEvent, RelationInfo
-from sqlbuild.adapter.types import TablePromotionMode
+from sqlbuild.adapter.contract.models import LifeCycleEvent, RelationInfo
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import (

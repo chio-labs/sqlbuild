@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from sqlbuild.adapter.discovery.main.project_adapters import discover_project_adapters
 from sqlbuild.cli.exceptions import CliUserError

@@ -71,7 +71,7 @@ _WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
     }
 )
 _SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
-    "src/sqlbuild/adapter/main/relation_lookup.py": "single-query lookup capability",
+    "src/sqlbuild/adapter/relations/main/relation_lookup.py": "single-query lookup capability",
     "src/sqlbuild/executor/janitor/_helpers/plan.py": "one list_relations per database",
     "src/sqlbuild/integrations/dbt/_helpers/planning/model_planning.py": (
         "one list_relations per database"
@@ -144,9 +144,6 @@ _MAIN_PHASE_REMEDIATION_MESSAGE: str = (
 _MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "_helpers", "shared"})
 _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("adapter", "constants.py"),
-        ("adapter", "models.py"),
-        ("adapter", "types.py"),
         ("executor", "types.py"),
         ("python_nodes", "models.py"),
         ("python_nodes", "types.py"),
@@ -157,8 +154,6 @@ _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
 )
 _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("adapter", "classes"),
-        ("adapter", "_helpers"),
         ("executor", "_helpers"),
         ("spec", "_helpers"),
         ("virtual", "_helpers"),
@@ -166,8 +161,8 @@ _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset
 )
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/classes/*_adapter.py",
-    "src/sqlbuild/adapter/classes/base_adapter.py",
-    "src/sqlbuild/adapter/classes/duckdb_backed_adapter.py",
+    "src/sqlbuild/adapter/contract/classes/base_adapter.py",
+    "src/sqlbuild/adapter/contract/classes/duckdb_backed_adapter.py",
     "src/sqlbuild/virtual/state/classes/*.py",
 )
 _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
@@ -336,9 +331,9 @@ def _is_adapter_implementation_file(file_path: Path) -> bool:
     path_text: str = file_path.as_posix()
     if ADAPTERS_PATH_MARKER in path_text and CLASSES_PATH_MARKER in path_text:
         return True
-    if path_text.endswith("/adapter/classes/duckdb_backed_adapter.py"):
+    if path_text.endswith("/adapter/contract/classes/duckdb_backed_adapter.py"):
         return True
-    return path_text.endswith("/adapter/classes/base_adapter.py")
+    return path_text.endswith("/adapter/contract/classes/base_adapter.py")
 
 
 def _path_is_allowed(*, path_text: str, allowed_paths: tuple[str, ...]) -> bool:
@@ -627,7 +622,7 @@ def _adapter_contract_class_names(
 
 def _builtin_adapter_contract_class_names_by_path(*, repo_root: Path) -> dict[Path, frozenset[str]]:
     try:
-        from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+        from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
         from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
     except ImportError:
         return {}
@@ -653,7 +648,7 @@ def _builtin_adapter_contract_class_names_by_path(*, repo_root: Path) -> dict[Pa
 
 def _strict_adapter_contract_method_names() -> frozenset[str]:
     try:
-        from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+        from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
     except Exception:
         return frozenset()
 

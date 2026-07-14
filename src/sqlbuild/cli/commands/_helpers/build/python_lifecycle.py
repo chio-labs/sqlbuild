@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any, TextIO
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build.models import StandardLifecycleCallbacks
 from sqlbuild.cli.commands._helpers.build.python_lifecycle_selection import (
     python_node_result_names,

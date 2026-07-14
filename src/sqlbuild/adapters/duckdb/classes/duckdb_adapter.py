@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from sqlbuild.adapter.classes.duckdb_backed_adapter import DuckDbBackedAdapter
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 
 
 class DuckDbAdapter(DuckDbBackedAdapter):

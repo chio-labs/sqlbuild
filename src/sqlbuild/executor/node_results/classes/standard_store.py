@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.main.read import read_node_results
 from sqlbuild.executor.node_results.main.write import write_node_result_record

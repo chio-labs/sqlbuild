@@ -8,7 +8,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from typing import Any
 
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.testing.constants import SQL_TEST_BACKTICK_IDENTIFIER_QUOTE

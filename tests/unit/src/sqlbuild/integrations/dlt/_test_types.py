@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 
 
 @dataclass(frozen=True)

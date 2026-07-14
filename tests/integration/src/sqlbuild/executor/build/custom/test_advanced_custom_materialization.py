@@ -9,8 +9,8 @@ from typing import Any
 import duckdb
 import pytest
 
-from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.adapter.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry

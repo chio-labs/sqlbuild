@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.models import QueryResult
+from sqlbuild.adapter.contract.models import QueryResult
 
 
 @dataclass(frozen=True)

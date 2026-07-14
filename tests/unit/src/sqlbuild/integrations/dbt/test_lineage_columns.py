@@ -7,7 +7,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt._helpers.graph.core import (
     build_dbt_combined_graph,

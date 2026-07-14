@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlbuild.adapter.types import BuiltinAdapter, TypeDialect
+from sqlbuild.adapter.contract.types import BuiltinAdapter, TypeDialect
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage._helpers.columns import (

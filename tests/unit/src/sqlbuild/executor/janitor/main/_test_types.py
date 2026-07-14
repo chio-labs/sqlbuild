@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.executor.janitor.models import (
     JanitorRelationKey,
     JanitorVirtualStatePruneCandidate,

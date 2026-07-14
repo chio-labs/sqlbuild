@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-from sqlbuild.adapter.models import RelationInfo
-from sqlbuild.adapter.types import TablePromotionMode
+from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (

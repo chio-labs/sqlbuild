@@ -7,8 +7,8 @@ import re
 from functools import lru_cache
 from typing import Any, cast
 
-from sqlbuild.adapter.models import ExpressionInferenceProfile
-from sqlbuild.adapter.types import FunctionNullabilityRule
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.compiler.compile.constants import (
     DECIMAL_SQL_TYPE_NAME,
     FULL_JOIN_SIDE,

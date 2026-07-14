@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.compiler.source_freshness._helpers.planning import (
     build_standard_source_freshness_planning_result as _build_planning_result,
 )

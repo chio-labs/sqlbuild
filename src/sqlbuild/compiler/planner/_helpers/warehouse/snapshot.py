@@ -8,9 +8,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.models import ColumnInfo, RelationInfo
-from sqlbuild.adapter.types import AdapterExecute
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.contract.types import AdapterExecute
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,

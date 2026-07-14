@@ -55,8 +55,8 @@ CONSTANTS_PACKAGE_NAME: str = "constants"
 CROSS_PACKAGE_PUBLIC_MODULE_NAMES: frozenset[str] = frozenset(
     {"classes", "models", "types", "constants", "exceptions", "__init__", "main"}
 )
-CROSS_PACKAGE_SOURCE_EXEMPT_DOMAIN_NAMES: frozenset[str] = frozenset({"spec", "adapter"})
-CROSS_PACKAGE_TARGET_EXEMPT_DOMAIN_NAMES: frozenset[str] = frozenset({"spec", "adapter", "shared"})
+CROSS_PACKAGE_SOURCE_EXEMPT_DOMAIN_NAMES: frozenset[str] = frozenset({"spec"})
+CROSS_PACKAGE_TARGET_EXEMPT_DOMAIN_NAMES: frozenset[str] = frozenset({"spec", "shared"})
 DBT_INTEGRATION_PATH_MARKER: str = "src/sqlbuild/integrations/dbt/"
 DBT_REF_ATTRIBUTE_NAME: str = "DBT_REF"
 DEEP_INTERNAL_PACKAGE_NAMES: frozenset[str] = frozenset({"shared", "_helpers"})
@@ -113,7 +113,13 @@ PROVIDER_CLASS_NAME: str = "Provider"
 PROVIDER_MODULE_PARTS: tuple[str, ...] = ("src", "sqlbuild", "providers.py")
 PLANNER_PATH_MARKER: str = "src/sqlbuild/compiler/planner/"
 PUBLIC_SURFACE_ROLE_NAMES: frozenset[str] = frozenset(
-    {MODELS_PACKAGE_NAME, "types", CONSTANTS_PACKAGE_NAME, EXCEPTIONS_PACKAGE_NAME}
+    {
+        CLASSES_PACKAGE_NAME,
+        MODELS_PACKAGE_NAME,
+        "types",
+        CONSTANTS_PACKAGE_NAME,
+        EXCEPTIONS_PACKAGE_NAME,
+    }
 )
 PYTHON_BYTECODE_CACHE_PACKAGE_NAME: str = "__pycache__"
 PYTHON_FILE_SUFFIX: str = ".py"

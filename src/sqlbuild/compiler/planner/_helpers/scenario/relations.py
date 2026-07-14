@@ -9,8 +9,8 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.constants import (
     DBT_REF_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,

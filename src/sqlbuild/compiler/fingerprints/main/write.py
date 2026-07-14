@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.types import AdapterExecute, FrameworkType
+from sqlbuild.adapter.contract.types import AdapterExecute, FrameworkType
 from sqlbuild.compiler.fingerprints._helpers.sql import (
     build_create_table_sql,
     build_insert_sql,

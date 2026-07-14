@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.models import RowDiffResult, RowDiffSampleRow, SchemaDiffResult
+from sqlbuild.adapter.contract.models import RowDiffResult, RowDiffSampleRow, SchemaDiffResult
 
 
 @dataclass(frozen=True)

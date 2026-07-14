@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.adapter.models import CursorValue
+from sqlbuild.adapter.contract.models import CursorValue
 
 
 @dataclass(frozen=True)

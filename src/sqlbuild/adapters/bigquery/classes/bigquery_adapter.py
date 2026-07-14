@@ -9,27 +9,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
-from sqlbuild.adapter.exceptions import AdapterUserError
-from sqlbuild.adapter.main.conditional_result_nullability import conditional_result_nullability
-from sqlbuild.adapter.main.first_arg_nullability import first_arg_nullability
-from sqlbuild.adapter.main.normalize_numeric_family import normalize_numeric_family
-from sqlbuild.adapter.main.render_create_node_source_watermark_table_sql import (
-    render_create_node_source_watermark_table_sql,
-)
-from sqlbuild.adapter.main.render_insert_node_source_watermark_records_sql import (
-    render_insert_node_source_watermark_records_sql,
-)
-from sqlbuild.adapter.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
-)
-from sqlbuild.adapter.main.render_read_latest_node_source_watermarks_sql import (
-    render_read_latest_node_source_watermarks_sql,
-)
-from sqlbuild.adapter.main.types_equal import types_equal
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
@@ -48,7 +32,7 @@ from sqlbuild.adapter.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.types import (
+from sqlbuild.adapter.contract.types import (
     BuiltinAdapter,
     CursorKind,
     FrameworkType,
@@ -56,6 +40,24 @@ from sqlbuild.adapter.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
+from sqlbuild.adapter.state_sql.main.render_create_node_source_watermark_table_sql import (
+    render_create_node_source_watermark_table_sql,
+)
+from sqlbuild.adapter.state_sql.main.render_insert_node_source_watermark_records_sql import (
+    render_insert_node_source_watermark_records_sql,
+)
+from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
+    render_insert_source_freshness_records_sql,
+)
+from sqlbuild.adapter.state_sql.main.render_read_latest_node_source_watermarks_sql import (
+    render_read_latest_node_source_watermarks_sql,
+)
+from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
+    conditional_result_nullability,
+)
+from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
+from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
+from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
 from sqlbuild.adapters.bigquery.constants import (

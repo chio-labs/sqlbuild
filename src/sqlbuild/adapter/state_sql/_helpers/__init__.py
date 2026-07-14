@@ -1,0 +1,1 @@
+"""Adapter state SQL implementations."""

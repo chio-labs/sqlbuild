@@ -4,7 +4,7 @@ from collections.abc import Callable
 from decimal import Decimal
 from typing import cast
 
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     RowDiffColumnResult,
     RowDiffResult,

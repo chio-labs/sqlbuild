@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import quote, urlencode
 
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.integrations.ingestr.constants import (
     SQLSERVER_DRIVER_PARAMETER,
     SQLSERVER_TRUST_SERVER_CERTIFICATE_PARAMETER,

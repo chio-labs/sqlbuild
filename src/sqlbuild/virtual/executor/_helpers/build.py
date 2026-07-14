@@ -10,13 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts as relation_parts
-import sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name as rn
+import sqlbuild.adapter.relations.main.resolve_qualified_name_parts as relation_parts
+import sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name as rn
 import sqlbuild.executor.build.types
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationInfo, RelationLookup
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,

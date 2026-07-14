@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.types import AdapterExecute
+from sqlbuild.adapter.contract.types import AdapterExecute
 from sqlbuild.compiler.node_source_watermarks.constants import (
     NODE_SOURCE_WATERMARK_TABLE_NAME,
 )

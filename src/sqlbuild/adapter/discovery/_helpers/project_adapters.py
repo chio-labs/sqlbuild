@@ -10,11 +10,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.constants import PYTHON_IDENTIFIER_REPLACEMENT, PYTHON_INIT_FILE_NAME
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.constants import PYTHON_IDENTIFIER_REPLACEMENT, PYTHON_INIT_FILE_NAME
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.discovery.models import DiscoveredAdapter
-from sqlbuild.adapter.exceptions import AdapterUserError
 
 
 def discover_project_adapters(

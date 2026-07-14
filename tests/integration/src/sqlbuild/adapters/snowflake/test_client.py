@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
     QueryResult,
@@ -19,7 +19,7 @@ from sqlbuild.adapter.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.types import FunctionNullabilityRule
+from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.executor.run._helpers.reuse.core import create_relation_from_reuse_origin

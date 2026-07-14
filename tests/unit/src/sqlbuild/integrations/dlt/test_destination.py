@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.integrations.dlt._helpers.destination import build_dlt_destination
 from sqlbuild.integrations.dlt.constants import DLT_DESTINATION_ADAPTERS
 from sqlbuild.integrations.dlt.exceptions import DltIntegrationError

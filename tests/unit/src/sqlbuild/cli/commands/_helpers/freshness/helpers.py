@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.models import (
     QueryResult,
     TableFreshnessMetadata,
     TableFreshnessRequest,

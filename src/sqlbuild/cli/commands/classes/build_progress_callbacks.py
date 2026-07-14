@@ -6,8 +6,8 @@ import sys
 import threading
 import time
 
-from sqlbuild.adapter.models import LifeCycleEvent
-from sqlbuild.adapter.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands.models import AuditDisplayEntry, ExecutionCounts
 from sqlbuild.cli.progress.main.expectation_detail import format_expectation_detail
 from sqlbuild.cli.progress.main.expectation_name import format_expectation_name

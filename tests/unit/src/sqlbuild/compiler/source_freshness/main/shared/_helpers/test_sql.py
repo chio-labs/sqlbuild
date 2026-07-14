@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
-from sqlbuild.adapter.types import FrameworkType
+from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.source_freshness._helpers.sql import (
     build_create_table_sql,

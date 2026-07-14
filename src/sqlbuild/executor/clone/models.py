@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.models import LifeCycleEvent
+from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 
 

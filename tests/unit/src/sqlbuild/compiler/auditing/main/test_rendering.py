@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.spec.contracts.models import SourceEntry

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.integrations.dbt._helpers.profile.constants import (
     DBT_BIGQUERY_SUPPORTED_METHODS,
     DBT_BIGQUERY_UNSUPPORTED_METHODS,
