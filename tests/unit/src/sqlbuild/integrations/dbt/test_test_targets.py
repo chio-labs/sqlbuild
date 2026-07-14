@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import partial
+
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -18,12 +20,21 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtSqlTestTargetTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
-    build_dbt_sql_test_target_error_manifest,
-    build_dbt_sql_test_target_error_project,
-    build_dbt_sql_test_target_success_manifest,
+    build_dbt_sql_test_ephemeral_chain_manifest,
+    build_dbt_sql_test_seed_chain_manifest,
+    build_dbt_sql_test_seed_manifest,
+    build_dbt_sql_test_snapshot_chain_manifest,
+    build_dbt_sql_test_source_chain_manifest,
+    build_dbt_sql_test_source_manifest,
+    build_dbt_sql_test_target_manifest,
+    build_dbt_sql_test_target_missing_compiled_manifest,
     build_project_with_expected_sql_test_targets,
     build_project_with_multiple_dbt_sql_test_boundaries,
-    resolve_dbt_sql_test_fixture_names,
+    build_project_with_seed_relation_collision,
+    build_project_with_source_relation_collision,
+    resolve_dbt_sql_test_model_fixture_names,
+    resolve_dbt_sql_test_seed_fixture_names,
+    resolve_dbt_sql_test_source_fixture_names,
 )
 
 
@@ -40,6 +51,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
                 'from __dbt_ref("stg_orders")',
                 "where amount_cents > 0",
             ),
+            manifest_factory=build_dbt_sql_test_target_manifest,
             expected_absent_fragments=("{{ ref('stg_orders') }}",),
             mock_model_names=("stg_orders",),
         ),
@@ -50,6 +62,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("analytics__fact_orders",),
             expected_model_names=("analytics__fact_orders",),
             expected_query_fragments=('__dbt_ref("stg_orders")',),
+            manifest_factory=build_dbt_sql_test_target_manifest,
             mock_model_names=("stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
@@ -59,7 +72,11 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __dbt_ref("stg_orders")',),
-            manifest_kind="unquoted",
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest,
+                dep_relation_name="analytics.stg_orders",
+                fact_compiled_code="select * from analytics.stg_orders where amount_cents > 0",
+            ),
             mock_model_names=("stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
@@ -69,7 +86,13 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __dbt_ref("stg_orders")',),
-            manifest_kind="three_part",
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest,
+                dep_relation_name='"warehouse"."analytics"."stg_orders"',
+                fact_compiled_code=(
+                    'select * from "warehouse"."analytics"."stg_orders" where amount_cents > 0'
+                ),
+            ),
             mock_model_names=("stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
@@ -79,7 +102,11 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __dbt_ref("stg_orders")',),
-            manifest_kind="alias",
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest,
+                dep_relation_name='"analytics"."stg_orders_alias"',
+                fact_compiled_code='select * from "analytics"."stg_orders_alias"',
+            ),
             mock_model_names=("stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
@@ -97,7 +124,15 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
                 "-- upstream __dbt_ref",
                 "'__dbt_ref",
             ),
-            manifest_kind="relation_in_string_and_comment",
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest,
+                dep_relation_name="analytics.stg_orders",
+                fact_compiled_code=(
+                    "-- upstream analytics.stg_orders\n"
+                    "select *, 'analytics.stg_orders' as src "
+                    "from analytics.stg_orders where amount_cents > 0"
+                ),
+            ),
             mock_model_names=("stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
@@ -107,6 +142,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('__dbt_ref("stg_orders")',),
+            manifest_factory=build_dbt_sql_test_target_manifest,
             mock_model_names=("stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
@@ -116,7 +152,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __source("raw__orders")',),
-            manifest_kind="source_dependency",
+            manifest_factory=build_dbt_sql_test_source_manifest,
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites dbt source dependency from unquoted relation",
@@ -125,7 +161,11 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __source("raw__orders")',),
-            manifest_kind="source_unquoted",
+            manifest_factory=partial(
+                build_dbt_sql_test_source_manifest,
+                relation_name="raw.orders",
+                compiled_code="select * from raw.orders",
+            ),
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites dbt source dependency from three-part relation",
@@ -134,7 +174,11 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __source("raw__orders")',),
-            manifest_kind="source_three_part",
+            manifest_factory=partial(
+                build_dbt_sql_test_source_manifest,
+                relation_name='"warehouse"."raw"."orders"',
+                compiled_code='select * from "warehouse"."raw"."orders"',
+            ),
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites dbt source dependency from aliased relation",
@@ -143,7 +187,11 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __source("raw__orders")',),
-            manifest_kind="source_alias",
+            manifest_factory=partial(
+                build_dbt_sql_test_source_manifest,
+                relation_name='"raw"."orders_alias"',
+                compiled_code='select * from "raw"."orders_alias"',
+            ),
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites ambiguous dbt source dependency to qualified fixture",
@@ -152,7 +200,10 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __source("analytics__raw__orders")',),
-            manifest_kind="source_ambiguous_fixture",
+            manifest_factory=partial(
+                build_dbt_sql_test_source_manifest,
+                include_ambiguous_package=True,
+            ),
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites dbt seed dependency to seed fixture",
@@ -161,7 +212,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __seed("countries")',),
-            manifest_kind="seed_dependency",
+            manifest_factory=build_dbt_sql_test_seed_manifest,
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites dbt seed dependency from unquoted relation",
@@ -170,7 +221,11 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __seed("countries")',),
-            manifest_kind="seed_unquoted",
+            manifest_factory=partial(
+                build_dbt_sql_test_seed_manifest,
+                relation_name="analytics.countries",
+                compiled_code="select * from analytics.countries",
+            ),
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites dbt seed dependency from three-part relation",
@@ -179,7 +234,11 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __seed("countries")',),
-            manifest_kind="seed_three_part",
+            manifest_factory=partial(
+                build_dbt_sql_test_seed_manifest,
+                relation_name='"warehouse"."analytics"."countries"',
+                compiled_code='select * from "warehouse"."analytics"."countries"',
+            ),
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites dbt seed dependency from aliased relation",
@@ -188,7 +247,11 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __seed("countries")',),
-            manifest_kind="seed_alias",
+            manifest_factory=partial(
+                build_dbt_sql_test_seed_manifest,
+                relation_name='"analytics"."countries_alias"',
+                compiled_code='select * from "analytics"."countries_alias"',
+            ),
         ),
         DbtSqlTestTargetTestCase(
             description="rewrites ambiguous dbt seed dependency to qualified fixture",
@@ -197,7 +260,10 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('from __seed("analytics__countries")',),
-            manifest_kind="seed_ambiguous_fixture",
+            manifest_factory=partial(
+                build_dbt_sql_test_seed_manifest,
+                include_ambiguous_package=True,
+            ),
         ),
         DbtSqlTestTargetTestCase(
             description="adapts dbt model chain through source dependency",
@@ -207,7 +273,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_model_names=("fact_orders",),
             expected_adapted_model_names=("fact_orders", "stg_orders"),
             expected_query_fragments=('from __ref("stg_orders")',),
-            manifest_kind="chain_source_dependency",
+            manifest_factory=build_dbt_sql_test_source_chain_manifest,
         ),
         DbtSqlTestTargetTestCase(
             description="adapts dbt model chain through seed dependency",
@@ -217,7 +283,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_model_names=("fact_orders",),
             expected_adapted_model_names=("fact_orders", "stg_orders"),
             expected_query_fragments=('from __ref("stg_orders")',),
-            manifest_kind="chain_seed_dependency",
+            manifest_factory=build_dbt_sql_test_seed_chain_manifest,
         ),
         DbtSqlTestTargetTestCase(
             description="preserves explicit dbt ref mock boundary in dbt model chain",
@@ -226,7 +292,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('__dbt_ref("stg_orders")',),
-            manifest_kind="chain_source_dependency",
+            manifest_factory=build_dbt_sql_test_source_chain_manifest,
             mock_model_names=("stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
@@ -236,7 +302,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('__dbt_ref("analytics", "stg_orders")',),
-            manifest_kind="chain_snapshot_boundary",
+            manifest_factory=build_dbt_sql_test_snapshot_chain_manifest,
             mock_model_names=("analytics__stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
@@ -246,7 +312,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_target_names=("fact_orders",),
             expected_model_names=("fact_orders",),
             expected_query_fragments=('__dbt_ref("analytics", "stg_orders")',),
-            manifest_kind="chain_ephemeral_boundary",
+            manifest_factory=build_dbt_sql_test_ephemeral_chain_manifest,
             mock_model_names=("analytics__stg_orders",),
         ),
     ],
@@ -255,9 +321,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
 def test_given_dbt_sql_test_target_when_adapting_project_then_adds_compiled_model(
     test_case: DbtSqlTestTargetTestCase,
 ) -> None:
-    manifest: DbtManifestIndex = build_dbt_sql_test_target_success_manifest(
-        manifest_kind=test_case.manifest_kind
-    )
+    manifest: DbtManifestIndex = test_case.manifest_factory()
     project: CompiledProject = build_project_with_expected_sql_test_targets(
         expected_model_names=test_case.expected_model_names,
         sqlbuild_model_names=test_case.sqlbuild_model_names,
@@ -314,9 +378,7 @@ def test_given_dbt_sql_test_target_when_adapting_project_then_adds_compiled_mode
 def test_given_multiple_dbt_sql_tests_when_adapting_then_keeps_mock_boundaries_per_test(
     test_case: DbtSqlTestMultipleBoundaryTestCase,
 ) -> None:
-    manifest: DbtManifestIndex = build_dbt_sql_test_target_success_manifest(
-        manifest_kind="chain_source_dependency"
-    )
+    manifest: DbtManifestIndex = build_dbt_sql_test_source_chain_manifest()
     project: CompiledProject = build_project_with_multiple_dbt_sql_test_boundaries()
 
     adapted: CompiledProject = adapt_project_for_dbt_sql_tests(
@@ -348,98 +410,160 @@ def test_given_multiple_dbt_sql_tests_when_adapting_then_keeps_mock_boundaries_p
     [
         DbtSqlTestTargetErrorTestCase(
             description="errors on ambiguous bare dbt expected target",
-            manifest_kind="ambiguous",
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest, include_ambiguous_package=True
+            ),
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="ambiguous across packages",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when dbt test target has no compiled SQL",
-            manifest_kind="missing_compiled_sql",
+            manifest_factory=build_dbt_sql_test_target_missing_compiled_manifest,
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="has no compiled SQL",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when dependency relation cannot be rewritten",
-            manifest_kind="unresolved_relation",
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest,
+                fact_compiled_code="select * from analytics.unexpected_orders",
+            ),
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="compiled SQL did not contain upstream relation",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when dbt and SQLBuild model names overlap",
-            manifest_kind="default",
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest,
+                fact_compiled_code="select * from analytics.unexpected_orders",
+            ),
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+                sqlbuild_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="dbt and SQLBuild models share names: fact_orders",
-            project_kind="model_name_collision",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when source dependency relation cannot be rewritten",
-            manifest_kind="source_unresolved_relation",
+            manifest_factory=partial(
+                build_dbt_sql_test_source_manifest,
+                compiled_code="select * from raw.unexpected_orders",
+            ),
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="compiled SQL did not contain upstream relation",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when seed dependency relation cannot be rewritten",
-            manifest_kind="seed_unresolved_relation",
+            manifest_factory=partial(
+                build_dbt_sql_test_seed_manifest,
+                compiled_code="select * from analytics.unexpected_countries",
+            ),
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="compiled SQL did not contain upstream relation",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when upstream dbt chain model has no compiled SQL",
-            manifest_kind="chain_missing_compiled_sql",
+            manifest_factory=partial(
+                build_dbt_sql_test_source_chain_manifest,
+                upstream_compiled_code=None,
+            ),
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="has no compiled SQL",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when upstream dbt chain relation cannot be rewritten",
-            manifest_kind="chain_unresolved_relation",
+            manifest_factory=partial(
+                build_dbt_sql_test_source_chain_manifest,
+                upstream_compiled_code="select * from raw.unexpected_orders",
+            ),
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="compiled SQL did not contain upstream relation",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when upstream dbt snapshot is resolved inside a chain",
-            manifest_kind="chain_snapshot_boundary",
+            manifest_factory=build_dbt_sql_test_snapshot_chain_manifest,
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="snapshot 'snapshot.analytics.stg_orders' cannot be resolved",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when upstream dbt ephemeral model is resolved inside a chain",
-            manifest_kind="chain_ephemeral_boundary",
+            manifest_factory=build_dbt_sql_test_ephemeral_chain_manifest,
+            project_factory=partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="ephemeral 'model.analytics.stg_orders' cannot be resolved",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when dbt source relation clashes with SQLBuild source",
-            manifest_kind="source_dependency",
+            manifest_factory=build_dbt_sql_test_source_manifest,
+            project_factory=build_project_with_source_relation_collision,
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="same relation as SQLBuild source",
-            project_kind="source_relation_collision",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when dbt seed relation clashes with SQLBuild seed",
-            manifest_kind="seed_dependency",
+            manifest_factory=build_dbt_sql_test_seed_manifest,
+            project_factory=build_project_with_seed_relation_collision,
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="same relation as SQLBuild seed",
-            project_kind="seed_relation_collision",
         ),
         DbtSqlTestTargetErrorTestCase(
             description="errors when dbt seed relation clashes before qualified name is built",
-            manifest_kind="seed_dependency",
+            manifest_factory=build_dbt_sql_test_seed_manifest,
+            project_factory=partial(
+                build_project_with_seed_relation_collision, qualified_name=None
+            ),
             expected_model_names=("fact_orders",),
             target_names=("fact_orders",),
             expected_error_fragment="same relation as SQLBuild seed",
-            project_kind="seed_relation_collision_unqualified",
         ),
     ],
     ids=lambda case: case.description,
@@ -447,12 +571,8 @@ def test_given_multiple_dbt_sql_tests_when_adapting_then_keeps_mock_boundaries_p
 def test_given_invalid_dbt_sql_test_target_when_adapting_project_then_errors(
     test_case: DbtSqlTestTargetErrorTestCase,
 ) -> None:
-    manifest: DbtManifestIndex = build_dbt_sql_test_target_error_manifest(
-        manifest_kind=test_case.manifest_kind
-    )
-    project: CompiledProject = build_dbt_sql_test_target_error_project(
-        project_kind=test_case.project_kind
-    )
+    manifest: DbtManifestIndex = test_case.manifest_factory()
+    project: CompiledProject = test_case.project_factory()
 
     with pytest.raises(DbtInteropRuntimeError, match=test_case.expected_error_fragment):
         adapt_project_for_dbt_sql_tests(
@@ -467,7 +587,8 @@ def test_given_invalid_dbt_sql_test_target_when_adapting_project_then_errors(
     [
         DbtSqlTestFixtureNameTestCase(
             description="extends dbt model fixture names",
-            fixture_kind="model",
+            manifest_factory=build_dbt_sql_test_target_manifest,
+            fixture_resolver=resolve_dbt_sql_test_model_fixture_names,
             known_names=set(),
             expected_names={
                 "fact_orders",
@@ -475,11 +596,13 @@ def test_given_invalid_dbt_sql_test_target_when_adapting_project_then_errors(
                 "stg_orders",
                 "analytics__stg_orders",
             },
-            manifest_kind="default",
         ),
         DbtSqlTestFixtureNameTestCase(
             description="extends ambiguous dbt model fixture names with qualified names only",
-            fixture_kind="model",
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest, include_ambiguous_package=True
+            ),
+            fixture_resolver=resolve_dbt_sql_test_model_fixture_names,
             known_names=set(),
             expected_names={
                 "analytics__fact_orders",
@@ -487,34 +610,38 @@ def test_given_invalid_dbt_sql_test_target_when_adapting_project_then_errors(
                 "stg_orders",
                 "analytics__stg_orders",
             },
-            manifest_kind="ambiguous",
         ),
         DbtSqlTestFixtureNameTestCase(
             description="extends dbt source fixture names",
-            fixture_kind="source",
+            manifest_factory=build_dbt_sql_test_source_manifest,
+            fixture_resolver=resolve_dbt_sql_test_source_fixture_names,
             known_names=set(),
             expected_names={"raw__orders", "analytics__raw__orders"},
         ),
         DbtSqlTestFixtureNameTestCase(
             description="extends ambiguous dbt source fixture names with qualified names only",
-            fixture_kind="source",
+            manifest_factory=partial(
+                build_dbt_sql_test_source_manifest, include_ambiguous_package=True
+            ),
+            fixture_resolver=resolve_dbt_sql_test_source_fixture_names,
             known_names=set(),
             expected_names={"analytics__raw__orders", "finance__raw__orders"},
-            manifest_kind="source_ambiguous_fixture",
         ),
         DbtSqlTestFixtureNameTestCase(
             description="extends dbt seed fixture names",
-            fixture_kind="seed",
+            manifest_factory=build_dbt_sql_test_seed_manifest,
+            fixture_resolver=resolve_dbt_sql_test_seed_fixture_names,
             known_names=set(),
             expected_names={"countries", "analytics__countries"},
-            manifest_kind="seed_dependency",
         ),
         DbtSqlTestFixtureNameTestCase(
             description="extends ambiguous dbt seed fixture names with qualified names only",
-            fixture_kind="seed",
+            manifest_factory=partial(
+                build_dbt_sql_test_seed_manifest, include_ambiguous_package=True
+            ),
+            fixture_resolver=resolve_dbt_sql_test_seed_fixture_names,
             known_names=set(),
             expected_names={"analytics__countries", "finance__countries"},
-            manifest_kind="seed_ambiguous_fixture",
         ),
     ],
     ids=lambda case: case.description,
@@ -522,14 +649,8 @@ def test_given_invalid_dbt_sql_test_target_when_adapting_project_then_errors(
 def test_given_dbt_manifest_when_extending_sql_test_fixture_names_then_returns_expected_names(
     test_case: DbtSqlTestFixtureNameTestCase,
 ) -> None:
-    manifest: DbtManifestIndex = build_dbt_sql_test_target_success_manifest(
-        manifest_kind=test_case.manifest_kind
-    )
-    result: set[str] = resolve_dbt_sql_test_fixture_names(
-        manifest=manifest,
-        fixture_kind=test_case.fixture_kind,
-        known_names=test_case.known_names,
-    )
+    manifest: DbtManifestIndex = test_case.manifest_factory()
+    result: set[str] = test_case.fixture_resolver(manifest, test_case.known_names)
 
     assert result == test_case.expected_names
 
@@ -539,26 +660,27 @@ def test_given_dbt_manifest_when_extending_sql_test_fixture_names_then_returns_e
     [
         DbtSqlTestFixtureNameTestCase(
             description="errors when dbt model fixture name clashes with SQLBuild model",
-            fixture_kind="model",
+            manifest_factory=build_dbt_sql_test_target_manifest,
+            fixture_resolver=resolve_dbt_sql_test_model_fixture_names,
             known_names={"analytics__fact_orders"},
             expected_names=set(),
             expected_error_fragment="conflicts with a SQLBuild model",
-            manifest_kind="default",
         ),
         DbtSqlTestFixtureNameTestCase(
             description="errors when dbt source fixture name clashes with SQLBuild source",
-            fixture_kind="source",
+            manifest_factory=build_dbt_sql_test_source_manifest,
+            fixture_resolver=resolve_dbt_sql_test_source_fixture_names,
             known_names={"raw__orders"},
             expected_names=set(),
             expected_error_fragment="conflicts with a SQLBuild source",
         ),
         DbtSqlTestFixtureNameTestCase(
             description="errors when dbt seed fixture name clashes with SQLBuild seed",
-            fixture_kind="seed",
+            manifest_factory=build_dbt_sql_test_seed_manifest,
+            fixture_resolver=resolve_dbt_sql_test_seed_fixture_names,
             known_names={"countries"},
             expected_names=set(),
             expected_error_fragment="conflicts with a SQLBuild seed",
-            manifest_kind="seed_dependency",
         ),
     ],
     ids=lambda case: case.description,
@@ -566,13 +688,7 @@ def test_given_dbt_manifest_when_extending_sql_test_fixture_names_then_returns_e
 def test_given_dbt_manifest_when_extending_clashing_sql_test_fixture_names_then_errors(
     test_case: DbtSqlTestFixtureNameTestCase,
 ) -> None:
-    manifest: DbtManifestIndex = build_dbt_sql_test_target_success_manifest(
-        manifest_kind=test_case.manifest_kind
-    )
+    manifest: DbtManifestIndex = test_case.manifest_factory()
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        resolve_dbt_sql_test_fixture_names(
-            manifest=manifest,
-            fixture_kind=test_case.fixture_kind,
-            known_names=test_case.known_names,
-        )
+        test_case.fixture_resolver(manifest, test_case.known_names)

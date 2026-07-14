@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 
@@ -483,7 +484,7 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
                 ref_fixture_names=("stg_customers",),
                 seed_names=("country_codes",),
             ),
-            include_unrelated_project_seed=False,
+            project=build_scenario_relation_test_project(),
             expected_seed_fixture_names=frozenset(),
             expected_seed_entry_targets={
                 "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes"
@@ -501,7 +502,7 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
                 ref_fixture_names=("stg_customers",),
                 seed_names=("country_codes",),
             ),
-            include_unrelated_project_seed=True,
+            project=build_scenario_relation_test_project_with_unused_seed(),
             expected_seed_fixture_names=frozenset(),
             expected_seed_entry_targets={
                 "country_codes": "scenario_schema.__sqb_51b385aebe20__seed__country_codes"
@@ -513,11 +514,7 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
 def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_project_seed(
     test_case: ScenarioUnmockedSeedExecutionPlanTestCase,
 ) -> None:
-    project: CompiledProject = (
-        build_scenario_relation_test_project_with_unused_seed()
-        if test_case.include_unrelated_project_seed
-        else build_scenario_relation_test_project()
-    )
+    project: CompiledProject = test_case.project
     relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
         project=project,
         graph_plan=test_case.graph_plan,
@@ -535,9 +532,10 @@ def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_pr
     )
 
     assert warnings == ()
-    assert {
-        fixture.logical_name for fixture in result.fixture_plans if fixture.kind.value == "seed"
-    } == test_case.expected_seed_fixture_names
+    fixture_names_by_kind: defaultdict[str, set[str]] = defaultdict(set)
+    for fixture in result.fixture_plans:
+        fixture_names_by_kind[fixture.kind.value].add(fixture.logical_name)
+    assert fixture_names_by_kind["seed"] == test_case.expected_seed_fixture_names
     assert {
         entry.name: entry.destination.qualified_name for entry in result.seed_entries
     } == test_case.expected_seed_entry_targets

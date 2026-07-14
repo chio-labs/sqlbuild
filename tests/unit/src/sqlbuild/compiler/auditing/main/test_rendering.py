@@ -129,7 +129,7 @@ def test_given_unresolved_sql_when_rendering_then_returns_expected(
         seed_locations=seed_locations,
         source_map=source_map,
         adapter=build_render_adapter(test_case.adapter_name),
-        relation_overrides=test_case.relation_overrides if test_case.relation_overrides else None,
+        relation_overrides=test_case.relation_overrides,
     )
 
     assert test_case.expected_sql_fragment in result

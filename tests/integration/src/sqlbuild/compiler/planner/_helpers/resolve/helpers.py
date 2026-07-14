@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -38,7 +38,7 @@ def build_model(
     """Build a minimal CompiledModel for resolve integration tests."""
 
     raw_schema: object | None = config.get("schema")
-    schema: str = raw_schema if isinstance(raw_schema, str) else "staging"
+    schema: str = cast(str, ("staging", raw_schema)[isinstance(raw_schema, str)])
     references: tuple[CompileSqlReference, ...] = tuple(
         CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name=ref_name)
         for ref_name in ref_names

@@ -165,6 +165,7 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
             description="first run with no existing target passes None",
             expected_row_count=1,
             expected_existing_was_none=True,
+            existing_relation=None,
         ),
         ExistingRelationTestCase(
             description="subsequent run with existing target passes RelationInfo",
@@ -172,10 +173,12 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
                 "CREATE TABLE main.test_model (old_col INT)",
                 "INSERT INTO main.test_model VALUES (999)",
             ),
-            existing_database=None,
-            existing_schema="main",
-            existing_name="test_model",
-            existing_type="BASE TABLE",
+            existing_relation=RelationInfo(
+                database=None,
+                schema="main",
+                name="test_model",
+                relation_type="BASE TABLE",
+            ),
             expected_row_count=1,
             expected_existing_was_none=False,
         ),
@@ -191,16 +194,7 @@ def test_given_custom_materialization_when_target_state_varies_then_existing_rel
     for sql_stmt in test_case.setup_sql:
         connection.execute(sql_stmt)
 
-    existing: RelationInfo | None = (
-        RelationInfo(
-            database=test_case.existing_database,
-            schema=test_case.existing_schema,
-            name=test_case.existing_name or "",
-            relation_type=test_case.existing_type or "",
-        )
-        if test_case.existing_name is not None
-        else None
-    )
+    existing: RelationInfo | None = test_case.existing_relation
 
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
     captured: dict[str, Any] = {}

@@ -207,31 +207,25 @@ def write_dagster_test_dag(*, root: Path) -> Path:
     return dag_path
 
 
-def assert_select_file_behavior(
-    *, command: tuple[str, ...], expected_uses_select_file: bool
+def assert_select_file_selector_behavior(
+    *, command: tuple[str, ...], selectors: tuple[str, ...]
 ) -> None:
-    uses_select_file: bool = "--select-file" in command
-    assert uses_select_file is expected_uses_select_file
-    if uses_select_file:
-        select_file_index: int = command.index("--select-file") + 1
-        assert not Path(command[select_file_index]).exists()
+    assert "--select-file" in command
+    select_file_index: int = command.index("--select-file") + 1
+    assert not Path(command[select_file_index]).exists()
+    assert all(selector not in command for selector in selectors)
 
 
 def assert_positional_selector_behavior(
-    *, command: tuple[str, ...], selectors: tuple[str, ...], uses_select_file: bool
+    *, command: tuple[str, ...], selectors: tuple[str, ...]
 ) -> None:
-    if uses_select_file:
-        return
+    assert "--select-file" not in command
     for selector in selectors:
         assert selector in command
 
 
-def assert_json_output_file_behavior(
-    *, command: tuple[str, ...], expected_uses_json_output: bool
-) -> None:
-    uses_json_output: bool = "--json-output" in command
-    assert uses_json_output is expected_uses_json_output
+def assert_json_output_file_behavior(*, command: tuple[str, ...]) -> None:
+    assert "--json-output" in command
     assert "--json" not in command
-    if uses_json_output:
-        json_output_index: int = command.index("--json-output") + 1
-        assert not Path(command[json_output_index]).exists()
+    json_output_index: int = command.index("--json-output") + 1
+    assert not Path(command[json_output_index]).exists()

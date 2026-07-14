@@ -61,10 +61,8 @@ class FakeCloneAdapter(BaseAdapter):
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
         del connection, database, names
-        if schemas is None:
-            return ()
         relations: list[RelationInfo] = []
-        for schema in schemas:
+        for schema in schemas or ():
             for origin_name in self._origin_names:
                 relations.append(
                     RelationInfo(
@@ -78,7 +76,7 @@ class FakeCloneAdapter(BaseAdapter):
         return tuple(relations)
 
     def render_drop(self, *, destination: str, if_exists: bool = True) -> tuple[str, ...]:
-        exists_clause: str = " IF EXISTS" if if_exists else ""
+        exists_clause: str = {True: " IF EXISTS", False: ""}[if_exists]
         return (f"DROP TABLE{exists_clause} {destination}",)
 
     def render_clone(
@@ -89,10 +87,12 @@ class FakeCloneAdapter(BaseAdapter):
         hard_copy: bool = False,
         origin_is_transient: bool = False,
     ) -> tuple[str, ...]:
-        if hard_copy:
-            return (f"CREATE OR REPLACE TABLE {destination} AS SELECT * FROM {origin}",)
-        table_kind: str = "TRANSIENT TABLE" if origin_is_transient else "TABLE"
-        return (f"CREATE {table_kind} {destination} CLONE {origin}",)
+        table_kind: str = {True: "TRANSIENT TABLE", False: "TABLE"}[origin_is_transient]
+        statements: dict[bool, str] = {
+            True: f"CREATE OR REPLACE TABLE {destination} AS SELECT * FROM {origin}",
+            False: f"CREATE {table_kind} {destination} CLONE {origin}",
+        }
+        return (statements[hard_copy],)
 
 
 def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:

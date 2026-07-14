@@ -93,22 +93,8 @@ def test_given_empty_directory_when_running_init_then_scaffolds_project_director
     assert test_case.expected_config_fragment in (project_dir / "sqlbuild_project.toml").read_text(
         encoding="utf-8"
     )
-    assert (
-        tuple(
-            directory
-            for directory in test_case.expected_directories
-            if (project_dir / directory).is_dir()
-        )
-        == test_case.expected_directories
-    )
-    assert (
-        tuple(
-            gitkeep
-            for gitkeep in test_case.expected_gitkeep_files
-            if (project_dir / gitkeep).is_file()
-        )
-        == test_case.expected_gitkeep_files
-    )
+    assert all((project_dir / directory).is_dir() for directory in test_case.expected_directories)
+    assert all((project_dir / gitkeep).is_file() for gitkeep in test_case.expected_gitkeep_files)
 
 
 @pytest.mark.parametrize(

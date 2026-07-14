@@ -52,8 +52,10 @@ from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
 from tests.unit.src.sqlbuild.adapters.bigquery.helpers import (
     FakeBigQueryBadRequest,
     FakeBigQueryClient,
+    FakeBigQueryFailingClient,
     FakeBigQueryRows,
     build_count_rows_execute,
+    build_fake_bigquery_schema_client,
     build_row_diff_execute,
     build_sample_rows_execute,
     fake_row_diff_describe_relation,
@@ -506,7 +508,9 @@ def test_given_bigquery_dataset_state_when_checking_schema_exists_then_returns_e
     test_case: BigQuerySchemaExistsTestCase,
 ) -> None:
     adapter: BigQueryAdapter = BigQueryAdapter()
-    client: FakeBigQueryClient = FakeBigQueryClient(missing_dataset=test_case.missing_dataset)
+    client: FakeBigQueryClient = build_fake_bigquery_schema_client(
+        missing_dataset=test_case.missing_dataset
+    )
     connection: _BigQueryConnection = _BigQueryConnection(client=client, location="europe-west2")
 
     exists: bool = adapter.schema_exists(
@@ -561,7 +565,7 @@ def test_given_bigquery_job_failure_when_executing_then_includes_error_details(
     test_case: BigQueryExecutionErrorTestCase,
 ) -> None:
     connection: _BigQueryConnection = _BigQueryConnection(
-        client=FakeBigQueryClient(
+        client=FakeBigQueryFailingClient(
             query_error=FakeBigQueryBadRequest(
                 test_case.error_message,
                 errors=test_case.error_details,
@@ -730,20 +734,24 @@ def test_given_delete_insert_cursor_when_rendering_then_bigquery_uses_merge(
                     (ColumnInfo(name="id", type="INT64"), ColumnInfo(name="id", type="STRING")),
                 ),
             ),
-            left_relation_columns=(
-                ColumnInfo(name="id", type="INT64"),
-                ColumnInfo(name="status", type="STRING"),
-            ),
-            right_relation_columns=(
-                ColumnInfo(name="id", type="STRING"),
-                ColumnInfo(name="new_col", type="DATE"),
-            ),
+            relation_columns={
+                "left_relation": (
+                    ColumnInfo(name="id", type="INT64"),
+                    ColumnInfo(name="status", type="STRING"),
+                ),
+                "right_relation": (
+                    ColumnInfo(name="id", type="STRING"),
+                    ColumnInfo(name="new_col", type="DATE"),
+                ),
+            },
         ),
         BigQuerySchemaDiffTestCase(
             description="ignores semantically equivalent type aliases",
             expected_result=SchemaDiffResult(),
-            left_relation_columns=(ColumnInfo(name="id", type="INT64"),),
-            right_relation_columns=(ColumnInfo(name="id", type="INTEGER"),),
+            relation_columns={
+                "left_relation": (ColumnInfo(name="id", type="INT64"),),
+                "right_relation": (ColumnInfo(name="id", type="INTEGER"),),
+            },
         ),
     ],
     ids=lambda case: case.description,
@@ -756,11 +764,7 @@ def test_given_bigquery_relations_when_diffing_schema_then_returns_expected_resu
     monkeypatch.setattr(
         adapter,
         "describe_relation",
-        lambda connection, relation: (
-            test_case.left_relation_columns
-            if relation == "left_relation"
-            else test_case.right_relation_columns
-        ),
+        lambda connection, relation: test_case.relation_columns[relation],
     )
 
     result: SchemaDiffResult = adapter.diff_schema(

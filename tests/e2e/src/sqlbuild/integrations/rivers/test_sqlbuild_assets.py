@@ -78,8 +78,12 @@ def test_given_python_nodes_project_when_loading_rivers_assets_then_maps_real_ar
         translator=SqlBuildRiversTranslator(),
     )
     repo: Any = rs.CodeRepository(assets=[sqlbuild_python_nodes])
-    task_def: Any = next(asset for asset in output_defs if asset.name == "task__prepare_orders")
-    asset_def: Any = next(asset for asset in output_defs if asset.name == "asset__orders_export")
+    output_defs_by_name: dict[str, tuple[Any, ...]] = {
+        asset.name: (asset,) for asset in output_defs
+    }
+    assert len(output_defs_by_name) == len(output_defs)
+    task_def: Any = next(iter(output_defs_by_name.get("task__prepare_orders", ())))
+    asset_def: Any = next(iter(output_defs_by_name.get("asset__orders_export", ())))
 
     assert sqlbuild_project.dag_path.exists()
     assert test_case.expected_asset_names <= set(repo.assets)

@@ -44,24 +44,28 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
             expected_passed=True,
             expected_severity=PythonCheckSeverity.ERROR,
             expected_message="passed",
+            upstream_skip_mode=None,
         ),
         PythonCheckExecutorTestCase(
             description="preserves explicit warning result",
             expected_passed=False,
             expected_severity=PythonCheckSeverity.WARN,
             expected_message="warned",
+            upstream_skip_mode=None,
         ),
         PythonCheckExecutorTestCase(
             description="normalizes false result as error failure",
             expected_passed=False,
             expected_severity=PythonCheckSeverity.ERROR,
             expected_message=None,
+            upstream_skip_mode=None,
         ),
         PythonCheckExecutorTestCase(
             description="normalizes check exception as error failure",
             expected_passed=False,
             expected_severity=PythonCheckSeverity.ERROR,
             expected_message=None,
+            upstream_skip_mode=None,
             expected_error_fragment="check exploded",
         ),
         PythonCheckExecutorTestCase(
@@ -69,6 +73,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
             expected_passed=False,
             expected_severity=PythonCheckSeverity.ERROR,
             expected_message=None,
+            upstream_skip_mode=None,
             expected_error_fragment="Upstream Python node failed: upstream_task",
             upstream_status=PythonNodeStatus.FAILED,
         ),
@@ -78,6 +83,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
             expected_severity=PythonCheckSeverity.WARN,
             expected_message="Upstream Python node skipped: upstream_task",
             upstream_status=PythonNodeStatus.SKIPPED,
+            upstream_skip_mode=SkipMode.HARD,
             upstream_skip_reason="not needed",
         ),
     ),
@@ -95,7 +101,7 @@ def test_given_python_check_when_executing_then_returns_expected_result(
         status=test_case.upstream_status,
         payload={"rows": 3},
         metadata={"rows": 3},
-        skip_mode=SkipMode.HARD if test_case.upstream_status == PythonNodeStatus.SKIPPED else None,
+        skip_mode=test_case.upstream_skip_mode,
         skip_reason=test_case.upstream_skip_reason,
     )
     run_state.record_result(node_function=check_upstream_task, result=upstream_result)
@@ -152,6 +158,7 @@ def test_given_python_check_when_executing_then_returns_expected_result(
             expected_passed=True,
             expected_severity=PythonCheckSeverity.ERROR,
             expected_message=None,
+            upstream_skip_mode=None,
         )
     ],
     ids=lambda case: case.description,
@@ -204,6 +211,7 @@ def test_given_provider_parameter_when_executing_python_check_then_provider_is_i
             expected_passed=True,
             expected_severity=PythonCheckSeverity.ERROR,
             expected_message=None,
+            upstream_skip_mode=None,
         )
     ],
     ids=lambda case: case.description,
@@ -256,6 +264,7 @@ def test_given_provider_container_when_executing_python_check_then_context_expos
             expected_passed=False,
             expected_severity=PythonCheckSeverity.ERROR,
             expected_message=None,
+            upstream_skip_mode=None,
             expected_error_fragment=(
                 "Provider parameter 'slack_provider' requires provider 'slack_provider', "
                 "but no provider container is available"

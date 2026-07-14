@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import dagster as dg
 import pytest
@@ -96,16 +97,12 @@ def test_given_python_nodes_project_when_loading_dagster_assets_then_maps_real_a
         yield
 
     asset_keys: set[tuple[str, ...]] = {tuple(key.path) for key in sqlbuild_python_nodes.keys}
-    task_spec: object = next(
-        spec
-        for spec in sqlbuild_python_nodes.specs
-        if tuple(spec.key.path) == ("task", "prepare_orders")
-    )
-    asset_spec: object = next(
-        spec
-        for spec in sqlbuild_python_nodes.specs
-        if tuple(spec.key.path) == ("asset", "orders_export")
-    )
+    specs_by_key: dict[tuple[str, ...], tuple[Any, ...]] = {
+        tuple(spec.key.path): (spec,) for spec in sqlbuild_python_nodes.specs
+    }
+    assert len(specs_by_key) == len(sqlbuild_python_nodes.specs)
+    task_spec: object = next(iter(specs_by_key.get(("task", "prepare_orders"), ())))
+    asset_spec: object = next(iter(specs_by_key.get(("asset", "orders_export"), ())))
 
     assert sqlbuild_project.dag_path.exists()
     assert set(test_case.expected_asset_keys) <= asset_keys

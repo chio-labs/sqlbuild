@@ -17,6 +17,7 @@ from tests.unit.src.sqlbuild.compiler.fingerprints.main._test_types import (
     WriteFingerprintIndexTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.fingerprints.main.helpers import (
+    FailingFingerprintExecute,
     FakeFingerprintExecute,
     FakeFingerprintWriteExecute,
     render_create_fingerprint_index_sqls,
@@ -169,7 +170,7 @@ def test_given_read_failure_when_reading_fingerprints_then_raises_operator_guida
     with pytest.raises(FingerprintInputError) as exc_info:
         read_latest_fingerprints(
             connection=object(),
-            execute=FakeFingerprintExecute(rows=[], read_error=test_case.read_error),
+            execute=FailingFingerprintExecute(read_error=test_case.read_error),
             table_exists=True,
             database=None,
             schema="main",

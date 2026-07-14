@@ -78,6 +78,7 @@ MODEL_B_IDENTITY: NodeSourceWatermarkIdentity = NodeSourceWatermarkIdentity(
                 "raw_orders",
             ),
             unexpected_warning_fragments=("Unknown freshness proofs",),
+            expected_warning_count=1,
         ),
         NodeSourceWatermarkWarningTestCase(
             description="missing materialized frontier watermark is unknown",
@@ -96,6 +97,7 @@ MODEL_B_IDENTITY: NodeSourceWatermarkIdentity = NodeSourceWatermarkIdentity(
                 "b (missing_frontier_watermark)",
             ),
             unexpected_warning_fragments=("Stale frontier tables", "Changed sources"),
+            expected_warning_count=1,
         ),
         NodeSourceWatermarkWarningTestCase(
             description="direct source frontier does not warn",
@@ -104,6 +106,7 @@ MODEL_B_IDENTITY: NodeSourceWatermarkIdentity = NodeSourceWatermarkIdentity(
             source_names=("raw_orders",),
             watermark_records={},
             expected_warning_fragments=(),
+            expected_warning_count=0,
         ),
     ],
     ids=lambda case: case.description,
@@ -122,7 +125,7 @@ def test_given_native_plan_when_building_watermark_warnings_then_reports_expecte
 
     output: str = "\n".join(warning.message for warning in warnings)
 
-    assert len(warnings) == (1 if test_case.expected_warning_fragments else 0)
+    assert len(warnings) == test_case.expected_warning_count
     for fragment in test_case.expected_warning_fragments:
         assert fragment in output
     for fragment in test_case.unexpected_warning_fragments:

@@ -12,7 +12,6 @@ from sqlbuild.integrations.dbt._helpers.lineage.output import (
     format_dbt_lineage_tree,
 )
 from sqlbuild.integrations.dbt.models import DbtLineageGraph
-from sqlbuild.integrations.dbt.types import DbtLineageOutputFormat
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtLineageJsonOutputTestCase,
     DbtLineageOutputTestCase,
@@ -52,11 +51,12 @@ def test_given_lineage_graph_when_formatting_json_then_includes_node_metadata(
     assert isinstance(payload, dict)
     nodes: object = payload["nodes"]
     assert isinstance(nodes, list)
+    assert all(isinstance(node, dict) for node in nodes)
     node_by_id: dict[str, Mapping[str, object]] = {
         str(cast(Mapping[str, object], node)["id"]): cast(Mapping[str, object], node)
         for node in nodes
-        if isinstance(node, dict)
     }
+    assert len(node_by_id) == len(nodes)
     for node_id, metadata_key, expected_value in test_case.expected_node_metadata:
         assert node_by_id[node_id][metadata_key] == expected_value
     assert payload["direction"] == test_case.expected_direction
@@ -67,7 +67,7 @@ def test_given_lineage_graph_when_formatting_json_then_includes_node_metadata(
     (
         DbtLineageOutputTestCase(
             description="formats list output",
-            output_format=DbtLineageOutputFormat.LIST,
+            formatter=format_dbt_lineage_list,
             expected_fragments=(
                 "stg_orders [dbt]",
                 "int_orders [dbt]",
@@ -77,7 +77,7 @@ def test_given_lineage_graph_when_formatting_json_then_includes_node_metadata(
         ),
         DbtLineageOutputTestCase(
             description="formats tree output",
-            output_format=DbtLineageOutputFormat.TREE,
+            formatter=format_dbt_lineage_tree,
             expected_fragments=(
                 "Lineage",
                 "fact_orders [sqb]",
@@ -94,11 +94,7 @@ def test_given_lineage_graph_when_formatting_human_output_then_includes_expected
 ) -> None:
     graph: DbtLineageGraph = build_lineage_graph_for_output_test()
 
-    output: str = (
-        format_dbt_lineage_list(graph=graph, use_color=False)
-        if test_case.output_format == DbtLineageOutputFormat.LIST
-        else format_dbt_lineage_tree(graph=graph, use_color=False)
-    )
+    output: str = test_case.formatter(graph=graph, use_color=False)
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -110,12 +106,12 @@ def test_given_lineage_graph_when_formatting_human_output_then_includes_expected
     (
         DbtLineageOutputTestCase(
             description="formats single node list output",
-            output_format=DbtLineageOutputFormat.LIST,
+            formatter=format_dbt_lineage_list,
             expected_fragments=("mart_orders [sqb]",),
         ),
         DbtLineageOutputTestCase(
             description="formats single node tree output",
-            output_format=DbtLineageOutputFormat.TREE,
+            formatter=format_dbt_lineage_tree,
             expected_fragments=("Lineage", "mart_orders [sqb]", "upstream"),
         ),
     ),
@@ -126,11 +122,7 @@ def test_given_single_node_lineage_graph_when_formatting_human_output_then_inclu
 ) -> None:
     graph: DbtLineageGraph = build_depth_zero_lineage_graph_for_output_test()
 
-    output: str = (
-        format_dbt_lineage_list(graph=graph, use_color=False)
-        if test_case.output_format == DbtLineageOutputFormat.LIST
-        else format_dbt_lineage_tree(graph=graph, use_color=False)
-    )
+    output: str = test_case.formatter(graph=graph, use_color=False)
 
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
@@ -142,7 +134,7 @@ def test_given_single_node_lineage_graph_when_formatting_human_output_then_inclu
     [
         DbtLineageOutputTestCase(
             description="formats summary fallback without focus",
-            output_format=DbtLineageOutputFormat.TREE,
+            formatter=format_dbt_lineage_tree,
             expected_fragments=("Lineage graph", "mart_orders [sqb]"),
         )
     ],

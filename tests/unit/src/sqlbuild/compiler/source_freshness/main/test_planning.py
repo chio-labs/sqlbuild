@@ -174,6 +174,7 @@ def test_given_standard_source_freshness_state_when_planning_then_classifies_has
             current_query="SELECT CAST('2026-01-15 11:30:00' AS TIMESTAMP) AS data_version",
             warn_after="1h",
             error_after="2h",
+            value_kind=SourceFreshnessValueKind.TIMESTAMP,
             expected_age_status="pass",
         ),
         StandardSourceFreshnessAgePolicyTestCase(
@@ -181,6 +182,7 @@ def test_given_standard_source_freshness_state_when_planning_then_classifies_has
             current_query="SELECT CAST('2026-01-15 10:30:00' AS TIMESTAMP) AS data_version",
             warn_after="1h",
             error_after="2h",
+            value_kind=SourceFreshnessValueKind.TIMESTAMP,
             expected_age_status="warn",
         ),
         StandardSourceFreshnessAgePolicyTestCase(
@@ -188,6 +190,7 @@ def test_given_standard_source_freshness_state_when_planning_then_classifies_has
             current_query="SELECT CAST('2026-01-15 09:30:00' AS TIMESTAMP) AS data_version",
             warn_after="1h",
             error_after="2h",
+            value_kind=SourceFreshnessValueKind.TIMESTAMP,
             expected_age_status="error",
         ),
         StandardSourceFreshnessAgePolicyTestCase(
@@ -195,6 +198,7 @@ def test_given_standard_source_freshness_state_when_planning_then_classifies_has
             current_query="SELECT CAST('2026-01-15 09:30:00' AS TIMESTAMP) AS data_version",
             warn_after="1h",
             error_after="2h",
+            value_kind=SourceFreshnessValueKind.TIMESTAMP,
             expected_age_status="error",
             observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
         ),
@@ -203,6 +207,7 @@ def test_given_standard_source_freshness_state_when_planning_then_classifies_has
             current_query="SELECT 42 AS data_version",
             warn_after="1h",
             error_after="2h",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_age_status="unknown",
         ),
     ),
@@ -219,9 +224,7 @@ def test_given_source_freshness_age_policy_when_planning_then_records_age_status
             name="raw.orders",
             freshness=SourceFreshnessConfig(
                 strategy=SourceFreshnessStrategy.SQL,
-                value_kind=SourceFreshnessValueKind.TIMESTAMP
-                if test_case.expected_age_status != "unknown"
-                else SourceFreshnessValueKind.INTEGER,
+                value_kind=test_case.value_kind,
                 query=test_case.current_query,
                 age_policy=SourceFreshnessAgePolicy(
                     warn_after=test_case.warn_after,
@@ -264,6 +267,7 @@ def test_given_source_freshness_age_policy_when_planning_then_records_age_status
             warn_after="1h",
             error_after="2h",
             expected_age_status="error",
+            value_kind=SourceFreshnessValueKind.TIMESTAMP,
         )
     ],
     ids=lambda case: case.description,

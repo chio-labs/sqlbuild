@@ -19,8 +19,7 @@ class ScenarioFailureHelpTestCase:
     """One scenario failure help resolution case."""
 
     description: str
-    code: str | None
-    explicit_help: str | None
+    error: Exception
     expected_help: str | None
 
 

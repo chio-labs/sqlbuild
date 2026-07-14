@@ -33,18 +33,21 @@ RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_f
             description="builds schema-qualified name without database",
             database=None,
             schema="analytics",
+            render_qualified_name=RENDER_QUALIFIED_NAME,
             expected_name=f"analytics.{FINGERPRINT_TABLE_NAME}",
         ),
         BuildQualifiedTableNameTestCase(
             description="builds fully qualified name with database",
             database="warehouse",
             schema="analytics",
+            render_qualified_name=RENDER_QUALIFIED_NAME,
             expected_name=f"warehouse.analytics.{FINGERPRINT_TABLE_NAME}",
         ),
         BuildQualifiedTableNameTestCase(
             description="bigquery fingerprint table naming remains adapter-qualified",
             database="example-project",
             schema="dev",
+            render_qualified_name=BigQueryAdapter().render_qualified_name,
             expected_name=f"`example-project.dev.{FINGERPRINT_TABLE_NAME}`",
         ),
     ],
@@ -53,15 +56,10 @@ RENDER_FRAMEWORK_TYPE: Callable[[FrameworkType], str] = DuckDbAdapter().render_f
 def test_given_schema_when_building_qualified_name_then_returns_expected(
     test_case: BuildQualifiedTableNameTestCase,
 ) -> None:
-    render_qualified_name: Callable[..., str | None] = (
-        BigQueryAdapter().render_qualified_name
-        if test_case.database == "example-project"
-        else RENDER_QUALIFIED_NAME
-    )
     result: str = build_qualified_table_name(
         database=test_case.database,
         schema=test_case.schema,
-        render_qualified_name=render_qualified_name,
+        render_qualified_name=test_case.render_qualified_name,
     )
 
     assert result == test_case.expected_name

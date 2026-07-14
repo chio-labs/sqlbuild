@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceColumnEntry
 
@@ -138,7 +139,7 @@ class LoadPipelineSkipFanInTestCase:
     """One loader skip fan-in behavior case."""
 
     description: str
-    hard_skip: bool
+    skip_mode: SkipMode
     expected_statuses: tuple[ExecutionStatus, ...]
     expected_skip_modes: tuple[str | None, ...]
     expected_skip_reasons: tuple[str | None, ...]

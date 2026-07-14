@@ -96,10 +96,12 @@ def test_given_base_adapter_when_getting_inference_profile_then_returns_portable
     [
         BaseAdapterSqlAnalysisDialectTestCase(
             description="returns none by default",
+            adapter_factory=ConcreteBaseAdapter,
             expected_sql_analysis_dialect=None,
         ),
         BaseAdapterSqlAnalysisDialectTestCase(
             description="returns class configured dialect",
+            adapter_factory=PostgresLikeBaseAdapter,
             expected_sql_analysis_dialect="postgres",
         ),
     ],
@@ -108,11 +110,7 @@ def test_given_base_adapter_when_getting_inference_profile_then_returns_portable
 def test_given_base_adapter_subclass_when_getting_sql_analysis_dialect_then_uses_class_setting(
     test_case: BaseAdapterSqlAnalysisDialectTestCase,
 ) -> None:
-    adapter: BaseAdapter = (
-        PostgresLikeBaseAdapter()
-        if test_case.expected_sql_analysis_dialect is not None
-        else ConcreteBaseAdapter()
-    )
+    adapter: BaseAdapter = test_case.adapter_factory()
 
     assert adapter.sql_analysis_dialect() == test_case.expected_sql_analysis_dialect
     assert adapter.expression_inference_profile().sql_analysis_dialect == (

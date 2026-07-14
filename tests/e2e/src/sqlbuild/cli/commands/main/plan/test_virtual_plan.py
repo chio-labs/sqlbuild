@@ -869,9 +869,11 @@ def test_given_virtual_run_despite_unchanged_when_planning_json_then_outputs_met
     assert result.returncode == 0, result.stdout + result.stderr
     payload: dict[str, object] = cast(dict[str, object], json.loads(result.stdout))
     models: list[dict[str, object]] = cast(list[dict[str, object]], payload["models"])
-    root_model: dict[str, object] = next(
-        model for model in models if model["name"] == "rolling_orders"
-    )
+    models_by_name: dict[str, tuple[dict[str, object], ...]] = {
+        str(model["name"]): (model,) for model in models
+    }
+    assert len(models_by_name) == len(models)
+    root_model: dict[str, object] = next(iter(models_by_name.get("rolling_orders", ())))
     run_metadata: dict[str, object] = cast(dict[str, object], root_model["run_despite_unchanged"])
 
     assert root_model["name"] == test_case.expected_fragments[0]
@@ -935,11 +937,21 @@ def test_given_virtual_scoped_run_despite_unchanged_when_planning_then_downstrea
             description="virtual duration mode fails without source freshness",
             expected_unchanged_fragments=(),
             expected_fragments=("cannot determine upstream source freshness age",),
+            project_suffix="missing",
+            data_version_sql="TIMESTAMP '2026-06-01 00:00:00'",
+            include_freshness=False,
+            source_freshness_type="timestamp",
+            warehouse_column_type="TIMESTAMP",
         ),
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual duration mode fails with integer source freshness",
             expected_unchanged_fragments=(),
             expected_fragments=("requires timestamp source freshness",),
+            project_suffix="integer",
+            data_version_sql="1",
+            include_freshness=True,
+            source_freshness_type="integer",
+            warehouse_column_type="INTEGER",
         ),
     ),
     ids=lambda case: case.description,
@@ -948,16 +960,16 @@ def test_given_virtual_duration_without_timestamp_freshness_when_planning_then_f
     test_case: VirtualSourceFreshnessPlanE2ETestCase,
     tmp_path: Path,
 ) -> None:
-    is_integer_case: bool = "integer" in test_case.description
-    project_suffix: str = "integer" if is_integer_case else "missing"
+    assert test_case.project_suffix is not None
+    assert test_case.data_version_sql is not None
     project_dir: Path = prepare_virtual_run_despite_unchanged_project(
         tmp_path=tmp_path,
-        project_name=f"virtual_run_despite_unchanged_error_{project_suffix}",
+        project_name=f"virtual_run_despite_unchanged_error_{test_case.project_suffix}",
         run_despite_unchanged="30d",
-        data_version_sql="1" if is_integer_case else "TIMESTAMP '2026-06-01 00:00:00'",
-        include_freshness=is_integer_case,
-        source_freshness_type="integer" if is_integer_case else "timestamp",
-        warehouse_column_type="INTEGER" if is_integer_case else "TIMESTAMP",
+        data_version_sql=test_case.data_version_sql,
+        include_freshness=test_case.include_freshness,
+        source_freshness_type=test_case.source_freshness_type,
+        warehouse_column_type=test_case.warehouse_column_type,
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(

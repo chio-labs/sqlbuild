@@ -655,43 +655,37 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
     typed_decisions_metadata: dict[str, object] = cast(dict[str, object], decisions_metadata)
     decision_models_metadata: object = typed_decisions_metadata["models"]
     assert isinstance(decision_models_metadata, dict)
+    typed_decision_models_metadata: dict[str, object] = cast(
+        dict[str, object], decision_models_metadata
+    )
+    assert all(
+        isinstance(model_metadata, dict)
+        for model_metadata in typed_decision_models_metadata.values()
+    )
     assert {
         model_name: cast(dict[str, object], model_metadata).get("decision")
-        for model_name, model_metadata in decision_models_metadata.items()
-        if isinstance(model_metadata, dict)
+        for model_name, model_metadata in typed_decision_models_metadata.items()
     } == test_case.expected_decisions
-    assert (
-        tuple(
-            sorted(
-                model_name
-                for model_name, model_metadata in decision_models_metadata.items()
-                if isinstance(model_metadata, dict)
-                and cast(dict[str, object], model_metadata).get("decision") == "reuse_eligible"
-            )
-        )
-        == test_case.expected_reuse_eligible_names
-    )
+    for model_name in test_case.expected_reuse_eligible_names:
+        assert cast(dict[str, object], typed_decision_models_metadata[model_name]).get(
+            "decision"
+        ) == ("reuse_eligible")
     assert {entry.name: entry.action.value for entry in plan_output.model_entries} == (
         test_case.expected_actions
     )
-    reuse_entry: ModelPlanEntry | None = next(
-        (entry for entry in plan_output.model_entries if entry.name == "orders"), None
-    )
-    assert reuse_entry is not None
+    entries_by_name: dict[str, tuple[ModelPlanEntry, ...]] = {
+        entry.name: (entry,) for entry in plan_output.model_entries
+    }
+    assert len(entries_by_name) == len(plan_output.model_entries)
+    reuse_entry: ModelPlanEntry = next(iter(entries_by_name.get("orders", ())))
     assert reuse_entry.relation_reuse is not None
     assert reuse_entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
     assert reuse_entry.relation_reuse.origin.qualified_name == "prod_schema.orders"
-    seed_entry: ModelPlanEntry | None = next(
-        (entry for entry in plan_output.model_entries if entry.name == "line_items"), None
-    )
-    assert seed_entry is not None
+    seed_entry: ModelPlanEntry = next(iter(entries_by_name.get("line_items", ())))
     assert seed_entry.relation_reuse is not None
     assert seed_entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
     assert seed_entry.relation_reuse.origin.qualified_name == "prod_schema.line_items"
-    snapshot_entry: ModelPlanEntry | None = next(
-        (entry for entry in plan_output.model_entries if entry.name == "account_snapshot"), None
-    )
-    assert snapshot_entry is not None
+    snapshot_entry: ModelPlanEntry = next(iter(entries_by_name.get("account_snapshot", ())))
     assert snapshot_entry.relation_reuse is not None
     assert snapshot_entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
     assert snapshot_entry.relation_reuse.origin.qualified_name == "prod_schema.account_snapshot"

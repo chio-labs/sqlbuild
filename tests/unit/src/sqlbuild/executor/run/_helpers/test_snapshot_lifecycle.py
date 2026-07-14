@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -81,6 +81,10 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
         pre_hooks=test_case.pre_hook,
         post_hooks=test_case.post_hook,
     )
+    assert all(
+        isinstance(hook_function, DiscoveredHookFunction)
+        for hook_function in test_case.hook_functions
+    )
 
     result: ModelExecutionResult = execute_snapshot_entry(
         context=ModelMaterializationContext(
@@ -93,11 +97,7 @@ def test_given_successful_snapshot_when_executing_then_runs_lifecycle_side_effec
             model_audits=(),
             run_id=test_case.run_id,
             query_change_tracking=True,
-            hook_functions=tuple(
-                hook_function
-                for hook_function in test_case.hook_functions
-                if isinstance(hook_function, DiscoveredHookFunction)
-            ),
+            hook_functions=cast(tuple[DiscoveredHookFunction, ...], test_case.hook_functions),
         ),
     )
     hook_rows: tuple[tuple[object, ...], ...] = tuple(

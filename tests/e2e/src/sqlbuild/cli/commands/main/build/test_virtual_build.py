@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 from textwrap import dedent
 
@@ -689,9 +690,12 @@ def test_given_virtual_seed_change_when_plan_and_build_json_then_seed_reason_is_
     )
     assert build_result.returncode == 0, build_result.stderr
     build_payload: dict[str, object] = json.loads(build_result.stdout)
-    seed_assets: list[dict[str, object]] = [
-        dict(asset) for asset in build_payload["assets"] if dict(asset).get("kind") == "seed"
-    ]
+    assets_by_kind: defaultdict[object, list[dict[str, object]]] = defaultdict(list)
+    for asset in build_payload["assets"]:
+        typed_asset: dict[str, object] = dict(asset)
+        assets_by_kind[typed_asset.get("kind")].append(typed_asset)
+    seed_assets: list[dict[str, object]] = assets_by_kind["seed"]
+    assert len(seed_assets) == 1
     assert seed_assets[0]["name"] == expected_seed_name
     assert seed_assets[0]["reason"] == expected_seed_reason
 
@@ -3079,12 +3083,12 @@ database = "state.duckdb"
 
     payload: dict[str, object] = json.loads(execution_json_path.read_text(encoding="utf-8"))
     assets: list[dict[str, object]] = list(payload["assets"])  # type: ignore[arg-type]
-    function_assets: dict[str, dict[str, object]] = {
-        str(asset["name"]): asset for asset in assets if asset.get("kind") in {"udf", "table_fn"}
-    }
+    assets_by_name: dict[str, dict[str, object]] = {str(asset["name"]): asset for asset in assets}
+    assert len(assets_by_name) == len(assets)
     function_name: str
     for function_name in test_case.expected_function_names:
-        assert function_assets[function_name]["status"] == "success"
+        assert assets_by_name[function_name]["kind"] in {"udf", "table_fn"}
+        assert assets_by_name[function_name]["status"] == "success"
 
     query_sql: str
     expected_rows: tuple[tuple[object, ...], ...]

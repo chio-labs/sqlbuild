@@ -717,18 +717,18 @@ def test_given_build_result_when_formatting_output_then_contains_expected_fragme
     model_result: ModelExecutionResult
     for model_result in test_case.result.model_results:
         override: ModelPlanOverride | None = override_map.get(model_result.model_name)
-        mat_type: MaterializationType = (
-            override.materialization_type if override else MaterializationType.TABLE
+        mat_type: MaterializationType = getattr(
+            override, "materialization_type", MaterializationType.TABLE
         )
-        action: PlanAction = override.action if override else PlanAction.CREATE_TABLE
+        action: PlanAction = getattr(override, "action", PlanAction.CREATE_TABLE)
         plan_entries.append(
             build_model_plan_entry(
                 name=model_result.model_name,
                 materialization_type=mat_type,
                 action=action,
-                snapshot_strategy=override.snapshot_strategy if override else None,
-                observed_at_column=override.observed_at_column if override else None,
-                historical_input=override.historical_input if override else None,
+                snapshot_strategy=getattr(override, "snapshot_strategy", None),
+                observed_at_column=getattr(override, "observed_at_column", None),
+                historical_input=getattr(override, "historical_input", None),
             )
         )
 

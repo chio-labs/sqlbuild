@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from sqlbuild.compiler.compile._helpers.config.model_validation import (
@@ -205,11 +207,10 @@ def test_given_valid_config_when_validating_then_passes(
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
     cursor_inputs: object | None = test_case.config_values.get("cursor_inputs")
-    known_input_names: frozenset[str] = (
-        frozenset(str(name) for name in cursor_inputs)
-        if isinstance(cursor_inputs, dict)
-        else frozenset()
+    cursor_input_dict: dict[object, object] = cast(
+        dict[object, object], ({}, cursor_inputs)[isinstance(cursor_inputs, dict)]
     )
+    known_input_names: frozenset[str] = frozenset(str(name) for name in cursor_input_dict)
 
     validate_incremental_config(
         config=config,

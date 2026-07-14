@@ -2253,7 +2253,7 @@ def test_given_duckdb_state_backend_when_two_connections_acquire_same_lock_then_
             ]
         results: list[bool] = [future.result() for future in futures]
 
-        assert sum(1 for result in results if result) == test_case.expected_success_count
+        assert sum(results) == test_case.expected_success_count
         active_locks: tuple[StateLockRecord, ...] = backend.list_active_locks(
             connection=first_connection,
             schema=test_case.schema,

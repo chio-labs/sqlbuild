@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections import defaultdict
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -264,11 +265,11 @@ def test_given_dbt_source_freshness_changes_when_building_then_reruns_downstream
         test_case.expected_plan_stale_sqlbuild_model_names
     )
     entries: list[object] = cast(list[object], model_plan["entries"])
-    run_entries: tuple[Mapping[str, object], ...] = tuple(
-        cast(Mapping[str, object], entry)
-        for entry in entries
-        if cast(Mapping[str, object], entry)["action"] == "run"
-    )
+    entries_by_action: defaultdict[object, list[Mapping[str, object]]] = defaultdict(list)
+    for entry in entries:
+        typed_entry: Mapping[str, object] = cast(Mapping[str, object], entry)
+        entries_by_action[typed_entry["action"]].append(typed_entry)
+    run_entries: tuple[Mapping[str, object], ...] = tuple(entries_by_action["run"])
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_plan_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -356,11 +357,11 @@ def test_given_dbt_only_selector_when_source_freshness_changes_then_reruns_dbt_m
         test_case.expected_plan_stale_sqlbuild_model_names
     )
     entries: list[object] = cast(list[object], model_plan["entries"])
-    run_entries: tuple[Mapping[str, object], ...] = tuple(
-        cast(Mapping[str, object], entry)
-        for entry in entries
-        if cast(Mapping[str, object], entry)["action"] == "run"
-    )
+    entries_by_action: defaultdict[object, list[Mapping[str, object]]] = defaultdict(list)
+    for entry in entries:
+        typed_entry: Mapping[str, object] = cast(Mapping[str, object], entry)
+        entries_by_action[typed_entry["action"]].append(typed_entry)
+    run_entries: tuple[Mapping[str, object], ...] = tuple(entries_by_action["run"])
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_plan_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -501,11 +502,11 @@ def test_given_multi_source_dbt_model_when_one_source_changes_then_model_reruns(
         test_case.expected_stale_sqlbuild_model_names
     )
     entries: list[object] = cast(list[object], model_plan["entries"])
-    run_entries: tuple[Mapping[str, object], ...] = tuple(
-        cast(Mapping[str, object], entry)
-        for entry in entries
-        if cast(Mapping[str, object], entry)["action"] == "run"
-    )
+    entries_by_action: defaultdict[object, list[Mapping[str, object]]] = defaultdict(list)
+    for entry in entries:
+        typed_entry: Mapping[str, object] = cast(Mapping[str, object], entry)
+        entries_by_action[typed_entry["action"]].append(typed_entry)
+    run_entries: tuple[Mapping[str, object], ...] = tuple(entries_by_action["run"])
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_run_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -601,11 +602,11 @@ def test_given_query_and_filtered_dbt_sources_when_source_changes_then_freshness
         test_case.expected_stale_sqlbuild_model_names
     )
     entries: list[object] = cast(list[object], model_plan["entries"])
-    run_entries: tuple[Mapping[str, object], ...] = tuple(
-        cast(Mapping[str, object], entry)
-        for entry in entries
-        if cast(Mapping[str, object], entry)["action"] == "run"
-    )
+    entries_by_action: defaultdict[object, list[Mapping[str, object]]] = defaultdict(list)
+    for entry in entries:
+        typed_entry: Mapping[str, object] = cast(Mapping[str, object], entry)
+        entries_by_action[typed_entry["action"]].append(typed_entry)
+    run_entries: tuple[Mapping[str, object], ...] = tuple(entries_by_action["run"])
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_run_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -672,11 +673,11 @@ def test_given_dbt_source_freshness_moves_backward_when_building_then_reruns_dow
         test_case.expected_stale_sqlbuild_model_names
     )
     entries: list[object] = cast(list[object], model_plan["entries"])
-    run_entries: tuple[Mapping[str, object], ...] = tuple(
-        cast(Mapping[str, object], entry)
-        for entry in entries
-        if cast(Mapping[str, object], entry)["action"] == "run"
-    )
+    entries_by_action: defaultdict[object, list[Mapping[str, object]]] = defaultdict(list)
+    for entry in entries:
+        typed_entry: Mapping[str, object] = cast(Mapping[str, object], entry)
+        entries_by_action[typed_entry["action"]].append(typed_entry)
+    run_entries: tuple[Mapping[str, object], ...] = tuple(entries_by_action["run"])
     assert tuple(entry["reason"] for entry in run_entries) == test_case.expected_run_reasons
 
     changed_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -1150,9 +1151,10 @@ def test_given_full_refresh_when_selecting_then_scope_matches_selection(
 
     assert result.returncode == 0, result.stderr or result.stdout
     assert f"Full refresh ({test_case.expected_full_refresh_count})" in result.stdout
-    command_line: str = next(
-        line for line in result.stdout.splitlines() if "dbt build" in line and "--select" in line
-    )
+    command_lines_by_match_status: defaultdict[bool, list[str]] = defaultdict(list)
+    for line in result.stdout.splitlines():
+        command_lines_by_match_status["dbt build" in line and "--select" in line].append(line)
+    command_line: str = next(iter(command_lines_by_match_status[True]))
     fragment: str
     for fragment in test_case.expected_command_select_fragments:
         assert fragment in command_line

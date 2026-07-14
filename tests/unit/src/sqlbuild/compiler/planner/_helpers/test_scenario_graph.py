@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 import pytest
 
 from sqlbuild.compiler.compile.models.core import (
@@ -274,7 +276,8 @@ def test_given_invalid_scenario_when_planning_graph_then_returns_clear_error(
         ),
     )
 
-    error_messages: tuple[str, ...] = tuple(
-        warning.message for warning in warnings if warning.severity == WarningSeverity.ERROR
-    )
+    messages_by_severity: defaultdict[WarningSeverity, list[str]] = defaultdict(list)
+    for warning in warnings:
+        messages_by_severity[warning.severity].append(warning.message)
+    error_messages: tuple[str, ...] = tuple(messages_by_severity[WarningSeverity.ERROR])
     assert any(test_case.expected_error_fragment in message for message in error_messages)

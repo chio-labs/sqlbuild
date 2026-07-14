@@ -34,6 +34,7 @@ class RuntimeCursorStartTestCase:
     upstream_min: object
     upstream_max: object
     cursor_type: str
+    warehouse_column_type: str
     cursor_start: str | None
     expected_start: str
     expected_end: str

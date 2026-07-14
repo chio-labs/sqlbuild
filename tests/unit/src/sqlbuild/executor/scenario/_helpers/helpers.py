@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledObjectKey,
@@ -254,28 +256,24 @@ def write_local_snapshot_load_test_file_contents(
 def write_snapshot_state_test_manifest(
     *, manifest_path: Path, test_case: ScenarioSnapshotStateTestCase
 ) -> None:
-    if test_case.manifest is not None:
-        from sqlbuild.executor.scenario._helpers.snapshots.core import (
-            write_scenario_snapshot_manifest,
-        )
-
-        write_scenario_snapshot_manifest(
-            manifest_path=manifest_path,
-            manifest=test_case.manifest,
-        )
-    if test_case.manifest_contents is not None:
-        manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        manifest_path.write_text(test_case.manifest_contents, encoding="utf-8")
+    _SNAPSHOT_MANIFEST_WRITERS[test_case.manifest is None](
+        manifest_path=manifest_path,
+        value=test_case.manifest,
+    )
+    _SNAPSHOT_CONTENT_WRITERS[test_case.manifest_contents is None](
+        manifest_path=manifest_path,
+        value=test_case.manifest_contents,
+    )
 
 
 def assert_snapshot_state_error(
     *, state_result: ScenarioSnapshotStateResult, test_case: ScenarioSnapshotStateTestCase
 ) -> None:
-    if test_case.expected_error_code is not None:
-        assert state_result.error_code == test_case.expected_error_code
-    if test_case.expected_error_fragment is not None:
-        assert state_result.error_message is not None
-        assert test_case.expected_error_fragment in state_result.error_message
+    normalized_error_code: str | None = {None: None}.get(
+        test_case.expected_error_code, state_result.error_code
+    )
+    assert normalized_error_code == test_case.expected_error_code
+    assert (test_case.expected_error_fragment or "") in (state_result.error_message or "")
 
 
 def assert_capture_steps_error(
@@ -283,9 +281,7 @@ def assert_capture_steps_error(
     result: ScenarioSnapshotCaptureRunResult,
     test_case: ExecuteScenarioSnapshotCaptureStepsTestCase,
 ) -> None:
-    if test_case.expected_error_fragment is not None:
-        assert result.error_message is not None
-        assert test_case.expected_error_fragment in result.error_message
+    assert (test_case.expected_error_fragment or "") in (result.error_message or "")
 
 
 def _target(kind: str, logical_name: str) -> CompiledRelationLocation:
@@ -296,3 +292,31 @@ def _target(kind: str, logical_name: str) -> CompiledRelationLocation:
         name=name,
         qualified_name=f"scenario_schema.{name}",
     )
+
+
+def _ignore_optional_snapshot_value(*, manifest_path: Path, value: object) -> None:
+    del manifest_path, value
+
+
+def _write_snapshot_manifest(*, manifest_path: Path, value: object) -> None:
+    from sqlbuild.executor.scenario._helpers.snapshots.core import write_scenario_snapshot_manifest
+
+    write_scenario_snapshot_manifest(
+        manifest_path=manifest_path,
+        manifest=cast(ScenarioSnapshotManifest, value),
+    )
+
+
+def _write_snapshot_contents(*, manifest_path: Path, value: object) -> None:
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(cast(str, value), encoding="utf-8")
+
+
+_SNAPSHOT_MANIFEST_WRITERS: dict[bool, Callable[..., None]] = {
+    True: _ignore_optional_snapshot_value,
+    False: _write_snapshot_manifest,
+}
+_SNAPSHOT_CONTENT_WRITERS: dict[bool, Callable[..., None]] = {
+    True: _ignore_optional_snapshot_value,
+    False: _write_snapshot_contents,
+}

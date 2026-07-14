@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import pytest
 
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -27,7 +25,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.helpers import (
     [
         DeferredTargetTestCase(
             description="preserve schema returns logical schema",
-            adapter_name="duckdb",
+            render_qualified_name=DuckDbAdapter().render_qualified_name,
             logical_schema="analytics",
             logical_database=None,
             env_schema="preserve",
@@ -41,7 +39,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.helpers import (
         ),
         DeferredTargetTestCase(
             description="literal env schema overrides logical schema",
-            adapter_name="duckdb",
+            render_qualified_name=DuckDbAdapter().render_qualified_name,
             logical_schema="analytics",
             logical_database=None,
             env_schema="prod_analytics",
@@ -55,7 +53,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.helpers import (
         ),
         DeferredTargetTestCase(
             description="template env schema resolves CTX with logical value",
-            adapter_name="duckdb",
+            render_qualified_name=DuckDbAdapter().render_qualified_name,
             logical_schema="analytics",
             logical_database=None,
             env_schema="prod_${CTX:schema}",
@@ -69,7 +67,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.helpers import (
         ),
         DeferredTargetTestCase(
             description="template env schema resolves vars",
-            adapter_name="duckdb",
+            render_qualified_name=DuckDbAdapter().render_qualified_name,
             logical_schema=None,
             logical_database=None,
             env_schema="dev_${user}",
@@ -83,7 +81,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.helpers import (
         ),
         DeferredTargetTestCase(
             description="none env schema falls through to adapter default",
-            adapter_name="duckdb",
+            render_qualified_name=DuckDbAdapter().render_qualified_name,
             logical_schema=None,
             logical_database=None,
             env_schema=None,
@@ -97,7 +95,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.helpers import (
         ),
         DeferredTargetTestCase(
             description="database and schema both resolve for three-part name",
-            adapter_name="duckdb",
+            render_qualified_name=DuckDbAdapter().render_qualified_name,
             logical_schema="analytics",
             logical_database="warehouse",
             env_schema="preserve",
@@ -111,7 +109,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.helpers import (
         ),
         DeferredTargetTestCase(
             description="bigquery deferred locations use adapter-qualified names",
-            adapter_name="bigquery",
+            render_qualified_name=BigQueryAdapter().render_qualified_name,
             logical_schema="analytics",
             logical_database="warehouse",
             env_schema="prod",
@@ -140,18 +138,13 @@ def test_given_deferred_target_config_when_building_targets_then_resolves_expect
         database=test_case.env_database,
     )
 
-    render_qualified_name: Callable[..., str | None] = (
-        BigQueryAdapter().render_qualified_name
-        if test_case.adapter_name == "bigquery"
-        else DuckDbAdapter().render_qualified_name
-    )
     locations: dict[str, CompiledRelationLocation] = build_deferred_locations(
         project=project,
         deferred_target_config=deferred_target_config,
         effective_vars=test_case.effective_vars,
         default_schema=test_case.default_schema,
         default_database=test_case.default_database,
-        render_qualified_name=render_qualified_name,
+        render_qualified_name=test_case.render_qualified_name,
     )
 
     result: CompiledRelationLocation = locations["test_model"]

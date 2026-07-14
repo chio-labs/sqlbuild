@@ -28,12 +28,12 @@ def prepare_janitor_project(
 
     normalized_settings_config: str = dedent(settings_config).strip()
     normalized_janitor_config: str = dedent(janitor_config).strip()
-    settings_block: str = (
-        f"\n[settings]\n{normalized_settings_config}\n" if normalized_settings_config else ""
-    )
-    janitor_block: str = (
-        f"\n[janitor]\n{normalized_janitor_config}\n" if normalized_janitor_config else ""
-    )
+    settings_block: str = {False: "", True: f"\n[settings]\n{normalized_settings_config}\n"}[
+        bool(normalized_settings_config)
+    ]
+    janitor_block: str = {False: "", True: f"\n[janitor]\n{normalized_janitor_config}\n"}[
+        bool(normalized_janitor_config)
+    ]
     project_config: str = (
         f'name = "{project_name}"\n'
         'adapter = "duckdb"\n\n'

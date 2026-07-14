@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
+from itertools import chain, repeat
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -114,11 +115,10 @@ class PythonNodeContextTestResultStore:
     ) -> NodeResultEnvelope | object:
         del run_id
         results: tuple[NodeResultEnvelope, ...] = self._results.get((node_type, node_name), ())
-        if results:
-            return results[0]
-        if default is not MISSING_DEFAULT:
-            return default
-        raise ExecutorInputError(f"No persisted result found for Python node '{node_name}'")
+        strategy: Callable[..., object] = _RESULT_READ_STRATEGIES[
+            (bool(results), default is MISSING_DEFAULT)
+        ]
+        return strategy(results=results, default=default, node_name=node_name)
 
     def results_of(
         self,
@@ -265,15 +265,9 @@ def export_orders(ctx: AssetContext) -> object:
     upstream_result: NodeResultEnvelope = cast(
         NodeResultEnvelope, ctx.result_of(node_function=fetch_orders)
     )
-    payload: object = upstream_result.payload
-    metadata: object = upstream_result.metadata
-    if not isinstance(payload, dict) or not isinstance(metadata, dict):
-        raise TypeError("Expected upstream payload and metadata dictionaries")
-    payload_dict: dict[str, object] = cast(dict[str, object], payload)
-    metadata_dict: dict[str, object] = metadata
-    file_name: object | None = payload_dict.get("file")
-    if not isinstance(file_name, str):
-        raise TypeError("Expected upstream file payload")
+    payload_dict: dict[str, object] = cast(dict[str, object], upstream_result.payload)
+    metadata_dict: dict[str, object] = upstream_result.metadata
+    file_name: str = cast(str, payload_dict["file"])
     return ctx.result(
         payload={"uri": f"s3://exports/{file_name}"},
         metadata=metadata_dict,
@@ -329,11 +323,20 @@ class FlakyTask:
         self.failures_before_success: int = failures_before_success
         self.exception_type: type[Exception] = exception_type
         self.attempts: int = 0
+        failures: Iterator[Callable[[TaskContext], object]] = (
+            self._raise_transient_failure for _attempt in range(self.failures_before_success)
+        )
+        self._strategies = iter(chain(failures, repeat(self._return_success)))
 
     def __call__(self, ctx: TaskContext) -> object:
         self.attempts += 1
-        if self.attempts <= self.failures_before_success:
-            raise self.exception_type("transient failure")
+        return next(self._strategies)(ctx)
+
+    def _raise_transient_failure(self, ctx: TaskContext) -> object:
+        del ctx
+        raise self.exception_type("transient failure")
+
+    def _return_success(self, ctx: TaskContext) -> object:
         return ctx.result(payload={"attempts": self.attempts})
 
 
@@ -374,11 +377,12 @@ def lifecycle_node_payload_name(node: LifecycleExecutionNode) -> str:
 
 
 def python_graph_for_lifecycle_case(case_name: str) -> PythonNodeGraph:
-    if case_name == "orders":
-        return build_orders_python_node_graph()
-    if case_name == "intermediate_loader_asset_dependency":
-        return build_intermediate_loader_asset_dependency_python_node_graph()
-    raise ValueError(f"unknown lifecycle graph case: {case_name}")
+    return {
+        "orders": build_orders_python_node_graph,
+        "intermediate_loader_asset_dependency": (
+            build_intermediate_loader_asset_dependency_python_node_graph
+        ),
+    }[case_name]()
 
 
 INGRESS_CALLS: list[str] = []
@@ -520,13 +524,11 @@ def exception_python_check(_ctx: CheckContext) -> object:
 
 
 def python_check_function_for_case(description: str) -> DiscoveredCheckFunction:
-    function: Callable[..., object] = passing_python_check
-    if "warning" in description:
-        function = warning_python_check
-    if "false" in description:
-        function = false_python_check
-    if "exception" in description:
-        function = exception_python_check
+    function: Callable[..., object] = {
+        "preserves explicit warning result": warning_python_check,
+        "normalizes false result as error failure": false_python_check,
+        "normalizes check exception as error failure": exception_python_check,
+    }.get(description, passing_python_check)
     return DiscoveredCheckFunction(
         file_path=Path("/project/checks/orders.py"),
         relative_path=Path("checks/orders.py"),
@@ -553,3 +555,32 @@ def build_python_check_graph(*, check_function: DiscoveredCheckFunction) -> Pyth
             check_functions=(check_function,),
         )
     )
+
+
+def _read_existing_result(
+    *, results: tuple[NodeResultEnvelope, ...], default: object, node_name: str
+) -> NodeResultEnvelope:
+    del default, node_name
+    return results[0]
+
+
+def _read_default_result(
+    *, results: tuple[NodeResultEnvelope, ...], default: object, node_name: str
+) -> object:
+    del results, node_name
+    return default
+
+
+def _raise_missing_result(
+    *, results: tuple[NodeResultEnvelope, ...], default: object, node_name: str
+) -> object:
+    del results, default
+    raise ExecutorInputError(f"No persisted result found for Python node '{node_name}'")
+
+
+_RESULT_READ_STRATEGIES: dict[tuple[bool, bool], Callable[..., object]] = {
+    (True, True): _read_existing_result,
+    (True, False): _read_existing_result,
+    (False, False): _read_default_result,
+    (False, True): _raise_missing_result,
+}

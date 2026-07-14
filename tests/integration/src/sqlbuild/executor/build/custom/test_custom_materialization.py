@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import duckdb
 import pytest
@@ -238,17 +238,17 @@ def test_given_custom_materialization_with_hooks_when_executing_then_handles_hoo
         pre_hooks=test_case.pre_hook,
         post_hooks=test_case.post_hook,
     )
+    assert all(
+        isinstance(hook_function, DiscoveredHookFunction)
+        for hook_function in test_case.hook_functions
+    )
 
     result: ModelExecutionResult = run_custom_entry(
         adapter=adapter,
         connection=connection,
         entry=entry,
         materialize_fn=build_simple_fn(),
-        hook_functions=tuple(
-            hook_function
-            for hook_function in test_case.hook_functions
-            if isinstance(hook_function, DiscoveredHookFunction)
-        ),
+        hook_functions=cast(tuple[DiscoveredHookFunction, ...], test_case.hook_functions),
     )
 
     assert result.status == test_case.expected_status
@@ -271,12 +271,14 @@ def test_given_custom_materialization_with_hooks_when_executing_then_handles_hoo
         FrameworkAuditTestCase(
             description="framework runs passing audit when user does not call run_audits",
             audit_passes=True,
+            audit=build_passing_audit(name="check_empty", target_name="test_model"),
             expected_status=ExecutionStatus.SUCCESS,
             expected_audit_count=1,
         ),
         FrameworkAuditTestCase(
             description="framework audit error blocks post_hook",
             audit_passes=False,
+            audit=build_failing_audit(name="check_rows", target_name="test_model"),
             expected_status=ExecutionStatus.FAILED,
             expected_failed_phase=ExecutionPhase.AUDIT,
             expected_audit_count=1,
@@ -291,11 +293,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
     model_locations: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
-    audit: AuditPlanEntry = (
-        build_passing_audit(name="check_empty", target_name="test_model")
-        if test_case.audit_passes
-        else build_failing_audit(name="check_rows", target_name="test_model")
-    )
+    audit: AuditPlanEntry = test_case.audit
 
     result: ModelExecutionResult = run_custom_entry(
         adapter=adapter,
@@ -305,11 +303,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
         model_audits=(audit,),
         model_locations=model_locations,
     )
-    actual_audit: AuditPlanEntry = (
-        build_passing_audit(name="check_empty", target_name="test_model")
-        if test_case.audit_passes
-        else build_failing_audit(name="check_rows", target_name="test_model")
-    )
+    actual_audit: AuditPlanEntry = test_case.audit
 
     result: ModelExecutionResult = run_custom_entry(
         adapter=adapter,
@@ -331,6 +325,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
         UserAuditTestCase(
             description="user calls run_audits with passing audit against staging",
             audit_passes=True,
+            audit=build_passing_audit(name="check_empty", target_name="test_model"),
             expected_status=ExecutionStatus.SUCCESS,
             expected_audit_count=1,
             expected_audit_outcome=AuditOutcome.PASS,
@@ -338,6 +333,7 @@ def test_given_custom_materialization_when_framework_runs_audits_then_handles_ou
         UserAuditTestCase(
             description="user calls run_audits with failing audit and returns failed",
             audit_passes=False,
+            audit=build_failing_audit(name="check_rows", target_name="test_model"),
             expected_status=ExecutionStatus.FAILED,
             expected_audit_count=1,
             expected_audit_outcome=AuditOutcome.ERROR,
@@ -352,11 +348,7 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
     model_locations: dict[str, CompiledRelationLocation] = {"test_model": entry.destination}
-    actual_audit: AuditPlanEntry = (
-        build_passing_audit(name="check_empty", target_name="test_model")
-        if test_case.audit_passes
-        else build_failing_audit(name="check_rows", target_name="test_model")
-    )
+    actual_audit: AuditPlanEntry = test_case.audit
 
     result: ModelExecutionResult = run_custom_entry(
         adapter=adapter,
@@ -378,6 +370,7 @@ def test_given_custom_materialization_when_user_runs_audits_then_handles_outcome
         UserAuditTestCase(
             description="custom baseline reuse executes user audits despite accepted origin proof",
             audit_passes=False,
+            audit=build_failing_audit(name="check_rows", target_name="test_model"),
             expected_status=ExecutionStatus.FAILED,
             expected_audit_count=1,
             expected_audit_outcome=AuditOutcome.ERROR,

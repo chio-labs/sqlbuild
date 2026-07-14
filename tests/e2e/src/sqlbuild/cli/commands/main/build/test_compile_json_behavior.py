@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -65,16 +66,18 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
     assert artifacts["manifest"] is None
     resources: dict[str, object] = payload["resources"]
     models: list[dict[str, object]] = resources["models"]
+    models_by_name: dict[str, tuple[dict[str, object], ...]] = {
+        str(model["name"]): (model,) for model in models
+    }
+    assert len(models_by_name) == len(models)
     selected_models: list[dict[str, object]] = [
-        model for model in models if str(model["name"]) in test_case.expected_model_names
+        next(iter(models_by_name.get(name, ()))) for name in test_case.expected_model_names
     ]
     assert len(selected_models) == len(test_case.expected_model_names)
     fragment: str
     for fragment in test_case.expected_sql_fragments:
         assert any(fragment in str(model["query_sql"]) for model in selected_models)
-    fact_orders: dict[str, object] = next(
-        model for model in models if model["name"] == "fact_orders"
-    )
+    fact_orders: dict[str, object] = next(iter(models_by_name.get("fact_orders", ())))
     assert fact_orders["materialized"] == "table"
     assert fact_orders["column_count"] == 14
     assert fact_orders["lineage"] == {
@@ -83,7 +86,8 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
         "edge_count": 15,
         "has_star": False,
     }
-    assert {dep["name"] for dep in fact_orders["depends_on"]} >= {
+    depends_on: list[dict[str, object]] = cast(list[dict[str, object]], fact_orders["depends_on"])
+    assert {dep["name"] for dep in depends_on} >= {
         "stg_orders",
         "stg_payments",
         "waffle_types",
@@ -156,7 +160,11 @@ def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_m
     payload: dict[str, object] = json.loads(result.stdout)
     resources: dict[str, object] = payload["resources"]
     models: list[dict[str, object]] = resources["models"]
-    orders: dict[str, object] = next(model for model in models if model["name"] == "orders")
+    models_by_name: dict[str, tuple[dict[str, object], ...]] = {
+        str(model["name"]): (model,) for model in models
+    }
+    assert len(models_by_name) == len(models)
+    orders: dict[str, object] = next(iter(models_by_name.get("orders", ())))
     fragment: str
     for fragment in test_case.expected_sql_fragments:
         assert fragment in str(orders["query_sql"])

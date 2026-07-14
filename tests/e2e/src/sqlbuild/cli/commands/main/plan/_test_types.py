@@ -121,3 +121,8 @@ class VirtualSourceFreshnessPlanE2ETestCase:
     expected_unchanged_fragments: tuple[str, ...]
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = ()
+    project_suffix: str | None = None
+    data_version_sql: str | None = None
+    include_freshness: bool = True
+    source_freshness_type: str = "timestamp"
+    warehouse_column_type: str = "TIMESTAMP"

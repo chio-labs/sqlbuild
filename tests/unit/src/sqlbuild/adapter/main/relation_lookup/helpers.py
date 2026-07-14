@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from collections.abc import Callable
+from types import MappingProxyType
+from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import RelationInfo
@@ -34,10 +36,65 @@ class RecordingRelationAdapter(BaseAdapter):
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
         del connection, names
-        self.list_relations_calls.append((database, tuple(schemas) if schemas is not None else ()))
-        requested: frozenset[str] | None = frozenset(schemas) if schemas is not None else None
-        return tuple(
-            relation
-            for relation in self._relations
-            if relation.database == database and (requested is None or relation.schema in requested)
+        self.list_relations_calls.append(
+            (database, _SCHEMA_TUPLE_BUILDERS[schemas is None](schemas))
         )
+        matcher: Callable[[RelationInfo], bool] = _RELATION_MATCHER_BUILDERS[schemas is None](
+            database, schemas
+        )
+        relations: list[RelationInfo] = []
+        relation: RelationInfo
+        for relation in self._relations:
+            _RELATION_COLLECTORS[matcher(relation)](relations, relation)
+        return tuple(relations)
+
+
+def _schema_tuple(schemas: tuple[str, ...] | None) -> tuple[str, ...]:
+    return cast(tuple[str, ...], schemas)
+
+
+def _empty_schema_tuple(schemas: tuple[str, ...] | None) -> tuple[str, ...]:
+    del schemas
+    return ()
+
+
+def _schema_relation_matcher(
+    database: str | None, schemas: tuple[str, ...] | None
+) -> Callable[[RelationInfo], bool]:
+    requested: frozenset[str] = frozenset(cast(tuple[str, ...], schemas))
+
+    def matches(relation: RelationInfo) -> bool:
+        return relation.database == database and relation.schema in requested
+
+    return matches
+
+
+def _database_relation_matcher(
+    database: str | None, schemas: tuple[str, ...] | None
+) -> Callable[[RelationInfo], bool]:
+    del schemas
+
+    def matches(relation: RelationInfo) -> bool:
+        return relation.database == database
+
+    return matches
+
+
+def _append_relation(relations: list[RelationInfo], relation: RelationInfo) -> None:
+    relations.append(relation)
+
+
+def _ignore_relation(relations: list[RelationInfo], relation: RelationInfo) -> None:
+    del relations, relation
+
+
+_SCHEMA_TUPLE_BUILDERS: MappingProxyType[
+    bool, Callable[[tuple[str, ...] | None], tuple[str, ...]]
+] = MappingProxyType({False: _schema_tuple, True: _empty_schema_tuple})
+_RELATION_MATCHER_BUILDERS: MappingProxyType[
+    bool,
+    Callable[[str | None, tuple[str, ...] | None], Callable[[RelationInfo], bool]],
+] = MappingProxyType({False: _schema_relation_matcher, True: _database_relation_matcher})
+_RELATION_COLLECTORS: MappingProxyType[bool, Callable[[list[RelationInfo], RelationInfo], None]] = (
+    MappingProxyType({False: _ignore_relation, True: _append_relation})
+)

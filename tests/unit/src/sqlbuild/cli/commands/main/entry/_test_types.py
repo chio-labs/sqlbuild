@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
@@ -48,6 +48,7 @@ class MainTestCase:
     expected_state_backup_id: str | None = None
     expected_auto_approve: bool = False
     expected_vars: dict[str, object] | None = None
+    expected_command_vars: dict[str, object] = field(default_factory=dict)
     expected_direct_state_history_versions: int | None = None
     expected_dbt_init_project_dir: str | None = None
     expected_dbt_init_profiles_dir: str | None = None

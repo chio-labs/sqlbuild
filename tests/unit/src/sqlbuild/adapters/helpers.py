@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from types import MappingProxyType
+from typing import Protocol, cast
+
+
+class AdapterRecordingConnection(Protocol):
+    def test_executed_sql(self) -> tuple[str, ...]: ...
+
+    def test_closed_cursor_count(self) -> int: ...
+
 
 class AdapterCursorMaxCursor:
     def __init__(self, rows: tuple[tuple[object, ...], ...]) -> None:
@@ -11,7 +21,7 @@ class AdapterCursorMaxCursor:
         self.executed_sql.append(sql)
 
     def fetchone(self) -> tuple[object, ...] | None:
-        return self.rows[0] if self.rows else None
+        return next(iter(self.rows), None)
 
     def close(self) -> None:
         self.closed = True
@@ -26,6 +36,12 @@ class AdapterExecuteRecordingConnection:
         self.executed_sql.append(sql)
         return self.cursor
 
+    def test_executed_sql(self) -> tuple[str, ...]:
+        return tuple(self.executed_sql)
+
+    def test_closed_cursor_count(self) -> int:
+        return 0
+
 
 class AdapterCursorRecordingConnection:
     def __init__(self, rows: tuple[tuple[object, ...], ...]) -> None:
@@ -34,18 +50,39 @@ class AdapterCursorRecordingConnection:
     def cursor(self) -> AdapterCursorMaxCursor:
         return self.cursor_instance
 
+    def test_executed_sql(self) -> tuple[str, ...]:
+        return tuple(self.cursor_instance.executed_sql)
+
+    def test_closed_cursor_count(self) -> int:
+        return int(self.cursor_instance.closed)
+
 
 def adapter_cursor_executed_sql(connection: object) -> tuple[str, ...]:
-    if isinstance(connection, AdapterExecuteRecordingConnection):
-        return tuple(connection.executed_sql)
-    if isinstance(connection, AdapterCursorRecordingConnection):
-        return tuple(connection.cursor_instance.executed_sql)
-    raise TypeError(f"unsupported connection type: {type(connection).__name__}")
+    _CONNECTION_VALIDATORS[
+        isinstance(
+            connection, (AdapterExecuteRecordingConnection, AdapterCursorRecordingConnection)
+        )
+    ](connection)
+    return cast(AdapterRecordingConnection, connection).test_executed_sql()
 
 
 def adapter_closed_cursor_count(connection: object) -> int:
-    if isinstance(connection, AdapterExecuteRecordingConnection):
-        return 0
-    if isinstance(connection, AdapterCursorRecordingConnection):
-        return int(connection.cursor_instance.closed)
+    _CONNECTION_VALIDATORS[
+        isinstance(
+            connection, (AdapterExecuteRecordingConnection, AdapterCursorRecordingConnection)
+        )
+    ](connection)
+    return cast(AdapterRecordingConnection, connection).test_closed_cursor_count()
+
+
+def _accept_recording_connection(connection: object) -> None:
+    del connection
+
+
+def _reject_recording_connection(connection: object) -> None:
     raise TypeError(f"unsupported connection type: {type(connection).__name__}")
+
+
+_CONNECTION_VALIDATORS: MappingProxyType[bool, Callable[[object], None]] = MappingProxyType(
+    {False: _reject_recording_connection, True: _accept_recording_connection}
+)

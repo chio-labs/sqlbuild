@@ -67,14 +67,9 @@ def test_given_project_inputs_when_resolving_connection_then_uses_effective_conn
         project_dir=project_dir,
     )
 
-    assert connection == {
-        key: (
-            str(tmp_path / value)
-            if key == "database" and isinstance(value, str) and not value.startswith("/")
-            else value
-        )
-        for key, value in test_case.expected_connection.items()
-    }
+    expected_connection: dict[str, object] = dict(test_case.expected_connection)
+    expected_connection["database"] = str(tmp_path / str(expected_connection["database"]))
+    assert connection == expected_connection
     captured_err: str = capsys.readouterr().err
     assert test_case.expected_warning_fragment in captured_err
 

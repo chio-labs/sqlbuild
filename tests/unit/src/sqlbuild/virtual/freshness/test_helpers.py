@@ -95,7 +95,7 @@ class UnsupportedFreshnessMetadataDuckDbAdapter(DuckDbAdapter):
             table="raw_orders",
             strategy="column",
             column="updated_at",
-            value_kind="integer",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_data_version=3,
         ),
         SourceFreshnessObservationTestCase(
@@ -155,7 +155,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
             table=None,
             strategy="sql",
             query="SELECT 1 AS left_value, 2 AS right_value",
-            value_kind="integer",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_error_fragment="must return exactly one column",
         ),
         SourceFreshnessObservationErrorTestCase(
@@ -165,7 +165,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
             table=None,
             strategy="sql",
             query="SELECT 1 AS data_version WHERE FALSE",
-            value_kind="integer",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_error_fragment="must return exactly one row",
         ),
         SourceFreshnessObservationErrorTestCase(
@@ -175,7 +175,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
             table=None,
             strategy="sql",
             query="SELECT NULL AS data_version",
-            value_kind="integer",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_error_fragment="data_version cannot be null",
         ),
         SourceFreshnessObservationErrorTestCase(
@@ -204,11 +204,7 @@ def test_given_invalid_source_freshness_result_when_observing_then_raises_clear_
             table=test_case.table,
             freshness=SourceFreshnessConfig(
                 strategy=SourceFreshnessStrategy(test_case.strategy),
-                value_kind=(
-                    None
-                    if test_case.value_kind is None
-                    else SourceFreshnessValueKind(test_case.value_kind)
-                ),
+                value_kind=test_case.value_kind,
                 column=test_case.column,
                 query=test_case.query,
             ),

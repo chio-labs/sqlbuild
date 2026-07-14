@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
-from sqlbuild.cli.commands._helpers.audit.models import AuditCommandRequest
-from sqlbuild.cli.commands._helpers.build.models import BuildCommandRequest
 from sqlbuild.cli.commands._helpers.entry.models import CliEntrypointHandlers
-from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
-from sqlbuild.cli.commands._helpers.scenario.models import ScenarioTestCommandRequest
-from sqlbuild.cli.commands._helpers.seed.models import SeedCommandRequest
-from sqlbuild.cli.commands._helpers.test.models import TestCommandRequest
+
+
+class JsonOutputRequest(Protocol):
+    json_output: bool
+    json_output_path: Path | None
 
 
 def noop_handler(*_a: Any, **_k: Any) -> int:
@@ -22,18 +21,8 @@ def noop_handler(*_a: Any, **_k: Any) -> int:
 def extract_json_output_fields(args: tuple[object, ...]) -> tuple[bool, Path | None]:
     """Return (json_output, json_output_path) from a typed request or positional args."""
 
-    request: object = args[0]
-    if isinstance(
-        request,
-        AuditCommandRequest
-        | BuildCommandRequest
-        | LoadCommandRequest
-        | ScenarioTestCommandRequest
-        | SeedCommandRequest
-        | TestCommandRequest,
-    ):
-        return bool(request.json_output), request.json_output_path
-    return bool(args[-2]), args[-1] if isinstance(args[-1], Path) else None
+    request: JsonOutputRequest = cast(JsonOutputRequest, args[0])
+    return bool(request.json_output), request.json_output_path
 
 
 def build_json_recording_handler(

@@ -175,10 +175,13 @@ def test_given_unchanged_project_when_planning_after_build_then_models_are_not_q
 
     plan_payload: dict[str, object] = json.loads(plan_result.stdout)
     model_entries: list[dict[str, object]] = plan_payload["models"]
+    entries_by_name: dict[str, dict[str, object]] = {
+        str(entry["name"]): entry for entry in model_entries
+    }
+    assert len(entries_by_name) == len(model_entries)
     reasons_by_name: dict[str, str] = {
-        str(entry["name"]): str(entry["reason"])
-        for entry in model_entries
-        if str(entry["name"]) in test_case.expected_unchanged_models
+        model_name: str(entries_by_name[model_name]["reason"])
+        for model_name in test_case.expected_unchanged_models
     }
 
     model_name: str

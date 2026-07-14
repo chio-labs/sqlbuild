@@ -31,7 +31,7 @@ class ManifestTopLevelTestCase:
 class ManifestModelNodeTestCase:
     description: str
     model: CompiledModel
-    plan_entry: ModelPlanEntry | None
+    plan_entries: tuple[ModelPlanEntry, ...]
     project_name: str
     expected_unique_id: str
     expected_resource_type: str

@@ -95,7 +95,7 @@ def build_project_with_targets(
                     database=None,
                     schema=target_schema,
                     name=model_name,
-                    qualified_name=(f"{target_schema}.{model_name}" if target_schema else None),
+                    qualified_name=(None, f"{target_schema}.{model_name}")[bool(target_schema)],
                 ),
                 references=references,
             )
@@ -155,7 +155,7 @@ def build_project_with_targets(
                     database=None,
                     schema=target_schema,
                     name=seed_name,
-                    qualified_name=(f"{target_schema}.{seed_name}" if target_schema else None),
+                    qualified_name=(None, f"{target_schema}.{seed_name}")[bool(target_schema)],
                 ),
             )
         )
@@ -201,7 +201,7 @@ def build_deferred_locations_from_map(
     return {
         name: CompiledRelationLocation(
             database=None,
-            schema=qualified.rsplit(".", 1)[0] if "." in qualified else None,
+            schema=(None, qualified.rsplit(".", 1)[0])["." in qualified],
             name=name,
             qualified_name=qualified,
         )

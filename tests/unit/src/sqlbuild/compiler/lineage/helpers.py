@@ -52,9 +52,10 @@ def make_compiled_model(
             name=name,
             qualified_name=name,
         ),
-        inferred_columns=None
-        if inferred_columns is None
-        else tuple(InferredColumn(column_name) for column_name in inferred_columns),
+        inferred_columns=(
+            None,
+            tuple(InferredColumn(column_name) for column_name in (inferred_columns or ())),
+        )[inferred_columns is not None],
     )
 
 

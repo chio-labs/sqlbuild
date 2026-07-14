@@ -64,8 +64,9 @@ def prepare_dependency_baseline_project(
     )
     db_path: Path = project_dir / "warehouse.duckdb"
     execute_duckdb(db_path=db_path, sql=prod_setup_sql)
-    if dev_setup_sql is not None:
-        execute_duckdb(db_path=db_path, sql=dev_setup_sql)
+    for setup_sql in (dev_setup_sql,) * int(dev_setup_sql is not None):
+        assert setup_sql is not None
+        execute_duckdb(db_path=db_path, sql=setup_sql)
     return project_dir
 
 
@@ -235,33 +236,12 @@ def build_frontier_inputs_for_node_source_watermark_case(
     db_path: Path,
     test_case: NodeSourceWatermarkBuildE2ETestCase,
 ) -> None:
-    if test_case.project_name.endswith("current"):
-        replace_raw_orders_versions(db_path=db_path, versions=(2,))
-        run_successful_sqb_build(
-            project_dir=project_dir, command=("--no-color", "build", "--select", "b")
-        )
-        run_successful_sqb_build(
-            project_dir=project_dir, command=("--no-color", "build", "--select", "c")
-        )
-        return
-    if test_case.project_name.endswith("stale"):
-        replace_raw_orders_versions(db_path=db_path, versions=(1,))
-        run_successful_sqb_build(
-            project_dir=project_dir, command=("--no-color", "build", "--select", "b")
-        )
-        run_successful_sqb_build(
-            project_dir=project_dir, command=("--no-color", "build", "--select", "c")
-        )
-        replace_raw_orders_versions(db_path=db_path, versions=(2,))
-        return
-    replace_raw_orders_versions(db_path=db_path, versions=(1,))
-    run_successful_sqb_build(
-        project_dir=project_dir, command=("--no-color", "build", "--select", "b")
-    )
-    replace_raw_orders_versions(db_path=db_path, versions=(2,))
-    run_successful_sqb_build(
-        project_dir=project_dir, command=("--no-color", "build", "--select", "c")
-    )
+    versions: tuple[int, ...]
+    commands: tuple[tuple[str, ...], ...]
+    for versions, commands in test_case.frontier_actions:
+        replace_raw_orders_versions(db_path=db_path, versions=versions)
+        for command in commands:
+            run_successful_sqb_build(project_dir=project_dir, command=command)
 
 
 def run_successful_sqb_build(*, project_dir: Path, command: tuple[str, ...]) -> None:
@@ -422,19 +402,20 @@ def assert_defer_clone_build_case(*, tmp_path: Path, test_case: DeferCloneBuildE
 
 
 def _apply_command_target(*, project_dir: Path, command: tuple[str, ...]) -> tuple[str, ...]:
-    if "--target" not in command:
-        return command
-    target_index: int = command.index("--target")
-    (project_dir / "sqlbuild_local.toml").write_text(
-        f'target = "{command[target_index + 1]}"\n', encoding="utf-8"
-    )
-    return (*command[:target_index], *command[target_index + 2 :])
+    command_with_sentinel: tuple[str, ...] = (*command, "--target")
+    target_index: int = command_with_sentinel.index("--target")
+    target_names: tuple[str, ...] = command[target_index + 1 : target_index + 2]
+    for target_name in target_names:
+        (project_dir / "sqlbuild_local.toml").write_text(
+            f'target = "{target_name}"\n', encoding="utf-8"
+        )
+    return (*command[:target_index], *command[target_index + 2 * len(target_names) :])
 
 
 def _apply_optional_dev_setup_sql(*, project_dir: Path, sql: str | None) -> None:
-    if sql is None:
-        return
-    execute_duckdb(db_path=project_dir / "warehouse.duckdb", sql=sql)
+    for setup_sql in (sql,) * int(sql is not None):
+        assert setup_sql is not None
+        execute_duckdb(db_path=project_dir / "warehouse.duckdb", sql=setup_sql)
 
 
 def prepare_virtual_seeded_incremental_project(

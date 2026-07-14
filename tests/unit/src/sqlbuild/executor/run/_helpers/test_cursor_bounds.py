@@ -28,6 +28,7 @@ from tests.unit.src.sqlbuild.executor.run._helpers.helpers import FakeCursorAdap
             upstream_min=datetime(2024, 1, 1, tzinfo=UTC),
             upstream_max=datetime(2024, 2, 1, tzinfo=UTC),
             cursor_type=CursorType.TIMESTAMP,
+            warehouse_column_type="TIMESTAMPTZ",
             cursor_start="2024-01-15T00:00:00+00:00",
             expected_start="2024-01-15T00:00:00+00:00",
             expected_end="2024-02-01T00:00:01+00:00",
@@ -38,6 +39,7 @@ from tests.unit.src.sqlbuild.executor.run._helpers.helpers import FakeCursorAdap
             upstream_min=50,
             upstream_max=200,
             cursor_type=CursorType.INTEGER,
+            warehouse_column_type="INTEGER",
             cursor_start="100",
             expected_start="100",
             expected_end="201",
@@ -49,10 +51,9 @@ def test_given_runtime_cursor_start_when_resolving_bounds_then_applies_lower_flo
     test_case: RuntimeCursorStartTestCase,
 ) -> None:
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
-    cursor_column_type: str = (
-        "TIMESTAMPTZ" if test_case.cursor_type == CursorType.TIMESTAMP else "INTEGER"
+    connection.execute(
+        f"CREATE TABLE upstream_data (cursor_value {test_case.warehouse_column_type})"
     )
-    connection.execute(f"CREATE TABLE upstream_data (cursor_value {cursor_column_type})")
     connection.execute("INSERT INTO upstream_data VALUES (?)", [test_case.upstream_min])
     connection.execute("INSERT INTO upstream_data VALUES (?)", [test_case.upstream_max])
 

@@ -16,6 +16,7 @@ class ScenarioCliE2ETestCase:
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_retained_prefix_count: int | None = None
+    disabled_setting: str | None = None
 
 
 @dataclass(frozen=True)

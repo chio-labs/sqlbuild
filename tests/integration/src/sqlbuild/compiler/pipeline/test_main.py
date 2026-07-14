@@ -571,12 +571,12 @@ def test_given_sql_analysis_enabled_chain_test_when_writing_compile_target_then_
     [
         AppendCursorPipelineIntegrationTestCase(
             description="append cursor defaults to inclusive lower bound in resolved sql",
-            append_cursor_inclusive=True,
+            model_header_cursor_config="",
             expected_resolved_sql_fragment="WHERE ordered_at >= TIMESTAMP '2026-01-01 00:00:00'",
         ),
         AppendCursorPipelineIntegrationTestCase(
             description="append cursor can use exclusive lower bound in resolved sql",
-            append_cursor_inclusive=False,
+            model_header_cursor_config="  append_cursor_inclusive false,\n",
             expected_resolved_sql_fragment="WHERE ordered_at > TIMESTAMP '2026-01-01 00:00:00'",
         ),
     ],
@@ -595,7 +595,7 @@ def test_given_append_cursor_model_when_compiling_then_sql_uses_expected_lower_b
         "  cursor ordered_at,\n"
         "  cursor_type timestamp,\n"
         "  cursor_grain second,\n"
-        + ("  append_cursor_inclusive false,\n" if not test_case.append_cursor_inclusive else "")
+        + test_case.model_header_cursor_config
         + ");\n\n"
         + 'SELECT id, ordered_at FROM __source("raw_orders")'
     )

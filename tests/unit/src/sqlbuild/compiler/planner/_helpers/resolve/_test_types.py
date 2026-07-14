@@ -63,6 +63,7 @@ class RefResolutionTestCase:
     query_sql: str
     expected_sql: str
     cursor_type: str | None = None
+    cursor_bounds: CursorBounds | None = None
 
 
 @dataclass(frozen=True)

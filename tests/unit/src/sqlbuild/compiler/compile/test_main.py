@@ -2423,7 +2423,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
 
     assert (
         tuple(
-            None if model_input.schema_entry is None else model_input.schema_entry.name
+            getattr(model_input.schema_entry, "name", None)
             for model_input in compile_inputs.model_inputs
         )
         == test_case.expected_model_schema_names
@@ -2449,7 +2449,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         test_case.expected_model_column_nullables, actual_model_column_nullables
     )
     actual_model_schema_descriptions: tuple[str | None, ...] = tuple(
-        None if model_input.schema_entry is None else model_input.schema_entry.description
+        getattr(model_input.schema_entry, "description", None)
         for model_input in compile_inputs.model_inputs
     )
     assert actual_model_schema_descriptions == expected_or_actual(

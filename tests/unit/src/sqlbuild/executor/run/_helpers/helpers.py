@@ -131,9 +131,7 @@ class FakeCursorAdapter:
 
 
 def build_name_test_adapter(adapter_name: str) -> DuckDbAdapter | BigQueryAdapter:
-    if adapter_name == "bigquery":
-        return BigQueryAdapter()
-    return DuckDbAdapter()
+    return {"bigquery": BigQueryAdapter, "duckdb": DuckDbAdapter}[adapter_name]()
 
 
 def build_fingerprint_audit_plan_entry() -> AuditPlanEntry:
@@ -175,7 +173,11 @@ def build_fingerprint_audit_result(
         attachment_kind=AuditAttachmentKind.MODEL,
         severity=AuditSeverity(severity),
         outcome=AuditOutcome(outcome),
-        row_count=0 if outcome == AuditOutcome.PASS.value else 1,
+        row_count={
+            AuditOutcome.PASS.value: 0,
+            AuditOutcome.WARN.value: 1,
+            AuditOutcome.ERROR.value: 1,
+        }[outcome],
         executed_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
         run_scope_phase=AuditRunScope.FINAL,
         attached_target_name="orders",

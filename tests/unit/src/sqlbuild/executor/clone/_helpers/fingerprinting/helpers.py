@@ -46,7 +46,7 @@ class CloneFingerprintAdapter:
         )
 
     def render_qualified_name(self, **kwargs: object) -> str:
-        return ".".join(str(value) for value in kwargs.values() if value is not None)
+        return ".".join(str(value) for value in kwargs.values()).replace("None.", "")
 
     def render_read_latest_fingerprints_sql(self, **kwargs: object) -> str:
         del kwargs

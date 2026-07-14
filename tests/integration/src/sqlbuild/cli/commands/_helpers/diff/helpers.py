@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
+from typing import cast
 
 from sqlbuild.adapter.models import (
     ColumnInfo,
@@ -39,7 +41,10 @@ def build_model_result(
         left_relation=f"prod.{name}",
         right_relation=f"dev.{name}",
         unique_key=unique_key,
-        schema_result=schema_result if schema_result is not None else SchemaDiffResult(),
+        schema_result=cast(
+            SchemaDiffResult,
+            {False: SchemaDiffResult(), True: schema_result}[schema_result is not None],
+        ),
         row_result=row_result,
         unequal_row_samples=unequal_row_samples,
         left_only_key_samples=left_only_key_samples,
@@ -78,16 +83,45 @@ def build_column_result(
     absolute_tolerance: str | None = None,
     relative_tolerance: str | None = None,
 ) -> RowDiffColumnResult:
-    tolerance: RowDiffTolerance | None = None
-    if absolute_tolerance is not None or relative_tolerance is not None:
-        tolerance = RowDiffTolerance(
-            absolute=Decimal(absolute_tolerance) if absolute_tolerance is not None else None,
-            relative=Decimal(relative_tolerance) if relative_tolerance is not None else None,
-        )
+    tolerance_builder: Callable[..., RowDiffTolerance | None] = {
+        (False, False): _build_no_tolerance,
+        (True, False): _build_absolute_tolerance,
+        (False, True): _build_relative_tolerance,
+        (True, True): _build_combined_tolerance,
+    }[(absolute_tolerance is not None, relative_tolerance is not None)]
+    tolerance: RowDiffTolerance | None = tolerance_builder(
+        absolute_tolerance=absolute_tolerance,
+        relative_tolerance=relative_tolerance,
+    )
     return RowDiffColumnResult(
         name=name,
         mismatched_count=mismatched_count,
         tolerance=tolerance,
+    )
+
+
+def _build_no_tolerance(**_kwargs: object) -> None:
+    return None
+
+
+def _build_absolute_tolerance(
+    *, absolute_tolerance: str | None, relative_tolerance: str | None
+) -> RowDiffTolerance:
+    return RowDiffTolerance(absolute=Decimal(cast(str, absolute_tolerance)))
+
+
+def _build_relative_tolerance(
+    *, absolute_tolerance: str | None, relative_tolerance: str | None
+) -> RowDiffTolerance:
+    return RowDiffTolerance(relative=Decimal(cast(str, relative_tolerance)))
+
+
+def _build_combined_tolerance(
+    *, absolute_tolerance: str | None, relative_tolerance: str | None
+) -> RowDiffTolerance:
+    return RowDiffTolerance(
+        absolute=Decimal(cast(str, absolute_tolerance)),
+        relative=Decimal(cast(str, relative_tolerance)),
     )
 
 

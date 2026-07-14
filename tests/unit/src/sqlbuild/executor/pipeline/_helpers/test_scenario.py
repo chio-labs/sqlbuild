@@ -83,7 +83,7 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
         _result: ScenarioRunResult,
     ) -> None:
         completed_names.append(scenario.name)
-        completed_plan_names.append(scenario_plan.name if scenario_plan is not None else None)
+        completed_plan_names.append(getattr(scenario_plan, "name", None))
 
     monkeypatch.setattr(
         scenario_pipeline,
@@ -251,20 +251,17 @@ class _CodedScenarioError(Exception):
     (
         ScenarioFailureHelpTestCase(
             description="coded user error keeps no bug help when help is absent",
-            code="S504",
-            explicit_help=None,
+            error=_CodedScenarioError(code="S504", message="boom"),
             expected_help=None,
         ),
         ScenarioFailureHelpTestCase(
             description="coded user error preserves explicit help",
-            code="S504",
-            explicit_help="Rename the source.",
+            error=_CodedScenarioError(code="S504", message="boom", help="Rename the source."),
             expected_help="Rename the source.",
         ),
         ScenarioFailureHelpTestCase(
             description="uncoded error keeps the internal bug help",
-            code=None,
-            explicit_help=None,
+            error=RuntimeError("boom"),
             expected_help=(
                 "This is likely a SQLBuild bug. Please file an issue with the scenario name."
             ),
@@ -275,10 +272,4 @@ class _CodedScenarioError(Exception):
 def test_given_scenario_exception_when_resolving_help_then_avoids_bug_help_for_user_errors(
     test_case: ScenarioFailureHelpTestCase,
 ) -> None:
-    exc: Exception = (
-        _CodedScenarioError(code=test_case.code, message="boom", help=test_case.explicit_help)
-        if test_case.code is not None
-        else RuntimeError("boom")
-    )
-
-    assert scenario_pipeline._scenario_failure_help(exc) == test_case.expected_help
+    assert scenario_pipeline._scenario_failure_help(test_case.error) == test_case.expected_help

@@ -85,9 +85,7 @@ def physical_relation_for_test(relation_name: str, version_hash: str) -> Physica
 
 
 def _state_column_type_for_test(column_type: StateColumnType) -> str:
-    if column_type == StateColumnType.TEXT:
-        return "VARCHAR"
-    return column_type.value.upper()
+    return {StateColumnType.TEXT: "VARCHAR"}.get(column_type, column_type.value.upper())
 
 
 class FakeStateBackend(StateBackend):

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 
+from sqlbuild.adapter.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
@@ -44,6 +46,7 @@ class HookTestCase:
 class FrameworkAuditTestCase:
     description: str
     audit_passes: bool
+    audit: AuditPlanEntry
     expected_status: ExecutionStatus
     expected_audit_count: int
     expected_failed_phase: ExecutionPhase | None = None
@@ -53,6 +56,7 @@ class FrameworkAuditTestCase:
 class UserAuditTestCase:
     description: str
     audit_passes: bool
+    audit: AuditPlanEntry
     expected_status: ExecutionStatus
     expected_audit_count: int
     expected_audit_outcome: AuditOutcome
@@ -105,11 +109,8 @@ class ExistingRelationTestCase:
     description: str
     expected_row_count: int
     expected_existing_was_none: bool
+    existing_relation: RelationInfo | None
     setup_sql: tuple[str, ...] = field(default_factory=tuple)
-    existing_database: str | None = None
-    existing_schema: str | None = None
-    existing_name: str | None = None
-    existing_type: str | None = None
 
 
 @dataclass(frozen=True)

@@ -251,6 +251,7 @@ def test_given_non_scenario_physical_name_when_parsing_scenario_artifact_then_re
                     ),
                 ),
             ),
+            normalize_identifier=None,
         )
     ],
     ids=lambda case: case.description,
@@ -262,7 +263,7 @@ def test_given_scenario_artifacts_when_building_relation_map_then_returns_expect
         scenario_name="revenue__customer_refund",
         hash_prefix="51b385aebe20",
         artifacts=test_case.artifacts,
-        normalize_identifier=str.lower if test_case.normalize_case else None,
+        normalize_identifier=test_case.normalize_identifier,
     )
 
     assert result == test_case.expected_relation_map
@@ -278,6 +279,7 @@ def test_given_scenario_artifacts_when_building_relation_map_then_returns_expect
                 ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
             ),
             expected_error_fragment="relation name collision",
+            normalize_identifier=None,
         ),
         ScenarioRelationMapErrorTestCase(
             description="raises on adapter normalized collision",
@@ -286,7 +288,7 @@ def test_given_scenario_artifacts_when_building_relation_map_then_returns_expect
                 ScenarioArtifactIdentity(kind="model", logical_name="daily_revenue"),
             ),
             expected_error_fragment="relation name collision",
-            normalize_case=True,
+            normalize_identifier=str.lower,
         ),
     ],
     ids=lambda case: case.description,
@@ -299,6 +301,6 @@ def test_given_colliding_scenario_artifacts_when_building_relation_map_then_rais
             scenario_name="revenue__customer_refund",
             hash_prefix="51b385aebe20",
             artifacts=test_case.artifacts,
-            normalize_identifier=str.lower if test_case.normalize_case else None,
+            normalize_identifier=test_case.normalize_identifier,
         )
     assert exc_info.value.code == SCENARIO_PLAN_RELATION_COLLISION

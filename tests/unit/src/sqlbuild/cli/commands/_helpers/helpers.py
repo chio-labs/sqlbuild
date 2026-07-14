@@ -34,17 +34,18 @@ class RecordingAdapter:
     def execute(self, *, connection: object, sql: str) -> None:
         del connection
         self.executed_sql.append(sql)
-        if sql.strip().upper().startswith("INSERT"):
-            self.insert_count += 1
+        self.insert_count += int(sql.strip().upper().startswith("INSERT"))
 
     def render_qualified_name(
         self, *, database: str | None, schema: str | None, name: str
     ) -> str | None:
-        if schema is None:
-            return name
-        if database is not None:
-            return f"{database}.{schema}.{name}"
-        return f"{schema}.{name}"
+        rendered_names: dict[tuple[bool, bool], str] = {
+            (False, False): name,
+            (False, True): f"{schema}.{name}",
+            (True, False): f"{database}.{name}",
+            (True, True): f"{database}.{schema}.{name}",
+        }
+        return rendered_names[(database is not None, schema is not None)]
 
     def render_framework_type(self, framework_type: FrameworkType) -> str:
         return framework_type.value

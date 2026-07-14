@@ -105,14 +105,14 @@ def test_given_two_built_sessions_when_closing_one_then_other_session_remains_ac
     first_session.close()
 
     first_event_prefixes: tuple[str, ...] = tuple(
-        event if not event.startswith("teardown:") else "teardown:"
+        {True: "teardown:", False: event}[event.startswith("teardown:")]
         for event in RuntimeFreshProvider.events
     )
     assert first_event_prefixes == test_case.expected_first_events
     second_session.providers[test_case.provider_name]
     second_session.close()
     second_event_prefixes: tuple[str, ...] = tuple(
-        event if not event.startswith("teardown:") else "teardown:"
+        {True: "teardown:", False: event}[event.startswith("teardown:")]
         for event in RuntimeFreshProvider.events
     )
     assert second_event_prefixes == test_case.expected_second_events

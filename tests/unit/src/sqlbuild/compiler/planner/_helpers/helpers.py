@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, cast
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.models import RelationInfo
@@ -140,23 +142,19 @@ class StandardReuseFromTargetTestResult:
 def compose_readable_identity(
     *, local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
 ) -> str:
-    if not upstream_hashes:
-        return local_hash
     rendered: str = ",".join(
         f"{key.node_type}:{key.node_name}={upstream_hash}" for key, upstream_hash in upstream_hashes
     )
-    return f"{local_hash}|{rendered}"
+    return (f"{local_hash}|{rendered}", local_hash)[not upstream_hashes]
 
 
 def compose_hashed_identity(
     *, local_hash: str, upstream_hashes: tuple[tuple[GraphNodeKey, str], ...]
 ) -> str:
-    if not upstream_hashes:
-        return local_hash
     payload: str = (
         local_hash + "|" + ",".join(upstream_hash for _, upstream_hash in upstream_hashes)
     )
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return (hashlib.sha256(payload.encode()).hexdigest(), local_hash)[not upstream_hashes]
 
 
 def build_diamond_ladder_identity_nodes(
@@ -196,18 +194,12 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
         *,
         fingerprint_rows: tuple[tuple[object, ...], ...],
         existing_relations: frozenset[tuple[str | None, str | None, str]],
-        fingerprint_table_exists: bool = True,
-        fingerprint_read_fails: bool = False,
     ) -> None:
         self.fingerprint_rows: tuple[tuple[object, ...], ...] = fingerprint_rows
         self.existing_relations: frozenset[tuple[str | None, str | None, str]] = existing_relations
-        self.fingerprint_table_exists: bool = fingerprint_table_exists
-        self.fingerprint_read_fails: bool = fingerprint_read_fails
 
     def execute(self, connection: object, sql: str) -> StandardReuseFromTargetTestResult:
         del connection, sql
-        if self.fingerprint_read_fails:
-            raise RuntimeError("cannot select fingerprint rows")
         return StandardReuseFromTargetTestResult(self.fingerprint_rows)
 
     def relation_exists(
@@ -219,9 +211,15 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
         name: str,
     ) -> bool:
         del connection
-        if name == FINGERPRINT_TABLE_NAME:
-            return self.fingerprint_table_exists
-        return (database, schema, name) in self.existing_relations
+        return (
+            name == FINGERPRINT_TABLE_NAME
+            or (
+                database,
+                schema,
+                name,
+            )
+            in self.existing_relations
+        )
 
     def list_relations(
         self,
@@ -232,29 +230,41 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
         del connection, names
-        requested: frozenset[str] | None = frozenset(schemas) if schemas is not None else None
-        listed: list[RelationInfo] = [
-            RelationInfo(
+        requested: frozenset[str] = frozenset(schemas or ())
+        listed: list[RelationInfo] = []
+        relation_database: str | None
+        relation_schema: str | None
+        relation_name: str
+        for relation_database, relation_schema, relation_name in self.existing_relations:
+            relation: RelationInfo = RelationInfo(
                 database=relation_database,
                 schema=relation_schema,
                 name=relation_name,
                 relation_type="base table",
             )
-            for relation_database, relation_schema, relation_name in self.existing_relations
-            if relation_database == database and (requested is None or relation_schema in requested)
-        ]
-        if self.fingerprint_table_exists and requested is not None:
-            requested_schema: str
-            for requested_schema in requested:
-                listed.append(
-                    RelationInfo(
-                        database=database,
-                        schema=requested_schema,
-                        name=FINGERPRINT_TABLE_NAME,
-                        relation_type="base table",
-                    )
-                )
+            should_list: bool = relation_database == database and (
+                schemas is None or relation_schema in requested
+            )
+            _RELATION_INFO_COLLECTORS[should_list](listed, relation)
+        self._append_fingerprint_relations(listed, database, requested)
         return tuple(listed)
+
+    def _append_fingerprint_relations(
+        self,
+        listed: list[RelationInfo],
+        database: str | None,
+        requested: frozenset[str],
+    ) -> None:
+        requested_schema: str
+        for requested_schema in requested:
+            listed.append(
+                RelationInfo(
+                    database=database,
+                    schema=requested_schema,
+                    name=FINGERPRINT_TABLE_NAME,
+                    relation_type="base table",
+                )
+            )
 
     def render_qualified_name(
         self,
@@ -263,11 +273,75 @@ class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
         schema: str | None,
         name: str,
     ) -> str | None:
-        if database is not None and schema is not None:
-            return f"{database}.{schema}.{name}"
-        if schema is not None:
-            return f"{schema}.{name}"
-        return name
+        return {
+            (True, True): f"{database}.{schema}.{name}",
+            (False, True): f"{schema}.{name}",
+            (True, False): name,
+            (False, False): name,
+        }[(database is not None, schema is not None)]
+
+
+class MissingFingerprintTableReuseFromTargetTestAdapter(StandardReuseFromTargetTestAdapter):
+    def relation_exists(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> bool:
+        del connection
+        return (database, schema, name) in self.existing_relations
+
+    def _append_fingerprint_relations(
+        self,
+        listed: list[RelationInfo],
+        database: str | None,
+        requested: frozenset[str],
+    ) -> None:
+        del listed, database, requested
+
+
+class FailingFingerprintReadReuseFromTargetTestAdapter(StandardReuseFromTargetTestAdapter):
+    def execute(self, connection: object, sql: str) -> StandardReuseFromTargetTestResult:
+        del connection, sql
+        raise RuntimeError("cannot select fingerprint rows")
+
+
+def build_standard_reuse_from_target_test_adapter(
+    *,
+    fingerprint_rows: tuple[tuple[object, ...], ...],
+    existing_relations: frozenset[tuple[str | None, str | None, str]],
+    fingerprint_table_exists: bool = True,
+    fingerprint_read_fails: bool = False,
+) -> StandardReuseFromTargetTestAdapter:
+    adapter_classes: MappingProxyType[
+        tuple[bool, bool], type[StandardReuseFromTargetTestAdapter]
+    ] = MappingProxyType(
+        {
+            (True, False): StandardReuseFromTargetTestAdapter,
+            (False, False): MissingFingerprintTableReuseFromTargetTestAdapter,
+            (True, True): FailingFingerprintReadReuseFromTargetTestAdapter,
+            (False, True): MissingFingerprintTableReuseFromTargetTestAdapter,
+        }
+    )
+    return adapter_classes[(fingerprint_table_exists, fingerprint_read_fails)](
+        fingerprint_rows=fingerprint_rows,
+        existing_relations=existing_relations,
+    )
+
+
+def _append_relation_info(listed: list[RelationInfo], relation: RelationInfo) -> None:
+    listed.append(relation)
+
+
+def _skip_relation_info(listed: list[RelationInfo], relation: RelationInfo) -> None:
+    del listed, relation
+
+
+_RELATION_INFO_COLLECTORS: MappingProxyType[
+    bool, Callable[[list[RelationInfo], RelationInfo], None]
+] = MappingProxyType({False: _skip_relation_info, True: _append_relation_info})
 
 
 def model_key(name: str) -> CompiledObjectKey:
@@ -328,9 +402,10 @@ def build_run_despite_unchanged_model(
 ) -> CompiledModel:
     """Build a minimal model for run_despite_unchanged helper tests."""
 
-    values: dict[str, object] = {"materialized": materialized}
-    if run_despite_unchanged is not None:
-        values["run_despite_unchanged"] = run_despite_unchanged
+    values: dict[str, object] = {"materialized": materialized} | (
+        {},
+        {"run_despite_unchanged": run_despite_unchanged},
+    )[run_despite_unchanged is not None]
     return CompiledModel(
         key=key,
         deps=(),
@@ -352,8 +427,6 @@ def build_run_despite_unchanged_source_freshness(
 ) -> StandardSourceFreshnessPlanningResult:
     """Build source freshness state for run_despite_unchanged helper tests."""
 
-    if data_version is None:
-        return StandardSourceFreshnessPlanningResult()
     record: SourceFreshnessRecord = SourceFreshnessRecord(
         source_name="raw_orders",
         target_database=None,
@@ -362,11 +435,11 @@ def build_run_despite_unchanged_source_freshness(
         run_id="run-1",
         strategy=SourceFreshnessStrategy.SQL.value,
         value_kind=value_kind,
-        data_version=data_version,
+        data_version=data_version or "",
         data_version_hash="hash",
         observed_at=observed_at,
     )
-    return StandardSourceFreshnessPlanningResult(
+    populated_result: StandardSourceFreshnessPlanningResult = StandardSourceFreshnessPlanningResult(
         observed_records=(record,),
         unchanged_identities=frozenset(
             {
@@ -379,6 +452,7 @@ def build_run_despite_unchanged_source_freshness(
             }
         ),
     )
+    return (StandardSourceFreshnessPlanningResult(), populated_result)[data_version is not None]
 
 
 def build_node_source_watermark_warning_plan(
@@ -544,10 +618,16 @@ def build_standard_reuse_from_target_scope(
 
     project: CompiledProject = build_standard_reuse_from_target_project()
     models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    all_model_names: frozenset[str] = frozenset(model.name for model in project.models)
+    effective_selected_names: frozenset[str] = cast(
+        frozenset[str],
+        (selected_model_names, all_model_names)[selected_model_names is None],
+    )
+    model_keys_by_name: dict[str, CompiledObjectKey] = {
+        model.name: model.key for model in project.models
+    }
     selected_keys: frozenset[CompiledObjectKey] = frozenset(
-        model.key
-        for model in project.models
-        if selected_model_names is None or model.name in selected_model_names
+        model_keys_by_name[name] for name in effective_selected_names
     )
     return PlannerScope(
         upstream_deps={},
@@ -634,9 +714,14 @@ def build_standard_reuse_decision_scope(
         all_keys={model.name: model.key for model in models},
         models_by_name={model.name: model for model in models},
         selected_keys=frozenset(
-            model.key
-            for model in models
-            if selected_model_names is None or model.name in selected_model_names
+            {model.name: model.key for model in models}[name]
+            for name in cast(
+                frozenset[str],
+                (
+                    selected_model_names,
+                    frozenset(model.name for model in models),
+                )[selected_model_names is None],
+            )
         ),
         execution_order=tuple(model.key for model in models),
     )
@@ -877,68 +962,64 @@ def build_test_project(
         )
 
     sql_tests: list[CompiledSqlTest] = []
-    if sql_test_expected_model_names:
-        sql_tests.append(
-            CompiledSqlTest(
-                key=CompiledObjectKey(
-                    resource_type=CompiledResourceType.SQL_TEST,
-                    name="test_models",
-                ),
-                scope_deps=tuple(model_key(name) for name in sql_test_expected_model_names),
-                name="test_models",
-                test_file=DiscoveredSqlTestFile(
-                    file_path=Path("tests/test_models.sql"),
-                    relative_path=Path("tests/test_models.sql"),
-                    contents="SELECT 1",
-                    blocks=(),
-                ),
-                test_block=DiscoveredSqlTestBlock(
-                    test_index=0,
-                    header_values={},
-                    sql_body="SELECT 1",
-                ),
+    model_sql_test: CompiledSqlTest = CompiledSqlTest(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="test_models",
+        ),
+        scope_deps=tuple(model_key(name) for name in sql_test_expected_model_names),
+        name="test_models",
+        test_file=DiscoveredSqlTestFile(
+            file_path=Path("tests/test_models.sql"),
+            relative_path=Path("tests/test_models.sql"),
+            contents="SELECT 1",
+            blocks=(),
+        ),
+        test_block=DiscoveredSqlTestBlock(
+            test_index=0,
+            header_values={},
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+        payload=CompiledModelSqlTestPayload(
+            expected_model_names=sql_test_expected_model_names,
+        ),
+    )
+    sql_tests.extend(((), (model_sql_test,))[bool(sql_test_expected_model_names)])
+    table_function_sql_test: CompiledSqlTest = CompiledSqlTest(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="test_table_functions",
+        ),
+        scope_deps=tuple(function_key(name) for name in table_fn_test_function_names),
+        name="test_table_functions",
+        test_file=DiscoveredSqlTestFile(
+            file_path=Path("tests/test_table_functions.sql"),
+            relative_path=Path("tests/test_table_functions.sql"),
+            contents="SELECT 1",
+            blocks=(),
+        ),
+        test_block=DiscoveredSqlTestBlock(
+            test_index=0,
+            header_values={"mode": "table_fn"},
+            sql_body="SELECT 1",
+        ),
+        sql_body="SELECT 1",
+        mode=SqlTestMode.TABLE_FN,
+        payload=CompiledDirectLogicSqlTestPayload(
+            mode=SqlTestMode.TABLE_FN,
+            actual_cte=CompileSqlTestCte(
+                name="__table_fn_actual__",
+                sql_body="SELECT * FROM __table_fn('customer_orders')(42)",
+            ),
+            expected_cte=CompileSqlTestCte(
+                name="__table_fn_expected__",
                 sql_body="SELECT 1",
-                payload=CompiledModelSqlTestPayload(
-                    expected_model_names=sql_test_expected_model_names,
-                ),
-            )
-        )
-    if table_fn_test_function_names:
-        sql_tests.append(
-            CompiledSqlTest(
-                key=CompiledObjectKey(
-                    resource_type=CompiledResourceType.SQL_TEST,
-                    name="test_table_functions",
-                ),
-                scope_deps=tuple(function_key(name) for name in table_fn_test_function_names),
-                name="test_table_functions",
-                test_file=DiscoveredSqlTestFile(
-                    file_path=Path("tests/test_table_functions.sql"),
-                    relative_path=Path("tests/test_table_functions.sql"),
-                    contents="SELECT 1",
-                    blocks=(),
-                ),
-                test_block=DiscoveredSqlTestBlock(
-                    test_index=0,
-                    header_values={"mode": "table_fn"},
-                    sql_body="SELECT 1",
-                ),
-                sql_body="SELECT 1",
-                mode=SqlTestMode.TABLE_FN,
-                payload=CompiledDirectLogicSqlTestPayload(
-                    mode=SqlTestMode.TABLE_FN,
-                    actual_cte=CompileSqlTestCte(
-                        name="__table_fn_actual__",
-                        sql_body="SELECT * FROM __table_fn('customer_orders')(42)",
-                    ),
-                    expected_cte=CompileSqlTestCte(
-                        name="__table_fn_expected__",
-                        sql_body="SELECT 1",
-                    ),
-                    tested_resource_names=table_fn_test_function_names,
-                ),
-            )
-        )
+            ),
+            tested_resource_names=table_fn_test_function_names,
+        ),
+    )
+    sql_tests.extend(((), (table_function_sql_test,))[bool(table_fn_test_function_names)])
 
     audits: list[CompiledAudit] = []
     model_name: str
@@ -1105,11 +1186,12 @@ def quoting_render_qualified_name(
 ) -> str | None:
     """Render qualified names with distinctive quoting to assert adapter pass-through."""
 
-    if database is not None and schema is not None:
-        return f'"{database}"."{schema}"."{name}"'
-    if schema is not None:
-        return f'"{schema}"."{name}"'
-    return None
+    return {
+        (True, True): f'"{database}"."{schema}"."{name}"',
+        (False, True): f'"{schema}"."{name}"',
+        (True, False): None,
+        (False, False): None,
+    }[(database is not None, schema is not None)]
 
 
 def build_scenario_relation_test_map() -> ScenarioRelationMap:
@@ -1141,23 +1223,17 @@ def build_scenario_relation_test_project() -> CompiledProject:
         source_names=("raw__orders",),
         seed_names=("country_codes",),
     )
-    models: list[CompiledModel] = []
-    model: CompiledModel
-    for model in project.models:
-        if model.name == "daily_revenue":
-            models.append(
-                replace(
-                    model,
-                    query_sql=(
-                        'SELECT * FROM __source("raw__orders") '
-                        'JOIN __ref("stg_customers") USING (customer_id) '
-                        'JOIN __seed("country_codes") USING (country_code) '
-                        'JOIN __dbt_ref("stripe", "payments") USING (customer_id)'
-                    ),
-                )
-            )
-            continue
-        models.append(model)
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name["daily_revenue"] = replace(
+        models_by_name["daily_revenue"],
+        query_sql=(
+            'SELECT * FROM __source("raw__orders") '
+            'JOIN __ref("stg_customers") USING (customer_id) '
+            'JOIN __seed("country_codes") USING (country_code) '
+            'JOIN __dbt_ref("stripe", "payments") USING (customer_id)'
+        ),
+    )
+    models: list[CompiledModel] = [models_by_name[model.name] for model in project.models]
     return replace(project, models=tuple(models))
 
 
@@ -1192,14 +1268,14 @@ def build_scenario_relation_test_scenario(
             sql_body="SELECT 1 AS payment_id, 10 AS customer_id",
         ),
     )
-    if include_seed_fixture:
-        authored_ctes = (
-            *authored_ctes,
-            CompileSqlScenarioCte(
-                name="__seed__country_codes",
-                sql_body="SELECT 'US' AS country_code",
-            ),
-        )
+    seed_ctes: tuple[CompileSqlScenarioCte, ...] = (
+        *authored_ctes,
+        CompileSqlScenarioCte(
+            name="__seed__country_codes",
+            sql_body="SELECT 'US' AS country_code",
+        ),
+    )
+    authored_ctes = (authored_ctes, seed_ctes)[include_seed_fixture]
 
     return CompiledSqlScenario(
         key=CompiledObjectKey(
@@ -1232,7 +1308,7 @@ def build_scenario_relation_test_scenario(
         source_fixture_names=("raw__orders",),
         ref_fixture_names=("stg_customers",),
         dbt_ref_fixture_names=("stripe__payments",),
-        seed_fixture_names=("country_codes",) if include_seed_fixture else (),
+        seed_fixture_names=((), ("country_codes",))[include_seed_fixture],
         expected_model_names=("daily_revenue",),
         assertion_names=("no_negative_revenue",),
     )
@@ -1267,11 +1343,11 @@ def build_source_cursor_input_model(
 ) -> CompiledModel:
     """Build an incremental model for source cursor input column validation."""
 
-    config_values: dict[str, object] = {"materialized": "incremental"}
-    if test_case.cursor_column is not None:
-        config_values["cursor"] = test_case.cursor_column
-    if test_case.cursor_inputs is not None:
-        config_values["cursor_inputs"] = test_case.cursor_inputs
+    config_values: dict[str, object] = (
+        {"materialized": "incremental"}
+        | ({}, {"cursor": test_case.cursor_column})[test_case.cursor_column is not None]
+        | ({}, {"cursor_inputs": test_case.cursor_inputs})[test_case.cursor_inputs is not None]
+    )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
         deps=(),
@@ -1297,11 +1373,7 @@ def build_source_cursor_input_model(
 def build_cursor_input_contract_models(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> dict[str, CompiledModel]:
-    if test_case.reference_kind != SqlReferenceKind.REF:
-        return {}
-    if test_case.upstream_contract is None:
-        return {}
-    return {
+    models: dict[str, CompiledModel] = {
         test_case.reference_name: CompiledModel(
             key=CompiledObjectKey(
                 resource_type=CompiledResourceType.MODEL,
@@ -1327,16 +1399,16 @@ def build_cursor_input_contract_models(
             ),
         )
     }
+    include_model: bool = (
+        test_case.reference_kind == SqlReferenceKind.REF and test_case.upstream_contract is not None
+    )
+    return ({}, models)[include_model]
 
 
 def build_cursor_input_contract_sources(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> dict[str, SourceEntry]:
-    if test_case.reference_kind != SqlReferenceKind.SOURCE:
-        return {}
-    if test_case.upstream_contract is None:
-        return {}
-    return {
+    sources: dict[str, SourceEntry] = {
         test_case.reference_name: SourceEntry(
             name=test_case.reference_name,
             contract=test_case.upstream_contract,
@@ -1346,6 +1418,11 @@ def build_cursor_input_contract_sources(
             ),
         )
     }
+    include_source: bool = (
+        test_case.reference_kind == SqlReferenceKind.SOURCE
+        and test_case.upstream_contract is not None
+    )
+    return ({}, sources)[include_source]
 
 
 def _resolve_dep_key(
@@ -1357,25 +1434,29 @@ def _resolve_dep_key(
 ) -> CompiledObjectKey:
     """Resolve a dependency name to the correct key type."""
 
-    if name in source_names:
-        return source_key(name)
-    if name in seed_names:
-        return seed_key(name)
-    if name in dbt_ref_names:
-        return CompiledObjectKey(resource_type=CompiledResourceType.DBT_REF, name=name)
-    if name in function_names:
-        return function_key(name)
-    return model_key(name)
+    resource_types_by_name: dict[str, CompiledResourceType] = (
+        {item: CompiledResourceType.UDF for item in function_names}
+        | {item: CompiledResourceType.DBT_REF for item in dbt_ref_names}
+        | {item: CompiledResourceType.SEED for item in seed_names}
+        | {item: CompiledResourceType.SOURCE for item in source_names}
+    )
+    resource_type: CompiledResourceType = resource_types_by_name.get(
+        name, CompiledResourceType.MODEL
+    )
+    return CompiledObjectKey(resource_type=resource_type, name=name)
 
 
 def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledModel:
     """Build a CompiledModel from an action resolution test case."""
 
-    config_values: dict[str, object] = {"materialized": test_case.materialized}
-    if test_case.incremental_strategy is not None:
-        config_values["incremental_strategy"] = test_case.incremental_strategy
-    if test_case.enabled is not None:
-        config_values["enabled"] = test_case.enabled
+    config_values: dict[str, object] = (
+        {"materialized": test_case.materialized}
+        | (
+            {},
+            {"incremental_strategy": test_case.incremental_strategy},
+        )[test_case.incremental_strategy is not None]
+        | ({}, {"enabled": test_case.enabled})[test_case.enabled is not None]
+    )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
         deps=(),
@@ -1412,9 +1493,10 @@ def build_strategy_change_result(
 def build_strategy_error_model(test_case: IncrementalStrategyErrorTestCase) -> CompiledModel:
     """Build a CompiledModel from a strategy error test case."""
 
-    config_values: dict[str, object] = {"materialized": test_case.materialized}
-    if test_case.incremental_strategy is not None:
-        config_values["incremental_strategy"] = test_case.incremental_strategy
+    config_values: dict[str, object] = {"materialized": test_case.materialized} | (
+        {},
+        {"incremental_strategy": test_case.incremental_strategy},
+    )[test_case.incremental_strategy is not None]
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
         deps=(),
@@ -1527,9 +1609,7 @@ def build_cursor_model_map(
 ) -> dict[str, CompiledModel]:
     """Build a model map with one entry for cursor resolution tests."""
 
-    if qualified_name is None:
-        return {}
-    return {
+    model_map: dict[str, CompiledModel] = {
         ref_name: CompiledModel(
             key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=ref_name),
             deps=(),
@@ -1545,6 +1625,7 @@ def build_cursor_model_map(
             ),
         ),
     }
+    return ({}, model_map)[qualified_name is not None]
 
 
 def build_cursor_deferred_locations(
@@ -1553,9 +1634,7 @@ def build_cursor_deferred_locations(
 ) -> dict[str, CompiledRelationLocation] | None:
     """Build deferred locations dict with one entry, or None."""
 
-    if qualified_name is None:
-        return None
-    return {
+    locations: dict[str, CompiledRelationLocation] = {
         ref_name: CompiledRelationLocation(
             database=None,
             schema=None,
@@ -1563,14 +1642,16 @@ def build_cursor_deferred_locations(
             qualified_name=qualified_name,
         ),
     }
+    return (None, locations)[qualified_name is not None]
 
 
 def build_cursor_override_model(cursor_type: str | None) -> CompiledModel:
     """Build a minimal model with optional cursor_type for override resolution tests."""
 
-    config_values: dict[str, object] = {"materialized": "incremental"}
-    if cursor_type is not None:
-        config_values["cursor_type"] = cursor_type
+    config_values: dict[str, object] = {"materialized": "incremental"} | (
+        {},
+        {"cursor_type": cursor_type},
+    )[cursor_type is not None]
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
         deps=(),
@@ -1601,8 +1682,7 @@ def build_microbatch_lookback_model(
         "incremental_mode": "microbatch",
         "batch_size": batch_size,
     }
-    if lookback is not None:
-        config_values["lookback"] = lookback
+    config_values |= ({}, {"lookback": lookback})[lookback is not None]
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
         deps=(),

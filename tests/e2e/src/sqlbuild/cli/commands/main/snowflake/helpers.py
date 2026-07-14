@@ -99,10 +99,9 @@ def build_snowflake_dependency_baseline_project_toml(
 def build_snowflake_virtual_seed_project_toml(
     *, database_name: str, schema_name: str, unsuffixed_virtual_env: str | None = None
 ) -> str:
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         'name = "snowflake_virtual_seed"\n'
@@ -551,8 +550,7 @@ def assert_snowflake_dbt_clone_lifecycle(
     _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
     _run_git(args=("branch", "prod"), cwd=workspace)
     process_env: dict[str, str] = dict(os.environ)
-    if env is not None:
-        process_env.update(env)
+    process_env.update(env or {})
     subprocess.run(
         (
             dbt_executable(),

@@ -20,6 +20,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
     [
         ConnectionProgressTestCase(
             description="single connection message omits count",
+            adapter_name="duckdb",
             connection_count=1,
             elapsed_seconds=0.034,
             expected_start="Connecting to duckdb...",
@@ -33,6 +34,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
         ),
         ConnectionProgressTestCase(
             description="multiple connection message includes count",
+            adapter_name="databricks",
             connection_count=8,
             elapsed_seconds=18.424,
             expected_start="Connecting to databricks (8 connections)...",
@@ -46,6 +48,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
         ),
         ConnectionProgressTestCase(
             description="execution connection completion can add spacing before progress rows",
+            adapter_name="databricks",
             connection_count=8,
             elapsed_seconds=10.924,
             expected_start="Connecting to databricks (8 connections)...",
@@ -61,6 +64,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
         ),
         ConnectionProgressTestCase(
             description="execution connection start can add spacing after pre-connection work",
+            adapter_name="duckdb",
             connection_count=1,
             elapsed_seconds=0.034,
             expected_start="Connecting to duckdb...",
@@ -76,6 +80,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
         ),
         ConnectionProgressTestCase(
             description="connection progress dims start and success when color is enabled",
+            adapter_name="duckdb",
             connection_count=1,
             elapsed_seconds=0.034,
             expected_start="Connecting to duckdb...",
@@ -95,9 +100,8 @@ def test_given_connection_progress_event_when_reporting_then_writes_expected_mes
     test_case: ConnectionProgressTestCase,
 ) -> None:
     stream: StringIO = StringIO()
-    adapter_name: str = "databricks" if test_case.connection_count > 1 else "duckdb"
     reporter: ConnectionProgressReporter = ConnectionProgressReporter(
-        adapter_name=adapter_name,
+        adapter_name=test_case.adapter_name,
         stream=stream,
         blank_line_before_start=test_case.blank_line_before_start,
         blank_line_after_complete=test_case.blank_line_after_complete,

@@ -171,10 +171,9 @@ def build_sqlserver_virtual_project_toml(
     config: dict[str, object],
     unsuffixed_virtual_env: str | None = None,
 ) -> str:
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         f'name = "{project_name}"\n'

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -205,11 +206,12 @@ def test_given_existing_snapshot_target_when_executing_then_uses_adapter_rendere
         tuple(row)
         for row in connection.execute("SELECT marker FROM main.rendered_snapshot_sql").fetchall()
     )
-    lifecycle_sql: tuple[str, ...] = tuple(
-        event.content
-        for event in result.lifecycle_events
-        if event.content.startswith("INSERT INTO")
-    )
+    lifecycle_sql_by_insert_status: defaultdict[bool, list[str]] = defaultdict(list)
+    for event in result.lifecycle_events:
+        lifecycle_sql_by_insert_status[event.content.startswith("INSERT INTO")].append(
+            event.content
+        )
+    lifecycle_sql: tuple[str, ...] = tuple(lifecycle_sql_by_insert_status[True])
 
     assert result.status == ExecutionStatus.SUCCESS
     assert adapter.rendered_timestamp_changes is True

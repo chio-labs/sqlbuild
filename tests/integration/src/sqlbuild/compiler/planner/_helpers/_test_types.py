@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -39,7 +39,7 @@ class GatherCursorSnapshotTestCase:
     expected_cursor_model_names: frozenset[str]
     expected_cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
     expected_progress_calls: int = 0
-    deferred_locations: dict[str, str] | None = None
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None
     extra_model_locations: dict[str, str | None] = field(default_factory=dict)
 
 

@@ -1864,7 +1864,7 @@ def test_given_postgres_state_backend_when_two_connections_acquire_same_lock_the
             ]
         results: list[bool] = [future.result() for future in futures]
 
-        assert sum(1 for result in results if result) == test_case.expected_success_count
+        assert sum(results) == test_case.expected_success_count
         active_locks: tuple[StateLockRecord, ...] = postgres_state_backend.list_active_locks(
             connection=postgres_state_connection,
             schema=postgres_state_schema,

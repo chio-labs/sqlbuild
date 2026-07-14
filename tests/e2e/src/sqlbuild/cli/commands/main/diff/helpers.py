@@ -158,8 +158,7 @@ def build_both_environments(*, project_dir: Path) -> None:
     """Build prod then dev from a blank db."""
 
     db_path: Path = project_dir / "diff.duckdb"
-    if db_path.exists():
-        db_path.unlink()
+    db_path.unlink(missing_ok=True)
     build_environment(project_dir=project_dir, environment="prod")
     build_environment(project_dir=project_dir, environment="dev")
 

@@ -82,4 +82,4 @@ def run_concurrent_fingerprint_write_round(
         "SELECT COUNT(DISTINCT node_name) FROM main._sqlbuild_fingerprints"
     ).fetchone()
     check_connection.close()
-    return int(row[0]) if row is not None else 0
+    return int(getattr(row, "__getitem__", lambda _index: 0)(0))

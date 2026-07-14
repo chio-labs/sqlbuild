@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import re
 import uuid
+from collections.abc import Callable
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -21,12 +23,39 @@ _ENV_KEYS: tuple[str, ...] = (
 )
 
 
+def _missing_env_key(key: str) -> tuple[str, ...]:
+    return (key,)
+
+
+def _present_env_key(key: str) -> tuple[str, ...]:
+    del key
+    return ()
+
+
+def _skip_missing_env(missing: tuple[str, ...]) -> None:
+    pytest.skip("Databricks credentials not configured: " + ", ".join(sorted(missing)))
+
+
+def _accept_env(missing: tuple[str, ...]) -> None:
+    del missing
+
+
+_ENV_KEY_RESULTS: MappingProxyType[bool, Callable[[str], tuple[str, ...]]] = MappingProxyType(
+    {False: _missing_env_key, True: _present_env_key}
+)
+_ENV_VALIDATORS: MappingProxyType[bool, Callable[[tuple[str, ...]], None]] = MappingProxyType(
+    {False: _accept_env, True: _skip_missing_env}
+)
+
+
 def build_databricks_connection_config(*, schema: str | None = None) -> dict[str, object]:
     """Return Databricks connection config from required env vars or skip."""
 
-    missing: list[str] = [key for key in _ENV_KEYS if not os.environ.get(key)]
-    if missing:
-        pytest.skip("Databricks credentials not configured: " + ", ".join(sorted(missing)))
+    missing: tuple[str, ...] = sum(
+        (_ENV_KEY_RESULTS[bool(os.environ.get(key))](key) for key in _ENV_KEYS),
+        (),
+    )
+    _ENV_VALIDATORS[bool(missing)](missing)
     return {
         "server_hostname": os.environ["SQB_TEST_DATABRICKS_SERVER_HOSTNAME"],
         "http_path": os.environ["SQB_TEST_DATABRICKS_HTTP_PATH"],

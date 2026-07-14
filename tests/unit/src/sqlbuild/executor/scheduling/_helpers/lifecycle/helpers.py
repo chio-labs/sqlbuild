@@ -21,32 +21,21 @@ def record_lifecycle_maybe_failure(
     *, node: LifecycleExecutionNode, calls: list[str]
 ) -> LifecycleNodeResult:
     calls.append(node.name)
-    if node.name == "summarize_pages":
-        return LifecycleNodeResult(
-            name=node.name,
-            kind=node.kind,
-            status=LifecycleNodeStatus.FAILED,
-            error_message="failed",
-        )
-    return lifecycle_success(node)
+    return {"summarize_pages": lifecycle_failure}.get(node.name, lifecycle_success)(node)
 
 
 def record_lifecycle_soft_skip_a_else_success(
     *, node: LifecycleExecutionNode, calls: list[str]
 ) -> LifecycleNodeResult:
     calls.append(node.name)
-    if node.name == "A":
-        return lifecycle_soft_skip(node)
-    return lifecycle_success(node)
+    return {"A": lifecycle_soft_skip}.get(node.name, lifecycle_success)(node)
 
 
 def record_lifecycle_hard_skip_a_else_success(
     *, node: LifecycleExecutionNode, calls: list[str]
 ) -> LifecycleNodeResult:
     calls.append(node.name)
-    if node.name == "A":
-        return lifecycle_hard_skip(node)
-    return lifecycle_success(node)
+    return {"A": lifecycle_hard_skip}.get(node.name, lifecycle_success)(node)
 
 
 def lifecycle_success(node: LifecycleExecutionNode) -> LifecycleNodeResult:
@@ -54,6 +43,15 @@ def lifecycle_success(node: LifecycleExecutionNode) -> LifecycleNodeResult:
         name=node.name,
         kind=node.kind,
         status=LifecycleNodeStatus.SUCCESS,
+    )
+
+
+def lifecycle_failure(node: LifecycleExecutionNode) -> LifecycleNodeResult:
+    return LifecycleNodeResult(
+        name=node.name,
+        kind=node.kind,
+        status=LifecycleNodeStatus.FAILED,
+        error_message="failed",
     )
 
 

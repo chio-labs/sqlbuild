@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.adapter.models import ColumnInfo
+
 
 class FakePostgresCursor:
     """Cursor double matching the psycopg2 cursor interface."""
@@ -26,7 +28,7 @@ class FakePostgresCursor:
         return list(self.rows)
 
     def fetchone(self) -> tuple[Any, ...] | None:
-        return self.rows[0] if self.rows else None
+        return next(iter(self.rows), None)
 
     def close(self) -> None:
         self.closed = True
@@ -45,3 +47,14 @@ class FakePostgresConnection:
 
     def cursor(self) -> FakePostgresCursor:
         return self._cursor
+
+
+def describe_equivalent_numeric_relation(
+    connection: object, relation: str
+) -> tuple[ColumnInfo, ...]:
+    del connection
+    columns_by_relation: dict[str, tuple[ColumnInfo, ...]] = {
+        "left_relation": (ColumnInfo(name="total", type="NUMERIC(10,2)"),),
+        "right_relation": (ColumnInfo(name="total", type="numeric(10,2)"),),
+    }
+    return columns_by_relation[relation]

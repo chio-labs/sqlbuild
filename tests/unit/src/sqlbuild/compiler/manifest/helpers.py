@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -101,18 +101,20 @@ def build_test_model(
 ) -> CompiledModel:
     """Build a minimal CompiledModel for manifest tests."""
 
-    effective_alias: str = alias if alias is not None else name
-    effective_qualified: str | None = qualified_name
-    if effective_qualified is None and schema is not None:
-        effective_qualified = f"{schema}.{effective_alias}"
+    effective_alias: str = cast(str, (name, alias)[alias is not None])
+    default_qualified: str | None = (None, f"{schema}.{effective_alias}")[schema is not None]
+    effective_qualified: str | None = (default_qualified, qualified_name)[
+        qualified_name is not None
+    ]
 
-    schema_entry: SchemaModelEntry | None = None
-    if description is not None or columns:
-        schema_entry = SchemaModelEntry(
+    schema_entry: SchemaModelEntry | None = (
+        None,
+        SchemaModelEntry(
             name=name,
             description=description,
             columns=columns,
-        )
+        ),
+    )[description is not None or bool(columns)]
 
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
@@ -192,7 +194,7 @@ def build_test_seed(
             database=database,
             schema=schema,
             name=name,
-            qualified_name=f"{schema}.{name}" if schema else name,
+            qualified_name=(name, f"{schema}.{name}")[bool(schema)],
         ),
     )
 

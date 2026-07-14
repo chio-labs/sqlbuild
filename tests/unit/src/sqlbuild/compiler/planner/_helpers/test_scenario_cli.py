@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import ClassVar
 
 import pytest
@@ -51,10 +52,9 @@ def test_given_adapter_identifier_limit_when_building_cli_scenario_plan_then_use
         project_name="scenario_demo",
     )
 
-    model_artifacts: tuple[ScenarioArtifactName, ...] = tuple(
-        artifact
-        for artifact in result.relation_plan.relation_map.artifacts
-        if artifact.identity.kind == "model"
-    )
+    artifacts_by_kind: defaultdict[str, list[ScenarioArtifactName]] = defaultdict(list)
+    for artifact in result.relation_plan.relation_map.artifacts:
+        artifacts_by_kind[artifact.identity.kind].append(artifact)
+    model_artifacts: tuple[ScenarioArtifactName, ...] = tuple(artifacts_by_kind["model"])
     assert len(model_artifacts) == 1
     assert model_artifacts[0].physical_name == test_case.expected_model_physical_name

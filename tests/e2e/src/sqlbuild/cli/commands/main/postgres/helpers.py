@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +33,19 @@ def postgres_dbt_core_executable() -> str:
     """
 
     candidate: Path = Path(sys.prefix) / "bin" / "dbt"
-    if not candidate.exists():
-        pytest.skip("dbt-core CLI is not installed in the project virtual environment")
+    candidate_actions: dict[bool, Callable[[Path], str]] = {
+        False: _skip_missing_postgres_dbt_core,
+        True: _validate_postgres_dbt_core,
+    }
+    return candidate_actions[candidate.exists()](candidate)
+
+
+def _skip_missing_postgres_dbt_core(candidate: Path) -> str:
+    del candidate
+    pytest.skip("dbt-core CLI is not installed in the project virtual environment")
+
+
+def _validate_postgres_dbt_core(candidate: Path) -> str:
     result: subprocess.CompletedProcess[str] = subprocess.run(
         (str(candidate), "--version"),
         capture_output=True,
@@ -41,11 +53,30 @@ def postgres_dbt_core_executable() -> str:
         text=True,
     )
     output: str = result.stdout + result.stderr
-    if result.returncode != 0:
-        pytest.skip(f"dbt-core CLI is not runnable: {output}")
-    if "fusion" in output.lower():
-        pytest.skip("project virtual environment dbt resolves to Fusion, which lacks Postgres")
+    validation_actions: dict[tuple[bool, bool], Callable[[Path, str], str]] = {
+        (False, False): _return_postgres_dbt_core,
+        (False, True): _skip_postgres_dbt_fusion,
+        (True, False): _skip_unrunnable_postgres_dbt_core,
+        (True, True): _skip_unrunnable_postgres_dbt_core,
+    }
+    return validation_actions[(result.returncode != 0, "fusion" in output.lower())](
+        candidate, output
+    )
+
+
+def _return_postgres_dbt_core(candidate: Path, output: str) -> str:
+    del output
     return str(candidate)
+
+
+def _skip_postgres_dbt_fusion(candidate: Path, output: str) -> str:
+    del candidate, output
+    pytest.skip("project virtual environment dbt resolves to Fusion, which lacks Postgres")
+
+
+def _skip_unrunnable_postgres_dbt_core(candidate: Path, output: str) -> str:
+    del candidate
+    pytest.skip(f"dbt-core CLI is not runnable: {output}")
 
 
 def postgres_dbt_env(*, password: str) -> dict[str, str]:
@@ -113,10 +144,9 @@ def build_postgres_virtual_project_toml(
     warehouse_schema: str,
     unsuffixed_virtual_env: str | None = None,
 ) -> str:
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         f'name = "{project_name}"\n'

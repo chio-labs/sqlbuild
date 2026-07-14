@@ -178,10 +178,7 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
         tuple(len(loader.depends_on) for loader in result) == test_case.expected_dependency_counts
     )
     assert (
-        tuple(
-            None if loader.write_strategy is None else loader.write_strategy.value
-            for loader in result
-        )
+        tuple(getattr(loader.write_strategy, "value", None) for loader in result)
         == test_case.expected_write_strategies
     )
     assert tuple(loader.cursor_column for loader in result) == test_case.expected_cursor_columns

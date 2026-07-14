@@ -30,26 +30,28 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
         DetectFunctionChangeTestCase(
             description="first run function without policy returns first run reason and warn only",
             body_sql="order_status = 'completed'",
-            previous_query_sql="",
+            existing_function_fingerprints={},
             replay_on_change=None,
             expected_reason=PlanReason.FIRST_RUN,
             expected_action=BackfillAction.FORWARD_ONLY,
-            existing_fingerprint=False,
         ),
         DetectFunctionChangeTestCase(
             description="first run function with policy returns first run reason and bounded backfill",
             body_sql="order_status = 'completed'",
-            previous_query_sql="",
+            existing_function_fingerprints={},
             replay_on_change="bounded-30d",
             expected_reason=PlanReason.FIRST_RUN,
             expected_action=BackfillAction.BOUNDED,
             expected_duration="30d",
-            existing_fingerprint=False,
         ),
         DetectFunctionChangeTestCase(
             description="changed function with policy returns query reason and bounded backfill",
             body_sql="order_status = 'completed'",
-            previous_query_sql="name=is_completed_order\nbody=\norder_status = 'complete'",
+            existing_function_fingerprints={
+                "is_completed_order": build_fingerprint(
+                    query_sql="name=is_completed_order\nbody=\norder_status = 'complete'"
+                )
+            },
             replay_on_change="bounded-30d",
             expected_reason=PlanReason.QUERY_CHANGED,
             expected_action=BackfillAction.BOUNDED,
@@ -58,7 +60,11 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
         DetectFunctionChangeTestCase(
             description="changed function without policy returns query reason and warn only",
             body_sql="order_status = 'completed'",
-            previous_query_sql="name=is_completed_order\nbody=\norder_status = 'complete'",
+            existing_function_fingerprints={
+                "is_completed_order": build_fingerprint(
+                    query_sql="name=is_completed_order\nbody=\norder_status = 'complete'"
+                )
+            },
             replay_on_change=None,
             expected_reason=PlanReason.QUERY_CHANGED,
             expected_action=BackfillAction.FORWARD_ONLY,
@@ -66,17 +72,21 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
         DetectFunctionChangeTestCase(
             description="target schema case change does not cause function query change",
             body_sql="order_status = 'completed'",
-            previous_query_sql=(
-                "language=sql\n"
-                "arguments=order_status:STRING\n"
-                "returns=BOOLEAN\n"
-                "return_columns=\n"
-                "runtime_version=\n"
-                "entry_point=\n"
-                "packages=\n"
-                "body=\n"
-                "order_status = 'completed'"
-            ),
+            existing_function_fingerprints={
+                "is_completed_order": build_fingerprint(
+                    query_sql=(
+                        "language=sql\n"
+                        "arguments=order_status:STRING\n"
+                        "returns=BOOLEAN\n"
+                        "return_columns=\n"
+                        "runtime_version=\n"
+                        "entry_point=\n"
+                        "packages=\n"
+                        "body=\n"
+                        "order_status = 'completed'"
+                    )
+                )
+            },
             replay_on_change=None,
             expected_reason=PlanReason.NO_CHANGE,
             expected_action=BackfillAction.FORWARD_ONLY,
@@ -94,13 +104,7 @@ def test_given_function_fingerprint_when_detecting_change_then_returns_reason_an
         target_schema=test_case.target_schema,
     )
     snapshot: WarehouseSnapshot = WarehouseSnapshot(
-        fingerprints=WarehouseFingerprints(
-            functions=(
-                {"is_completed_order": build_fingerprint(query_sql=test_case.previous_query_sql)}
-                if test_case.existing_fingerprint
-                else {}
-            )
-        )
+        fingerprints=WarehouseFingerprints(functions=test_case.existing_function_fingerprints)
     )
 
     reason: PlanReason

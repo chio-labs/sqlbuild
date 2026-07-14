@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from types import MappingProxyType
+from typing import cast
 
 from sqlbuild.compiler.compile.models.core import (
     CompiledFunction,
@@ -74,8 +77,7 @@ def build_virtual_planner_test_project(
         "materialized": upstream_materialized,
         "schema": upstream_schema,
     }
-    if upstream_extra_config is not None:
-        upstream_config_values.update(upstream_extra_config)
+    upstream_config_values.update(upstream_extra_config or {})
     source_entry: SourceEntry = SourceEntry(name=upstream_source_name, table="raw_orders")
     upstream_source: CompiledSource = CompiledSource(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=upstream_source_name),
@@ -89,53 +91,26 @@ def build_virtual_planner_test_project(
             source_entries=(source_entry,),
         ),
     )
-    seed: CompiledSeed | None = None
-    seed_key: CompiledObjectKey | None = None
-    if upstream_seed_file_path is not None:
-        seed_key = CompiledObjectKey(
-            resource_type=CompiledResourceType.SEED,
-            name=upstream_seed_name,
-        )
-        seed_schema_entry: SchemaSeedEntry = SchemaSeedEntry(
-            name=upstream_seed_name,
-            columns=(SchemaColumn(name="status"),),
-        )
-        seed_schema_file: DiscoveredSchemaFile = DiscoveredSchemaFile(
-            file_path=Path("seeds/schema.yml"),
-            relative_path=Path("seeds/schema.yml"),
-            contents="",
-            model_entries=(),
-            seed_entries=(seed_schema_entry,),
-        )
-        seed = CompiledSeed(
-            key=seed_key,
-            deps=(),
-            name=upstream_seed_name,
-            seed_file=DiscoveredSeedFile(
-                file_path=upstream_seed_file_path,
-                relative_path=Path("seeds") / upstream_seed_file_path.name,
-            ),
-            schema_entry=seed_schema_entry,
-            schema_file=seed_schema_file,
-            destination=CompiledRelationLocation(
-                database=None,
-                schema="staging",
-                name=upstream_seed_name,
-                qualified_name=f"staging.{upstream_seed_name}",
-            ),
-        )
+    seed: CompiledSeed | None
+    seed_key: CompiledObjectKey | None
+    seed, seed_key = _VIRTUAL_SEED_BUILDERS[upstream_seed_file_path is not None](
+        upstream_seed_file_path, upstream_seed_name
+    )
+    upstream_model_deps: tuple[CompiledObjectKey, ...] = cast(
+        tuple[CompiledObjectKey, ...],
+        ((upstream_source.key,), (upstream_source.key, seed_key))[seed_key is not None],
+    )
     upstream_model: CompiledModel = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=upstream_model_name),
-        deps=(upstream_source.key, seed_key) if seed_key is not None else (upstream_source.key,),
+        deps=upstream_model_deps,
         name=upstream_model_name,
         relative_path=Path(f"models/{upstream_model_name}.sql"),
         query_sql=upstream_query_sql,
         config=CompileModelConfig(values=upstream_config_values),
         schema_entry=(
-            SchemaModelEntry(name=upstream_model_name, columns=upstream_schema_columns)
-            if upstream_schema_columns
-            else None
-        ),
+            None,
+            SchemaModelEntry(name=upstream_model_name, columns=upstream_schema_columns),
+        )[bool(upstream_schema_columns)],
         destination=CompiledRelationLocation(
             database=None,
             schema=upstream_schema,
@@ -172,10 +147,9 @@ def build_virtual_planner_test_project(
         ),
     )
     downstream_deps: tuple[CompiledObjectKey, ...] = (
-        (upstream_model.key, function.key, unrelated_model.key)
-        if downstream_depends_on_dim_customers
-        else (upstream_model.key, function.key)
-    )
+        (upstream_model.key, function.key),
+        (upstream_model.key, function.key, unrelated_model.key),
+    )[downstream_depends_on_dim_customers]
     downstream_model = CompiledModel(
         key=downstream_model.key,
         deps=downstream_deps,
@@ -193,7 +167,7 @@ def build_virtual_planner_test_project(
         settings=SettingsConfig(),
         models=(upstream_model, downstream_model, unrelated_model),
         sources=(upstream_source,),
-        seeds=(seed,) if seed is not None else (),
+        seeds=cast(tuple[CompiledSeed, ...], ((), (seed,))[seed is not None]),
         functions=(function,),
     )
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
@@ -209,8 +183,7 @@ def build_virtual_planner_test_project(
         unrelated_model.name: unrelated_model.key,
         function.name: function.key,
     }
-    if seed is not None:
-        all_keys[seed.name] = seed.key
+    _VIRTUAL_SEED_KEY_ADDERS[seed is not None](all_keys, seed)
     return ProjectGraph(
         project=project,
         upstream_deps=upstream_deps,
@@ -219,3 +192,71 @@ def build_virtual_planner_test_project(
         path_index={},
         all_keys=all_keys,
     )
+
+
+def _build_virtual_seed(
+    seed_file_path: Path | None, seed_name: str
+) -> tuple[CompiledSeed | None, CompiledObjectKey | None]:
+    resolved_seed_file_path: Path = cast(Path, seed_file_path)
+    seed_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.SEED,
+        name=seed_name,
+    )
+    seed_schema_entry: SchemaSeedEntry = SchemaSeedEntry(
+        name=seed_name,
+        columns=(SchemaColumn(name="status"),),
+    )
+    seed_schema_file: DiscoveredSchemaFile = DiscoveredSchemaFile(
+        file_path=Path("seeds/schema.yml"),
+        relative_path=Path("seeds/schema.yml"),
+        contents="",
+        model_entries=(),
+        seed_entries=(seed_schema_entry,),
+    )
+    seed: CompiledSeed = CompiledSeed(
+        key=seed_key,
+        deps=(),
+        name=seed_name,
+        seed_file=DiscoveredSeedFile(
+            file_path=resolved_seed_file_path,
+            relative_path=Path("seeds") / resolved_seed_file_path.name,
+        ),
+        schema_entry=seed_schema_entry,
+        schema_file=seed_schema_file,
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="staging",
+            name=seed_name,
+            qualified_name=f"staging.{seed_name}",
+        ),
+    )
+    return seed, seed_key
+
+
+def _build_no_virtual_seed(
+    seed_file_path: Path | None, seed_name: str
+) -> tuple[CompiledSeed | None, CompiledObjectKey | None]:
+    del seed_file_path, seed_name
+    return None, None
+
+
+def _add_virtual_seed_key(
+    all_keys: dict[str, CompiledObjectKey], seed: CompiledSeed | None
+) -> None:
+    resolved_seed: CompiledSeed = cast(CompiledSeed, seed)
+    all_keys[resolved_seed.name] = resolved_seed.key
+
+
+def _skip_virtual_seed_key(
+    all_keys: dict[str, CompiledObjectKey], seed: CompiledSeed | None
+) -> None:
+    del all_keys, seed
+
+
+_VIRTUAL_SEED_BUILDERS: MappingProxyType[
+    bool,
+    Callable[[Path | None, str], tuple[CompiledSeed | None, CompiledObjectKey | None]],
+] = MappingProxyType({False: _build_no_virtual_seed, True: _build_virtual_seed})
+_VIRTUAL_SEED_KEY_ADDERS: MappingProxyType[
+    bool, Callable[[dict[str, CompiledObjectKey], CompiledSeed | None], None]
+] = MappingProxyType({False: _skip_virtual_seed_key, True: _add_virtual_seed_key})

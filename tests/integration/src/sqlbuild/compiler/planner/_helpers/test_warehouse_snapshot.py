@@ -429,7 +429,7 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
             ),
             selected_keys=frozenset({_SELECTED_KEY, _ORDERS_KEY}),
             full_refresh=False,
-            deferred_locations={"raw_orders": "prod.raw_orders"},
+            deferred_locations=build_deferred_locations_from_map({"raw_orders": "prod.raw_orders"}),
             expected_cursor_model_names=frozenset({"fact_orders"}),
             expected_cursor_snapshots={
                 "fact_orders": ModelCursorSnapshot(
@@ -451,7 +451,7 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
             ),
             selected_keys=frozenset({_SELECTED_KEY}),
             full_refresh=False,
-            deferred_locations={"raw_orders": "prod.raw_orders"},
+            deferred_locations=build_deferred_locations_from_map({"raw_orders": "prod.raw_orders"}),
             expected_cursor_model_names=frozenset({"fact_orders"}),
             expected_cursor_snapshots={
                 "fact_orders": ModelCursorSnapshot(
@@ -480,11 +480,7 @@ def test_given_deferred_locations_when_gathering_cursor_snapshots_then_resolves_
     def _track_progress(message: str) -> None:
         progress_calls.append(message)
 
-    deferred: dict[str, CompiledRelationLocation] | None = (
-        build_deferred_locations_from_map(test_case.deferred_locations)
-        if test_case.deferred_locations is not None
-        else None
-    )
+    deferred: dict[str, CompiledRelationLocation] | None = test_case.deferred_locations
 
     project: CompiledProject = build_project_with_targets(
         model_locations={"raw_orders": "staging"},
