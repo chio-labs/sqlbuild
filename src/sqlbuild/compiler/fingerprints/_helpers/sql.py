@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Callable
 
-from sqlbuild.adapter.types import FrameworkType
+from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.compiler.fingerprints.constants import (
     COLUMN_DEFINITION_B64,
     COLUMN_DEFINITION_HASH,

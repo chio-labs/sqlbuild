@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.types import AdapterExecute, FrameworkType
+from sqlbuild.adapter.contract.types import AdapterExecute, FrameworkType
 from sqlbuild.executor.node_results._helpers.ddl_lock import run_with_node_result_ddl_lock
 from sqlbuild.executor.node_results._helpers.serialization import encode_json_b64
 from sqlbuild.executor.node_results._helpers.sql import build_create_table_sql, build_insert_sql

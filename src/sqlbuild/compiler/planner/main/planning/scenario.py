@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.scenario.cli import build_cli_scenario_plan

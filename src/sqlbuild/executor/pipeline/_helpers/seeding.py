@@ -7,8 +7,8 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import PlanOutput, SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.seed.main.execute import execute_seed

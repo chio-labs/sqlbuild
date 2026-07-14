@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.models import LifeCycleEvent
-from sqlbuild.adapter.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.executor.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.execution.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult

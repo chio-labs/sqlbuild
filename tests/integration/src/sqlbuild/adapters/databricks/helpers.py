@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 
 _ENV_KEYS: tuple[str, ...] = (

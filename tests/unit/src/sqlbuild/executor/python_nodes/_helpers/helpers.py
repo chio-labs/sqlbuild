@@ -9,8 +9,8 @@ from itertools import chain, repeat
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.assets import AssetContext, asset
 from sqlbuild.checks import CheckContext
 from sqlbuild.compiler.discovery.models import (

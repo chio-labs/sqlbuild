@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.types import TypeDialect
+from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.contracts._helpers.columns import collect_model_column_contract_diagnostics
 from sqlbuild.compiler.contracts.models import ContractValidationResult

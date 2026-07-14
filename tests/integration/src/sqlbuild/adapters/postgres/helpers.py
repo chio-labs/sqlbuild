@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 
 

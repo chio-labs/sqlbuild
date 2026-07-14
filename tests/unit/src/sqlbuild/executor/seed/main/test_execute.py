@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.executor.build.models import SeedExecutionResult

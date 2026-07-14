@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.run._helpers.execution.promotion import promote_relation_to_destination
 
 

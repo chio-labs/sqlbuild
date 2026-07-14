@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationLookup
-from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.contract.types import RelationType
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.adapter.types import RelationType
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph

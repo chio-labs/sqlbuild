@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanAction
 from sqlbuild.virtual.executor._helpers.seeding import (

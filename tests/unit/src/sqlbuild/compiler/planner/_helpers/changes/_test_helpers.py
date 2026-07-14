@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.adapter.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,

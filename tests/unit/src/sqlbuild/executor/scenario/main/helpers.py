@@ -4,9 +4,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.models import ColumnInfo, QueryResult
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,

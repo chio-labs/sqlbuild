@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredLoaderFunction,

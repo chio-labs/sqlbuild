@@ -6,8 +6,8 @@ from dataclasses import replace
 from datetime import date, datetime
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,

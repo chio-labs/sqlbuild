@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
 from sqlbuild.cli.commands.classes.standard_python_lifecycle_state import (
     StandardPythonLifecycleState,

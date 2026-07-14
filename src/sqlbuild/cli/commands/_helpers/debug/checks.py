@@ -7,7 +7,7 @@ import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.debug.models import DebugLine, DebugResult
 from sqlbuild.cli.commands._helpers.debug.types import DebugCheckStatus
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter

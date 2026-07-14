@@ -7,14 +7,14 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.main.normalize_relation_type import normalize_relation_type
-from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationInfo, RelationLookup
-from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
+from sqlbuild.adapter.contract.types import RelationType
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.adapter.types import RelationType
+from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph

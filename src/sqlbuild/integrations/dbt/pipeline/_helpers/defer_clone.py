@@ -10,9 +10,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationLookup
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT

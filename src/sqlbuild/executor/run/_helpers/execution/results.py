@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help

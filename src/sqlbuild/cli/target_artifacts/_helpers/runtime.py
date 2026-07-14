@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.models import LifeCycleEvent
-from sqlbuild.adapter.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,

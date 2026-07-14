@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import execute_scenario_fixtures

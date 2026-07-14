@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.adapter.types import FrameworkType
+from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.compiler.source_freshness.constants import (
     COLUMN_DATA_VERSION,
     COLUMN_DATA_VERSION_HASH,

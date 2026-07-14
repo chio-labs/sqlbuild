@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.models import LifeCycleEvent
-from sqlbuild.adapter.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import (

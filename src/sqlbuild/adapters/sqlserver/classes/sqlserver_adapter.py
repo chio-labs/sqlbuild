@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlbuild.adapter.classes.base_adapter import (
+from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _build_names_filter,
     _build_schemas_filter,
@@ -20,18 +20,9 @@ from sqlbuild.adapter.classes.base_adapter import (
     _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
 )
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.exceptions import AdapterUserError
-from sqlbuild.adapter.main.render_insert_node_source_watermark_records_sql import (
-    render_insert_node_source_watermark_records_sql,
-)
-from sqlbuild.adapter.main.render_insert_source_freshness_records_sql import (
-    render_insert_source_freshness_records_sql,
-)
-from sqlbuild.adapter.main.render_read_latest_node_source_watermarks_sql import (
-    render_read_latest_node_source_watermarks_sql,
-)
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
@@ -48,13 +39,22 @@ from sqlbuild.adapter.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.types import (
+from sqlbuild.adapter.contract.types import (
     BuiltinAdapter,
     CursorKind,
     FrameworkType,
     LoaderLogicalType,
     PromotionStrategy,
     TablePromotionMode,
+)
+from sqlbuild.adapter.state_sql.main.render_insert_node_source_watermark_records_sql import (
+    render_insert_node_source_watermark_records_sql,
+)
+from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
+    render_insert_source_freshness_records_sql,
+)
+from sqlbuild.adapter.state_sql.main.render_read_latest_node_source_watermarks_sql import (
+    render_read_latest_node_source_watermarks_sql,
 )
 from sqlbuild.adapters.sqlserver.classes.sqlserver_connection import _SqlServerConnection
 from sqlbuild.adapters.sqlserver.constants import (

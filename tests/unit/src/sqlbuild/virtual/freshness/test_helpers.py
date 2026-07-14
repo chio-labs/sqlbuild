@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.models import TableFreshnessMetadata
+from sqlbuild.adapter.contract.models import TableFreshnessMetadata
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError

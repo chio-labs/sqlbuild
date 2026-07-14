@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
 from sqlbuild.spec.contracts.models import SourceEntry
 

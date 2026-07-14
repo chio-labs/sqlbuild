@@ -5,8 +5,8 @@ from __future__ import annotations
 import threading
 from typing import TextIO
 
-from sqlbuild.adapter.models import LifeCycleEvent
-from sqlbuild.adapter.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle

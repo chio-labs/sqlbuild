@@ -900,8 +900,8 @@ def test_given_detach_copy_failure_when_detaching_then_operation_is_marked_faile
             ),
             "adapters/failing_duckdb.py": (
                 "from typing import Any\n"
-                "from sqlbuild.adapter.classes.statement_recorder import StatementRecorder\n"
-                "from sqlbuild.adapter.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder\n"
+                "from sqlbuild.adapter.contract.exceptions import AdapterUserError\n"
                 "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n"
                 "class FailingDuckDbAdapter(DuckDbAdapter):\n"
                 "    adapter_name = 'failing_duckdb'\n\n"
@@ -1023,8 +1023,8 @@ def test_given_adopt_move_failure_when_adopting_then_operation_is_marked_failed(
             ),
             "adapters/failing_duckdb.py": (
                 "from typing import Any\n"
-                "from sqlbuild.adapter.classes.statement_recorder import StatementRecorder\n"
-                "from sqlbuild.adapter.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder\n"
+                "from sqlbuild.adapter.contract.exceptions import AdapterUserError\n"
                 "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n"
                 "class FailingDuckDbAdapter(DuckDbAdapter):\n"
                 "    adapter_name = 'failing_duckdb'\n\n"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build.models import (
     VirtualBuildCliRequest,
     VirtualBuildExecution,

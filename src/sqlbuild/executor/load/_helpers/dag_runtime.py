@@ -7,8 +7,8 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.load._helpers.execution import (
     load_resource_kind,

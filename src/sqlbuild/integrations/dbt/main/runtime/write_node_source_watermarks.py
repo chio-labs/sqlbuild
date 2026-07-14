@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.integrations.dbt._helpers.runtime.node_source_watermarks import (
     write_dbt_node_source_watermark_records as _write,

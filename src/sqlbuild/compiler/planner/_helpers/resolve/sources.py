@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.main.types_equal import types_equal
-from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.planner.constants import (
     SOURCE_ALIAS_BOUNDARY_CHARACTERS,
     SQL_ALIAS_KEYWORD,

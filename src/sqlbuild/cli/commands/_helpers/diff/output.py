@@ -9,7 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.models import (
     RowDiffColumnResult,
     RowDiffResult,
     RowDiffSampleCell,

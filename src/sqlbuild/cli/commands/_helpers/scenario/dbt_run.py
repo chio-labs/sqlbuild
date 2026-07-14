@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.scenario.capture_run import (
     build_scenario_capture_settings,

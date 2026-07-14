@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.main.types_equal import types_equal
-from sqlbuild.adapter.types import TypeDialect
+from sqlbuild.adapter.contract.types import TypeDialect
+from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledModel,

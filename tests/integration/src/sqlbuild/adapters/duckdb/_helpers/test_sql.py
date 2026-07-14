@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.models import CursorValue
-from sqlbuild.adapter.types import CursorKind
+from sqlbuild.adapter.contract.models import CursorValue
+from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from tests.integration.src.sqlbuild.adapters.duckdb._helpers._test_types import (
     BuildAttachSqlTestCase,

@@ -1,1 +1,0 @@
-"""Adapter-owned relation naming."""

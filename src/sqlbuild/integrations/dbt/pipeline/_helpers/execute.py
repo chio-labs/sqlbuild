@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TextIO, cast
 
-from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.main.cli.build_command_argv import build_dbt_command_argv

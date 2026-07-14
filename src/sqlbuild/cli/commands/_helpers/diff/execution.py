@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.diff.models import (
     DiffCommandRequest,
     DiffInvocation,

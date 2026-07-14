@@ -8,12 +8,12 @@ max_positional_args = 1
 
 [[rule_exceptions]]
 rule = "SFR601"
-path = "src/sqlbuild/adapter/classes/base_adapter.py"
+path = "src/sqlbuild/adapter/contract/classes/base_adapter.py"
 reason = "The adapter contract intentionally keeps its overrideable methods on one class."
 
 [[rule_exceptions]]
 rule = "SFR601"
-path = "src/sqlbuild/adapter/classes/duckdb_backed_adapter.py"
+path = "src/sqlbuild/adapter/contract/classes/duckdb_backed_adapter.py"
 reason = "The shared DuckDB-backed adapter intentionally keeps overrideable methods on one class."
 
 [[rule_exceptions]]

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from types import MappingProxyType
 from typing import Any
 
-from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo
 
 
 class StubCursor:

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.types import TablePromotionMode
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.executor.types import ExecutionPhase
 
 

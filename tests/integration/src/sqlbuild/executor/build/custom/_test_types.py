@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason

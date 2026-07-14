@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.planner._helpers.graph.buildability import check_buildability
 from sqlbuild.compiler.planner.models import MissingUpstream, WarehouseSnapshot
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (

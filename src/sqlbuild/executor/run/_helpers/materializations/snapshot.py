@@ -4,22 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.main.normalize_type import normalize_type
-from sqlbuild.adapter.main.types_equal import types_equal
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     NormalizedType,
     SnapshotChangeTarget,
 )
-from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+from sqlbuild.adapter.contract.types import TypeFamily
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
-from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.adapter.types import TypeFamily
+from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
+from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     HistoricalInput,

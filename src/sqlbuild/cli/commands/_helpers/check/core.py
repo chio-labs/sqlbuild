@@ -6,10 +6,10 @@ import json
 from collections.abc import Callable
 from typing import Any, TextIO
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationLookup
-from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.cli.exceptions import CliUserError

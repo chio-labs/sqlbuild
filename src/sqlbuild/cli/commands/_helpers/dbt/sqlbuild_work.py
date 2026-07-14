@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands._helpers.test.sql_progress import (
     build_test_expectation_rows,

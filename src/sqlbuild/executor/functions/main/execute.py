@@ -6,9 +6,9 @@ import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.models import FunctionDefinition
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import FunctionDefinition
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.models import ExpressionInferenceProfile
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledObjectKey,

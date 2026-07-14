@@ -8,8 +8,8 @@ from decimal import Decimal
 from typing import Any, ClassVar
 from urllib.parse import urlencode
 
-from sqlbuild.adapter.classes.duckdb_backed_adapter import DuckDbBackedAdapter
-from sqlbuild.adapter.types import BuiltinAdapter, LoaderLogicalType
+from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter, LoaderLogicalType
 from sqlbuild.adapters.motherduck.constants import (
     EMPTY_CONNECTION_VALUE,
     URI_ADDITIONAL_PARAMETER_SEPARATOR,

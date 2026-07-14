@@ -7,8 +7,8 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.adapter.models import LifeCycleEvent
-from sqlbuild.adapter.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
     _aggregate_audit_results,

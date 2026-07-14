@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlbuild.adapter.models import CursorValue
-from sqlbuild.adapter.types import CursorKind
+from sqlbuild.adapter.contract.models import CursorValue
+from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.executor.diff.constants import (
     BOUNDED_DIFF_DAY_UNIT,
     BOUNDED_DIFF_HOUR_UNIT,

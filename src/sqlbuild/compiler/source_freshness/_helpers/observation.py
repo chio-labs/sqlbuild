@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.models import (
     QueryResult,
     TableFreshnessMetadata,
     TableFreshnessRequest,

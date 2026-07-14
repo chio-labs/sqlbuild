@@ -7,17 +7,17 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.models import RelationLookup
-from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
-from sqlbuild.adapter.relation_naming.main.resolve_relation_location_qualified_name import (
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.adapter.types import BuiltinAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,

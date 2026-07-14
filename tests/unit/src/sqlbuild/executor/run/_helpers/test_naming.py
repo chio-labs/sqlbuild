@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (

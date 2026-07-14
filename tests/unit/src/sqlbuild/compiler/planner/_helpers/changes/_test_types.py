@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind

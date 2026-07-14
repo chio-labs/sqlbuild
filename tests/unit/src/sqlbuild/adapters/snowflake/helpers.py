@@ -6,7 +6,7 @@ import sys
 from types import ModuleType
 from typing import Any
 
-from sqlbuild.adapter.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo
 
 
 class FakeSnowflakeDescribeCursor:

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.models import RelationLookup
+from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,

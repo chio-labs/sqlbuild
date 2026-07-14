@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.types import FrameworkType
+from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 

@@ -7,9 +7,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
     RelationInfo,
@@ -17,7 +17,7 @@ from sqlbuild.adapter.models import (
     RowDiffTolerances,
     SchemaDiffResult,
 )
-from sqlbuild.adapter.types import TablePromotionMode
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,

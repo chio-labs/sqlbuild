@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlbuild.adapter.models import (
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     RowDiffResult,
     RowDiffSampleRow,

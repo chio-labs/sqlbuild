@@ -83,7 +83,7 @@ _WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
     }
 )
 _SC051_BATCHED_REASON_BY_PATH: dict[str, str] = {
-    "src/sqlbuild/adapter/main/relation_lookup.py": "single-query lookup capability",
+    "src/sqlbuild/adapter/relations/main/relation_lookup.py": "single-query lookup capability",
     "src/sqlbuild/executor/janitor/_helpers/plan.py": "one list_relations per database",
     "src/sqlbuild/integrations/dbt/_helpers/planning/model_planning.py": (
         "one list_relations per database"
@@ -156,9 +156,6 @@ _MAIN_PHASE_REMEDIATION_MESSAGE: str = (
 _MAIN_SUPPORT_FOLDER_NAMES: frozenset[str] = frozenset({"classes", "_helpers", "shared"})
 _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("adapter", "constants.py"),
-        ("adapter", "models.py"),
-        ("adapter", "types.py"),
         ("executor", "types.py"),
         ("python_nodes", "models.py"),
         ("python_nodes", "types.py"),
@@ -169,8 +166,6 @@ _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
 )
 _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("adapter", "classes"),
-        ("adapter", "_helpers"),
         ("executor", "_helpers"),
         ("spec", "_helpers"),
         ("virtual", "_helpers"),
@@ -178,8 +173,8 @@ _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS: frozenset[tuple[str, str]] = frozenset
 )
 _MAX_SOURCE_LINE_ALLOWED_PATTERNS: tuple[str, ...] = (
     "src/sqlbuild/adapters/*/classes/*_adapter.py",
-    "src/sqlbuild/adapter/classes/base_adapter.py",
-    "src/sqlbuild/adapter/classes/duckdb_backed_adapter.py",
+    "src/sqlbuild/adapter/contract/classes/base_adapter.py",
+    "src/sqlbuild/adapter/contract/classes/duckdb_backed_adapter.py",
     "src/sqlbuild/virtual/state/classes/*.py",
 )
 _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (

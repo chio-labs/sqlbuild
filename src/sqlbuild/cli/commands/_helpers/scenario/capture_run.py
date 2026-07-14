@@ -7,7 +7,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.scenario.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands._helpers.scenario.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands._helpers.scenario.result_output import render_result_error

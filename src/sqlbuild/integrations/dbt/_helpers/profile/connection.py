@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from sqlbuild.adapter.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.profile.constants import (
     DBT_DUCKDB_MEMORY_DATABASE,

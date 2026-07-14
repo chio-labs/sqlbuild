@@ -1568,6 +1568,36 @@ from tests.unit.scripts.structure.main.check_structure_conventions.helpers impor
             expected_violation_codes=(),
         ),
         CheckPathsTestCase(
+            description="allows sibling classes public surface import",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/discovery/__init__.py": '"""Discovery."""\n',
+                "src/sqlbuild/example/discovery/models.py": dedent(
+                    """
+                from dataclasses import dataclass
+
+                from sqlbuild.example.contract.classes.strict_adapter import StrictAdapter
+
+
+                @dataclass(frozen=True)
+                class DiscoveredAdapter:
+                    adapter_class: type[StrictAdapter]
+                """
+                ).strip()
+                + "\n",
+                "src/sqlbuild/example/contract/__init__.py": '"""Contract."""\n',
+                "src/sqlbuild/example/contract/classes/__init__.py": '"""Classes."""\n',
+                "src/sqlbuild/example/contract/classes/strict_adapter.py": dedent(
+                    """
+                class StrictAdapter:
+                    pass
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
             description="reports main module inside shared package",
             repo_files=compliant_repo_files()
             | {
@@ -1845,7 +1875,7 @@ from tests.unit.scripts.structure.main.check_structure_conventions.helpers impor
             | {
                 "src/sqlbuild/adapters/example/client.py": dedent(
                     """
-                from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
                 class ExampleAdapter(BaseAdapter):
@@ -1862,7 +1892,7 @@ from tests.unit.scripts.structure.main.check_structure_conventions.helpers impor
             | {
                 "src/sqlbuild/adapters/example/client.py": dedent(
                     """
-                from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
                 class ExampleAdapter(BaseAdapter):
