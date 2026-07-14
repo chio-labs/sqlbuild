@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
-from sqlbuild.executor.python_nodes.helpers.read_side_execution import (
+from sqlbuild.executor.python_nodes._helpers.read_side_execution import (
     ReadSidePythonExecutionTracker,
 )
 from sqlbuild.executor.python_nodes.models import PythonNodeRuntime

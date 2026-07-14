@@ -6,14 +6,14 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
-from sqlbuild.integrations.dagster.helpers.assets import (
+from sqlbuild.integrations.dagster._helpers.assets import (
     build_asset_specs,
     build_check_specs,
     build_scenario_check_specs,
 )
-from sqlbuild.integrations.dagster.helpers.dag import load_sqlbuild_dag
-from sqlbuild.integrations.dagster.helpers.imports import load_dagster
+from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag
+from sqlbuild.integrations.dagster._helpers.imports import load_dagster
+from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
 from sqlbuild.integrations.dagster.project import SqlBuildProject
 from sqlbuild.integrations.dagster.translator import SqlBuildDagsterTranslator
 from sqlbuild.integrations.dagster.types import SqlBuildDagInput

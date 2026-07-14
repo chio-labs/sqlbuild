@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.helpers.dbt.models import DbtSqlbuildWorkContext
-from sqlbuild.cli.commands.helpers.dbt.sqlbuild_work import (
+from sqlbuild.cli.commands._helpers.dbt.models import DbtSqlbuildWorkContext
+from sqlbuild.cli.commands._helpers.dbt.sqlbuild_work import (
     execute_sqlbuild_build_work,
     execute_sqlbuild_test_work,
 )

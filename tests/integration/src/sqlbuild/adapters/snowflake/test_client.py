@@ -22,7 +22,7 @@ from sqlbuild.adapter.models import (
 from sqlbuild.adapter.types import FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
+from sqlbuild.executor.run._helpers.reuse.core import create_relation_from_reuse_origin
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
 from sqlbuild.virtual.freshness.models import SourceFreshnessObservation

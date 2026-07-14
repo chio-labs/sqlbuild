@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.node_source_watermarks.helpers.frontier import (
+from sqlbuild.compiler.node_source_watermarks._helpers.frontier import (
     build_materialized_watermark_frontier as _build_materialized_watermark_frontier,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

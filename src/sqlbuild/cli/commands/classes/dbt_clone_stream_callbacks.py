@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TextIO, cast
 
+from sqlbuild.cli.commands._helpers.clone.output import render_clone_header, render_clone_item_line
 from sqlbuild.cli.commands.constants import (
     DBT_CLONE_INDEX_ARGUMENT,
     DBT_CLONE_ORIGIN_TARGET_NAME_ARGUMENT,
 )
-from sqlbuild.cli.commands.helpers.clone.output import render_clone_header, render_clone_item_line
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.executor.clone.models import CloneItemResult
 

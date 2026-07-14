@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.integrations.rivers.helpers import assets as rivers_assets
-from sqlbuild.integrations.rivers.helpers.assets import build_asset_defs
+from sqlbuild.integrations.rivers._helpers import assets as rivers_assets
+from sqlbuild.integrations.rivers._helpers.assets import build_asset_defs
 from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     build_python_augmented_dagster_test_dag,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.classes.statement_recorder import StatementRecorder
-from sqlbuild.executor.python_nodes.helpers.execution import execute_python_nodes
+from sqlbuild.executor.python_nodes._helpers.execution import execute_python_nodes
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutorResult, PythonNodeRuntime
 from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
 

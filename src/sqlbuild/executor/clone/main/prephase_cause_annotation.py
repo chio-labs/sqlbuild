@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.executor.clone.helpers.prephase_progress import (
+from sqlbuild.executor.clone._helpers.prephase_progress import (
     format_prephase_cause_annotation as _format_prephase_cause_annotation,
 )
 

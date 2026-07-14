@@ -1,7 +1,7 @@
 """Public scenario local type override selection operation."""
 
 from sqlbuild.spec.contracts.models import ScenarioConfig
-from sqlbuild.spec.resolution.helpers.project_config import (
+from sqlbuild.spec.resolution._helpers.project_config import (
     scenario_local_type_overrides_for_dialect as _scenario_local_type_overrides_for_dialect,
 )
 

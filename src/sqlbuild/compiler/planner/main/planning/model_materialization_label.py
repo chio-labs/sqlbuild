@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.helpers.output.materialization_labels import (
+from sqlbuild.compiler.planner._helpers.output.materialization_labels import (
     model_materialization_label as _model_materialization_label,
 )
 from sqlbuild.compiler.planner.models import ModelPlanEntry

@@ -1,7 +1,7 @@
 """Build a neutral SQLBuild model graph key."""
 
 from sqlbuild.compiler.planner.models import GraphNodeKey
-from sqlbuild.integrations.dbt.helpers.planning.graph_projection import (
+from sqlbuild.integrations.dbt._helpers.planning.graph_projection import (
     sqlbuild_model_graph_node_key as _build,
 )
 

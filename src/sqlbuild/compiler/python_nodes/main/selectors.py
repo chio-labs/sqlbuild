@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.python_nodes.helpers.selectors import resolve_python_node_selectors
+from sqlbuild.compiler.python_nodes._helpers.selectors import resolve_python_node_selectors
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 
 

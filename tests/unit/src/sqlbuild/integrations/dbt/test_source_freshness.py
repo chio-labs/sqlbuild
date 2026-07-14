@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.main.runtime.source_freshness import (
     translate_dbt_manifest_sources_to_sqlbuild_sources,
 )

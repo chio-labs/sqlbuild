@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.virtual.executor.helpers.rewrite import relation_type_for_model
+from sqlbuild.virtual.executor._helpers.rewrite import relation_type_for_model
 
 
 def resolve_model_relation_type(materialized: str | None) -> str:

@@ -10,14 +10,14 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.virtual.planner.helpers.planning import (
+from sqlbuild.virtual.planner._helpers.planning import (
     build_expected_local_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
 )
+from sqlbuild.virtual.state._helpers.backend import build_state_backend
+from sqlbuild.virtual.state._helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.helpers.backend import build_state_backend
-from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,

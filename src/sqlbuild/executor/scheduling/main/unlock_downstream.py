@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.executor.scheduling.helpers.python_nodes import (
+from sqlbuild.executor.scheduling._helpers.python_nodes import (
     unlock_downstream_python_nodes as _unlock_downstream_python_nodes,
 )
 

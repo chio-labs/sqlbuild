@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from sqlbuild.adapter.helpers.node_source_watermarks import (
+from sqlbuild.adapter._helpers.node_source_watermarks import (
     render_read_latest_node_source_watermarks_sql as _render_sql,
 )
 

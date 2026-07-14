@@ -1,7 +1,7 @@
 """Public effective force resolution operation."""
 
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
-from sqlbuild.spec.resolution.helpers.targets import (
+from sqlbuild.spec.resolution._helpers.targets import (
     resolve_effective_force as _resolve_effective_force,
 )
 

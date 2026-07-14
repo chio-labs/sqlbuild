@@ -35,7 +35,7 @@ from sqlbuild.integrations.dbt.main.selection.resolve_scenario_target_names impo
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtScenarioBuild
-from sqlbuild.integrations.dbt.pipeline.helpers.interop_prologue import (
+from sqlbuild.integrations.dbt.pipeline._helpers.interop_prologue import (
     load_compiled_dbt_manifest,
 )
 from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (

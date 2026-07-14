@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.virtual.state.helpers.encoding import decode_state_text_impl
+from sqlbuild.virtual.state._helpers.encoding import decode_state_text_impl
 
 
 def decode_state_text(value: str | None) -> str | None:

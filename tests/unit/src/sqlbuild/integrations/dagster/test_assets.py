@@ -11,12 +11,12 @@ from sqlbuild.integrations.dagster import (
     sqlbuild_assets,
     sqlbuild_scenario_checks,
 )
-from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
-from sqlbuild.integrations.dagster.helpers.assets import (
+from sqlbuild.integrations.dagster._helpers.assets import (
     build_asset_specs,
     build_check_specs,
     build_scenario_check_specs,
 )
+from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
 from sqlbuild.integrations.dagster.project import SqlBuildProject
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetCheckFilterTestCase,

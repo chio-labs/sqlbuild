@@ -24,7 +24,7 @@ from scripts.structure.structure_conventions.models import Violation
 def check_example(file_path):
     code = "SC010" if file_path.name == "main.py" else "SC022"
     message = (
-        "helpers/ must not contain main.py; keep orchestration outside helper packages"
+        "_helpers/ must not contain main.py; keep orchestration outside helper packages"
         if code == "SC010"
         else "helper subpackages must stay shallow"
     )
@@ -60,7 +60,7 @@ def check_example(file_path):
                 "A `main/` public function is an orchestrator",
                 "`SC063`, `SC064`, and `SC065` cap statements, distinct calls, and locals",
                 (
-                    "- `SC010`: helpers/ must not contain main.py; keep orchestration "
+                    "- `SC010`: _helpers/ must not contain main.py; keep orchestration "
                     "outside helper packages"
                 ),
                 "- `SC022`: helper subpackages must stay shallow",
@@ -92,4 +92,4 @@ def test_given_structure_rules_when_building_skill_then_renders_boundary_guidanc
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in skill_markdown
     assert "- `SC010`: helper subpackages must stay shallow" not in skill_markdown
-    assert "- `SC022`: helpers/ must not contain main.py" not in skill_markdown
+    assert "- `SC022`: _helpers/ must not contain main.py" not in skill_markdown

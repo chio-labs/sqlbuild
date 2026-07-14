@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.references.helpers.patterns import (
+from sqlbuild.compiler.references._helpers.patterns import (
     reference_call_prefix_pattern_text as _reference_call_prefix_pattern_text,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind

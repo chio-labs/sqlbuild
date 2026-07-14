@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.helpers.janitor.compilation import compile_janitor_project
-from sqlbuild.cli.commands.helpers.janitor.connections import (
+from sqlbuild.cli.commands._helpers.janitor.compilation import compile_janitor_project
+from sqlbuild.cli.commands._helpers.janitor.connections import (
     close_janitor_warehouse,
     connect_janitor_warehouse,
 )
-from sqlbuild.cli.commands.helpers.janitor.execution import execute_janitor_cleanup
-from sqlbuild.cli.commands.helpers.janitor.invocation import (
+from sqlbuild.cli.commands._helpers.janitor.execution import execute_janitor_cleanup
+from sqlbuild.cli.commands._helpers.janitor.invocation import (
     resolve_janitor_invocation,
     resolve_janitor_settings,
 )
-from sqlbuild.cli.commands.helpers.janitor.models import (
+from sqlbuild.cli.commands._helpers.janitor.models import (
     JanitorCommandRequest,
     JanitorCompileContext,
     JanitorConnectionContext,
@@ -21,7 +21,7 @@ from sqlbuild.cli.commands.helpers.janitor.models import (
     JanitorRetentionInspection,
     JanitorSettings,
 )
-from sqlbuild.cli.commands.helpers.janitor.outputs import (
+from sqlbuild.cli.commands._helpers.janitor.outputs import (
     confirm_janitor_plan,
     janitor_plan_has_work,
     write_janitor_cancelled,
@@ -29,7 +29,7 @@ from sqlbuild.cli.commands.helpers.janitor.outputs import (
     write_janitor_disabled,
     write_janitor_plan,
 )
-from sqlbuild.cli.commands.helpers.janitor.planning import (
+from sqlbuild.cli.commands._helpers.janitor.planning import (
     build_janitor_execution_plan,
     inspect_janitor_retention,
 )

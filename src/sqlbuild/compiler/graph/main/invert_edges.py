@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from sqlbuild.compiler.graph.helpers.algorithms import invert_edges_impl
+from sqlbuild.compiler.graph._helpers.algorithms import invert_edges_impl
 
 
 def invert_edges[K](

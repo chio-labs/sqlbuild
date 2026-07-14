@@ -6,13 +6,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
-from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
-from sqlbuild.cli.commands.helpers.entry.models import CliEntrypointHandlers
-from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
-from sqlbuild.cli.commands.helpers.scenario.models import ScenarioTestCommandRequest
-from sqlbuild.cli.commands.helpers.seed.models import SeedCommandRequest
-from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
+from sqlbuild.cli.commands._helpers.audit.models import AuditCommandRequest
+from sqlbuild.cli.commands._helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands._helpers.entry.models import CliEntrypointHandlers
+from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
+from sqlbuild.cli.commands._helpers.scenario.models import ScenarioTestCommandRequest
+from sqlbuild.cli.commands._helpers.seed.models import SeedCommandRequest
+from sqlbuild.cli.commands._helpers.test.models import TestCommandRequest
 
 
 def noop_handler(*_a: Any, **_k: Any) -> int:

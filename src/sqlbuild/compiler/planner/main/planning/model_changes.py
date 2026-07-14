@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledModel
-from sqlbuild.compiler.planner.helpers.changes.detect import (
+from sqlbuild.compiler.planner._helpers.changes.detect import (
     detect_model_changes as _detect_model_changes,
 )
 from sqlbuild.compiler.planner.models import ChangeDetectionResult, WarehouseSnapshot

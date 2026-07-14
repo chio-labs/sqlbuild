@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.integrations.dbt.helpers.runtime.event_stream import (
+from sqlbuild.integrations.dbt._helpers.runtime.event_stream import (
     execute_dbt_json_event_stream as _execute,
 )
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult

@@ -20,7 +20,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.integrations.dbt.helpers.selection.selector_terms import dbt_fqn_selector_term
+from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,

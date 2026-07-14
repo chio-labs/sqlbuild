@@ -20,7 +20,7 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
-from sqlbuild.virtual.freshness.helpers.state import (
+from sqlbuild.virtual.freshness._helpers.state import (
     source_freshness_record_from_observation,
 )
 from sqlbuild.virtual.freshness.main.runtime_observation import (

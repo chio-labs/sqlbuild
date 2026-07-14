@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.python_nodes.helpers.run_lifecycle import (
+from sqlbuild.compiler.python_nodes._helpers.run_lifecycle import (
     build_python_sql_run_lifecycle_plan,
 )
 from sqlbuild.compiler.python_nodes.models import (

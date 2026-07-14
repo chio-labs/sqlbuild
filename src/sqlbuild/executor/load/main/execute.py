@@ -15,20 +15,20 @@ from sqlbuild.adapter.relation_naming.main.resolve_qualified_name_parts import (
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.exceptions import ExecutorInputError
-from sqlbuild.executor.load.helpers.cursors import (
+from sqlbuild.executor.load._helpers.cursors import (
     exclusive_cursor_end,
     format_cursor_bound,
     load_staging_cursor_bounds,
 )
-from sqlbuild.executor.load.helpers.execution import load_resource_kind
-from sqlbuild.executor.load.helpers.external import execute_external_source_load
-from sqlbuild.executor.load.helpers.loader_invocation import (
+from sqlbuild.executor.load._helpers.execution import load_resource_kind
+from sqlbuild.executor.load._helpers.external import execute_external_source_load
+from sqlbuild.executor.load._helpers.loader_invocation import (
     build_loader_context,
     interpret_loader_return,
     validate_source_write_strategy,
 )
-from sqlbuild.executor.load.helpers.schema import validate_and_evolve_existing_target
-from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
+from sqlbuild.executor.load._helpers.schema import validate_and_evolve_existing_target
+from sqlbuild.executor.load._helpers.staging import write_loader_rows_to_staging
 from sqlbuild.executor.load.models import (
     LoaderContext,
     LoaderDestination,

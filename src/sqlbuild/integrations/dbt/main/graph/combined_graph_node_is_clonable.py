@@ -1,6 +1,6 @@
 """Inspect combined graph clone eligibility."""
 
-from sqlbuild.integrations.dbt.helpers.graph.core import combined_graph_node_is_clonable as _check
+from sqlbuild.integrations.dbt._helpers.graph.core import combined_graph_node_is_clonable as _check
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import DbtCombinedGraphKey
 

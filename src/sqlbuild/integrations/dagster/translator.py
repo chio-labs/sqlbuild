@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from sqlbuild.integrations.dagster.helpers.imports import load_dagster
+from sqlbuild.integrations.dagster._helpers.imports import load_dagster
 
 
 class SqlBuildDagsterTranslator:

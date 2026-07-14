@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.helpers.identity.hashing import (
+from sqlbuild.compiler.planner._helpers.identity.hashing import (
     build_model_local_identity_hash as _build_model_local_identity_hash,
 )
 

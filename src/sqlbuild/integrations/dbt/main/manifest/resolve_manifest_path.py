@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.helpers.planning.runtime import resolve_dbt_manifest_path as _resolve
+from sqlbuild.integrations.dbt._helpers.planning.runtime import (
+    resolve_dbt_manifest_path as _resolve,
+)
 from sqlbuild.integrations.dbt.models import DbtCliOptions
 
 

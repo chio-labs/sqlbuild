@@ -1,6 +1,6 @@
 """Resolve dbt variables."""
 
-from sqlbuild.integrations.dbt.helpers.planning.runtime import resolve_dbt_vars_mapping as _resolve
+from sqlbuild.integrations.dbt._helpers.planning.runtime import resolve_dbt_vars_mapping as _resolve
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
 

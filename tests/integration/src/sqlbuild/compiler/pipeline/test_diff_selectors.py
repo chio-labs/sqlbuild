@@ -9,7 +9,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.helpers.diff import (
+from sqlbuild.compiler.pipeline._helpers.diff import (
     compile_project_for_diff_environment,
     resolve_diff_model_names,
 )

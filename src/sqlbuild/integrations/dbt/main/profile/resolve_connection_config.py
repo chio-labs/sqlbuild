@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.helpers.profile.connection import (
+from sqlbuild.integrations.dbt._helpers.profile.connection import (
     resolve_connection_config as _resolve,
 )
 

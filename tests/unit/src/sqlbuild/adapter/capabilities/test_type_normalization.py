@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-import sqlbuild.adapter.helpers.type_normalization as type_normalization
+import sqlbuild.adapter._helpers.type_normalization as type_normalization
 from sqlbuild.adapter.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.main.normalize_type import normalize_type
 from sqlbuild.adapter.main.types_equal import types_equal

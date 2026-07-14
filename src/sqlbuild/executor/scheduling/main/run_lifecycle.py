@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.executor.scheduling.helpers.lifecycle import (
+from sqlbuild.executor.scheduling._helpers.lifecycle import (
     run_lifecycle_scheduler as _run_lifecycle_scheduler,
 )
 from sqlbuild.executor.scheduling.models import (

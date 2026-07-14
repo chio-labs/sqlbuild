@@ -1,7 +1,7 @@
 """Public target name resolution operation."""
 
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
-from sqlbuild.spec.resolution.helpers.targets import resolve_target_name as _resolve_target_name
+from sqlbuild.spec.resolution._helpers.targets import resolve_target_name as _resolve_target_name
 
 
 def resolve_target_name(

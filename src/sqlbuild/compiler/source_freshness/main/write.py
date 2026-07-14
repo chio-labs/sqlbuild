@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.types import AdapterExecute
-from sqlbuild.compiler.source_freshness.helpers.sql import (
+from sqlbuild.compiler.source_freshness._helpers.sql import (
     build_create_table_sql,
 )
 from sqlbuild.compiler.source_freshness.models import (

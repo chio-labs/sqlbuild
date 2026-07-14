@@ -1,6 +1,6 @@
 """Build expected dbt model version hashes."""
 
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+from sqlbuild.integrations.dbt._helpers.planning.model_planning import (
     build_expected_dbt_model_version_hashes as _build,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

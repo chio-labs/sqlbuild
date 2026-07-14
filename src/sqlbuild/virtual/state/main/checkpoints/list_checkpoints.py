@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.virtual.state._helpers.backend import build_state_backend
+from sqlbuild.virtual.state._helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.helpers.backend import build_state_backend
-from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.models import StateBackendConfig, VirtualEnvironmentCheckpointRecord
 
 

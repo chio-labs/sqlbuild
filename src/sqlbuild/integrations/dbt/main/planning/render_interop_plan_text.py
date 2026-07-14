@@ -1,6 +1,6 @@
 """Format a dbt interop plan."""
 
-from sqlbuild.integrations.dbt.helpers.planning.plan import format_dbt_interop_plan as _format
+from sqlbuild.integrations.dbt._helpers.planning.plan import format_dbt_interop_plan as _format
 from sqlbuild.integrations.dbt.models import DbtInteropPlan
 from sqlbuild.presentation.models import DisplayOptions
 

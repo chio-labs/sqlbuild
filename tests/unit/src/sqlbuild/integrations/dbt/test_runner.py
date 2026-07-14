@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.cli.runner import (
+from sqlbuild.integrations.dbt._helpers.cli.runner import (
     build_dbt_compile_argv,
     build_dbt_debug_argv,
     build_dbt_deps_argv,
     build_dbt_ls_argv,
     parse_dbt_ls_json_lines,
 )
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsNode, DbtLsResult
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtArgvTestCase,

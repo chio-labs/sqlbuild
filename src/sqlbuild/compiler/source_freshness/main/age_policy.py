@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.compiler.source_freshness.helpers.age_policy import (
+from sqlbuild.compiler.source_freshness._helpers.age_policy import (
     evaluate_source_freshness_age_policy as _evaluate_source_freshness_age_policy,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus

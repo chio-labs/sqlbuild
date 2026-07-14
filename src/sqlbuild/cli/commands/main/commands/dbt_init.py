@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.helpers.dbt_init.execution import execute_dbt_init
-from sqlbuild.cli.commands.helpers.dbt_init.invocation import resolve_dbt_init_invocation
-from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest, DbtInitInvocation
-from sqlbuild.cli.commands.helpers.dbt_init.outputs import (
+from sqlbuild.cli.commands._helpers.dbt_init.execution import execute_dbt_init
+from sqlbuild.cli.commands._helpers.dbt_init.invocation import resolve_dbt_init_invocation
+from sqlbuild.cli.commands._helpers.dbt_init.models import DbtInitCommandRequest, DbtInitInvocation
+from sqlbuild.cli.commands._helpers.dbt_init.outputs import (
     resolve_dbt_init_exit_code,
     write_dbt_init_completion_output,
 )

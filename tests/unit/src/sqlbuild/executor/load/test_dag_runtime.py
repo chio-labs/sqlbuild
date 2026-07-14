@@ -6,7 +6,7 @@ import queue
 
 import pytest
 
-from sqlbuild.executor.load.helpers.dag_runtime import (
+from sqlbuild.executor.load._helpers.dag_runtime import (
     build_load_dag_state,
     complete_dag_source,
     load_dag_worker,

@@ -9,11 +9,11 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.compile.models.core import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.identity.standard import (
+from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner._helpers.identity.standard import (
     build_standard_model_version_identities,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     ModelPlanEntry,

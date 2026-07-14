@@ -1,6 +1,6 @@
 """Public adapter type comparison operation."""
 
-from sqlbuild.adapter.helpers.type_normalization import types_equal as _types_equal
+from sqlbuild.adapter._helpers.type_normalization import types_equal as _types_equal
 from sqlbuild.adapter.types import TypeDialect
 
 

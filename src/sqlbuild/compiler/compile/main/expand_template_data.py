@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.helpers.render.templating import (
+from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_template_data as _expand_template_data,
 )
 

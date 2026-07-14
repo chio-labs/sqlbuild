@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.helpers.config.core import resolve_dbt_config as _resolve
+from sqlbuild.integrations.dbt._helpers.config.core import resolve_dbt_config as _resolve
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, ResolvedDbtConfig
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 

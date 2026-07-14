@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
-from sqlbuild.virtual.executor.helpers.rewrite import rewrite_project_model_locations
+from sqlbuild.virtual.executor._helpers.rewrite import rewrite_project_model_locations
 
 
 def rewrite_virtual_project_model_locations(

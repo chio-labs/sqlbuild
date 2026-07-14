@@ -11,11 +11,11 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
+from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands.main.commands.playground import run_playground
 from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
-from sqlbuild.integrations.rivers.helpers.assets import build_asset_defs
-from sqlbuild.integrations.rivers.helpers.dag import load_sqlbuild_dag
+from sqlbuild.integrations.rivers._helpers.assets import build_asset_defs
+from sqlbuild.integrations.rivers._helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     REPO_ROOT,

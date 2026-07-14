@@ -1,6 +1,6 @@
 """Public adapter type normalization operation."""
 
-from sqlbuild.adapter.helpers.type_normalization import normalize_type as _normalize_type
+from sqlbuild.adapter._helpers.type_normalization import normalize_type as _normalize_type
 from sqlbuild.adapter.models import NormalizedType
 from sqlbuild.adapter.types import TypeDialect
 

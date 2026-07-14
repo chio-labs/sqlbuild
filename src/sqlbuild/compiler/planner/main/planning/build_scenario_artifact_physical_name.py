@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.helpers.scenario.artifact_names import (
+from sqlbuild.compiler.planner._helpers.scenario.artifact_names import (
     build_scenario_artifact_physical_name as _build_scenario_artifact_physical_name,
 )
 

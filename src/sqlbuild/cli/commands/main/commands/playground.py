@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.helpers.playground.completion_output import (
+from sqlbuild.cli.commands._helpers.playground.completion_output import (
     render_playground_completion_text,
 )
-from sqlbuild.cli.commands.helpers.playground.models import (
+from sqlbuild.cli.commands._helpers.playground.models import (
     PlaygroundCommandRequest,
     PlaygroundTarget,
 )
-from sqlbuild.cli.commands.helpers.playground.scaffold import (
+from sqlbuild.cli.commands._helpers.playground.scaffold import (
     resolve_playground_target,
     write_playground_project,
 )

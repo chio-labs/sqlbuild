@@ -5,31 +5,31 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from sqlbuild.cli.commands.helpers.build.checks import run_post_build_python_checks
-from sqlbuild.cli.commands.helpers.build.compile_target import write_build_compile_target
-from sqlbuild.cli.commands.helpers.build.defer_clone import run_defer_clone_boundary_prephase
-from sqlbuild.cli.commands.helpers.build.execution import (
+from sqlbuild.cli.commands._helpers.build.checks import run_post_build_python_checks
+from sqlbuild.cli.commands._helpers.build.compile_target import write_build_compile_target
+from sqlbuild.cli.commands._helpers.build.defer_clone import run_defer_clone_boundary_prephase
+from sqlbuild.cli.commands._helpers.build.execution import (
     execute_build_plan,
     prepare_build_execution,
 )
-from sqlbuild.cli.commands.helpers.build.full_refresh import (
+from sqlbuild.cli.commands._helpers.build.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
-from sqlbuild.cli.commands.helpers.build.invocation import resolve_build_invocation
-from sqlbuild.cli.commands.helpers.build.models import (
+from sqlbuild.cli.commands._helpers.build.invocation import resolve_build_invocation
+from sqlbuild.cli.commands._helpers.build.models import (
     BuildCommandRequest,
     BuildExecutionPreparation,
     BuildInvocation,
     BuildRunOutcome,
     VirtualBuildCliRequest,
 )
-from sqlbuild.cli.commands.helpers.build.outputs import (
+from sqlbuild.cli.commands._helpers.build.outputs import (
     resolve_build_exit_code,
     write_build_completion_output,
     write_build_plan_text,
     write_build_runtime_targets,
 )
-from sqlbuild.cli.commands.helpers.build.planning import compile_build_plan
+from sqlbuild.cli.commands._helpers.build.planning import compile_build_plan
 from sqlbuild.cli.commands.main.commands.virtual_build import run_virtual_build
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult

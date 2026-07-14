@@ -1,6 +1,6 @@
 """Public adapter numeric family normalization operation."""
 
-from sqlbuild.adapter.helpers.type_normalization import (
+from sqlbuild.adapter._helpers.type_normalization import (
     normalize_numeric_family as _normalize_numeric_family,
 )
 from sqlbuild.adapter.types import TypeDialect

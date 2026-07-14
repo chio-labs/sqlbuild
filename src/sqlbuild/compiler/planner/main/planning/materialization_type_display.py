@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.helpers.output.materialization_labels import (
+from sqlbuild.compiler.planner._helpers.output.materialization_labels import (
     materialization_type_display as _materialization_type_display,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.output.helpers.execution_protocol_v1 import (
+from sqlbuild.cli.output._helpers.execution_protocol_v1 import (
     write_execution_json_output as _write_execution_json_output,
 )
 

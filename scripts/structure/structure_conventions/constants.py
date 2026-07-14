@@ -23,7 +23,7 @@ RAW_BUILTIN_RAISE_NAMES: frozenset[str] = frozenset(
 ADAPTER_DOMAIN_NAME: str = "adapter"
 ADAPTER_ENTRY_BOUNDARY_NAMES: frozenset[str] = frozenset(
     {
-        "helpers",
+        "_helpers",
         "classes",
         "models",
         "types",
@@ -59,7 +59,7 @@ CROSS_PACKAGE_SOURCE_EXEMPT_DOMAIN_NAMES: frozenset[str] = frozenset({"spec", "a
 CROSS_PACKAGE_TARGET_EXEMPT_DOMAIN_NAMES: frozenset[str] = frozenset({"spec", "adapter", "shared"})
 DBT_INTEGRATION_PATH_MARKER: str = "src/sqlbuild/integrations/dbt/"
 DBT_REF_ATTRIBUTE_NAME: str = "DBT_REF"
-DEEP_INTERNAL_PACKAGE_NAMES: frozenset[str] = frozenset({"shared", "helpers"})
+DEEP_INTERNAL_PACKAGE_NAMES: frozenset[str] = frozenset({"shared", "_helpers"})
 DIRECT_TOP_LEVEL_ROLE_MODULE_NAMES: frozenset[str] = frozenset(
     {"models.py", "types.py", CONSTANTS_MODULE_NAME, "helpers.py", CLASSES_MODULE_NAME}
 )
@@ -71,14 +71,14 @@ FROZEN_DATACLASS_KEYWORD_NAME: str = "frozen"
 FUTURE_MODULE_NAME: str = "__future__"
 GRAPH_KEY_CLASS_NAMES: frozenset[str] = frozenset({"GraphNodeKey", "SelectionStalenessNodeKey"})
 HELPERS_MODULE_NAME: str = "helpers.py"
-HELPERS_PACKAGE_NAME: str = "helpers"
+HELPERS_PACKAGE_NAME: str = "_helpers"
 INIT_MODULE_NAME: str = "__init__.py"
 INSERT_SQL_PREFIX: str = "INSERT INTO"
 LOAD_PROJECT_MACROS_NAME: str = "load_project_macros"
 LEGACY_DUCKDB_ADAPTER_PARTS: tuple[str, ...] = ("shared", "classes", "duckdb.py")
 MAIN_MODULE_NAME: str = "main.py"
 MAIN_PACKAGE_NAME: str = "main"
-MAIN_SUPPORT_IMPORT_PACKAGE_NAMES: frozenset[str] = frozenset({"helpers", "shared"})
+MAIN_SUPPORT_IMPORT_PACKAGE_NAMES: frozenset[str] = frozenset({"_helpers", "shared"})
 MODELS_MODULE_NAME: str = "models.py"
 MODELS_PACKAGE_NAME: str = "models"
 NESTED_ALLOWED_CHILD_PACKAGE_NAMES: frozenset[str] = frozenset(
@@ -117,7 +117,7 @@ PUBLIC_SURFACE_ROLE_NAMES: frozenset[str] = frozenset(
 )
 PYTHON_BYTECODE_CACHE_PACKAGE_NAME: str = "__pycache__"
 PYTHON_FILE_SUFFIX: str = ".py"
-RAW_COLOR_CAPABILITY_MODULE_NAME: str = "sqlbuild.presentation.helpers.terminal_capabilities"
+RAW_COLOR_CAPABILITY_MODULE_NAME: str = "sqlbuild.presentation._helpers.terminal_capabilities"
 ROLE_BOUNDARY_NAMES: frozenset[str] = frozenset(
     {
         HELPERS_PACKAGE_NAME,

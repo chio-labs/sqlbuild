@@ -18,13 +18,15 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
 )
-from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_dbt_node_fingerprint
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.manifest.fingerprinting import (
+    try_write_dbt_node_fingerprint,
+)
+from sqlbuild.integrations.dbt._helpers.planning.model_planning import (
     build_dbt_model_planning_result,
 )
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestSeed
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -40,7 +42,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtModelPlanningResult,
     DbtNodeExecutionResult,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+from sqlbuild.integrations.dbt.pipeline._helpers.execute import (
     build_dbt_execution_outcome,
     build_merged_dbt_execution_argv,
     execute_dbt_commands,
@@ -1089,7 +1091,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
     project: CompiledProject = build_compiled_project_with_models(
@@ -1197,7 +1199,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_test_then_renders_
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
     stdout_stream: io.StringIO = io.StringIO()
@@ -1252,7 +1254,7 @@ def test_given_dbt_execution_when_ls_counts_final_selection_then_streams_consist
             return 0
 
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
     runner: DbtRunner = DbtRunner(

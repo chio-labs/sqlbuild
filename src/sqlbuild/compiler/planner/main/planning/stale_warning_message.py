@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.planner.helpers.pruning.selection_classifier import (
+from sqlbuild.compiler.planner._helpers.pruning.selection_classifier import (
     format_stale_upstream_warning_message as _format_stale_upstream_warning_message,
 )
 

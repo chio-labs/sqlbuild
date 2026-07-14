@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlbuild.integrations.dbt.helpers.planning.orchestration import (
+from sqlbuild.integrations.dbt._helpers.planning.orchestration import (
     resolve_sqlbuild_test_actions as _resolve,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropSqlbuildTestAction

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.discovery.models import DiscoveredProvider
+from sqlbuild.provider._helpers.session import build_provider_session as _build_provider_session
 from sqlbuild.provider.classes.session import ProviderSession
-from sqlbuild.provider.helpers.session import build_provider_session as _build_provider_session
 
 
 def build_provider_session(

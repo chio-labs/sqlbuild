@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.integrations.dlt.helpers.progress import SqlbuildDltProgressCollector
+from sqlbuild.integrations.dlt._helpers.progress import SqlbuildDltProgressCollector
 from tests.unit.src.sqlbuild.integrations.dlt._test_types import DltProgressCollectorTestCase
 
 

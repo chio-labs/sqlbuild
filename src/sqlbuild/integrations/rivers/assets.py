@@ -6,10 +6,10 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.integrations.rivers._helpers.assets import build_asset_defs
+from sqlbuild.integrations.rivers._helpers.dag import load_sqlbuild_dag
+from sqlbuild.integrations.rivers._helpers.imports import load_rivers
 from sqlbuild.integrations.rivers.exceptions import RiversDagInputError
-from sqlbuild.integrations.rivers.helpers.assets import build_asset_defs
-from sqlbuild.integrations.rivers.helpers.dag import load_sqlbuild_dag
-from sqlbuild.integrations.rivers.helpers.imports import load_rivers
 from sqlbuild.integrations.rivers.project import SqlBuildProject
 from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
 from sqlbuild.integrations.rivers.types import SqlBuildDagInput

@@ -1,6 +1,6 @@
 """Quoted SQL text scanning entrypoint."""
 
-from sqlbuild.compiler.sql_analysis.helpers.scanning import skip_quoted_text_impl
+from sqlbuild.compiler.sql_analysis._helpers.scanning import skip_quoted_text_impl
 
 
 def skip_quoted_text(*, sql: str, start: int, context: str = "SQL") -> int:

@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.helpers.test.execution import (
+from sqlbuild.cli.commands._helpers.test.execution import (
     execute_test_plan,
     prepare_test_execution,
 )
-from sqlbuild.cli.commands.helpers.test.invocation import resolve_test_invocation
-from sqlbuild.cli.commands.helpers.test.models import (
+from sqlbuild.cli.commands._helpers.test.invocation import resolve_test_invocation
+from sqlbuild.cli.commands._helpers.test.models import (
     TestCommandRequest,
     TestExecutionPreparation,
     TestInvocation,
 )
-from sqlbuild.cli.commands.helpers.test.outputs import (
+from sqlbuild.cli.commands._helpers.test.outputs import (
     resolve_test_exit_code,
     write_test_completion_output,
 )
-from sqlbuild.cli.commands.helpers.test.planning import compile_test_plan
+from sqlbuild.cli.commands._helpers.test.planning import compile_test_plan
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.cli.target_artifacts.main.write_test_runtime_target import write_test_runtime_target
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult

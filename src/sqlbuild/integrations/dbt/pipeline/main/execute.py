@@ -18,11 +18,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtTrackedExecution,
     DbtWriteIdentities,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
+from sqlbuild.integrations.dbt.pipeline._helpers.execute import (
     build_dbt_execution_outcome,
     build_merged_dbt_execution_argv,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.execution_phases import (
+from sqlbuild.integrations.dbt.pipeline._helpers.execution_phases import (
     build_dbt_write_identities,
     execute_dbt_with_state_tracking,
     finalize_dbt_interop_exit,
@@ -36,7 +36,7 @@ from sqlbuild.integrations.dbt.pipeline.helpers.execution_phases import (
     write_dbt_execution_summary,
     write_sqlbuild_skip_notice,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers.interop_prologue import (
+from sqlbuild.integrations.dbt.pipeline._helpers.interop_prologue import (
     compile_dbt_interop_project,
     load_compiled_dbt_manifest,
     resolve_dbt_execution_invocation,

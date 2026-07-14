@@ -5,18 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.helpers.lineage.columns import (
+from sqlbuild.integrations.dbt._helpers.lineage.columns import (
     dbt_column_lineage_selected_keys,
     inspect_dbt_source_schemas,
     select_dbt_column_lineage_target,
 )
-from sqlbuild.integrations.dbt.helpers.lineage.output import (
+from sqlbuild.integrations.dbt._helpers.lineage.output import (
     render_dbt_column_lineage,
     render_dbt_lineage_graph,
 )
-from sqlbuild.integrations.dbt.helpers.lineage.preparation import prepare_dbt_lineage_inputs
-from sqlbuild.integrations.dbt.helpers.lineage.selection import select_dbt_lineage_target
-from sqlbuild.integrations.dbt.helpers.runtime.progress import report_progress
+from sqlbuild.integrations.dbt._helpers.lineage.preparation import prepare_dbt_lineage_inputs
+from sqlbuild.integrations.dbt._helpers.lineage.selection import select_dbt_lineage_target
+from sqlbuild.integrations.dbt._helpers.runtime.progress import report_progress
 from sqlbuild.integrations.dbt.models import (
     DbtColumnLineageTrace,
     DbtCombinedGraphKey,

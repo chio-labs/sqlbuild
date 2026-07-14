@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.helpers.seed.execution import execute_seed_plan
-from sqlbuild.cli.commands.helpers.seed.invocation import resolve_seed_invocation
-from sqlbuild.cli.commands.helpers.seed.models import (
+from sqlbuild.cli.commands._helpers.seed.execution import execute_seed_plan
+from sqlbuild.cli.commands._helpers.seed.invocation import resolve_seed_invocation
+from sqlbuild.cli.commands._helpers.seed.models import (
     SeedCommandRequest,
     SeedExecutionPreparation,
     SeedInvocation,
     SeedRunOutcome,
 )
-from sqlbuild.cli.commands.helpers.seed.outputs import (
+from sqlbuild.cli.commands._helpers.seed.outputs import (
     resolve_seed_exit_code,
     write_seed_completion_output,
     write_seed_execution_header,
 )
-from sqlbuild.cli.commands.helpers.seed.planning import prepare_seed_execution
-from sqlbuild.cli.commands.helpers.seed.virtual import execute_virtual_seed
+from sqlbuild.cli.commands._helpers.seed.planning import prepare_seed_execution
+from sqlbuild.cli.commands._helpers.seed.virtual import execute_virtual_seed
 
 
 def run_seed(request: SeedCommandRequest) -> int:

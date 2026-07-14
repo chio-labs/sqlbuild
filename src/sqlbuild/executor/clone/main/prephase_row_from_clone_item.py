@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.executor.clone.helpers.prephase_progress import (
+from sqlbuild.executor.clone._helpers.prephase_progress import (
     prephase_row_from_clone_item as _prephase_row_from_clone_item,
 )
 from sqlbuild.executor.clone.models import CloneItemResult, PrephaseProgressRow

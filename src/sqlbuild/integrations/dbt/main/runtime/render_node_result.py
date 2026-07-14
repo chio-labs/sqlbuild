@@ -2,7 +2,9 @@
 
 from typing import TextIO
 
-from sqlbuild.integrations.dbt.helpers.runtime.event_stream import render_dbt_node_result as _render
+from sqlbuild.integrations.dbt._helpers.runtime.event_stream import (
+    render_dbt_node_result as _render,
+)
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
 from sqlbuild.presentation.classes.cli_style import CliStyle
 

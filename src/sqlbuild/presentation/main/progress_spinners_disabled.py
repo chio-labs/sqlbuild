@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.presentation.helpers.progress import (
+from sqlbuild.presentation._helpers.progress import (
     progress_spinners_disabled as _progress_spinners_disabled,
 )
 

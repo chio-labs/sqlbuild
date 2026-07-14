@@ -1,6 +1,6 @@
 """SQL parenthesis matching entrypoint."""
 
-from sqlbuild.compiler.sql_analysis.helpers.scanning import find_matching_paren_impl
+from sqlbuild.compiler.sql_analysis._helpers.scanning import find_matching_paren_impl
 
 
 def find_matching_paren(*, sql: str, open_paren_index: int, context: str = "SQL") -> int:

@@ -26,7 +26,7 @@ from tests.unit.src.sqlbuild.executor.load._test_types import (
     SourceLoadNoneReturnTestCase,
 )
 from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
-from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import ExecutionSlackProvider
+from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import ExecutionSlackProvider
 
 
 @pytest.mark.parametrize(

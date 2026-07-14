@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.executor.load.helpers.execution import build_load_execution_indexes
-from sqlbuild.executor.load.helpers.scheduling import (
+from sqlbuild.executor.load._helpers.execution import build_load_execution_indexes
+from sqlbuild.executor.load._helpers.scheduling import (
     open_load_connections,
     run_external_source_loads,
     run_load_dag,

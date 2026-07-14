@@ -1,6 +1,6 @@
 """Build a SQLBuild model graph key."""
 
-from sqlbuild.integrations.dbt.helpers.graph.core import sqlbuild_model_graph_key as _build
+from sqlbuild.integrations.dbt._helpers.graph.core import sqlbuild_model_graph_key as _build
 from sqlbuild.integrations.dbt.models import DbtCombinedGraphKey
 
 

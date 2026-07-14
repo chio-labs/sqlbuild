@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.presentation.helpers.error_text import format_coded_error as _format_coded_error
+from sqlbuild.presentation._helpers.error_text import format_coded_error as _format_coded_error
 
 
 def format_coded_error(

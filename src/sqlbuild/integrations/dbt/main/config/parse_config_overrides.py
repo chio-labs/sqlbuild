@@ -1,6 +1,6 @@
 """Parse dbt configuration overrides."""
 
-from sqlbuild.integrations.dbt.helpers.planning.runtime import parse_dbt_config_overrides as _parse
+from sqlbuild.integrations.dbt._helpers.planning.runtime import parse_dbt_config_overrides as _parse
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides
 
 

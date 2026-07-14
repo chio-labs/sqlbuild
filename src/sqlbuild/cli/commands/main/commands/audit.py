@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.helpers.audit.execution import (
+from sqlbuild.cli.commands._helpers.audit.execution import (
     execute_audit_plan,
     prepare_audit_execution,
 )
-from sqlbuild.cli.commands.helpers.audit.invocation import resolve_audit_invocation
-from sqlbuild.cli.commands.helpers.audit.models import (
+from sqlbuild.cli.commands._helpers.audit.invocation import resolve_audit_invocation
+from sqlbuild.cli.commands._helpers.audit.models import (
     AuditCommandRequest,
     AuditExecutionPreparation,
     AuditInvocation,
 )
-from sqlbuild.cli.commands.helpers.audit.outputs import (
+from sqlbuild.cli.commands._helpers.audit.outputs import (
     resolve_audit_exit_code,
     write_audit_completion_output,
 )
-from sqlbuild.cli.commands.helpers.audit.planning import compile_audit_plan
+from sqlbuild.cli.commands._helpers.audit.planning import compile_audit_plan
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.auditing.models import AuditExecutionResult

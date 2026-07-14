@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild.compiler.graph.helpers.algorithms import transitive_closure_impl
+from sqlbuild.compiler.graph._helpers.algorithms import transitive_closure_impl
 
 
 def transitive_closure[K](

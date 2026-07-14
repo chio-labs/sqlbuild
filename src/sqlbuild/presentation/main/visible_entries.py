@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlbuild.presentation.helpers.display import visible_entries as _visible_entries
+from sqlbuild.presentation._helpers.display import visible_entries as _visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.presentation.helpers.display import append_overflow_line as _append_overflow_line
+from sqlbuild.presentation._helpers.display import append_overflow_line as _append_overflow_line
 from sqlbuild.presentation.models import DisplayOptions
 
 

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from scripts.testing.test_conventions.helpers.convention_checks import collect_violations
+from scripts.testing.test_conventions._helpers.convention_checks import collect_violations
 from scripts.testing.test_conventions.models import Violation
 
 

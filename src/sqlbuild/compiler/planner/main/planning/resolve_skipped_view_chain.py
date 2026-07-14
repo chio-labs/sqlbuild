@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-from sqlbuild.compiler.planner.helpers.graph.defer_clone import resolve_skipped_view_chain_impl
+from sqlbuild.compiler.planner._helpers.graph.defer_clone import resolve_skipped_view_chain_impl
 
 
 def resolve_skipped_view_chain[K](

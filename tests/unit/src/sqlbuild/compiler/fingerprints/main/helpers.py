@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.compiler.fingerprints.helpers.sql import build_read_latest_sql
+from sqlbuild.compiler.fingerprints._helpers.sql import build_read_latest_sql
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.virtual.freshness.helpers.runtime import (
+from sqlbuild.virtual.freshness._helpers.runtime import (
     persist_virtual_environment_source_freshness as _persist_virtual_environment_source_freshness,
 )
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult

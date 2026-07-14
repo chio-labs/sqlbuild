@@ -8,13 +8,13 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.types import AdapterExecute, FrameworkType
+from sqlbuild.compiler.fingerprints._helpers.sql import (
+    build_create_table_sql,
+    build_insert_sql,
+)
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_WRITE_ATTEMPTS,
     FINGERPRINT_WRITE_RETRY_BASE_SECONDS,
-)
-from sqlbuild.compiler.fingerprints.helpers.sql import (
-    build_create_table_sql,
-    build_insert_sql,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 

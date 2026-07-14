@@ -7,17 +7,17 @@ import logging
 import sys
 from collections.abc import Sequence
 
-from sqlbuild.cli.commands.helpers.entry.dispatch import dispatch_cli_command
-from sqlbuild.cli.commands.helpers.entry.errors import (
+from sqlbuild.cli.commands._helpers.entry.dispatch import dispatch_cli_command
+from sqlbuild.cli.commands._helpers.entry.errors import (
     cli_error_use_color,
     format_expected_error,
 )
-from sqlbuild.cli.commands.helpers.entry.models import (
+from sqlbuild.cli.commands._helpers.entry.models import (
     CliEntrypointHandlers,
     ParsedCliInvocation,
 )
-from sqlbuild.cli.commands.helpers.entry.parser import build_cli_parser
-from sqlbuild.cli.commands.helpers.entry.parsing import parse_cli_invocation
+from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
+from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.exceptions import CliUserError
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
@@ -28,7 +28,7 @@ from sqlbuild.virtual.state.exceptions import StateBackendError
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI entrypoint."""
 
-    from sqlbuild.cli.commands.helpers.scenario.capture import run_scenario_capture
+    from sqlbuild.cli.commands._helpers.scenario.capture import run_scenario_capture
     from sqlbuild.cli.commands.main.commands.audit import run_audit
     from sqlbuild.cli.commands.main.commands.build import run_build
     from sqlbuild.cli.commands.main.commands.check import run_check

@@ -13,13 +13,13 @@ from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
-from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
-from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
-from sqlbuild.cli.commands.helpers.load.selection import select_load_entries
-from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
-from sqlbuild.cli.commands.helpers.scenario.models import ScenarioTestCommandRequest
-from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
+from sqlbuild.cli.commands._helpers.audit.models import AuditCommandRequest
+from sqlbuild.cli.commands._helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
+from sqlbuild.cli.commands._helpers.load.selection import select_load_entries
+from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest
+from sqlbuild.cli.commands._helpers.scenario.models import ScenarioTestCommandRequest
+from sqlbuild.cli.commands._helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.main.commands.audit import run_audit
 from sqlbuild.cli.commands.main.commands.build import run_build
 from sqlbuild.cli.commands.main.commands.load import run_load

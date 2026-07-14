@@ -7,8 +7,8 @@ from typing import Any
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredSourceFile
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.models import LoaderContext
+from sqlbuild.integrations.dlt._helpers.runner import run_dlt_source
 from sqlbuild.integrations.dlt.constants import DLT_INTEGRATION_KIND
-from sqlbuild.integrations.dlt.helpers.runner import run_dlt_source
 from sqlbuild.integrations.dlt.models import DltSourceConfig
 from sqlbuild.spec.contracts.models import SourceEntry
 

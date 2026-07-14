@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.planning.plan import (
+from sqlbuild.integrations.dbt._helpers.planning.plan import (
     build_dbt_interop_plan,
     format_dbt_interop_plan,
     format_dbt_interop_plan_json,

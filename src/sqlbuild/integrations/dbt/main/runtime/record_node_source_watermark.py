@@ -1,7 +1,7 @@
 """Record a dbt node source watermark."""
 
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
-from sqlbuild.integrations.dbt.helpers.runtime.node_source_watermarks import (
+from sqlbuild.integrations.dbt._helpers.runtime.node_source_watermarks import (
     record_dbt_successful_node_source_watermark as _record,
 )
 from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex

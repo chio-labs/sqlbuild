@@ -31,7 +31,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.executor.run.helpers.materializations.incremental import execute_incremental_entry
+from sqlbuild.executor.run._helpers.materializations.incremental import execute_incremental_entry
 from sqlbuild.executor.run.models import (
     HookContext,
     ModelExecutionResult,

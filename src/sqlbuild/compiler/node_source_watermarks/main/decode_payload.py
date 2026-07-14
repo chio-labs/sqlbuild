@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.node_source_watermarks.helpers.payload import (
+from sqlbuild.compiler.node_source_watermarks._helpers.payload import (
     decode_watermark_payload as _decode_watermark_payload,
 )
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkPayload

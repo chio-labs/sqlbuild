@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Hashable
 
-from sqlbuild.compiler.lineage.helpers.tree_render import (
+from sqlbuild.compiler.lineage._helpers.tree_render import (
     SupportsSortKey,
     render_dependency_branch,
 )

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlbuild.compiler.sql_analysis.helpers.polyglot import (
+from sqlbuild.compiler.sql_analysis._helpers.polyglot import (
     import_polyglot_sql as _import_polyglot_sql,
 )
 

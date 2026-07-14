@@ -6,12 +6,12 @@ from collections.abc import Callable
 from typing import Any, TextIO, cast
 
 from sqlbuild.adapter.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.helpers.build.python_lifecycle_selection import (
+from sqlbuild.cli.commands._helpers.build.python_lifecycle_selection import (
     load_result_key_or_none,
     python_node_result_names,
     sql_loader_functions_for_lifecycle_handoff,
 )
-from sqlbuild.cli.commands.helpers.build.python_node_output import write_python_node_results
+from sqlbuild.cli.commands._helpers.build.python_node_output import write_python_node_results
 from sqlbuild.compiler.compile.models.core import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput

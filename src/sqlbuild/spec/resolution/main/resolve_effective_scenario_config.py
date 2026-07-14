@@ -1,7 +1,7 @@
 """Public effective scenario configuration resolution operation."""
 
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, ScenarioConfig
-from sqlbuild.spec.resolution.helpers.project_config import (
+from sqlbuild.spec.resolution._helpers.project_config import (
     resolve_effective_scenario_config as _resolve_effective_scenario_config,
 )
 

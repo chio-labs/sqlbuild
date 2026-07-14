@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.output.helpers.plan_json import format_plan_json as _format_plan_json
+from sqlbuild.cli.output._helpers.plan_json import format_plan_json as _format_plan_json
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild.compiler.node_source_watermarks.helpers.classifier import (
+from sqlbuild.compiler.node_source_watermarks._helpers.classifier import (
     classify_node_source_watermark_staleness as _classify_node_source_watermark_staleness,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (
