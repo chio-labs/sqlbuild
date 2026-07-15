@@ -134,6 +134,9 @@ ROLE_BOUNDARY_NAMES: frozenset[str] = frozenset(
         EXCEPTIONS_PACKAGE_NAME,
     }
 )
+RULES_PACKAGE_NAME: str = "rules"
+STRATA_POLICY_PATH_MARKER: str = "scripts/strata_policy/"
+TOOLING_RULE_HELPER_MIN_IMPORT_PARTS: int = 3
 RUNTIME_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild")
 SC010_CODE: str = "SC010"
 SELECTOR_MARKER: str = "+"

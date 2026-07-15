@@ -1,7 +1,8 @@
 roots = ["src/sqlbuild"]
 tests = ["tests"]
 tooling = ["scripts"]
-select = ["SF"]
+rule_paths = ["scripts/strata_policy/rules"]
+select = ["SF", "XSB"]
 
 [evaluation]
 exclude = ["tests/e2e/fixtures/**"]
@@ -146,3 +147,23 @@ rule = "SFS120"
 path = "src/sqlbuild/integrations/dagster/classes/sqlbuild_cli_resource.py"
 symbols = ["SqlBuildCliResource.cli"]
 reason = "This method follows Dagster's public cli(args, *, ...) positional convention."
+
+[[rule_exceptions]]
+rule = "SFL101"
+path = "scripts/strata_policy/rules/adapter_ownership.py"
+reason = "Strata 0.16.0 does not classify tooling rules/ as a role for sibling _helpers imports, despite SFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "SFL101"
+path = "scripts/strata_policy/rules/canonical_operations.py"
+reason = "Strata 0.16.0 does not classify tooling rules/ as a role for sibling _helpers imports, despite SFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "SFL101"
+path = "scripts/strata_policy/rules/module_boundaries.py"
+reason = "Strata 0.16.0 does not classify tooling rules/ as a role for sibling _helpers imports, despite SFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "SFL101"
+path = "scripts/strata_policy/rules/orchestration_dataflow.py"
+reason = "Strata 0.16.0 does not classify tooling rules/ as a role for sibling _helpers imports, despite SFR704 requiring that layout."
