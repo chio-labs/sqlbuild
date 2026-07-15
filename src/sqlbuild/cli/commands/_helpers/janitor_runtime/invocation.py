@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.janitor_runtime.models import (
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
     JanitorCommandRequest,
     JanitorInvocation,
     JanitorSettings,
 )
-from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color

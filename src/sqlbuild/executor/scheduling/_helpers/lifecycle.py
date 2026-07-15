@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.contracts.types import LifecycleNodeStatus
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.scheduling.models import (
     LifecycleExecutionNode,
     LifecycleNodeResult,
     LifecycleSchedulerResult,
 )
+from sqlbuild.executor.scheduling.types import LifecycleNodeStatus
 
 
 def run_lifecycle_scheduler(

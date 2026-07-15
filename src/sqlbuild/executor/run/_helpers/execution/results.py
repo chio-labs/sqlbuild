@@ -8,7 +8,6 @@ from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
 from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run.constants import (
     RUN_AUDIT_FAILED_CODE,
     RUN_CONTRACT_FAILED_CODE,
@@ -24,6 +23,8 @@ from sqlbuild.executor.run.constants import (
     RUN_UNKNOWN_FAILED_CODE,
 )
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def build_failed_result(

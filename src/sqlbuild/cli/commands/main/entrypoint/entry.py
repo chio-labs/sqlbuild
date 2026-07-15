@@ -12,13 +12,13 @@ from sqlbuild.cli.commands._helpers.entry.errors import (
     cli_error_use_color,
     format_expected_error,
 )
-from sqlbuild.cli.commands._helpers.entry.models import (
-    CliEntrypointHandlers,
-    ParsedCliInvocation,
-)
 from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
+    CliEntrypointHandlers,
+    ParsedCliInvocation,
+)
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.presentation.main.supports_color import supports_color

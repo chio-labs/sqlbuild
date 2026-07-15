@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.cli.commands._helpers.debug.models import DebugResult
+from sqlbuild.cli.commands.models import DebugResult
 
 
 @dataclass(frozen=True)

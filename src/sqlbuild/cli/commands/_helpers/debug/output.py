@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from sqlbuild.cli.commands._helpers.debug.models import DebugLine, DebugResult
-from sqlbuild.cli.commands._helpers.debug.types import DebugCheckStatus
+from sqlbuild.cli.commands.models import DebugLine, DebugResult
+from sqlbuild.cli.commands.types import DebugCheckStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
 

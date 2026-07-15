@@ -25,6 +25,21 @@ from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
+class SqlHookEntry:
+    """A model lifecycle hook that executes SQL."""
+
+    statement: str
+
+
+@dataclass(frozen=True)
+class PythonHookEntry:
+    """A model lifecycle hook that invokes a discovered Python hook."""
+
+    name: str
+    kwargs: dict[str, object]
+
+
+@dataclass(frozen=True)
 class DiscoveredSqlModelFile:
     """A discovered SQL model file and its raw contents."""
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.seed.models import (
+from sqlbuild.cli.commands.models import (
     SeedCommandRequest,
     SeedExecutionPreparation,
     SeedInvocation,

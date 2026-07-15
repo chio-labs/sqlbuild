@@ -32,13 +32,13 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run._helpers.materializations.incremental import execute_incremental_entry
 from sqlbuild.executor.run.models import (
     HookContext,
     ModelExecutionResult,
     ModelMaterializationContext,
 )
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.incremental._test_types import (
     IncrementalFailureTestCase,
     IncrementalSuccessTestCase,

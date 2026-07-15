@@ -62,6 +62,12 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
+from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
+    resolve_effective_scenario_config,
+)
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     SchemaAuditInstance,
@@ -70,12 +76,6 @@ from sqlbuild.spec.contracts.models import (
     SourceColumnEntry,
     SourceEntry,
     TargetConfig,
-)
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
-    resolve_effective_adapter_name,
-)
-from sqlbuild.spec.resolution.main.resolve_effective_scenario_config import (
-    resolve_effective_scenario_config,
 )
 
 _POLYGLOT_ANALYSIS_WORKERS: int = 2

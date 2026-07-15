@@ -5,12 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.playground.copy import create_playground_project
-from sqlbuild.cli.commands._helpers.playground.models import (
+from sqlbuild.cli.commands._helpers.skills.update import update_sqlbuild_skills
+from sqlbuild.cli.commands.models import (
     PlaygroundCommandRequest,
     PlaygroundTarget,
 )
-from sqlbuild.cli.commands._helpers.playground.types import PlaygroundTemplate
-from sqlbuild.cli.commands._helpers.skills.update import update_sqlbuild_skills
+from sqlbuild.cli.commands.types import PlaygroundTemplate
 
 
 def resolve_playground_target(*, request: PlaygroundCommandRequest) -> PlaygroundTarget:

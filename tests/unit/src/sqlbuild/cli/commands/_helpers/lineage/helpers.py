@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.lineage.models import ColumnLineageTrace, LineageNode
+from sqlbuild.cli.commands.models import ColumnLineageTrace, LineageNode
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,

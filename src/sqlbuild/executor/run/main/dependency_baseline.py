@@ -11,12 +11,13 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry
-from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run._helpers.reuse.core import (
     create_relation_from_reuse_origin,
     create_relation_from_reuse_plan,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
 
 

@@ -9,10 +9,10 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan, SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_SEED_FAILED
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.main.execute import execute_seed
 
 

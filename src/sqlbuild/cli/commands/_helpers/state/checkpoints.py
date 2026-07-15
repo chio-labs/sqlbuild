@@ -11,7 +11,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.state.main.checkpoints.list_checkpoints import (
     list_virtual_environment_checkpoints,
 )

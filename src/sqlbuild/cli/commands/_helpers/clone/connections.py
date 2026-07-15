@@ -5,13 +5,13 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sqlbuild.cli.commands._helpers.clone.models import (
+from sqlbuild.cli.commands._helpers.runtime.connection import (
+    resolve_target_connection_config,
+)
+from sqlbuild.cli.commands.models import (
     CloneCommandRequest,
     CloneConnectionContext,
     CloneInvocation,
-)
-from sqlbuild.cli.commands._helpers.runtime.connection import (
-    resolve_target_connection_config,
 )
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 

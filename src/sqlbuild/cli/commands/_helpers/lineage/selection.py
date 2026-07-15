@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from sqlbuild.cli.commands._helpers.lineage.constants import (
+from sqlbuild.cli.commands.constants import (
     BOTH_DIRECTIONS,
     COLUMN_TARGET_SEPARATOR,
     DOWNSTREAM_DIRECTION,
@@ -19,7 +19,8 @@ from sqlbuild.cli.commands._helpers.lineage.constants import (
     UNLIMITED_DEPTH_VALUE,
     UPSTREAM_DIRECTION,
 )
-from sqlbuild.cli.commands._helpers.lineage.models import (
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
     ColumnLineageTrace,
     LineageGraph,
     LineageNode,
@@ -27,7 +28,6 @@ from sqlbuild.cli.commands._helpers.lineage.models import (
     ParsedLineagePathSelector,
     ParsedLineageSelector,
 )
-from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,

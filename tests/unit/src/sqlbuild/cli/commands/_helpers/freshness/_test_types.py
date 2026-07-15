@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlbuild.cli.commands._helpers.freshness.models import FreshnessCommandResult
+from sqlbuild.cli.commands.models import FreshnessCommandResult
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
 
 

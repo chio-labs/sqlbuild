@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.playground.models import (
+from sqlbuild.cli.commands.models import (
     PlaygroundCommandRequest,
     PlaygroundTarget,
 )
-from sqlbuild.cli.commands._helpers.playground.types import PlaygroundTemplate
+from sqlbuild.cli.commands.types import PlaygroundTemplate
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.supports_color import supports_color

@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.contracts.types import LifecycleNodeStatus
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.scheduling.main.run_lifecycle import run_lifecycle_scheduler
 from sqlbuild.executor.scheduling.models import (
     LifecycleExecutionNode,
     LifecycleNodeResult,
     LifecycleSchedulerResult,
 )
+from sqlbuild.executor.scheduling.types import LifecycleNodeStatus
 from tests.unit.src.sqlbuild.executor.scheduling._helpers.lifecycle._test_types import (
     LifecycleSchedulerErrorTestCase,
     LifecycleSchedulerFanInTestCase,

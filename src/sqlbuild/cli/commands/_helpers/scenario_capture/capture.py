@@ -23,18 +23,18 @@ from sqlbuild.cli.commands._helpers.scenario_capture.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
     scenario_snapshot_capture_warning,
 )
-from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
+from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
+from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
     SQL_ANALYSIS_CONFIG_KEY,
     SQL_VALIDATION_CONFIG_KEY,
 )
-from sqlbuild.cli.commands._helpers.scenario_execution.models import (
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
     ScenarioCaptureCommandRequest,
     ScenarioRunOutputContext,
     ScenarioSnapshotLimitInputs,
 )
-from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
-from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
@@ -49,10 +49,10 @@ from sqlbuild.compiler.pipeline.models import (
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.resolution.main.resolve_effective_scenario_config import (
+from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
     resolve_effective_scenario_config,
 )
 

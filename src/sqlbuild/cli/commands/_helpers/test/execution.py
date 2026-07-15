@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.cli.commands._helpers.test.models import (
-    TestExecutionPreparation,
-    TestInvocation,
-)
 from sqlbuild.cli.commands._helpers.test.sql_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
+)
+from sqlbuild.cli.commands.models import (
+    TestExecutionPreparation,
+    TestInvocation,
 )
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,

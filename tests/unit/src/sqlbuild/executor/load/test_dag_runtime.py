@@ -6,7 +6,6 @@ import queue
 
 import pytest
 
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load._helpers.dag_runtime import (
     build_load_dag_state,
     complete_dag_source,
@@ -19,6 +18,7 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     LoadDagStateSchedulingTestCase,

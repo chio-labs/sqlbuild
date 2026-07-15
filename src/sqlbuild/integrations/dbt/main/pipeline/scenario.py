@@ -37,10 +37,10 @@ from sqlbuild.integrations.dbt.main.selection.resolve_scenario_target_names impo
     resolve_dbt_scenario_target_names,
 )
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtManifestIndex, DbtScenarioBuild
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.resolution.main.resolve_effective_scenario_config import (
+from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
     resolve_effective_scenario_config,
 )
 

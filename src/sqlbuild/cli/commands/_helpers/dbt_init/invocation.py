@@ -8,13 +8,13 @@ from pathlib import Path
 from sqlbuild.cli.commands._helpers.dbt_init.branch_detection import (
     detect_default_production_git_ref,
 )
-from sqlbuild.cli.commands._helpers.dbt_init.models import (
-    DbtInitCommandRequest,
-    DbtInitInvocation,
-)
 from sqlbuild.cli.commands._helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.cli.commands.classes.dbt_init_progress_reporter import DbtInitProgressReporter
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
+    DbtInitCommandRequest,
+    DbtInitInvocation,
+)
 from sqlbuild.integrations.dbt.main.profile.profile_init import _validate_dbt_profile_init_request
 from sqlbuild.integrations.dbt.models import DbtInitProgressCallbacks, DbtInitRequest
 from sqlbuild.presentation.main.supports_color import supports_color

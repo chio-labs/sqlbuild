@@ -19,8 +19,8 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
     ExternalSourceLoadResults,
 )
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     ExternalBuildSourceLoadTestCase,

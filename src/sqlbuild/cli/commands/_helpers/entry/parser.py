@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import argparse
 
-from sqlbuild.cli.commands._helpers.compile.constants import COMPILE_LINEAGE_MODE_VALUES
-from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands._helpers.entry.errors import build_argument_parser_class
 from sqlbuild.cli.commands._helpers.entry.parser_arguments import (
     add_cursor_override_args,
@@ -16,10 +14,13 @@ from sqlbuild.cli.commands._helpers.entry.parser_arguments import (
     add_select_args,
     add_vars_args,
 )
-from sqlbuild.cli.commands._helpers.entry.types import CliCommand
-from sqlbuild.cli.commands._helpers.lineage.constants import COLUMN_LINEAGE_MODE_VALUES
-from sqlbuild.cli.commands._helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.cli.commands.classes.sqlbuild_argument_parser import SqlbuildArgumentParser
+from sqlbuild.cli.commands.constants import (
+    COLUMN_LINEAGE_MODE_VALUES,
+    COMPILE_LINEAGE_MODE_VALUES,
+    PLAYGROUND_TEMPLATE_VALUES,
+)
+from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.virtual.state.types import StateCommand
 

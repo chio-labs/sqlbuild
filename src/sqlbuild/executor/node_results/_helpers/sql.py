@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from sqlbuild.adapter.contract.types import FrameworkType
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.constants import (
     COLUMN_ERROR_MESSAGE,
     COLUMN_MATERIALIZED,

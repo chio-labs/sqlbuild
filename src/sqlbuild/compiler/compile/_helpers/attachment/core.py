@@ -70,8 +70,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSqlModelFile,
+    PythonHookEntry,
+    SqlHookEntry,
 )
-from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,

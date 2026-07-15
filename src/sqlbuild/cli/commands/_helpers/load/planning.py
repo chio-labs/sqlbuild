@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.load.models import (
-    LoadCommandRequest,
-    LoadExecutionPreparation,
-    LoadInvocation,
-)
 from sqlbuild.cli.commands._helpers.load.references import validate_reference_source_targets
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
+from sqlbuild.cli.commands.models import (
+    LoadCommandRequest,
+    LoadExecutionPreparation,
+    LoadInvocation,
+)
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.provider.main.session import build_provider_session
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 

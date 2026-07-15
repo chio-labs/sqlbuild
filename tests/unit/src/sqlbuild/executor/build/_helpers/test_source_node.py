@@ -12,8 +12,8 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build._helpers.source_node import execute_build_source_node
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     BuildSourceNodeExecutionTestCase,

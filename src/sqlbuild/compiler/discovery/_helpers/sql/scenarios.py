@@ -10,9 +10,13 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
-from sqlbuild.compiler.discovery._helpers.sql.constants import SCENARIO_HEADER_PATTERN
 from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
+
+_SCENARIO_HEADER_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*SCENARIO\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
+    re.DOTALL,
+)
 
 
 def parse_sql_scenario_file(
@@ -20,7 +24,7 @@ def parse_sql_scenario_file(
 ) -> DiscoveredSqlScenarioFile:
     """Parse one SQL-native scenario file."""
 
-    header_match: re.Match[str] | None = SCENARIO_HEADER_PATTERN.match(contents)
+    header_match: re.Match[str] | None = _SCENARIO_HEADER_PATTERN.match(contents)
     if header_match is None:
         raise SqlScenarioParseError(
             f"SQL scenario '{file_path}' must start with a SCENARIO() header as the first "

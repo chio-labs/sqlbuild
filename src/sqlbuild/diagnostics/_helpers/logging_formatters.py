@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from sqlbuild.diagnostics._helpers.constants import (
-    INLINE_SQL_TRANSACTION_STATEMENTS,
-    LOGGER_ROOT_NAME,
-)
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
+_LOGGER_ROOT_NAME: str = "sqlbuild"
+_INLINE_SQL_TRANSACTION_STATEMENTS: tuple[str, ...] = ("BEGIN", "COMMIT", "ROLLBACK")
 _SQL_EVENT_FIELD: str = "sqlbuild_sql"
 
 
@@ -20,7 +18,7 @@ def _format_prefix(*, record: logging.LogRecord, date_text: str) -> str:
 
 
 def _short_logger_name(name: str) -> str:
-    prefix: str = f"{LOGGER_ROOT_NAME}."
+    prefix: str = f"{_LOGGER_ROOT_NAME}."
     if name.startswith(prefix):
         return name.removeprefix(prefix)
     return name
@@ -45,7 +43,7 @@ def _normalize_console_message(message: str) -> str:
 
 def _render_sql_inline(sql: str) -> bool:
     normalized: str = sql.strip().upper()
-    return normalized in INLINE_SQL_TRANSACTION_STATEMENTS
+    return normalized in _INLINE_SQL_TRANSACTION_STATEMENTS
 
 
 def _format_context_message(*, record: logging.LogRecord, use_color: bool) -> str | None:

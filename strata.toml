@@ -10,6 +10,46 @@ exclude = ["tests/e2e/fixtures/**"]
 max_positional_args = 1
 
 [[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapter/contract/__init__.py"
+reason = "The adapter contract intentionally owns overrideable behavior through its class hierarchy rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/bigquery/__init__.py"
+reason = "The BigQuery backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/databricks/constants.py"
+reason = "The Databricks backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/duckdb/__init__.py"
+reason = "The DuckDB backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/motherduck/__init__.py"
+reason = "The MotherDuck backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/postgres/__init__.py"
+reason = "The Postgres backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/snowflake/__init__.py"
+reason = "The Snowflake backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/sqlserver/__init__.py"
+reason = "The SQL Server backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
 rule = "SFR601"
 path = "src/sqlbuild/adapter/contract/classes/base_adapter.py"
 reason = "The adapter contract intentionally keeps its overrideable methods on one class."

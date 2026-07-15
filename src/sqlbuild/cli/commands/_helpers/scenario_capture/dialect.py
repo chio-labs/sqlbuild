@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
+from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_CAPTURE_DIALECT_REQUIRED,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError

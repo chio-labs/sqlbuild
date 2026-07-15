@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from sqlbuild.diagnostics._helpers.constants import LOG_FILE_NAME
 from sqlbuild.diagnostics._helpers.logging import (
     get_diagnostics_logger,
 )
@@ -17,6 +16,7 @@ from sqlbuild.diagnostics.classes.dynamic_stderr_handler import DynamicStderrHan
 def configure_diagnostics(*, target_dir: Path, debug: bool, use_color: bool = False) -> None:
     """Configure SQLBuild diagnostics logging for one CLI invocation."""
 
+    _LOG_FILE_NAME: str = "sqlbuild.log"
     target_dir.mkdir(parents=True, exist_ok=True)
     logger: logging.Logger = get_diagnostics_logger()
     logger.setLevel(logging.DEBUG)
@@ -28,7 +28,7 @@ def configure_diagnostics(*, target_dir: Path, debug: bool, use_color: bool = Fa
         handler.close()
 
     file_handler: logging.FileHandler = logging.FileHandler(
-        target_dir / LOG_FILE_NAME,
+        target_dir / _LOG_FILE_NAME,
         mode="w",
         encoding="utf-8",
     )

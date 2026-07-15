@@ -6,10 +6,11 @@ import argparse
 from collections.abc import Sequence
 from typing import NoReturn
 
-from sqlbuild.integrations.dbt._helpers.cli.constants import DBT_PASSTHROUGH_SEPARATOR
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.models import DbtInteropParsedArgs
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
+
+_DBT_PASSTHROUGH_SEPARATOR: str = "--"
 
 
 def add_dbt_execution_args(parser: argparse.ArgumentParser) -> None:
@@ -110,9 +111,9 @@ def parse_dbt_execution_args(
 
 def _split_passthrough(args: Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
     tokens: list[str] = list(args)
-    if DBT_PASSTHROUGH_SEPARATOR not in tokens:
+    if _DBT_PASSTHROUGH_SEPARATOR not in tokens:
         return tuple(tokens), ()
-    separator: int = tokens.index(DBT_PASSTHROUGH_SEPARATOR)
+    separator: int = tokens.index(_DBT_PASSTHROUGH_SEPARATOR)
     return tuple(tokens[:separator]), tuple(tokens[separator + 1 :])
 
 

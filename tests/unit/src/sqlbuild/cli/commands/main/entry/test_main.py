@@ -6,25 +6,25 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands._helpers.build_planning.models import BuildCommandRequest
-from sqlbuild.cli.commands._helpers.clone.models import CloneCommandRequest
-from sqlbuild.cli.commands._helpers.compile.models import CompileCommandRequest
-from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands._helpers.dbt_init.models import DbtInitCommandRequest
-from sqlbuild.cli.commands._helpers.diff.models import DiffCommandRequest
-from sqlbuild.cli.commands._helpers.freshness.models import FreshnessCommandRequest
-from sqlbuild.cli.commands._helpers.janitor_runtime.models import JanitorCommandRequest
-from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
-from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest
-from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
-from sqlbuild.cli.commands._helpers.promote.models import PromoteCommandRequest
-from sqlbuild.cli.commands._helpers.rollback.models import RollbackCommandRequest
-from sqlbuild.cli.commands._helpers.scenario_execution.models import (
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
+from sqlbuild.cli.commands.models import (
+    BuildCommandRequest,
+    CloneCommandRequest,
+    CompileCommandRequest,
+    DbtInitCommandRequest,
+    DiffCommandRequest,
+    FreshnessCommandRequest,
+    JanitorCommandRequest,
+    LoadCommandRequest,
+    PlanCommandRequest,
+    PlaygroundCommandRequest,
+    PromoteCommandRequest,
+    RollbackCommandRequest,
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
 )
-from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
+from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode

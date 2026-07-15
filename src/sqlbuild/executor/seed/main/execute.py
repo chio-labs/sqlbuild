@@ -12,7 +12,7 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 )
 from sqlbuild.compiler.planner.models import SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
-from sqlbuild.executor.contracts.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed._helpers.fingerprinting import try_write_seed_fingerprint
 from sqlbuild.executor.seed.constants import SEED_LOAD_FAILED_CODE
 

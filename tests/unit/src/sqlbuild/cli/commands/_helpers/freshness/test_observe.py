@@ -6,10 +6,10 @@ from typing import Any, cast
 import pytest
 
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.cli.commands._helpers.freshness.models import FreshnessCommandResult
 from sqlbuild.cli.commands._helpers.freshness.observe import (
     observe_source_freshness_for_command,
 )
+from sqlbuild.cli.commands.models import FreshnessCommandResult
 from tests.unit.src.sqlbuild.cli.commands._helpers.freshness._test_types import (
     FreshnessObservationTestCase,
 )

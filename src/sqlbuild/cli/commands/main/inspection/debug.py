@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.debug.checks import build_debug_result
-from sqlbuild.cli.commands._helpers.debug.models import DebugResult
 from sqlbuild.cli.commands._helpers.debug.output import format_debug_json, format_debug_text
+from sqlbuild.cli.commands.models import DebugResult
 from sqlbuild.presentation.main.supports_color import supports_color
 
 

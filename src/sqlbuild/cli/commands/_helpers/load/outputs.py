@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.load.models import (
+from sqlbuild.cli.commands.classes.load_progress_reporter import format_load_footer
+from sqlbuild.cli.commands.models import (
     LoadCommandRequest,
     LoadExecutionPreparation,
     LoadInvocation,
     LoadRunOutcome,
 )
-from sqlbuild.cli.commands.classes.load_progress_reporter import format_load_footer
 from sqlbuild.cli.output.main.load_execution_json import format_load_execution_json
 from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header

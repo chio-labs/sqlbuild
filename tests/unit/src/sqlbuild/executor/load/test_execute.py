@@ -11,13 +11,13 @@ import pytest
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.main.execute import execute_source_load
 from sqlbuild.executor.load.models import (
     LoaderContext,
     LoadExecutionResult,
     LoadRuntimeParams,
 )
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.spec.contracts.models import SourceEntry

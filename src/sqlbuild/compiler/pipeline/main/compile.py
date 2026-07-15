@@ -58,6 +58,7 @@ from sqlbuild.compiler.python_nodes.main.run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
+from sqlbuild.runtime.contracts.main.open_connection import open_connection_with_hooks
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import TargetConfig
 
@@ -99,17 +100,11 @@ def run_compile_pipeline(
     )
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
-    if resolved_hooks.on_connection_start is not None:
-        resolved_hooks.on_connection_start(1)
-    start: float = time.monotonic()
-    try:
-        connection: Any = adapter.connect(effective_config)
-    except Exception:
-        if resolved_hooks.on_connection_error is not None:
-            resolved_hooks.on_connection_error(1, elapsed_seconds=time.monotonic() - start)
-        raise
-    if resolved_hooks.on_connection_complete is not None:
-        resolved_hooks.on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
+    connection: Any = open_connection_with_hooks(
+        adapter=adapter,
+        connection_config=effective_config,
+        hooks=resolved_hooks,
+    )
     try:
         return _build_result(
             discovered_inputs=discovered_inputs,

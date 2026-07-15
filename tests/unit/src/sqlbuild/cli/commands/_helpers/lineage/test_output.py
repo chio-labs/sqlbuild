@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.lineage.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.cli.commands._helpers.lineage.output import (
     format_column_lineage_json,
     format_column_lineage_list,
@@ -13,6 +12,7 @@ from sqlbuild.cli.commands._helpers.lineage.output import (
     format_lineage_tree,
 )
 from sqlbuild.cli.commands._helpers.lineage.selection import select_target_lineage
+from sqlbuild.cli.commands.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
     ColumnLineageOutputTestCase,

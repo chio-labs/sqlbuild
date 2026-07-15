@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.compile.constants import EMPTY_DAG_PATH
+from sqlbuild.cli.commands.constants import EMPTY_DAG_PATH
 
 
 def resolve_compile_dag_path(*, project_dir: Path, dag_path: str) -> Path:

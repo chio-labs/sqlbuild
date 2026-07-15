@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from sqlbuild.integrations.dbt._helpers.lineage.constants import (
-    DBT_LINEAGE_DEPTH_ALL,
-    DBT_LINEAGE_DEPTH_FLAG,
-    DBT_LINEAGE_DIRECTION_FLAG,
-    DBT_LINEAGE_FORMAT_FLAG,
-    DBT_LINEAGE_NO_SQL_VALIDATION_FLAG,
-)
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.models import DbtLineageArgs
 from sqlbuild.integrations.dbt.types import DbtLineageDirection, DbtLineageOutputFormat
+
+_DBT_LINEAGE_DEPTH_ALL: str = "all"
+_DBT_LINEAGE_DEPTH_FLAG: str = "--depth"
+_DBT_LINEAGE_DIRECTION_FLAG: str = "--direction"
+_DBT_LINEAGE_FORMAT_FLAG: str = "--format"
+_DBT_LINEAGE_NO_SQL_VALIDATION_FLAG: str = "--no-sql-validation"
 
 
 def parse_dbt_lineage_args(args: tuple[str, ...]) -> DbtLineageArgs:
@@ -20,13 +19,13 @@ def parse_dbt_lineage_args(args: tuple[str, ...]) -> DbtLineageArgs:
     target: str | None = None
     output_format: DbtLineageOutputFormat = DbtLineageOutputFormat.TREE
     direction: DbtLineageDirection = DbtLineageDirection.UPSTREAM
-    raw_depth: str = DBT_LINEAGE_DEPTH_ALL
+    raw_depth: str = _DBT_LINEAGE_DEPTH_ALL
     no_sql_validation: bool = False
     dbt_args: list[str] = []
     index: int = 0
     while index < len(args):
         token: str = args[index]
-        if token == DBT_LINEAGE_FORMAT_FLAG:
+        if token == _DBT_LINEAGE_FORMAT_FLAG:
             raw_output_format: str
             raw_output_format, index = _consume_lineage_value(args=args, index=index)
             try:
@@ -36,7 +35,7 @@ def parse_dbt_lineage_args(args: tuple[str, ...]) -> DbtLineageArgs:
                     "--format must be tree, json, or list", code="C334"
                 ) from exc
             continue
-        if token == DBT_LINEAGE_DIRECTION_FLAG:
+        if token == _DBT_LINEAGE_DIRECTION_FLAG:
             raw_direction: str
             raw_direction, index = _consume_lineage_value(args=args, index=index)
             try:
@@ -46,10 +45,10 @@ def parse_dbt_lineage_args(args: tuple[str, ...]) -> DbtLineageArgs:
                     "--direction must be upstream, downstream, or both", code="C335"
                 ) from exc
             continue
-        if token == DBT_LINEAGE_DEPTH_FLAG:
+        if token == _DBT_LINEAGE_DEPTH_FLAG:
             raw_depth, index = _consume_lineage_value(args=args, index=index)
             continue
-        if token == DBT_LINEAGE_NO_SQL_VALIDATION_FLAG:
+        if token == _DBT_LINEAGE_NO_SQL_VALIDATION_FLAG:
             no_sql_validation = True
             index += 1
             continue
@@ -90,7 +89,7 @@ def _consume_lineage_value(*, args: tuple[str, ...], index: int) -> tuple[str, i
 
 
 def _parse_depth(raw_depth: str) -> int | None:
-    if raw_depth == DBT_LINEAGE_DEPTH_ALL:
+    if raw_depth == _DBT_LINEAGE_DEPTH_ALL:
         return None
     try:
         depth: int = int(raw_depth)

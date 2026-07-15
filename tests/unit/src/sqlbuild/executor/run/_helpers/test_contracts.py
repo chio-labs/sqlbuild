@@ -4,7 +4,7 @@ import pytest
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     RuntimeContractValidationTestCase,

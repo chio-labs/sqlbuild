@@ -33,7 +33,6 @@ from sqlbuild.integrations.dbt._helpers.graph.core import (
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt._helpers.lineage.constants import DBT_LINEAGE_COLUMN_SEPARATOR
 from sqlbuild.integrations.dbt._helpers.lineage.selection import resolve_dbt_lineage_target
 from sqlbuild.integrations.dbt._helpers.manifest.core import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
@@ -49,6 +48,8 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphResourceType, DbtLineageDirection
 from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
+
+_DBT_LINEAGE_COLUMN_SEPARATOR: str = ":"
 
 
 @dataclass(frozen=True)
@@ -78,9 +79,9 @@ def dbt_column_lineage_selected_keys(
 ) -> frozenset[DbtCombinedGraphKey]:
     """Return the graph keys a column lineage target would analyze, or empty."""
 
-    if DBT_LINEAGE_COLUMN_SEPARATOR not in target or direction == DbtLineageDirection.BOTH:
+    if _DBT_LINEAGE_COLUMN_SEPARATOR not in target or direction == DbtLineageDirection.BOTH:
         return frozenset()
-    raw_resource, column_name = target.rsplit(DBT_LINEAGE_COLUMN_SEPARATOR, 1)
+    raw_resource, column_name = target.rsplit(_DBT_LINEAGE_COLUMN_SEPARATOR, 1)
     if not raw_resource or not column_name:
         return frozenset()
     resource_key: DbtCombinedGraphKey = resolve_dbt_lineage_target(
@@ -108,14 +109,14 @@ def select_dbt_column_lineage_target(
 ) -> DbtColumnLineageTrace | None:
     """Select column lineage when target uses resource:column syntax."""
 
-    if DBT_LINEAGE_COLUMN_SEPARATOR not in target:
+    if _DBT_LINEAGE_COLUMN_SEPARATOR not in target:
         return None
     if direction == DbtLineageDirection.BOTH:
         raise DbtInteropArgumentError(
             "dbt column lineage supports --direction upstream or downstream, not both",
             code="C336",
         )
-    raw_resource, column_name = target.rsplit(DBT_LINEAGE_COLUMN_SEPARATOR, 1)
+    raw_resource, column_name = target.rsplit(_DBT_LINEAGE_COLUMN_SEPARATOR, 1)
     if not raw_resource or not column_name:
         return None
     resource_key: DbtCombinedGraphKey = resolve_dbt_lineage_target(

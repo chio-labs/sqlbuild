@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.contracts.types import LifecycleNodeStatus
 from sqlbuild.executor.scheduling.models import (
     LifecycleExecutionNode,
     LifecycleNodeResult,
 )
+from sqlbuild.executor.scheduling.types import LifecycleNodeStatus
 
 
 def record_lifecycle_success(

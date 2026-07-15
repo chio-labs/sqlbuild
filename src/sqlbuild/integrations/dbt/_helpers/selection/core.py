@@ -17,7 +17,7 @@ from sqlbuild.integrations.dbt._helpers.graph.core import (
     expand_combined_upstream,
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt._helpers.selection.constants import DBT_PATH_SELECTOR_SEPARATOR
+from sqlbuild.integrations.dbt.constants import DBT_PATH_SELECTOR_SEPARATOR
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,

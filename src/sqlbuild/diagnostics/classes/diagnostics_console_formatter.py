@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from sqlbuild.diagnostics._helpers.constants import SQL_SEPARATOR
 from sqlbuild.diagnostics._helpers.logging_formatters import (
     _append_exception,
     _format_console_header,
@@ -12,6 +11,8 @@ from sqlbuild.diagnostics._helpers.logging_formatters import (
     _render_sql_inline,
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
+
+_SQL_SEPARATOR: str = "-" * 80
 
 
 class DiagnosticsConsoleFormatter(logging.Formatter):
@@ -29,7 +30,7 @@ class DiagnosticsConsoleFormatter(logging.Formatter):
         if _render_sql_inline(sql):
             return _append_exception(record=record, rendered=f"{header}  {sql.strip()}")
         style: CliStyle = CliStyle(use_color=self._use_color)
-        separator: str = style.muted(SQL_SEPARATOR)
+        separator: str = style.muted(_SQL_SEPARATOR)
         return _append_exception(
             record=record,
             rendered=f"{header}\n{separator}\n{sql.rstrip()}\n{separator}",

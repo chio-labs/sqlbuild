@@ -40,6 +40,26 @@ class CompiledResourceType(StrEnum):
     SQL_SCENARIO = "sql_scenario"
 
 
+class DiagnosticPhase(StrEnum):
+    """Phase that produced a compiler diagnostic."""
+
+    COMPILE = "compile"
+    CONTRACT = "contract"
+    PLAN = "plan"
+    BUILD = "build"
+    AUDIT = "audit"
+    TEST = "test"
+    CONNECTION = "connection"
+
+
+class DiagnosticSeverity(StrEnum):
+    """Severity for a compiler diagnostic."""
+
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+
+
 class FunctionLanguage(StrEnum):
     SQL = "sql"
     PYTHON = "python"

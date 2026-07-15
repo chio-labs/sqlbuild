@@ -12,12 +12,17 @@ from yaml import YAMLError
 
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.discovery._helpers.sql.constants import (
-    TEST_HEADER_ONLY_PATTERN,
-    TEST_HEADER_PATTERN,
-)
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock
+
+_TEST_HEADER_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*TEST\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
+    re.DOTALL,
+)
+_TEST_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*TEST\s*\((?P<header>.*?)\)\s*;\s*",
+    re.DOTALL | re.MULTILINE,
+)
 
 
 def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:
@@ -49,7 +54,7 @@ def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSq
 
 
 def _split_sql_test_blocks(*, file_path: Path, contents: str) -> tuple[str, ...]:
-    matches: tuple[re.Match[str], ...] = tuple(TEST_HEADER_ONLY_PATTERN.finditer(contents))
+    matches: tuple[re.Match[str], ...] = tuple(_TEST_HEADER_ONLY_PATTERN.finditer(contents))
     if not matches:
         return ()
     if contents[: matches[0].start()].strip():
@@ -75,7 +80,7 @@ def _parse_single_sql_test_block(
     raw_test_block: str,
     test_index: int,
 ) -> DiscoveredSqlTestBlock:
-    header_match: re.Match[str] | None = TEST_HEADER_PATTERN.match(raw_test_block)
+    header_match: re.Match[str] | None = _TEST_HEADER_PATTERN.match(raw_test_block)
     if header_match is None:
         raise SqlTestParseError(
             f"SQL test '{file_path}' must start with a TEST() header as the first "

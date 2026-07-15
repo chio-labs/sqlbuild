@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands._helpers.seed.models import (
+from sqlbuild.cli.commands.models import (
     SeedCommandRequest,
     SeedExecutionPreparation,
     SeedInvocation,

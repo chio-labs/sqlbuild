@@ -3,7 +3,6 @@ from pathlib import Path
 
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotFileStats,
@@ -11,6 +10,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.scenario.types import ScenarioSnapshotState
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

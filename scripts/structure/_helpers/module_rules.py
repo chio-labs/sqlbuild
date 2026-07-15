@@ -567,6 +567,18 @@ def check_banned_generic_filename(file_path: Path) -> list[Violation]:
     ]
 
 
+def _top_level_domain_has_meaningful_direct_main(*, repo_root: Path, domain_name: str) -> bool:
+    direct_main_path: Path = repo_root.joinpath(*RUNTIME_ROOT_PARTS, domain_name, MAIN_PACKAGE_NAME)
+    if not direct_main_path.is_dir():
+        return False
+
+    entry_module_path: Path
+    for entry_module_path in direct_main_path.rglob(f"*{PYTHON_FILE_SUFFIX}"):
+        if entry_module_path.is_file() and entry_module_path.name != INIT_MODULE_NAME:
+            return True
+    return False
+
+
 def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -> list[Violation]:
     """Reject direct role files or role directories under top-level runtime domains."""
 
@@ -578,14 +590,20 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
         or relative_parts[:2] != RUNTIME_ROOT_PARTS
     ):
         return []
-    if relative_parts[2] in TOP_LEVEL_EXEMPT_DOMAIN_NAMES:
+    domain_name: str = relative_parts[2]
+    if domain_name in TOP_LEVEL_EXEMPT_DOMAIN_NAMES:
+        return []
+    if _top_level_domain_has_meaningful_direct_main(
+        repo_root=repo_root,
+        domain_name=domain_name,
+    ):
         return []
 
     direct_child_name: str = relative_parts[3]
     if (
         len(relative_parts) == top_level_domain_child_part_count
         and direct_child_name in DIRECT_TOP_LEVEL_ROLE_MODULE_NAMES
-        and (relative_parts[2], direct_child_name) not in _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS
+        and (domain_name, direct_child_name) not in _TOP_LEVEL_ROLE_FILE_ALLOWED_PAIRS
     ):
         return [
             Violation(
@@ -593,8 +611,8 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
                 path=file_path,
                 line=None,
                 message=(
-                    "top-level runtime domains must not contain direct role files; "
-                    "move them into a subpackage or shared/"
+                    "top-level branch runtime domains without a meaningful direct main/ must "
+                    "not contain direct role files; move them into a subdomain or shared/"
                 ),
             )
         ]
@@ -602,7 +620,7 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
     if (
         len(relative_parts) >= nested_domain_child_part_count
         and direct_child_name in SUPPORT_PACKAGE_NAMES
-        and (relative_parts[2], direct_child_name) not in _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS
+        and (domain_name, direct_child_name) not in _TOP_LEVEL_SUPPORT_PACKAGE_ALLOWED_PAIRS
         and file_path.name == INIT_MODULE_NAME
     ):
         return [
@@ -611,8 +629,9 @@ def check_top_level_domain_role_placement(*, repo_root: Path, file_path: Path) -
                 path=file_path,
                 line=None,
                 message=(
-                    "top-level runtime domains must not contain direct _helpers/ or classes/; "
-                    "move them into a subpackage or shared/"
+                    "top-level branch runtime domains without a meaningful direct main/ must "
+                    "not contain direct _helpers/ or classes/; move them into a subdomain or "
+                    "shared/"
                 ),
             )
         ]

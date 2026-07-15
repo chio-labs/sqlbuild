@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.build_planning.models import (
-    BuildCommandRequest,
-    BuildInvocation,
-)
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
+)
+from sqlbuild.cli.commands.models import (
+    BuildCommandRequest,
+    BuildInvocation,
 )
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import (

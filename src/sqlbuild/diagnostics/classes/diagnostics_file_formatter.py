@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 
-from sqlbuild.diagnostics._helpers.constants import FILE_LOG_DATE_FORMAT, SQL_SEPARATOR
 from sqlbuild.diagnostics._helpers.logging_formatters import (
     _append_exception,
     _format_prefix,
     _get_record_sql,
 )
+
+_FILE_LOG_DATE_FORMAT: str = "%Y-%m-%d %H:%M:%S"
+_SQL_SEPARATOR: str = "-" * 80
 
 
 class DiagnosticsFileFormatter(logging.Formatter):
@@ -17,7 +19,7 @@ class DiagnosticsFileFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         prefix: str = _format_prefix(
-            record=record, date_text=self.formatTime(record, FILE_LOG_DATE_FORMAT)
+            record=record, date_text=self.formatTime(record, _FILE_LOG_DATE_FORMAT)
         )
         sql: str | None = _get_record_sql(record)
         if sql is None:
@@ -25,6 +27,7 @@ class DiagnosticsFileFormatter(logging.Formatter):
         return _append_exception(
             record=record,
             rendered=(
-                f"{prefix} {record.getMessage()}\n{SQL_SEPARATOR}\n{sql.rstrip()}\n{SQL_SEPARATOR}"
+                f"{prefix} {record.getMessage()}\n{_SQL_SEPARATOR}\n"
+                f"{sql.rstrip()}\n{_SQL_SEPARATOR}"
             ),
         )

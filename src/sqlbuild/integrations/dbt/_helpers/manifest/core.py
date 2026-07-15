@@ -10,10 +10,6 @@ from typing import Any, cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.integrations.dbt._helpers.manifest.constants import (
-    DBT_CONFIG_CALL_CLOSE,
-    DBT_CONFIG_CALL_OPEN,
-)
 from sqlbuild.integrations.dbt.constants import (
     DBT_DEFINITION_FINGERPRINT_EXCLUDED_CONFIG_KEYS,
     DBT_MANIFEST_CONFIG_KEY,
@@ -27,6 +23,8 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 
+_DBT_CONFIG_CALL_CLOSE: str = ")"
+_DBT_CONFIG_CALL_OPEN: str = "("
 _INDEXED_NODE_RESOURCE_TYPES: frozenset[DbtSupportedResourceType] = frozenset(
     {DbtSupportedResourceType.MODEL, DbtSupportedResourceType.SNAPSHOT}
 )
@@ -491,9 +489,9 @@ def _find_config_expression_close(*, text: str, config_index: int) -> int | None
     cursor: int = paren_open
     while cursor < len(text):
         char: str = text[cursor]
-        if char == DBT_CONFIG_CALL_OPEN:
+        if char == _DBT_CONFIG_CALL_OPEN:
             depth += 1
-        elif char == DBT_CONFIG_CALL_CLOSE:
+        elif char == _DBT_CONFIG_CALL_CLOSE:
             depth -= 1
             if depth == 0:
                 close: int = text.find("}}", cursor)

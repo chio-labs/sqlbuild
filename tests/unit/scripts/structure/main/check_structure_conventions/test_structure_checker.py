@@ -461,6 +461,28 @@ from tests.unit.scripts.structure.main.check_structure_conventions.helpers impor
             expected_violation_codes=("SC017", "SC008"),
         ),
         CheckPathsTestCase(
+            description="allows top-level role file with a meaningful direct main entry",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/main/__init__.py": '"""Example entries."""\n',
+                "src/sqlbuild/example/main/build.py": (
+                    "def build_example() -> str:\n    return 'demo'\n"
+                ),
+                "src/sqlbuild/example/models.py": dedent(
+                    """
+                from dataclasses import dataclass
+
+
+                @dataclass(frozen=True)
+                class Example:
+                    name: str
+                """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
             description="allows Python-node authoring role files",
             repo_files=compliant_repo_files()
             | {
@@ -492,11 +514,50 @@ from tests.unit.scripts.structure.main.check_structure_conventions.helpers impor
             expected_violation_codes=("SC018",),
         ),
         CheckPathsTestCase(
+            description="reports top-level direct module despite a meaningful direct main entry",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/main/__init__.py": '"""Example entries."""\n',
+                "src/sqlbuild/example/main/build.py": (
+                    "def build_example() -> str:\n    return 'demo'\n"
+                ),
+                "src/sqlbuild/example/compile.py": "value = 1\n",
+            },
+            expected_violation_codes=("SC018",),
+        ),
+        CheckPathsTestCase(
             description="reports top-level helpers package under runtime domain",
             repo_files=compliant_repo_files()
             | {
                 "src/sqlbuild/example/_helpers/__init__.py": '"""Helpers."""\n',
                 "src/sqlbuild/example/_helpers/build.py": "def build() -> str:\n    return 'demo'\n",
+            },
+            expected_violation_codes=("SC017",),
+        ),
+        CheckPathsTestCase(
+            description="allows top-level helpers package with a meaningful direct main entry",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/main/__init__.py": '"""Example entries."""\n',
+                "src/sqlbuild/example/main/build.py": (
+                    "def build_example() -> str:\n    return 'demo'\n"
+                ),
+                "src/sqlbuild/example/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/_helpers/build.py": (
+                    "def build() -> str:\n    return 'demo'\n"
+                ),
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
+            description="reports top-level helpers package with initializer-only direct main",
+            repo_files=compliant_repo_files()
+            | {
+                "src/sqlbuild/example/main/__init__.py": '"""Example entries."""\n',
+                "src/sqlbuild/example/_helpers/__init__.py": '"""Helpers."""\n',
+                "src/sqlbuild/example/_helpers/build.py": (
+                    "def build() -> str:\n    return 'demo'\n"
+                ),
             },
             expected_violation_codes=("SC017",),
         ),

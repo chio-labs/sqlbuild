@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.dbt_init.models import DbtInitInvocation
+from sqlbuild.cli.commands.models import DbtInitInvocation
 from sqlbuild.integrations.dbt.main.profile.profile_init import run_dbt_profile_init
 from sqlbuild.integrations.dbt.models import DbtInitResult
 

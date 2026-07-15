@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
+from sqlbuild.cli.commands.constants import (
     DEFAULT_MAX_SNAPSHOT_BYTES_PER_RELATION,
     DEFAULT_MAX_SNAPSHOT_ROWS_PER_RELATION,
     DEFAULT_MAX_SNAPSHOT_TOTAL_BYTES,
     DEFAULT_MAX_SNAPSHOT_TOTAL_ROWS,
 )
-from sqlbuild.cli.commands._helpers.scenario_execution.models import ScenarioSnapshotLimitInputs
+from sqlbuild.cli.commands.models import ScenarioSnapshotLimitInputs
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
 from sqlbuild.spec.contracts.models import ScenarioConfig
 

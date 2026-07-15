@@ -2,7 +2,8 @@ from dataclasses import dataclass, field
 
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.types import OnSchemaChange
-from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

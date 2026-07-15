@@ -10,9 +10,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
-from sqlbuild.cli.commands._helpers.build_planning.models import VirtualBuildPlanHookConfig
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
+from sqlbuild.cli.commands.models import VirtualBuildPlanHookConfig
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

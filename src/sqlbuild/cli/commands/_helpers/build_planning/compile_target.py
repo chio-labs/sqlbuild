@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.build_planning.models import (
+from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
+from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     BuildInvocation,
 )
-from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult

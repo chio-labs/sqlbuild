@@ -8,14 +8,13 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.assets import get_asset_definition
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction
 from sqlbuild.compiler.python_nodes.types import (
     PythonNodeFanInAction,
     PythonNodeKind,
     PythonNodeStatus,
 )
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
@@ -42,14 +41,15 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
+from sqlbuild.python_nodes.main.calculate_retry_delay import calculate_retry_delay
+from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
+from sqlbuild.python_nodes.main.read_task_definition import read_task_definition
 from sqlbuild.python_nodes.models import (
     AssetDefinition,
     RetryPolicy,
     SqlResourceRef,
     TaskDefinition,
 )
-from sqlbuild.retries import calculate_retry_delay
-from sqlbuild.tasks import get_task_definition
 
 
 def execute_python_nodes(
@@ -396,12 +396,12 @@ def _build_upstream_names(
 
 def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:
     task_definition: TaskDefinition | None = (
-        get_task_definition(dependency) if callable(dependency) else None
+        read_task_definition(dependency) if callable(dependency) else None
     )
     if task_definition is not None:
         return ("name", task_definition.name)
     asset_definition: AssetDefinition | None = (
-        get_asset_definition(dependency) if callable(dependency) else None
+        read_asset_definition(dependency) if callable(dependency) else None
     )
     if asset_definition is not None:
         return ("name", asset_definition.name)

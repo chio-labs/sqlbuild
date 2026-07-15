@@ -7,8 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
-from sqlbuild.diagnostics._helpers.constants import LOGGER_ROOT_NAME
-
+_LOGGER_ROOT_NAME: str = "sqlbuild"
 _EMPTY_CONTEXT: dict[str, object] = {}
 _DIAGNOSTICS_CONTEXT: ContextVar[dict[str, object] | None] = ContextVar(
     "sqlbuild_diagnostics_context", default=None
@@ -19,8 +18,8 @@ def get_diagnostics_logger(name: str | None = None) -> logging.Logger:
     """Return a SQLBuild diagnostics logger."""
 
     if name is None:
-        return logging.getLogger(LOGGER_ROOT_NAME)
-    return logging.getLogger(f"{LOGGER_ROOT_NAME}.{name}")
+        return logging.getLogger(_LOGGER_ROOT_NAME)
+    return logging.getLogger(f"{_LOGGER_ROOT_NAME}.{name}")
 
 
 def log_sql(*, logger: logging.Logger, sql: str, action: str = "execute") -> None:

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 
-from sqlbuild.cli.commands._helpers.lineage.constants import (
+from sqlbuild.cli.commands.constants import (
     BOTH_DIRECTIONS,
     DOWNSTREAM_DIRECTION,
     UPSTREAM_DIRECTION,
 )
-from sqlbuild.cli.commands._helpers.lineage.models import (
+from sqlbuild.cli.commands.models import (
     ColumnLineageTrace,
     LineageGraph,
     LineageNode,

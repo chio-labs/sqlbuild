@@ -13,7 +13,7 @@ from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.assets import AssetContext
 from sqlbuild.assets import SkipMode as AssetSkipMode
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.models import (
     PythonNodeResult,

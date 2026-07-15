@@ -10,7 +10,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.errors.contracts.main.error_code import error_code
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario._helpers.capture.columns import build_scenario_snapshot_columns
 from sqlbuild.executor.scenario._helpers.capture.safety import (
     capture_error_help,
@@ -37,6 +36,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
 )
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_scenario_snapshot_capture(

@@ -7,15 +7,15 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.entry.constants import (
+from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.commands.constants import (
     DEBUG_OPTION,
     EMPTY_ENV_VALUE,
     NO_COLOR_OPTION,
     SQLBUILD_CONCURRENCY_ENV_VAR,
 )
-from sqlbuild.cli.commands._helpers.entry.models import ParsedCliInvocation
-from sqlbuild.cli.commands._helpers.entry.types import CliCommand
-from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.commands.models import ParsedCliInvocation
+from sqlbuild.cli.commands.types import CliCommand
 
 _DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
     {

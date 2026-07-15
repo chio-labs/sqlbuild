@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Any, TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.build_planning.models import StandardLifecycleCallbacks
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_lifecycle_selection import (
     python_node_result_names,
     task_asset_python_node_names,
@@ -18,6 +17,7 @@ from sqlbuild.cli.commands._helpers.build_python_nodes.python_node_output import
 from sqlbuild.cli.commands.classes.standard_python_lifecycle_state import (
     StandardPythonLifecycleState,
 )
+from sqlbuild.cli.commands.models import StandardLifecycleCallbacks
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

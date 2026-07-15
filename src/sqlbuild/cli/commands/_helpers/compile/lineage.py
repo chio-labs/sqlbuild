@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode

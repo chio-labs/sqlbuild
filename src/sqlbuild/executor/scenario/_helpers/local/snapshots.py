@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_message import error_message
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.scenario._helpers.snapshots.core import (
     is_scenario_snapshot_fresh,
     read_scenario_snapshot_jsonl,

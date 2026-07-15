@@ -10,12 +10,10 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
-from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
-    resolve_qualified_name_parts,
-)
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.custom.constants import CUSTOM_RELATION_QUALIFIER_SEPARATOR
+from sqlbuild.executor.custom.main.execute_sql import execute_sql_with_recording
+from sqlbuild.executor.custom.main.qualify_relation import qualify_custom_relation
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 
 
@@ -50,8 +48,12 @@ class MaterializationContext:
 
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
-        self.statement_recorder.record(sql)
-        return self.adapter.execute(connection=self.connection, sql=sql)
+        return execute_sql_with_recording(
+            adapter=self.adapter,
+            connection=self.connection,
+            sql=sql,
+            statement_recorder=self.statement_recorder,
+        )
 
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""
@@ -66,13 +68,13 @@ class MaterializationContext:
     ) -> str:
         """Return a fully-qualified relation name, preserving already-qualified input."""
 
-        if CUSTOM_RELATION_QUALIFIER_SEPARATOR in name:
-            return name
-        return resolve_qualified_name_parts(
+        return qualify_custom_relation(
             adapter=self.adapter,
-            database=self.destination_database if database is None else database,
-            schema=self.destination_schema if schema is None else schema,
             name=name,
+            destination_database=self.destination_database,
+            destination_schema=self.destination_schema,
+            database=database,
+            schema=schema,
         )
 
     def qualify_in_destination_schema(self, name: str) -> str:
@@ -103,8 +105,12 @@ class PrepareVersionContext:
 
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
-        self.statement_recorder.record(sql)
-        return self.adapter.execute(connection=self.connection, sql=sql)
+        return execute_sql_with_recording(
+            adapter=self.adapter,
+            connection=self.connection,
+            sql=sql,
+            statement_recorder=self.statement_recorder,
+        )
 
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""
@@ -119,13 +125,13 @@ class PrepareVersionContext:
     ) -> str:
         """Return a fully-qualified relation name, preserving already-qualified input."""
 
-        if CUSTOM_RELATION_QUALIFIER_SEPARATOR in name:
-            return name
-        return resolve_qualified_name_parts(
+        return qualify_custom_relation(
             adapter=self.adapter,
-            database=self.destination_database if database is None else database,
-            schema=self.destination_schema if schema is None else schema,
             name=name,
+            destination_database=self.destination_database,
+            destination_schema=self.destination_schema,
+            database=database,
+            schema=schema,
         )
 
     def qualify_in_destination_schema(self, name: str) -> str:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.diff.models import VirtualDiffRunOutcome
 from sqlbuild.cli.commands._helpers.diff.virtual_output import format_virtual_diff_header
+from sqlbuild.cli.commands.models import VirtualDiffRunOutcome
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from tests.unit.src.sqlbuild.cli.commands._helpers.diff._test_types import (
     RenderVirtualDiffHeaderTestCase,

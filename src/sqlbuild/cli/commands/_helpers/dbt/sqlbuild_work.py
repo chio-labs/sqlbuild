@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands._helpers.test.sql_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
@@ -16,6 +15,7 @@ from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
     format_build_footer,
 )
+from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
     NestedCommandProgressCallbacks,

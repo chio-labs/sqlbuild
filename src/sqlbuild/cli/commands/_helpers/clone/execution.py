@@ -5,14 +5,14 @@ from __future__ import annotations
 import time
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.clone.models import (
+from sqlbuild.cli.commands._helpers.clone.output import render_clone_item_line
+from sqlbuild.cli.commands.models import (
     CloneCommandRequest,
     CloneConnectionContext,
     CloneExecutionPreparation,
     CloneInvocation,
     CloneRunOutcome,
 )
-from sqlbuild.cli.commands._helpers.clone.output import render_clone_item_line
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult

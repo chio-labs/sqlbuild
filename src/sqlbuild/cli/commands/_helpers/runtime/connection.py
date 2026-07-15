@@ -13,7 +13,7 @@ from sqlbuild.integrations.dbt.main.profile.profile_connection import (
     resolve_raw_dbt_profile_connection,
 )
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 

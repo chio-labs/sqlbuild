@@ -7,9 +7,9 @@ from pathlib import Path
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import resolve_project_connection_config
-from sqlbuild.cli.commands._helpers.runtime.models import AdapterConnectionContext
+from sqlbuild.cli.commands.models import AdapterConnectionContext
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 

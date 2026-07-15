@@ -6,14 +6,14 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.playground.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.cli.commands._helpers.playground.dbt_scaffold import (
     scaffold_dbt_playground,
 )
-from sqlbuild.cli.commands._helpers.playground.types import PlaygroundTemplate
+from sqlbuild.cli.commands.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.types import PlaygroundTemplate
 
-_TEMPLATE_PACKAGE: str = "sqlbuild.playground"
+_TEMPLATE_PACKAGE: str = "sqlbuild.cli.commands._helpers.playground"
 _WAFFLE_SHOP_TEMPLATE: str = "templates/waffle_shop"
 _LOADER_WAFFLE_SHOP_TEMPLATE: str = "templates/loader_waffle_shop"
 _DBT_REUSE_TEMPLATE: str = "templates/dbt_reuse"

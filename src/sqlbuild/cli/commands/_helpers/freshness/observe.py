@@ -6,11 +6,11 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.cli.commands._helpers.freshness.models import (
+from sqlbuild.cli.commands.models import (
     FreshnessCommandResult,
     FreshnessSourceResult,
 )
-from sqlbuild.cli.commands._helpers.freshness.types import FreshnessSourceStatus
+from sqlbuild.cli.commands.types import FreshnessSourceStatus
 from sqlbuild.compiler.source_freshness.main.adapter_observation import (
     observe_adapter_sources_freshness,
 )

@@ -6,13 +6,6 @@ import sys
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.diff.models import (
-    DiffCommandRequest,
-    DiffInvocation,
-    StandardDiffPreparation,
-    VirtualDiffPreparation,
-    VirtualDiffRunOutcome,
-)
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -22,6 +15,13 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_target_connection_config,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
+    DiffCommandRequest,
+    DiffInvocation,
+    StandardDiffPreparation,
+    VirtualDiffPreparation,
+    VirtualDiffRunOutcome,
+)
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
@@ -29,7 +29,7 @@ from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 from sqlbuild.virtual.diff.main.diff import run_virtual_diff

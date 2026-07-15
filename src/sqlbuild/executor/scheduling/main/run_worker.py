@@ -6,10 +6,10 @@ import queue
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.executor.contracts.types import WorkerFailureBuilder, WorkerSuccessBuilder
 from sqlbuild.executor.scheduling._helpers.worker_completion import (
     run_worker_with_completion as _run_worker_with_completion,
 )
+from sqlbuild.executor.scheduling.types import WorkerFailureBuilder, WorkerSuccessBuilder
 
 
 def run_worker_with_completion[KeyT, ResultT, CompletionT](

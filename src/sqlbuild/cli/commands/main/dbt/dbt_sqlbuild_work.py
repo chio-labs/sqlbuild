@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands._helpers.dbt.sqlbuild_work import (
     execute_sqlbuild_build_work,
     execute_sqlbuild_test_work,
 )
+from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 

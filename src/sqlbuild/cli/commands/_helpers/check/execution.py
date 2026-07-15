@@ -11,7 +11,7 @@ from sqlbuild.cli.commands._helpers.check.core import (
     resolve_selected_check_names,
     run_check_read_side_dependencies,
 )
-from sqlbuild.cli.commands._helpers.check.models import (
+from sqlbuild.cli.commands.models import (
     CheckCommandRequest,
     CheckExecutionPreparation,
     CheckInvocation,

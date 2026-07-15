@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.contracts.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 

@@ -10,10 +10,7 @@ from collections.abc import Sequence
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.integrations.dbt._helpers.planning.constants import (
-    DBT_SELECT_FLAG,
-    DBT_UNIT_TEST_LABEL,
-)
+from sqlbuild.integrations.dbt.constants import DBT_SELECT_FLAG
 from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropSelectionResult,
@@ -35,6 +32,7 @@ from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_co
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 
+_DBT_UNIT_TEST_LABEL: str = "unit test"
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
 
 
@@ -461,7 +459,7 @@ def _format_count_breakdown(resource_counts: Counter[str]) -> str:
 def _pluralize(*, label: str, count: int) -> str:
     if count == 1:
         return label
-    if label == DBT_UNIT_TEST_LABEL:
+    if label == _DBT_UNIT_TEST_LABEL:
         return "unit tests"
     return f"{label}s"
 

@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RowDiffResult, RowDiffTolerances, SchemaDiffResult
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.bounds import resolve_bounded_cursors
 from sqlbuild.executor.diff._helpers.config import parse_row_diff_tolerances
 from sqlbuild.executor.diff._helpers.selection import (

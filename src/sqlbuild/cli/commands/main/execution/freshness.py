@@ -8,10 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.freshness.models import (
-    FreshnessCommandRequest,
-    FreshnessCommandResult,
-)
 from sqlbuild.cli.commands._helpers.freshness.observe import (
     observe_source_freshness_for_command,
 )
@@ -29,16 +25,20 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
+    FreshnessCommandRequest,
+    FreshnessCommandResult,
+)
 from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
-from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def run_freshness(request: FreshnessCommandRequest) -> int:

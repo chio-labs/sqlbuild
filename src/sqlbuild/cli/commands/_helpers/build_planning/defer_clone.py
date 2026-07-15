@@ -7,13 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.build_planning.models import (
-    BuildCommandRequest,
-    BuildInvocation,
-    DeferClonePrephaseInputs,
-    DeferClonePrephaseOutcome,
-    DeferClonePrephaseOutputContext,
-)
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -21,6 +14,13 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_target_connection_config,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
+    BuildCommandRequest,
+    BuildInvocation,
+    DeferClonePrephaseInputs,
+    DeferClonePrephaseOutcome,
+    DeferClonePrephaseOutputContext,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
