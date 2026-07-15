@@ -43,6 +43,26 @@ from tests.unit.scripts.structure.main.check_structure_conventions.helpers impor
             expected_violation_codes=("SC001",),
         ),
         CheckPathsTestCase(
+            description="allows tooling rules to import support from their sibling helpers role",
+            repo_files=compliant_repo_files()
+            | {
+                "scripts/strata_policy/_helpers/ownership.py": (
+                    "def resolve_owner() -> str:\n    return 'sqlbuild'\n"
+                ),
+                "scripts/strata_policy/rules/module_boundaries.py": dedent(
+                    """
+                    from scripts.strata_policy._helpers.ownership import resolve_owner
+
+
+                    def evaluate_policy() -> str:
+                        return resolve_owner()
+                    """
+                ).strip()
+                + "\n",
+            },
+            expected_violation_codes=(),
+        ),
+        CheckPathsTestCase(
             description="reports direct color capability implementation import",
             repo_files=compliant_repo_files()
             | {

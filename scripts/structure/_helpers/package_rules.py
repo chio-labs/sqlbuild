@@ -51,11 +51,14 @@ from scripts.structure.constants import (
     MAIN_MODULE_NAME,
     MAIN_PACKAGE_NAME,
     MAIN_SUPPORT_IMPORT_PACKAGE_NAMES,
+    RULES_PACKAGE_NAME,
     RUNTIME_ROOT_PARTS,
     SC010_CODE,
     SHARED_PACKAGE_NAME,
     SIBLING_HELPER_IMPORTER_PACKAGE_NAMES,
     SQLBUILD_PACKAGE_NAME,
+    TOOLING_ROOT_NAME,
+    TOOLING_RULE_HELPER_MIN_IMPORT_PARTS,
     TYPES_MODULE_NAME,
     TYPES_PACKAGE_NAME,
 )
@@ -729,6 +732,14 @@ def check_no_sibling_package_imports(
             continue
 
         imported_parts: tuple[str, ...] = tuple(node.module.split("."))
+        if (
+            current_package_parts[:1] == (TOOLING_ROOT_NAME,)
+            and current_package_parts[-1] == RULES_PACKAGE_NAME
+            and imported_parts[:2] == current_package_parts[:2]
+            and len(imported_parts) >= TOOLING_RULE_HELPER_MIN_IMPORT_PARTS
+            and imported_parts[2] == HELPERS_PACKAGE_NAME
+        ):
+            continue
         if imported_parts[: len(parent_package_parts)] != parent_package_parts:
             continue
         if len(imported_parts) <= len(parent_package_parts):
@@ -785,6 +796,14 @@ def check_no_sibling_package_imports(
             continue
         for alias in node.names:
             imported_parts = tuple(alias.name.split("."))
+            if (
+                current_package_parts[:1] == (TOOLING_ROOT_NAME,)
+                and current_package_parts[-1] == RULES_PACKAGE_NAME
+                and imported_parts[:2] == current_package_parts[:2]
+                and len(imported_parts) >= TOOLING_RULE_HELPER_MIN_IMPORT_PARTS
+                and imported_parts[2] == HELPERS_PACKAGE_NAME
+            ):
+                continue
             if imported_parts[: len(parent_package_parts)] != parent_package_parts:
                 continue
             if len(imported_parts) <= len(parent_package_parts) + 1:

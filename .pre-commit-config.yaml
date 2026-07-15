@@ -42,6 +42,12 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: strata-check
+        name: strata check
+        entry: uv run strata check
+        language: system
+        pass_filenames: false
+
       - id: check-type-annotation-conventions
         name: check type annotation conventions
         entry: uv run check-type-annotation-conventions src tests

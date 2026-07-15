@@ -89,6 +89,7 @@ from scripts.structure.constants import (
     SHARED_PACKAGE_NAME,
     SOURCE_FRESHNESS_TEXT_MARKERS,
     SQLBUILD_SOURCE_PATH_MARKER,
+    STRATA_POLICY_PATH_MARKER,
     SUPPORT_PACKAGE_NAMES,
     SUPPORTED_TOP_LEVEL_DIRECT_MODULE_NAMES,
     TOP_LEVEL_EXEMPT_DOMAIN_NAMES,
@@ -244,6 +245,7 @@ _SOURCE_FRESHNESS_SINGULAR_WRITER_NAME: str = "write_source_freshness_record"
 _SOURCE_FRESHNESS_INSERT_ALLOWED_MARKERS: tuple[str, ...] = (
     "scripts/structure/constants.py",
     "scripts/structure/_helpers/",
+    "scripts/strata_policy/",
     "src/sqlbuild/adapter/",
     "src/sqlbuild/adapters/",
     "src/sqlbuild/virtual/state/classes/",
@@ -280,7 +282,9 @@ def check_target_reuse_terminology(file_path: Path) -> list[Violation]:
     """Reject ambiguous source/target wording in reuse implementation modules."""
 
     path_text: str = file_path.as_posix()
-    if path_text.endswith(("/module_rules.py", "/package_rules.py", "/rule_ast.py")):
+    if path_text.endswith(("/module_rules.py", "/package_rules.py", "/rule_ast.py")) or (
+        STRATA_POLICY_PATH_MARKER in path_text
+    ):
         return []
     check_scoped_terms: bool = any(marker in path_text for marker in _TARGET_REUSE_PATH_MARKERS)
 
