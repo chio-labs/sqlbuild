@@ -45,6 +45,12 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("waffle_shop_control.duckdb"),
                 Path("macros/__pycache__"),
             ),
+            expected_file_fragments=(
+                (
+                    Path("materializations/partition_tracked.py"),
+                    ("from sqlbuild.adapter.contract.types import FrameworkType",),
+                ),
+            ),
         ),
         CreatePlaygroundProjectTestCase(
             description="creates Dagster playground from waffle shop template",
