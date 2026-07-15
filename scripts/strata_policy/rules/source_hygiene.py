@@ -28,13 +28,7 @@ def reuse_terminology(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
     if ctx.scope() not in POLICY_EVALUATION_SCOPES:
         return []
     path: str = "/".join(ctx.repo_relative_parts())
-    if path.startswith(POLICY_IMPLEMENTATION_PATH_PREFIX) or path.endswith(
-        (
-            "scripts/structure/_helpers/module_rules.py",
-            "scripts/structure/_helpers/package_rules.py",
-            "scripts/structure/_helpers/rule_ast.py",
-        )
-    ):
+    if path.startswith(POLICY_IMPLEMENTATION_PATH_PREFIX):
         return []
     terms: tuple[str, ...] = GLOBAL_REUSE_FORBIDDEN_TERMS
     if any(marker in path for marker in REUSE_PATH_MARKERS):

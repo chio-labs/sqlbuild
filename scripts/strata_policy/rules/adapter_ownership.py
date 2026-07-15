@@ -24,6 +24,7 @@ def adapter_method_alias(*, module: ast.Module, ctx: RuleContext) -> list[Fault]
     checked_class_names: frozenset[str] = adapter_contract_class_names(
         path_parts=ctx.repo_relative_parts(),
         module=module,
+        ctx=ctx,
     )
     faults: list[Fault] = []
     class_node: ast.ClassDef
@@ -57,6 +58,7 @@ def adapter_super_delegation(*, module: ast.Module, ctx: RuleContext) -> list[Fa
     checked_class_names: frozenset[str] = adapter_contract_class_names(
         path_parts=ctx.repo_relative_parts(),
         module=module,
+        ctx=ctx,
     )
     if not checked_class_names:
         return []

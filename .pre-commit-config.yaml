@@ -36,12 +36,6 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: check-structure-conventions
-        name: check structure conventions
-        entry: uv run check-structure-conventions src/sqlbuild scripts
-        language: system
-        pass_filenames: false
-
       - id: strata-check
         name: strata check
         entry: uv run strata check

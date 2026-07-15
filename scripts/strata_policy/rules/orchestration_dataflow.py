@@ -23,6 +23,7 @@ from scripts.strata_policy.constants import (
     HELPERS_PACKAGE_NAME,
     INIT_MODULE_NAME,
     NESTED_HELPER_MODULE_MIN_PARTS,
+    POLICY_EVALUATION_SCOPES,
     ROOT_SCOPE_NAME,
     RUNTIME_ROOT_PARTS,
 )
@@ -73,7 +74,7 @@ def metadata_query_loop(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
     remediation="Assign, return, or explicitly discard the result with _ = call(...).",
 )
 def main_discarded_call(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
-    if ctx.scope() != ROOT_SCOPE_NAME:
+    if ctx.scope() not in POLICY_EVALUATION_SCOPES:
         return []
     if not ctx.is_main_module() or ctx.path.name == INIT_MODULE_NAME:
         return []

@@ -27,6 +27,86 @@ from tests.unit.scripts.strata_policy.rules._test_types import CustomRuleTestCas
             expected_fault_count=1,
         ),
         CustomRuleTestCase(
+            description="describe relation in loop faults",
+            path="src/sqlbuild/example/main/describe.py",
+            source=dedent(
+                """
+                def describe(adapter, relations):
+                    for relation in relations:
+                        adapter.describe_relation(relation=relation)
+                """
+            ),
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="query column names in loop faults",
+            path="src/sqlbuild/example/main/columns.py",
+            source=dedent(
+                """
+                def columns(adapter, expressions):
+                    for sql in expressions:
+                        adapter.query_column_names(sql=sql)
+                """
+            ),
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="schema existence check in loop faults",
+            path="src/sqlbuild/example/main/schemas.py",
+            source=dedent(
+                """
+                def schemas(adapter, names):
+                    for name in names:
+                        adapter.schema_exists(schema=name)
+                """
+            ),
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="table freshness metadata in loop faults",
+            path="src/sqlbuild/example/main/freshness.py",
+            source=dedent(
+                """
+                def freshness(adapter, names):
+                    for name in names:
+                        adapter.get_table_freshness_metadata(name=name)
+                """
+            ),
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="transitive metadata helper in loop faults",
+            path="src/sqlbuild/example/main/indirect.py",
+            source=dedent(
+                """
+                def _exists(adapter, name):
+                    return adapter.relation_exists(name=name)
+
+                def _exists_named(adapter, name):
+                    return _exists(adapter, name)
+
+                def collect(adapter, names):
+                    for name in names:
+                        _exists_named(adapter, name)
+                """
+            ),
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="same-named non-metadata helper in comprehension passes",
+            path="src/sqlbuild/example/main/unrelated.py",
+            source=dedent(
+                """
+                def _exists(value):
+                    return value is not None
+
+                def collect(values):
+                    return [value for value in values if _exists(value)]
+                """
+            ),
+            expected_fault_count=0,
+        ),
+        CustomRuleTestCase(
             description="metadata query before loop passes",
             path="src/sqlbuild/example/main/build.py",
             source=dedent(
@@ -75,6 +155,57 @@ def test_given_runtime_code_when_checking_metadata_loop_then_matches_contract(
             source="def build() -> None:\n    _ = build_phase()\n",
             expected_fault_count=0,
         ),
+        CustomRuleTestCase(
+            description="approved side-effect names and method calls pass",
+            path="src/sqlbuild/example/main/build.py",
+            source=dedent(
+                """
+                def build(results, stream, backend) -> None:
+                    validate_inputs()
+                    enforce_policy()
+                    check_state()
+                    on_progress()
+                    report_progress()
+                    _report_progress()
+                    log_event()
+                    print("demo")
+                    write_summary(results)
+                    _ = build_receipt()
+                    results.append("demo")
+                    stream.write("demo")
+                    backend.close()
+                """
+            ),
+            expected_fault_count=0,
+        ),
+        CustomRuleTestCase(
+            description="discarded phase in private main function faults",
+            path="src/sqlbuild/example/main/build.py",
+            source=dedent(
+                """
+                def build() -> None:
+                    return _resolve()
+
+                def _resolve() -> None:
+                    build_phase()
+                """
+            ),
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="discarded underscore-prefixed phase faults",
+            path="src/sqlbuild/example/main/build.py",
+            source="def build() -> None:\n    _build_phase()\n",
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="discarded tooling main phase faults",
+            path="scripts/example/main/build.py",
+            source="def build() -> None:\n    build_phase()\n",
+            expected_fault_count=1,
+            scope="tooling",
+            scope_root="scripts",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -112,6 +243,21 @@ def test_given_main_code_when_checking_discarded_calls_then_matches_contract(
             source=(
                 "def build(values: list[str]) -> None:\n"
                 "    values.append('x')  # sc: allow-param-mutation\n"
+            ),
+            expected_fault_count=0,
+        ),
+        CustomRuleTestCase(
+            description="methods mutating self pass",
+            path="src/sqlbuild/compiler/planner/_helpers/build.py",
+            source=dedent(
+                """
+                class _State:
+                    def __init__(self, values: list[str]) -> None:
+                        self.values = values
+
+                    def merge(self, extra: list[str]) -> None:
+                        self.values.extend(extra)
+                """
             ),
             expected_fault_count=0,
         ),

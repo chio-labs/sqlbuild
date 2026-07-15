@@ -26,7 +26,6 @@ ALLOWED_MACRO_LOAD_PATHS: frozenset[str] = frozenset(
 )
 ALLOWED_PARAMETER_MUTATION_COMMENT: str = "# sc: allow-param-mutation"
 ALLOWED_SOURCE_FRESHNESS_INSERT_PREFIXES: tuple[str, ...] = (
-    "scripts/structure/",
     "scripts/strata_policy/",
     "src/sqlbuild/adapter/",
     "src/sqlbuild/adapters/",
@@ -132,11 +131,14 @@ WAREHOUSE_METADATA_METHODS: frozenset[str] = frozenset(
 )
 
 ABSTRACT_METHOD_DECORATOR_NAME: str = "abstractmethod"
+ABC_MODULE_NAME: str = "abc"
 ADAPTER_CLASS_MODULE_MIN_PARTS: int = 6
 ADAPTER_CONTRACT_CLASSES_PATH: str = "src/sqlbuild/adapter/contract/classes"
+ADAPTER_BUILTINS_PATH: str = "src/sqlbuild/adapter/discovery/main/builtins.py"
 ADAPTER_IMPLEMENTATION_PATH_MARKERS: tuple[str, str] = ("/adapters/", "/classes/")
 ADAPTER_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild", "adapter")
 ADAPTERS_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild", "adapters")
+ADAPTER_PACKAGE_IMPORT_PREFIX: str = "sqlbuild.adapters."
 BASE_ADAPTER_CLASS_NAME: str = "BaseAdapter"
 CLIENT_MODULE_MIN_PARTS: int = 5
 CLIENT_MODULE_NAME: str = "client.py"
@@ -148,6 +150,7 @@ HELPERS_PACKAGE_NAME: str = "_helpers"
 INIT_MODULE_NAME: str = "__init__.py"
 INSERT_SQL_PREFIX: str = "INSERT INTO"
 LEGACY_DUCKDB_ADAPTER_SUFFIX: tuple[str, ...] = ("shared", "classes", "duckdb.py")
+DUCKDB_BACKED_ADAPTER_PATH: str = "src/sqlbuild/adapter/contract/classes/duckdb_backed_adapter.py"
 LOAD_PROJECT_MACROS_NAME: str = "load_project_macros"
 MAIN_MODULE_NAME: str = "main.py"
 MAIN_PACKAGE_NAME: str = "main"
@@ -170,3 +173,4 @@ RUNTIME_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild")
 SELECTOR_MARKER: str = "+"
 SQL_REFERENCE_KIND_CLASS_NAME: str = "SqlReferenceKind"
 SUPER_CALL_NAME: str = "super"
+STRICT_ADAPTER_CLASS_NAME: str = "StrictAdapter"

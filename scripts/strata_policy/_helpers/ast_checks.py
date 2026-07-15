@@ -13,12 +13,12 @@ from scripts.strata_policy.constants import (
 
 
 def base_name(node: ast.AST) -> str | None:
-    """Return the leftmost or direct name represented by an expression."""
+    """Return the rightmost or direct name represented by an expression."""
 
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
-        return base_name(node.value)
+        return node.attr
     if isinstance(node, ast.Subscript):
         return base_name(node.value)
     return None
