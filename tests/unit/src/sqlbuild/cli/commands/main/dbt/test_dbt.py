@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main.commands.dbt import run_dbt_command
+from sqlbuild.cli.commands.main.dbt.dbt import run_dbt_command
 from sqlbuild.integrations.dbt.models import (
     DbtInitRequest,
     DbtInitResult,
@@ -73,7 +73,7 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt.plan_dbt_interop_from_project",
+        "sqlbuild.cli.commands.main.dbt.dbt.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
 
@@ -85,7 +85,7 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
         return project_dir, args
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt.ensure_sqlbuild_project_for_dbt_command",
+        "sqlbuild.cli.commands.main.dbt.dbt.ensure_sqlbuild_project_for_dbt_command",
         ensure_existing_sqlbuild_project,
     )
     exit_code: int = run_dbt_command(
@@ -141,7 +141,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
         return 0
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt.execute_dbt_interop_from_project",
+        "sqlbuild.cli.commands.main.dbt.dbt.execute_dbt_interop_from_project",
         execute_dbt_interop_from_project,
     )
 
@@ -153,7 +153,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
         return project_dir, args
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt.ensure_sqlbuild_project_for_dbt_command",
+        "sqlbuild.cli.commands.main.dbt.dbt.ensure_sqlbuild_project_for_dbt_command",
         ensure_existing_sqlbuild_project,
     )
 
@@ -226,11 +226,11 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
         return 0
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt_debug.debug_dbt_from_project",
+        "sqlbuild.cli.commands.main.dbt.dbt_debug.debug_dbt_from_project",
         debug_dbt_from_project,
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt_debug.run_sqlbuild_debug", run_sqlbuild_debug
+        "sqlbuild.cli.commands.main.dbt.dbt_debug.run_sqlbuild_debug", run_sqlbuild_debug
     )
 
     def ensure_existing_sqlbuild_project(
@@ -241,7 +241,7 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
         return project_dir, args
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt.ensure_sqlbuild_project_for_dbt_command",
+        "sqlbuild.cli.commands.main.dbt.dbt.ensure_sqlbuild_project_for_dbt_command",
         ensure_existing_sqlbuild_project,
     )
 
@@ -336,7 +336,7 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
         run_dbt_profile_init,
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt.plan_dbt_interop_from_project",
+        "sqlbuild.cli.commands.main.dbt.dbt.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
 
@@ -427,7 +427,7 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
         run_dbt_profile_init,
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.commands.dbt.plan_dbt_interop_from_project",
+        "sqlbuild.cli.commands.main.dbt.dbt.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
 

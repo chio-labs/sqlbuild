@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from sqlbuild.virtual.state._helpers.locks import (
+from sqlbuild.virtual.state._helpers.state_storage.locks import (
     acquire_model_version_lock,
     acquire_state_migration_lock,
     acquire_virtual_environment_lock,

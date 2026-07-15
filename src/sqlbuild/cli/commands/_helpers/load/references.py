@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.spec.contracts.models import SourceEntry
 
 

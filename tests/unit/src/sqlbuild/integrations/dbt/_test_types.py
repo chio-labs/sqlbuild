@@ -7,12 +7,12 @@ from pathlib import Path
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
     DbtInteropParsedArgs,
     DbtLsNode,
+    DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtLineageDirection,

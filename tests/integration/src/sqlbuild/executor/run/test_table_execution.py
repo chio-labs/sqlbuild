@@ -15,9 +15,9 @@ from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
     TableReuseAuditProofExecutionTestCase,

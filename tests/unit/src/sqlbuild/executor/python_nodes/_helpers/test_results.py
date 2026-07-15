@@ -11,7 +11,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeStatus,
     SkipMode,
 )
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.python_nodes._helpers.results import (
     build_python_node_failure_result,
     evaluate_python_node_fan_in,
@@ -148,13 +148,15 @@ def test_given_check_context_when_building_results_then_returns_check_results(
         logger_name="sqlbuild.check.export_customers_exists",
     )
 
-    pass_result: PythonCheckResult = context.pass_(test_case.message, metadata=test_case.metadata)
+    pass_result: PythonCheckResult = context.pass_(
+        message=test_case.message, metadata=test_case.metadata
+    )
     fail_result: PythonCheckResult = context.fail(
-        test_case.message or "failed",
+        message=test_case.message or "failed",
         metadata=test_case.metadata,
     )
     warn_result: PythonCheckResult = context.warn(
-        test_case.message or "warned",
+        message=test_case.message or "warned",
         metadata=test_case.metadata,
     )
 

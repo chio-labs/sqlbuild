@@ -31,8 +31,8 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
 )
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run.models import HookContext
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (

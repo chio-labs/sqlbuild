@@ -13,7 +13,7 @@ from sqlbuild.compiler.planner._helpers.pruning.standard_scope import (
     mark_version_identity_stale_actions,
     prune_standard_unchanged_scope,
 )
-from sqlbuild.compiler.planner.main.planning.run_despite_unchanged import (
+from sqlbuild.compiler.planner.main.changes.run_despite_unchanged import (
     build_run_despite_unchanged_planning_result,
 )
 from sqlbuild.compiler.planner.models import (

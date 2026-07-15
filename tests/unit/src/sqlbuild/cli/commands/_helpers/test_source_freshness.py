@@ -16,8 +16,8 @@ from sqlbuild.compiler.source_freshness.models import (
 )
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers._test_types import (
     SourceFreshnessAppendEligibilityTestCase,
 )

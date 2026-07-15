@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import random
 import time
 from collections.abc import Callable
 from typing import Any
@@ -16,7 +15,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonNodeStatus,
 )
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
@@ -49,6 +48,7 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
     TaskDefinition,
 )
+from sqlbuild.retries import calculate_retry_delay
 from sqlbuild.tasks import get_task_definition
 
 
@@ -312,7 +312,7 @@ def _call_node_with_retry(
         except retry_policy.retry_on:
             if attempt >= retry_policy.max_attempts:
                 raise
-            delay_seconds: float = _retry_delay_seconds(
+            delay_seconds: float = calculate_retry_delay(
                 retry_policy=retry_policy,
                 retry_index=attempt - 1,
             )
@@ -322,17 +322,6 @@ def _call_node_with_retry(
                     raise
             sleep(delay_seconds)
             attempt += 1
-
-
-def _retry_delay_seconds(*, retry_policy: RetryPolicy, retry_index: int) -> float:
-    delay_seconds: float = retry_policy.initial_delay_seconds * (
-        retry_policy.backoff_multiplier**retry_index
-    )
-    if retry_policy.max_delay_seconds is not None:
-        delay_seconds = min(delay_seconds, retry_policy.max_delay_seconds)
-    if retry_policy.jitter:
-        return random.uniform(0, delay_seconds)
-    return delay_seconds
 
 
 def _build_context(

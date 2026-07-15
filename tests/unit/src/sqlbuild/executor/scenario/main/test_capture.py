@@ -9,6 +9,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario._helpers.snapshots.core import (
     build_scenario_snapshot_capture_plan,
     build_scenario_snapshot_manifest_shell,
@@ -27,7 +28,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
 )
-from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
     ExecuteScenarioSnapshotCaptureLimitTestCase,
     ExecuteScenarioSnapshotCaptureTestCase,

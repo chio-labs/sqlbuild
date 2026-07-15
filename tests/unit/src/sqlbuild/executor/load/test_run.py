@@ -9,6 +9,7 @@ import pytest
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (
     LoadCallbacks,
@@ -16,7 +17,6 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     ExternalLoadPipelineTestCase,
@@ -134,7 +134,7 @@ def test_given_mixed_loader_skips_when_running_pipeline_then_fan_in_matches_mode
     adapter: CountingLoaderContextTestAdapter = CountingLoaderContextTestAdapter()
 
     def a_loader(ctx: LoaderContext) -> object:
-        return ctx.skip("no new orders", mode=test_case.skip_mode)
+        return ctx.skip(reason="no new orders", mode=test_case.skip_mode)
 
     def x_loader(_ctx: LoaderContext) -> None:
         return None

@@ -37,16 +37,14 @@ from sqlbuild.integrations.dbt._helpers.lineage.constants import DBT_LINEAGE_COL
 from sqlbuild.integrations.dbt._helpers.lineage.selection import resolve_dbt_lineage_target
 from sqlbuild.integrations.dbt._helpers.manifest.core import resolve_dbt_manifest_model
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.manifest.models import (
-    DbtManifestIndex,
-    DbtManifestModel,
-    DbtManifestSeed,
-    DbtManifestSource,
-)
 from sqlbuild.integrations.dbt.models import (
     DbtColumnLineageTrace,
     DbtCombinedGraph,
     DbtCombinedGraphKey,
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSeed,
+    DbtManifestSource,
     DbtSourceSchemaInspectionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphResourceType, DbtLineageDirection

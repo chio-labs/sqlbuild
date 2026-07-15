@@ -4,8 +4,7 @@ from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkE
 from sqlbuild.integrations.dbt._helpers.runtime.node_source_watermarks import (
     record_dbt_successful_node_source_watermark as _record,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
+from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtNodeExecutionResult
 
 
 def record_dbt_successful_node_source_watermark(

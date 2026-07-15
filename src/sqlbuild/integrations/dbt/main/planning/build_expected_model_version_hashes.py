@@ -3,8 +3,7 @@
 from sqlbuild.integrations.dbt._helpers.planning.model_planning import (
     build_expected_dbt_model_version_hashes as _build,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtManifestIndex
 
 
 def build_expected_dbt_model_version_hashes(

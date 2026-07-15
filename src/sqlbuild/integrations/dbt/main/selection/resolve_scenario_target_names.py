@@ -4,7 +4,7 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
     resolve_dbt_scenario_target_names as _resolve,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 
 
 def resolve_dbt_scenario_target_names(

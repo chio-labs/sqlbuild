@@ -21,10 +21,10 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.planning.build_model_path_index import (
+from sqlbuild.compiler.planner.main.selection.build_model_path_index import (
     build_model_path_index,
 )
-from sqlbuild.compiler.planner.main.planning.build_model_tag_index import (
+from sqlbuild.compiler.planner.main.selection.build_model_tag_index import (
     build_model_tag_index,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver

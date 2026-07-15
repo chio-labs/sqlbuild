@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.virtual.state._helpers.validation import build_validation_result
+from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
 from sqlbuild.virtual.state.constants import STATE_TABLE_COLUMNS, STATE_TABLE_INDEXES
 from sqlbuild.virtual.state.models import StateSchemaValidationResult
 from sqlbuild.virtual.state.types import StateSchemaValidationIssueKind

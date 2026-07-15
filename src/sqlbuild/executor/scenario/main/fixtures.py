@@ -11,9 +11,9 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 )
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_FIXTURE_FAILED
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
-from sqlbuild.executor.types import ExecutionStatus
 
 
 def execute_scenario_fixture(

@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
     resolve_sqlbuild_model_dbt_refs as _resolve,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
 
 
 def resolve_sqlbuild_model_dbt_refs(

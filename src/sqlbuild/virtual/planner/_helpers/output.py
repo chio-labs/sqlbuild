@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     DeferralInputs,

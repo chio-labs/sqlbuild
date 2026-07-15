@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
-from sqlbuild.cli.commands.main.commands.playground import run_playground
+from sqlbuild.cli.commands.main.workspace.playground import run_playground
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     skip_unless_dbt_is_runnable,
 )

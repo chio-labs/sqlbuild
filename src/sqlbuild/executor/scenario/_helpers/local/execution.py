@@ -23,6 +23,7 @@ from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
 from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.build.models import FunctionExecutionResult
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario._helpers.execution.model_execution import execute_scenario_models
@@ -65,7 +66,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry
 
 

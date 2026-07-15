@@ -8,6 +8,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
@@ -29,7 +30,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotManifest,
 )
-from sqlbuild.executor.types import ExecutionStatus
 
 
 def execute_scenario_snapshot_capture_steps(

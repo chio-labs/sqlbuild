@@ -23,7 +23,7 @@ from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_
 from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
     DbtCompileReferenceResolver,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     ApplyDeferredTargetsTestCase,
     RefResolutionTestCase,

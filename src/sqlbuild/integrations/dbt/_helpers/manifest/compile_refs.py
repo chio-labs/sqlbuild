@@ -16,7 +16,7 @@ from sqlbuild.integrations.dbt._helpers.manifest.core import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
     rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}\s*"([^"]+)"\s*'

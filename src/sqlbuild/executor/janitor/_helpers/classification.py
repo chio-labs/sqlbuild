@@ -11,7 +11,7 @@ from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
-from sqlbuild.compiler.planner.main.planning.is_scenario_artifact_physical_name import (
+from sqlbuild.compiler.planner.main.scenarios.is_scenario_artifact_physical_name import (
     is_scenario_artifact_physical_name,
 )
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME

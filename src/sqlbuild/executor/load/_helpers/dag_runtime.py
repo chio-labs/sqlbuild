@@ -10,6 +10,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load._helpers.execution import (
     load_resource_kind,
     should_skip_due_to_hard_dependency,
@@ -30,7 +31,6 @@ from sqlbuild.executor.scheduling.main.build_in_degree import build_python_node_
 from sqlbuild.executor.scheduling.main.build_ready_queue import build_python_node_ready_queue
 from sqlbuild.executor.scheduling.main.run_worker import run_worker_with_completion
 from sqlbuild.executor.scheduling.main.unlock_downstream import unlock_downstream_python_nodes
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.build.defer_clone import defer_clone_boundary_selectors
+from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
+    defer_clone_boundary_selectors,
+)
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlannerScope

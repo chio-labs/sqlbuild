@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.virtual.state._helpers.encoding import encode_state_text_impl
+from sqlbuild.virtual.state._helpers.state_storage.encoding import encode_state_text_impl
 
 
 def encode_state_text(value: str) -> str:

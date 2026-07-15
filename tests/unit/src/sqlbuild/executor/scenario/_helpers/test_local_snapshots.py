@@ -5,7 +5,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.scenario._helpers.local.snapshots import (
     load_scenario_snapshot_into_duckdb,
 )

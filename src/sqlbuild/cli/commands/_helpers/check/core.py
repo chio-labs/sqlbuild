@@ -12,7 +12,7 @@ from sqlbuild.adapter.relations.main.relation_lookup import build_relation_looku
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.relation_targets import (
@@ -20,7 +20,7 @@ from sqlbuild.compiler.pipeline.main.relation_targets import (
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.planning.selector_parse import parse_project_selector
+from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.python_nodes.main.selectors import resolve_python_nodes_from_selectors
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan

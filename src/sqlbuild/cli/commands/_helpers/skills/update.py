@@ -8,7 +8,7 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.skills.models import SkillInstallTarget, SkillUpdateResult
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 
 generated_marker: str = "<!-- generated-by: sqlbuild skills update -->"

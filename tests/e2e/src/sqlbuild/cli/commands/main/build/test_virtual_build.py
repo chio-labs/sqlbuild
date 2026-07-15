@@ -1912,8 +1912,8 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "\n"
                 "@task(depends_on=model('orders'))\n"
                 "def summarize_loader(ctx):\n"
-                "    result = ctx.result_of(raw_orders)\n"
-                "    history = ctx.results_of(raw_orders, limit=1)\n"
+                "    result = ctx.result_of(node_function=raw_orders)\n"
+                "    history = ctx.results_of(node_function=raw_orders, limit=1)\n"
                 "    output = Path(__file__).parents[1].joinpath('loader_result.txt')\n"
                 "    output.write_text(\n"
                 "        f\"{result.metadata['loader_name']}:{result.metadata['source_name']}:\"\n"
@@ -1921,7 +1921,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "    )\n"
                 "    history_output = Path(__file__).parents[1].joinpath('history_result.txt')\n"
                 "    history_output.write_text(\n"
-                "        f\"{ctx.result_of(produce_result).payload['value']}:{len(history)}\"\n"
+                "        f\"{ctx.result_of(node_function=produce_result).payload['value']}:{len(history)}\"\n"
                 "    )\n"
                 "    return ctx.result(metadata={'summarized': True})\n"
             ),
@@ -1930,7 +1930,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "from tasks.results import produce_result\n\n"
                 "@asset(depends_on=produce_result)\n"
                 "def publish_result(ctx):\n"
-                "    payload = ctx.result_of(produce_result).payload\n"
+                "    payload = ctx.result_of(node_function=produce_result).payload\n"
                 "    return ctx.result(payload=payload, materialized=True)\n"
             ),
             "models/orders.sql": (
@@ -1943,8 +1943,8 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "@check(depends_on=(publish_result, summarize_loader))\n"
                 "def check_produce_result(ctx):\n"
                 "    return (\n"
-                "        ctx.result_of(produce_result).payload['value'] == 42\n"
-                "        and ctx.result_of(publish_result).payload['value'] == 42\n"
+                "        ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
+                "        and ctx.result_of(node_function=publish_result).payload['value'] == 42\n"
                 "    )\n"
             ),
         },
@@ -2132,7 +2132,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                     "from sqlbuild.tasks import task\n\n"
                     "@task(depends_on=model('orders'))\n"
                     "def prepare_orders(ctx):\n"
-                    "    return ctx.skip('not needed', mode=SkipMode.SOFT)\n"
+                    "    return ctx.skip(reason='not needed', mode=SkipMode.SOFT)\n"
                 ),
             },
             command=("--no-color", "build", "--select", "orders"),
@@ -2173,7 +2173,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                     "from sqlbuild.tasks import task\n\n"
                     "@task\n"
                     "def prepare_events(ctx):\n"
-                    "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+                    "    return ctx.skip(reason='no input', mode=SkipMode.HARD)\n"
                 ),
                 "loaders/events.py": (
                     "from tasks.prepare import prepare_events\n"
@@ -2583,7 +2583,7 @@ def test_given_virtual_read_side_python_skip_when_building_then_prints_python_sk
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def skip_fact_orders(ctx):\n"
-                "    return ctx.skip('profile not needed')\n"
+                "    return ctx.skip(reason='profile not needed')\n"
             ),
         },
     )

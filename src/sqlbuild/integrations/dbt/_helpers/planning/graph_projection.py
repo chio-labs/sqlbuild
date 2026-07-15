@@ -6,8 +6,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
 from sqlbuild.compiler.planner.models import GraphNodeKey, SelectionStalenessNodeKey
 from sqlbuild.integrations.dbt._helpers.graph.core import dbt_model_graph_key
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtCombinedGraphKey
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtCombinedGraphKey, DbtManifestIndex
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,

@@ -3,6 +3,9 @@ tests = ["tests"]
 tooling = ["scripts"]
 select = ["SF"]
 
+[evaluation]
+exclude = ["tests/e2e/fixtures/**"]
+
 [thresholds]
 max_positional_args = 1
 
@@ -45,3 +48,61 @@ reason = "The SQL Server adapter intentionally keeps overrideable backend behavi
 rule = "SFR601"
 path = "src/sqlbuild/virtual/state/classes/postgres.py"
 reason = "The Postgres state backend intentionally keeps its transactional storage contract on one class."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/integrations/dbt/_helpers/profile/render.py"
+symbols = ["_render_string.env_var", "_render_string.var"]
+reason = "These Jinja globals preserve dbt's external positional call protocol."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/integrations/dlt/classes/sqlbuild_dlt_progress_collector.py"
+symbols = [
+    "SqlbuildDltProgressCollector.on_start_trace",
+    "SqlbuildDltProgressCollector.on_start_trace_step",
+    "SqlbuildDltProgressCollector.on_end_trace_step",
+    "SqlbuildDltProgressCollector.on_end_trace",
+    "SqlbuildDltProgressCollector.update",
+]
+reason = "These collector methods preserve dlt's external positional progress protocol."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/loaders.py"
+symbols = ["loader"]
+reason = "Bare @loader is evaluated by Python as loader(function), requiring positional function calling."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/assets.py"
+symbols = ["asset"]
+reason = "Bare @asset is evaluated by Python as asset(function), requiring positional function calling."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/hooks.py"
+symbols = ["hook"]
+reason = "Bare @hook is evaluated by Python as hook(function), requiring positional function calling."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/tasks.py"
+symbols = ["task"]
+reason = "Bare @task is evaluated by Python as task(function), requiring positional function calling."
+
+[[rule_exceptions]]
+rule = "SFR402"
+path = "src/sqlbuild/integrations/dagster/__init__.py"
+reason = "These imports preserve Dagster's documented external package-root APIs."
+
+[[rule_exceptions]]
+rule = "SFR402"
+path = "src/sqlbuild/integrations/rivers/__init__.py"
+reason = "These imports preserve Rivers' documented external package-root APIs."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/integrations/dagster/classes/sqlbuild_cli_resource.py"
+symbols = ["SqlBuildCliResource.cli"]
+reason = "This method follows Dagster's public cli(args, *, ...) positional convention."

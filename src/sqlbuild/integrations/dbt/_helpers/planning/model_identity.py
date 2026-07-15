@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Sequence
 
-from sqlbuild.compiler.planner.main.planning.graph_write_identity import (
+from sqlbuild.compiler.planner.main.identity.graph_write_identity import (
     build_graph_write_identity_hashes,
 )
 from sqlbuild.compiler.planner.models import GraphIdentityNode, GraphNodeKey
@@ -15,12 +15,12 @@ from sqlbuild.integrations.dbt._helpers.planning.graph_projection import (
     dbt_graph_node_key,
     dbt_identity_upstream_keys,
 )
-from sqlbuild.integrations.dbt.manifest.models import (
+from sqlbuild.integrations.dbt.models import (
+    DbtCombinedGraph,
     DbtManifestIndex,
     DbtManifestModel,
     DbtManifestSeed,
 )
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph
 
 
 def compose_dbt_version_hash(*, own_hash: str, upstream_hashes: Sequence[tuple[str, str]]) -> str:

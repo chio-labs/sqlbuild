@@ -10,8 +10,8 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.executor.contracts.types import ExecutionPhase
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.types import ExecutionPhase
 from tests.integration.src.sqlbuild.executor.run.view._test_types import (
     ViewFailureTestCase,
     ViewSuccessTestCase,

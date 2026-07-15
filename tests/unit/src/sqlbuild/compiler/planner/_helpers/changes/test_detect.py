@@ -9,7 +9,7 @@ from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.hooks.models import SqlHookEntry
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes, detect_model_changes
-from sqlbuild.compiler.planner.main.planning.version_identity_metadata import (
+from sqlbuild.compiler.planner.main.identity.version_identity_metadata import (
     build_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import (

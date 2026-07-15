@@ -10,10 +10,10 @@ from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_
 from sqlbuild.integrations.dbt._helpers.reuse import production_ref as production_ref_module
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtReuseUnavailableError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
+    DbtManifestIndex,
     DbtProductionRefCompileResult,
 )
 from sqlbuild.spec.contracts.models import DbtProductionRefConfig

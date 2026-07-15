@@ -6,7 +6,9 @@ from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.integrations.rivers._helpers.imports import load_rivers
-from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
+from sqlbuild.integrations.rivers.classes.sqlbuild_rivers_translator import (
+    SqlBuildRiversTranslator,
+)
 
 _ASSET_KINDS: frozenset[str] = frozenset(
     {"source", "loader", "seed", "model", "udf", "table_fn", "task", "asset"}

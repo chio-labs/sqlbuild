@@ -12,9 +12,11 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
-from sqlbuild.virtual.state._helpers.backend import build_state_backend
-from sqlbuild.virtual.state._helpers.config import resolve_state_backend_config
-from sqlbuild.virtual.state._helpers.lifecycle_output import format_state_lifecycle_summary
+from sqlbuild.virtual.state._helpers.state_lifecycle.lifecycle_output import (
+    format_state_lifecycle_summary,
+)
+from sqlbuild.virtual.state._helpers.state_runtime.backend import build_state_backend
+from sqlbuild.virtual.state._helpers.state_runtime.config import resolve_state_backend_config
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import StateBackendConfig, StateSchemaValidationResult

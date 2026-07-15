@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.integrations.dbt._helpers.manifest.core import (
     resolve_dbt_manifest_model as _resolve_dbt_manifest_model,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
 
 
 def resolve_manifest_model(

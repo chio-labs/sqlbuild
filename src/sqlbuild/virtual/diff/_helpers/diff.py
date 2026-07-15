@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks

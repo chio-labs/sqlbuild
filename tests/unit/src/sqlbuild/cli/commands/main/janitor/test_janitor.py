@@ -8,9 +8,9 @@ from io import StringIO
 import pytest
 
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.cli.commands._helpers.janitor.models import JanitorPlanningResult
-from sqlbuild.cli.commands._helpers.janitor.output import write_disabled, write_plan
-from sqlbuild.cli.commands._helpers.janitor.outputs import confirm_janitor_plan
+from sqlbuild.cli.commands._helpers.janitor_output.output import write_disabled, write_plan
+from sqlbuild.cli.commands._helpers.janitor_output.outputs import confirm_janitor_plan
+from sqlbuild.cli.commands._helpers.janitor_runtime.models import JanitorPlanningResult
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
     JanitorPlan,

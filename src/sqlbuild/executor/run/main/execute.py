@@ -13,7 +13,8 @@ from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import RelationReuseKind
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run._helpers.execution.final_audits import run_final_model_audits
 from sqlbuild.executor.run._helpers.execution.hook_phases import run_post_hook_phase
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
@@ -62,7 +63,6 @@ from sqlbuild.executor.run.models import (
     TableTargets,
 )
 from sqlbuild.executor.run.types import HookPhase
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 
 
 def execute_table_entry(

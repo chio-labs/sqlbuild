@@ -13,13 +13,13 @@ from sqlbuild.cli.progress.main.expectation_detail import format_expectation_det
 from sqlbuild.cli.progress.main.expectation_name import format_expectation_name
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.main.planning.materialization_type_display import (
+from sqlbuild.compiler.planner.main.execution.materialization_type_display import (
     materialization_type_display,
 )
-from sqlbuild.compiler.planner.main.planning.model_execution_annotation import (
+from sqlbuild.compiler.planner.main.execution.model_execution_annotation import (
     model_execution_annotation,
 )
-from sqlbuild.compiler.planner.main.planning.model_resource_type import model_resource_type
+from sqlbuild.compiler.planner.main.execution.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.models import AuditExecutionResult

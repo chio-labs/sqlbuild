@@ -6,13 +6,15 @@ from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
+from sqlbuild.integrations.dagster.classes.sqlbuild_dagster_translator import (
+    SqlBuildDagsterTranslator,
+)
 from sqlbuild.integrations.dagster.constants import (
     DAGSTER_ASSET_NODE_KINDS,
     DAGSTER_DIRECT_KIND_NODE_KINDS,
     MODEL_NODE_KIND,
     VIEW_MATERIALIZATION_TYPE,
 )
-from sqlbuild.integrations.dagster.translator import SqlBuildDagsterTranslator
 
 
 def build_asset_specs(

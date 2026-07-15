@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run._helpers.execution.results import (
@@ -31,7 +32,6 @@ from sqlbuild.executor.run.models import (
     ModelMaterializationContext,
 )
 from sqlbuild.executor.run.types import HookPhase
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.spec.contracts.models import SourceEntry
 

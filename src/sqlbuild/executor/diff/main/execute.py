@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.execution import execute_model_diff
 from sqlbuild.executor.diff._helpers.selection import is_disabled
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
-from sqlbuild.executor.exceptions import ExecutorInputError
 
 
 def execute_diff(

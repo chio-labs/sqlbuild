@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 
 
 def load_staging_cursor_bounds(

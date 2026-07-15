@@ -16,13 +16,13 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
     MaterializationResult,
     PrepareVersionContext,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     CleanupTestCase,
     ContextVerificationTestCase,

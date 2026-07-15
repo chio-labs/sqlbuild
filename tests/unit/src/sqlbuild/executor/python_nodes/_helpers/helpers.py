@@ -31,7 +31,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunSelection,
 )
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState

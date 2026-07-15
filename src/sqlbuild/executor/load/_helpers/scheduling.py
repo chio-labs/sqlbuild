@@ -12,7 +12,8 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load._helpers.dag_runtime import (
     build_load_dag_state,
     complete_dag_source,
@@ -34,7 +35,6 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.load.types import LoadProgressCallback
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 from sqlbuild.spec.contracts.models import SourceEntry
 

@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.commands.main.commands.entry import main
+from sqlbuild.cli.commands.main.entrypoint.entry import main
 
 
 def run_advanced_compile_benchmark(

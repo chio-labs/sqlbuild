@@ -11,13 +11,13 @@ from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_
 from sqlbuild.integrations.dbt._helpers.planning.orchestration import plan_dbt_interop_command
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtCommandResult,
     DbtInteropCommandArgs,
     DbtInteropPlan,
+    DbtManifestIndex,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtPlanOrchestrationErrorTestCase,

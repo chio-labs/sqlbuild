@@ -5,8 +5,8 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
-from sqlbuild.compiler.planner.main.planning.upstream import expand_project_upstream_keys
+from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.selection.upstream import expand_project_upstream_keys
 
 
 def resolve_freshness_source_names(

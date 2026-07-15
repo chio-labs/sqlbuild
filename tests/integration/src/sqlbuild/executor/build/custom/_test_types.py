@@ -5,7 +5,7 @@ from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 
 
 @dataclass(frozen=True)

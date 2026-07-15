@@ -1,0 +1,1 @@
+"""Virtual state storage helpers."""

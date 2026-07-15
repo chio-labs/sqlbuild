@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
 )
-from sqlbuild.compiler.planner.main.planning.selector_expansion import split_selector_expansion
-from sqlbuild.compiler.planner.main.planning.sqlbuild_model_selectors import (
+from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
+from sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.compiler.planner.models import SelectorExpansion
@@ -28,7 +28,6 @@ from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
@@ -36,6 +35,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsResult,
+    DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 

@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.integrations.dbt._helpers.manifest.core import resolve_dbt_manifest_model
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
 
 
 def resolve_sqlbuild_model_dbt_refs(

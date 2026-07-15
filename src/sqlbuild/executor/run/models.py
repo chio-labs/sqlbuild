@@ -14,10 +14,10 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorInputRelation, ModelPlanEntry
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.types import AuditGateReuseReason, HookPhase
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.spec.contracts.models import SourceEntry
 
@@ -67,7 +67,7 @@ class HookContext:
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
 
-    def skip(self, reason: str, *, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
+    def skip(self, *, reason: str, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
         """Return a skip signal for the current hook."""
 
         return HookSkipResult(reason=reason, mode=SkipMode(mode))

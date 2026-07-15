@@ -6,9 +6,9 @@ from typing import Protocol, cast
 
 
 class AdapterRecordingConnection(Protocol):
-    def test_executed_sql(self) -> tuple[str, ...]: ...
+    def recorded_sql(self) -> tuple[str, ...]: ...
 
-    def test_closed_cursor_count(self) -> int: ...
+    def closed_cursor_count(self) -> int: ...
 
 
 class AdapterCursorMaxCursor:
@@ -36,10 +36,10 @@ class AdapterExecuteRecordingConnection:
         self.executed_sql.append(sql)
         return self.cursor
 
-    def test_executed_sql(self) -> tuple[str, ...]:
+    def recorded_sql(self) -> tuple[str, ...]:
         return tuple(self.executed_sql)
 
-    def test_closed_cursor_count(self) -> int:
+    def closed_cursor_count(self) -> int:
         return 0
 
 
@@ -50,10 +50,10 @@ class AdapterCursorRecordingConnection:
     def cursor(self) -> AdapterCursorMaxCursor:
         return self.cursor_instance
 
-    def test_executed_sql(self) -> tuple[str, ...]:
+    def recorded_sql(self) -> tuple[str, ...]:
         return tuple(self.cursor_instance.executed_sql)
 
-    def test_closed_cursor_count(self) -> int:
+    def closed_cursor_count(self) -> int:
         return int(self.cursor_instance.closed)
 
 
@@ -63,7 +63,7 @@ def adapter_cursor_executed_sql(connection: object) -> tuple[str, ...]:
             connection, (AdapterExecuteRecordingConnection, AdapterCursorRecordingConnection)
         )
     ](connection)
-    return cast(AdapterRecordingConnection, connection).test_executed_sql()
+    return cast(AdapterRecordingConnection, connection).recorded_sql()
 
 
 def adapter_closed_cursor_count(connection: object) -> int:
@@ -72,7 +72,7 @@ def adapter_closed_cursor_count(connection: object) -> int:
             connection, (AdapterExecuteRecordingConnection, AdapterCursorRecordingConnection)
         )
     ](connection)
-    return cast(AdapterRecordingConnection, connection).test_closed_cursor_count()
+    return cast(AdapterRecordingConnection, connection).closed_cursor_count()
 
 
 def _accept_recording_connection(connection: object) -> None:

@@ -69,11 +69,14 @@ from sqlbuild.integrations.dbt._helpers.graph.core import (
 )
 from sqlbuild.integrations.dbt._helpers.lineage.selection import select_dbt_lineage_target
 from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.pipeline.diff import (
+    DbtDiffOptions,
+    parse_dbt_diff_options,
+)
 from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
     DbtCompileReferenceResolver,
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
@@ -83,10 +86,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtLineageGraph,
     DbtLsNode,
-)
-from sqlbuild.integrations.dbt.pipeline._helpers.diff import (
-    DbtDiffOptions,
-    parse_dbt_diff_options,
+    DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,

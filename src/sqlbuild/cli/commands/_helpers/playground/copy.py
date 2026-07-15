@@ -11,7 +11,7 @@ from sqlbuild.cli.commands._helpers.playground.dbt_scaffold import (
     scaffold_dbt_playground,
 )
 from sqlbuild.cli.commands._helpers.playground.types import PlaygroundTemplate
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 
 _TEMPLATE_PACKAGE: str = "sqlbuild.playground"
 _WAFFLE_SHOP_TEMPLATE: str = "templates/waffle_shop"
@@ -104,7 +104,7 @@ def prepare_raw_orders(ctx):
 def optional_partner_feed(ctx):
     """Soft-skip an optional upstream without blocking sibling fan-in."""
 
-    return ctx.skip("partner feed is not configured", mode=SkipMode.SOFT)
+    return ctx.skip(reason="partner feed is not configured", mode=SkipMode.SOFT)
 
 
 @task(tags=["python", "optional"], group="exports")
@@ -171,14 +171,17 @@ from assets.orders_export import orders_export
 def check_orders_export(ctx):
     """Validate the Python asset's same-run metadata and payload."""
 
-    result = ctx.result_of(orders_export)
+    result = ctx.result_of(node_function=orders_export)
     payload = result.payload
     metadata = result.metadata
     if payload["order_count"] <= 0:
-        return ctx.fail("orders export is empty")
+        return ctx.fail(message="orders export is empty")
     if "target_uri" not in metadata:
-        return ctx.warn("orders export target URI is missing")
-    return ctx.pass_("orders export is ready", metadata={"order_count": payload["order_count"]})
+        return ctx.warn(message="orders export target URI is missing")
+    return ctx.pass_(
+        message="orders export is ready",
+        metadata={"order_count": payload["order_count"]},
+    )
 '''
 
 _VIRTUAL_PROJECT_TOML: str = """name = "loader_waffle_shop_virtual"

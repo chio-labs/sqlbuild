@@ -6,7 +6,7 @@ from sqlbuild.cli.commands._helpers.runtime.mode_policy import (
     enforce_no_defer_to_in_virtual_mode,
     enforce_virtual_only_flags_in_virtual_mode,
 )
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SettingsConfig
 from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import ModeGuardTestCase

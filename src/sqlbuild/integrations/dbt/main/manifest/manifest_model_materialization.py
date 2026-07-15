@@ -3,7 +3,7 @@
 from sqlbuild.integrations.dbt._helpers.manifest.core import (
     dbt_manifest_model_materialization as _resolve,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestModel
+from sqlbuild.integrations.dbt.models import DbtManifestModel
 
 
 def dbt_manifest_model_materialization(*, model: DbtManifestModel) -> str | None:

@@ -19,7 +19,7 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_MATERIALIZED_KEY,
 )
-from sqlbuild.integrations.dbt.manifest.models import (
+from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
     DbtManifestModel,
     DbtManifestSeed,

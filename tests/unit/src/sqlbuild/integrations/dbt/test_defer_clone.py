@@ -5,13 +5,12 @@ import pytest
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph
 from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph
-from sqlbuild.integrations.dbt.pipeline._helpers.defer_clone import (
+from sqlbuild.integrations.dbt._helpers.pipeline.defer_clone import (
     resolve_defer_clone_unique_ids,
     resolve_defer_clone_view_chain_terms,
     resolve_defer_clone_view_chain_unique_ids,
 )
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtManifestIndex
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtDeferCloneViewChainTermsTestCase,
 )

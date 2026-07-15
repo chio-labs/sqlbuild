@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlbuild.integrations.dbt._helpers.manifest.core import (
     load_dbt_manifest_index,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 
 
 def load_manifest_index(*, manifest_path: Path) -> DbtManifestIndex:

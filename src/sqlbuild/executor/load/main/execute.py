@@ -14,7 +14,8 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load._helpers.cursors import (
     exclusive_cursor_end,
     format_cursor_bound,
@@ -36,7 +37,6 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import invoke_with_providers
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry

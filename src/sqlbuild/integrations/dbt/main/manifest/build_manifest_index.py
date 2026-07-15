@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.integrations.dbt._helpers.manifest.core import (
     build_dbt_manifest_index as _build_dbt_manifest_index,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 
 
 def build_manifest_index(*, raw_data: object) -> DbtManifestIndex:

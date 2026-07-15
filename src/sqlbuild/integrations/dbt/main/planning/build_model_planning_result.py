@@ -8,8 +8,11 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt._helpers.planning.model_planning import (
     build_dbt_model_planning_result as _build,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtModelPlanningResult
+from sqlbuild.integrations.dbt.models import (
+    DbtCombinedGraph,
+    DbtManifestIndex,
+    DbtModelPlanningResult,
+)
 
 
 def build_dbt_model_planning_result(

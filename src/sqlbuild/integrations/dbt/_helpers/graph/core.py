@@ -17,14 +17,12 @@ from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
     resolve_sqlbuild_model_dbt_refs,
 )
 from sqlbuild.integrations.dbt.constants import DBT_MATERIALIZATION_VIEW
-from sqlbuild.integrations.dbt.manifest.models import (
-    DbtManifestIndex,
-    DbtManifestModel,
-    DbtManifestSource,
-)
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSource,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
 

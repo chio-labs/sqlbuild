@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state._helpers.runtime import build_state_runtime
+from sqlbuild.virtual.state._helpers.state_runtime.runtime import build_state_runtime
 
 
 def delete_virtual_environment_checkpoint(

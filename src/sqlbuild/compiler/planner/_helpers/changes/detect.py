@@ -28,10 +28,10 @@ from sqlbuild.compiler.planner._helpers.identity.functions import (
     detect_function_change,
 )
 from sqlbuild.compiler.planner.constants import EMPTY_FINGERPRINT_METADATA_JSON
-from sqlbuild.compiler.planner.main.planning.version_identity_function_hashes import (
+from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (
     build_function_local_hashes,
 )
-from sqlbuild.compiler.planner.main.planning.version_identity_model_metadata import (
+from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import (

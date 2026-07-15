@@ -5,12 +5,12 @@ from sqlbuild.integrations.dbt._helpers.planning.orchestration import (
     plan_dbt_interop_command as _plan,
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtInteropCommandArgs,
     DbtInteropPlan,
+    DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 

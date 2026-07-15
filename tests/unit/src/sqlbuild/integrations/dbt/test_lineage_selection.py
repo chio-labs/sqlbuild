@@ -10,8 +10,7 @@ from sqlbuild.integrations.dbt._helpers.lineage.selection import (
 )
 from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtLineageGraph
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtLineageGraph, DbtManifestIndex
 from sqlbuild.integrations.dbt.types import DbtLineageDirection
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtLineageSelectionErrorTestCase,

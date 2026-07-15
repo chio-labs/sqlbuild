@@ -18,12 +18,12 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.constants import LOADER_RELATION_QUALIFIER_SEPARATOR
 from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -137,7 +137,7 @@ class LoaderContext:
         if self.on_progress is not None:
             self.on_progress(message)
 
-    def skip(self, reason: str, *, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
+    def skip(self, *, reason: str, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
         """Return a skip signal for the current source loader."""
 
         return LoaderSkipResult(reason=reason, mode=mode)
@@ -159,8 +159,8 @@ class LoaderContext:
 
     def result_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         run_id: str | None = None,
         default: object = MISSING_DEFAULT,
     ) -> NodeResultEnvelope | object:
@@ -180,8 +180,8 @@ class LoaderContext:
 
     def results_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         limit: int,
     ) -> tuple[NodeResultEnvelope, ...]:
         """Return persisted successful upstream result history, newest first."""

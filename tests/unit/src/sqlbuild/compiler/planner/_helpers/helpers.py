@@ -706,21 +706,20 @@ def build_standard_reuse_decision_scope(
         )
         for model_name, config_values in model_configs
     )
+    model_keys: dict[str, CompiledObjectKey] = {model.name: model.key for model in models}
+    effective_selected_model_names: frozenset[str] = cast(
+        frozenset[str],
+        (
+            selected_model_names,
+            frozenset(model.name for model in models),
+        )[selected_model_names is None],
+    )
     return PlannerScope(
         upstream_deps={},
         downstream_deps={},
-        all_keys={model.name: model.key for model in models},
+        all_keys=model_keys,
         models_by_name={model.name: model for model in models},
-        selected_keys=frozenset(
-            {model.name: model.key for model in models}[name]
-            for name in cast(
-                frozenset[str],
-                (
-                    selected_model_names,
-                    frozenset(model.name for model in models),
-                )[selected_model_names is None],
-            )
-        ),
+        selected_keys=frozenset(model_keys[name] for name in effective_selected_model_names),
         execution_order=tuple(model.key for model in models),
     )
 

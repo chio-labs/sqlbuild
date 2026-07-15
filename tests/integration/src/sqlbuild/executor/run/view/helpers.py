@@ -24,13 +24,13 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run._helpers.materializations.view import execute_view_entry
 from sqlbuild.executor.run.models import (
     HookContext,
     ModelExecutionResult,
     ModelMaterializationContext,
 )
-from sqlbuild.executor.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.view._test_types import (
     ViewFailureTestCase,
     ViewSuccessTestCase,
