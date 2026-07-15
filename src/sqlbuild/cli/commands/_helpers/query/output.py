@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlbuild.adapter.contract.models import QueryResult
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 
 _LONG_OUTPUT_FORMAT: str = "long"
 _TABLE_OUTPUT_FORMAT: str = "table"

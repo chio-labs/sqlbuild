@@ -6,7 +6,7 @@ from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.executor.exceptions import ExecutorInputError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.constants import (
     RUNTIME_CONTRACT_EXTRA_COLUMN_CODE,
     RUNTIME_CONTRACT_MISSING_COLUMN_CODE,

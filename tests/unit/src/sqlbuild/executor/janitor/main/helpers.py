@@ -83,11 +83,17 @@ class FakeJanitorAdapter(BaseAdapter):
             (relation.database, relation.schema, relation.name)
             for relation in self._available_relations
         }
-        state_relation_keys: set[tuple[str | None, str | None, str]] = {
-            (relation.database, relation.schema, state_name)
+        fingerprint_relation_keys: set[tuple[str | None, str | None, str]] = {
+            (relation.database, relation.schema, FINGERPRINT_TABLE_NAME)
             for relation in self._available_relations
-            for state_name in (FINGERPRINT_TABLE_NAME, SOURCE_FRESHNESS_TABLE_NAME)
         }
+        freshness_relation_keys: set[tuple[str | None, str | None, str]] = {
+            (relation.database, relation.schema, SOURCE_FRESHNESS_TABLE_NAME)
+            for relation in self._available_relations
+        }
+        state_relation_keys: set[tuple[str | None, str | None, str]] = (
+            fingerprint_relation_keys | freshness_relation_keys
+        )
         self._existing_relation_keys = relation_keys & state_relation_keys
 
     def supports_relation_age_metadata(self) -> bool:

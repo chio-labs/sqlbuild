@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, cast, overload
+from typing import Any, cast
 
 from sqlbuild.python_nodes.models import LoaderDefinition
 from sqlbuild.python_nodes.types import LoaderColumnSpec
@@ -36,26 +36,6 @@ def _decorate_loader(
     )
     loader_function.__sqlbuild_loader__ = definition
     return function
-
-
-@overload
-def loader(
-    function: Callable[..., object],
-) -> Callable[..., object]: ...
-
-
-@overload
-def loader(
-    *,
-    name: str | None = None,
-    depends_on: tuple[Callable[..., object], ...] | list[Callable[..., object]] = (),
-    destination: str | None = None,
-    write_strategy: str | None = None,
-    cursor_column: str | None = None,
-    unique_key: str | Sequence[str] | None = None,
-    columns: Sequence[LoaderColumnSpec | SourceColumnEntry] = (),
-    contract: str | None = None,
-) -> Callable[[Callable[..., object]], Callable[..., object]]: ...
 
 
 def loader(

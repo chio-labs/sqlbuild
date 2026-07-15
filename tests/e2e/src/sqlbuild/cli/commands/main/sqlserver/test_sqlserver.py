@@ -211,7 +211,7 @@ def test_given_python_result_when_running_check_on_sqlserver_then_persists_node_
                 "from tasks.results import produce_result\n\n"
                 "@check(depends_on=produce_result)\n"
                 "def check_produce_result(ctx):\n"
-                "    return ctx.result_of(produce_result).payload['value'] == 42\n"
+                "    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
             ),
         },
     )

@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state._helpers.detached_retention import (
+from sqlbuild.virtual.state._helpers.state_lifecycle.detached_retention import (
     build_detached_environment_inspection,
 )
-from sqlbuild.virtual.state._helpers.runtime import build_state_runtime
+from sqlbuild.virtual.state._helpers.state_runtime.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import (
     DetachedVirtualEnvironmentInspection,
     PhysicalRelationRecord,

@@ -9,7 +9,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from sqlbuild.adapter.discovery.main.project_adapters import discover_project_adapters
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 
 
 def resolve_adapter(*, adapter_name: str, project_dir: Path | None = None) -> BaseAdapter:

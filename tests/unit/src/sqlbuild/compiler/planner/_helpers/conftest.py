@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
 )
-from sqlbuild.compiler.planner.main.planning.build_model_path_index import (
+from sqlbuild.compiler.planner.main.selection.build_model_path_index import (
     build_model_path_index,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (

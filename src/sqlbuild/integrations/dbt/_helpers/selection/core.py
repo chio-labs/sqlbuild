@@ -6,8 +6,8 @@ from collections.abc import Mapping, Sequence
 
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.graph.main.path_nodes import path_nodes
-from sqlbuild.compiler.planner.main.planning.selector_expansion import split_selector_expansion
-from sqlbuild.compiler.planner.main.planning.sqlbuild_model_selectors import (
+from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
+from sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.compiler.planner.models import SelectorExpansion
@@ -19,11 +19,12 @@ from sqlbuild.integrations.dbt._helpers.graph.core import (
 )
 from sqlbuild.integrations.dbt._helpers.selection.constants import DBT_PATH_SELECTOR_SEPARATOR
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
     DbtInteropSelectionResult,
+    DbtManifestIndex,
+    DbtManifestModel,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner
 

@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
-from sqlbuild.compiler.planner.main.planning.clone import run_clone_planning
+from sqlbuild.compiler.planner.main.clone.clone import run_clone_planning
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 

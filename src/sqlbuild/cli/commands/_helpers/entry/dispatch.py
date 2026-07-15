@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.audit.models import AuditCommandRequest
-from sqlbuild.cli.commands._helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands._helpers.build_planning.models import BuildCommandRequest
 from sqlbuild.cli.commands._helpers.check.models import CheckCommandRequest
 from sqlbuild.cli.commands._helpers.clone.models import CloneCommandRequest
 from sqlbuild.cli.commands._helpers.compile.models import (
@@ -27,18 +27,18 @@ from sqlbuild.cli.commands._helpers.entry.models import CliEntrypointHandlers
 from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_files
 from sqlbuild.cli.commands._helpers.entry.types import CliCommand
 from sqlbuild.cli.commands._helpers.freshness.models import FreshnessCommandRequest
-from sqlbuild.cli.commands._helpers.janitor.models import JanitorCommandRequest
+from sqlbuild.cli.commands._helpers.janitor_runtime.models import JanitorCommandRequest
 from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands._helpers.promote.models import PromoteCommandRequest
 from sqlbuild.cli.commands._helpers.rollback.models import RollbackCommandRequest
-from sqlbuild.cli.commands._helpers.scenario.constants import (
+from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_MISSING_SUBCOMMAND,
 )
-from sqlbuild.cli.commands._helpers.scenario.models import (
+from sqlbuild.cli.commands._helpers.scenario_execution.models import (
     ScenarioCaptureCommandRequest,
     ScenarioSnapshotLimitInputs,
     ScenarioTestCommandRequest,
@@ -46,7 +46,7 @@ from sqlbuild.cli.commands._helpers.scenario.models import (
 from sqlbuild.cli.commands._helpers.seed.models import SeedCommandRequest
 from sqlbuild.cli.commands._helpers.test.models import TestCommandRequest
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides

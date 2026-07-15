@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
-from sqlbuild.compiler.planner.main.planning.model_execution_annotation import (
+from sqlbuild.compiler.planner.main.execution.model_execution_annotation import (
     model_execution_annotation,
 )
-from sqlbuild.compiler.planner.main.planning.model_resource_type import model_resource_type
+from sqlbuild.compiler.planner.main.execution.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.constants import BUILD_SOURCE_FRESHNESS_BLOCKED_CODE
@@ -20,11 +20,11 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.coded_error_text import format_coded_error

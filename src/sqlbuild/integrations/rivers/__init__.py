@@ -1,7 +1,9 @@
 """Optional Rivers integration for SQLBuild."""
 
-from sqlbuild.integrations.rivers.assets import sqlbuild_assets
-from sqlbuild.integrations.rivers.project import SqlBuildProject
-from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
+from sqlbuild.integrations.rivers.classes.sqlbuild_rivers_translator import (
+    SqlBuildRiversTranslator,
+)
+from sqlbuild.integrations.rivers.main.sqlbuild_assets import sqlbuild_assets
+from sqlbuild.integrations.rivers.models import SqlBuildProject
 
 __all__ = ["SqlBuildProject", "SqlBuildRiversTranslator", "sqlbuild_assets"]

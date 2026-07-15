@@ -19,7 +19,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_message import error_message
-from sqlbuild.executor.exceptions import ExecutorInputError, ExecutorJsonTypeError
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError, ExecutorJsonTypeError
 from sqlbuild.executor.scenario.constants import (
     JSONL_BLANK_LINE,
     SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,

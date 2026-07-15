@@ -7,12 +7,12 @@ from typing import Any
 
 from sqlbuild.adapter.contract.models import CursorValue
 from sqlbuild.adapter.contract.types import CursorKind
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff.constants import (
     BOUNDED_DIFF_DAY_UNIT,
     BOUNDED_DIFF_HOUR_UNIT,
     BOUNDED_DIFF_MINUTE_UNIT,
 )
-from sqlbuild.executor.exceptions import ExecutorInputError
 
 
 def resolve_bounded_cursors(

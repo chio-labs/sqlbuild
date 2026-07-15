@@ -15,19 +15,19 @@ from duckdb import DuckDBPyConnection
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.audit.models import AuditCommandRequest
-from sqlbuild.cli.commands._helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands._helpers.build_planning.models import BuildCommandRequest
 from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands._helpers.load.selection import select_load_entries
 from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest
-from sqlbuild.cli.commands._helpers.scenario.models import ScenarioTestCommandRequest
+from sqlbuild.cli.commands._helpers.scenario_execution.models import ScenarioTestCommandRequest
 from sqlbuild.cli.commands._helpers.test.models import TestCommandRequest
-from sqlbuild.cli.commands.main.commands.audit import run_audit
-from sqlbuild.cli.commands.main.commands.build import run_build
-from sqlbuild.cli.commands.main.commands.load import run_load
-from sqlbuild.cli.commands.main.commands.plan import run_plan
-from sqlbuild.cli.commands.main.commands.scenario import run_scenario
-from sqlbuild.cli.commands.main.commands.test import run_test
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.main.execution.audit import run_audit
+from sqlbuild.cli.commands.main.execution.build import run_build
+from sqlbuild.cli.commands.main.execution.load import run_load
+from sqlbuild.cli.commands.main.execution.scenario import run_scenario
+from sqlbuild.cli.commands.main.execution.test import run_test
+from sqlbuild.cli.commands.main.project.plan import run_plan
 from sqlbuild.cli.output.main.load_execution_json import format_load_execution_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile

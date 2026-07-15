@@ -15,8 +15,8 @@ from sqlbuild.virtual.planner._helpers.planning import (
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
 )
-from sqlbuild.virtual.state._helpers.backend import build_state_backend
-from sqlbuild.virtual.state._helpers.config import resolve_state_backend_config
+from sqlbuild.virtual.state._helpers.state_runtime.backend import build_state_backend
+from sqlbuild.virtual.state._helpers.state_runtime.config import resolve_state_backend_config
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
 from sqlbuild.virtual.state.models import (
@@ -270,7 +270,8 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "@asset(depends_on=prepare_orders)\n"
                 "def publish_prepared_orders(ctx):\n"
                 "    return ctx.result(\n"
-                "        payload=ctx.result_of(prepare_orders).payload, materialized=True\n"
+                "        payload=ctx.result_of(node_function=prepare_orders).payload,"
+                " materialized=True\n"
                 "    )\n"
             ),
             "loaders/raw.py": (
@@ -304,7 +305,8 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=profile_fact_orders)\n"
                 "def notify_fact_orders(ctx):\n"
-                "    return ctx.result(metadata=ctx.result_of(profile_fact_orders).payload)\n"
+                "    return ctx.result("
+                "metadata=ctx.result_of(node_function=profile_fact_orders).payload)\n"
             ),
         },
     )

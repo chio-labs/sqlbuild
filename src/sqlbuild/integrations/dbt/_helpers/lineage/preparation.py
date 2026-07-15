@@ -28,12 +28,12 @@ from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
     DbtLineageArgs,
     DbtLineagePreparation,
+    DbtManifestIndex,
 )
 from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,

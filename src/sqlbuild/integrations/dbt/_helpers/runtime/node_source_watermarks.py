@@ -52,14 +52,12 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_MATERIALIZATION_VIEW,
     DBT_SUCCESSFUL_RESULT_STATUSES,
 )
-from sqlbuild.integrations.dbt.manifest.models import (
-    DbtManifestIndex,
-    DbtManifestModel,
-    DbtManifestSource,
-)
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSource,
     DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.types import (

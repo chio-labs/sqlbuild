@@ -9,7 +9,7 @@ from sqlbuild.integrations.dbt._helpers.manifest.core import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )
-from sqlbuild.integrations.dbt.manifest.models import (
+from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
     DbtManifestModel,
     DbtManifestSource,

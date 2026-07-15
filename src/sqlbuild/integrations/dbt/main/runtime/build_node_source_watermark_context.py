@@ -8,8 +8,7 @@ from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.integrations.dbt._helpers.runtime.node_source_watermarks import (
     build_dbt_node_source_watermark_context as _build,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtManifestIndex
 
 
 def build_dbt_node_source_watermark_context(

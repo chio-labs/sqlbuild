@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlbuild.executor.types import ExecutionStatus
+from sqlbuild.executor.contracts.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

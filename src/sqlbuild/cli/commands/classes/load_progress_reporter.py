@@ -7,8 +7,8 @@ from typing import TextIO
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.spec.contracts.models import SourceEntry

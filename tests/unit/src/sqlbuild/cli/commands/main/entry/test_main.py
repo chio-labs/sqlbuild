@@ -6,25 +6,25 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands._helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands._helpers.build_planning.models import BuildCommandRequest
 from sqlbuild.cli.commands._helpers.clone.models import CloneCommandRequest
 from sqlbuild.cli.commands._helpers.compile.models import CompileCommandRequest
 from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands._helpers.dbt_init.models import DbtInitCommandRequest
 from sqlbuild.cli.commands._helpers.diff.models import DiffCommandRequest
 from sqlbuild.cli.commands._helpers.freshness.models import FreshnessCommandRequest
-from sqlbuild.cli.commands._helpers.janitor.models import JanitorCommandRequest
+from sqlbuild.cli.commands._helpers.janitor_runtime.models import JanitorCommandRequest
 from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands._helpers.promote.models import PromoteCommandRequest
 from sqlbuild.cli.commands._helpers.rollback.models import RollbackCommandRequest
-from sqlbuild.cli.commands._helpers.scenario.models import (
+from sqlbuild.cli.commands._helpers.scenario_execution.models import (
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
 )
-from sqlbuild.cli.commands.main.commands.entry import _main_with_dependencies, main
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -2292,7 +2292,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.cli.commands.main.commands.entry.supports_color", lambda: True)
+    monkeypatch.setattr("sqlbuild.cli.commands.main.entrypoint.entry.supports_color", lambda: True)
 
     exit_code: int = main(test_case.argv)
     rendered_stderr: str = capsys.readouterr().err
@@ -2318,7 +2318,7 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.cli.commands.main.commands.entry.supports_color", lambda: True)
+    monkeypatch.setattr("sqlbuild.cli.commands.main.entrypoint.entry.supports_color", lambda: True)
 
     exit_code: int = main(test_case.argv)
     rendered_stderr: str = capsys.readouterr().err
@@ -2460,7 +2460,7 @@ def test_given_expected_cli_error_and_color_support_when_running_main_then_it_co
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sqlbuild.cli.commands.main.commands.entry.supports_color", lambda: True)
+    monkeypatch.setattr("sqlbuild.cli.commands.main.entrypoint.entry.supports_color", lambda: True)
 
     def run_query(
         project_dir: Path | None,

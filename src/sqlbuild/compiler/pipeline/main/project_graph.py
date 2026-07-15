@@ -11,10 +11,10 @@ from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
 )
 from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.planning.build_model_path_index import (
+from sqlbuild.compiler.planner.main.selection.build_model_path_index import (
     build_model_path_index,
 )
-from sqlbuild.compiler.planner.main.planning.build_model_tag_index import (
+from sqlbuild.compiler.planner.main.selection.build_model_tag_index import (
     build_model_tag_index,
 )
 

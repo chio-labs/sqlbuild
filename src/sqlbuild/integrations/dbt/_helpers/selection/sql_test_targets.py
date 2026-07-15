@@ -39,7 +39,7 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_MATERIALIZATION_EPHEMERAL,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.manifest.models import (
+from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
     DbtManifestModel,
     DbtManifestSeed,

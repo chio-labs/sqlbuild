@@ -5,8 +5,8 @@ from decimal import Decimal
 import pytest
 
 from sqlbuild.adapter.contract.models import RowDiffTolerance, RowDiffTolerances
+from sqlbuild.executor.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.config import parse_row_diff_tolerances
-from sqlbuild.executor.exceptions import ExecutorInputError
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     ParseRowDiffTolerancesErrorTestCase,
     ParseRowDiffTolerancesTestCase,

@@ -6,6 +6,7 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.contracts.types import ExecutionPhase
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
@@ -19,7 +20,6 @@ from sqlbuild.executor.run.models import (
     PostHookPhaseOutcome,
 )
 from sqlbuild.executor.run.types import HookPhase
-from sqlbuild.executor.types import ExecutionPhase
 
 
 def run_pre_hook_phase(

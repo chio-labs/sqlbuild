@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.audit.models import AuditCommandRequest
-from sqlbuild.cli.commands._helpers.build.models import BuildCommandRequest
+from sqlbuild.cli.commands._helpers.build_planning.models import BuildCommandRequest
 from sqlbuild.cli.commands._helpers.check.models import CheckCommandRequest
 from sqlbuild.cli.commands._helpers.clone.models import CloneCommandRequest
 from sqlbuild.cli.commands._helpers.compile.models import CompileCommandRequest
@@ -23,13 +23,13 @@ from sqlbuild.cli.commands._helpers.entry.types import (
     StateCommandHandler,
 )
 from sqlbuild.cli.commands._helpers.freshness.models import FreshnessCommandRequest
-from sqlbuild.cli.commands._helpers.janitor.models import JanitorCommandRequest
+from sqlbuild.cli.commands._helpers.janitor_runtime.models import JanitorCommandRequest
 from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest
 from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest
 from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands._helpers.promote.models import PromoteCommandRequest
 from sqlbuild.cli.commands._helpers.rollback.models import RollbackCommandRequest
-from sqlbuild.cli.commands._helpers.scenario.models import (
+from sqlbuild.cli.commands._helpers.scenario_execution.models import (
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
 )

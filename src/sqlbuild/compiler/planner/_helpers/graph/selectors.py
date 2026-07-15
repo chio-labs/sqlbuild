@@ -20,7 +20,7 @@ from sqlbuild.compiler.planner.constants import (
     SELECTOR_PATH_SEPARATOR,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.planning.selector_expansion import split_selector_expansion
+from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector, SelectorExpansion
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.errors.contracts.exceptions import SharedInputError

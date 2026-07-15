@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.executor.types import ExecutionPhase
+from sqlbuild.executor.contracts.types import ExecutionPhase
 
 
 @dataclass(frozen=True)

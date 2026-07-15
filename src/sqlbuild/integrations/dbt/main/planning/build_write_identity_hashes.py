@@ -4,8 +4,7 @@ from sqlbuild.compiler.planner.models import GraphNodeKey
 from sqlbuild.integrations.dbt._helpers.planning.model_identity import (
     build_dbt_write_identity_hashes as _build,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtManifestIndex
 
 
 def build_dbt_write_identity_hashes(

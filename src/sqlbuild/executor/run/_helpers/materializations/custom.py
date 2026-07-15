@@ -20,6 +20,7 @@ from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main.execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
     MaterializationResult,
@@ -44,7 +45,6 @@ from sqlbuild.executor.run.models import (
     ModelMaterializationContext,
 )
 from sqlbuild.executor.run.types import HookPhase
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container, invoke_with_providers
 from sqlbuild.spec.contracts.models import SourceEntry
 

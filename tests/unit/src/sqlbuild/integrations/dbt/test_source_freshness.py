@@ -7,7 +7,7 @@ from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.main.runtime.source_freshness import (
     translate_dbt_manifest_sources_to_sqlbuild_sources,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtSourceFreshnessTranslationErrorTestCase,

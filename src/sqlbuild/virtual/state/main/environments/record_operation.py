@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.virtual.state._helpers.events import event_id
+from sqlbuild.virtual.state._helpers.state_storage.events import event_id
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import StateOperationEventRecord, StateOperationRecord
 from sqlbuild.virtual.state.types import StateOperationStatus, StateOperationType

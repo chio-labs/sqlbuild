@@ -39,13 +39,13 @@ from sqlbuild.compiler.pipeline.models import (
     ProjectGraph,
     PythonRunPlanOutputs,
 )
-from sqlbuild.compiler.planner.main.planning.build_model_path_index import (
+from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.selection.build_model_path_index import (
     build_model_path_index,
 )
-from sqlbuild.compiler.planner.main.planning.build_model_tag_index import (
+from sqlbuild.compiler.planner.main.selection.build_model_tag_index import (
     build_model_tag_index,
 )
-from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,

@@ -37,8 +37,8 @@ from sqlbuild.executor.build.models import (
     FunctionExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.cli.commands.main.dag.helpers import (
     prepare_python_dag_project,

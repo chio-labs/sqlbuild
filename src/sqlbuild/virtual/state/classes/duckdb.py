@@ -13,8 +13,8 @@ from sqlbuild.executor.node_results.models import (
     NodeResultQuery,
     NodeResultRecord,
 )
-from sqlbuild.virtual.state._helpers.events import backup_id, event_id
-from sqlbuild.virtual.state._helpers.validation import build_validation_result
+from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
+from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,

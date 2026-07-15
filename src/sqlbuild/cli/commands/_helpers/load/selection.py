@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from sqlbuild.cli.commands._helpers.load.models import LoadSelectionSets, LoadSelectorSets
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import SourceEntry, TargetConfig
 

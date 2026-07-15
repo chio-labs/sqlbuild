@@ -11,9 +11,9 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.hooks.models import SqlHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run.main.execute import execute_snapshot_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     SnapshotReuseExecutionTestCase,
     SnapshotReuseFailureExecutionTestCase,

@@ -54,27 +54,29 @@ from tasks.orders import export_customers, export_orders
 
 @check(depends_on=export_orders)
 def check_orders_export(ctx):
-    return ctx.pass_("orders exported")
+    return ctx.pass_(message="orders exported")
 
 
 @check(depends_on=export_orders, severity="warn")
 def warn_orders_export(ctx):
-    return ctx.fail("warning check failed")
+    return ctx.fail(message="warning check failed")
 
 
 @check(depends_on=orders_asset, tags=("asset",), group="python-checks")
 def check_orders_asset(ctx):
-    return ctx.result_of(orders_asset).payload["asset_rows"] == 3
+    return ctx.result_of(node_function=orders_asset).payload["asset_rows"] == 3
 
 
 @check(depends_on=(export_orders, export_customers), tags=("multi",), group="python-checks")
 def check_order_customer_exports(ctx):
-    return ctx.pass_(metadata={"orders": ctx.result_of(export_orders).metadata["rows"]})
+    return ctx.pass_(
+        metadata={"orders": ctx.result_of(node_function=export_orders).metadata["rows"]}
+    )
 
 
 @check(depends_on=[export_orders], severity="error", tags=("failure",), group="python-checks")
 def fail_orders_export(ctx):
-    return ctx.fail("orders export failed")
+    return ctx.fail(message="orders export failed")
 
 
 @check(depends_on=export_orders, severity="error", tags=("failure",), group="python-checks")
@@ -171,7 +173,7 @@ from assets.orders import orders_export
 
 @check(depends_on=orders_export)
 def check_orders_export(ctx):
-    return ctx.result_of(orders_export).payload["order_count"] == 1
+    return ctx.result_of(node_function=orders_export).payload["order_count"] == 1
 """,
         },
     )
@@ -222,7 +224,7 @@ from tasks.export import export_virtual_orders
 
 @check(depends_on=export_virtual_orders)
 def check_virtual_orders(ctx):
-    return ctx.pass_("virtual orders exported")
+    return ctx.pass_(message="virtual orders exported")
 """,
         },
     )
@@ -273,7 +275,7 @@ from tasks.export import export_virtual_orders
 
 @check(depends_on=export_virtual_orders)
 def fail_virtual_orders(ctx):
-    return ctx.fail("virtual orders failed")
+    return ctx.fail(message="virtual orders failed")
 """,
         },
     )

@@ -16,12 +16,12 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.build.models import FunctionExecutionResult
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.functions.main.execute import execute_function
 from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
 from sqlbuild.executor.testing.main.execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 
 

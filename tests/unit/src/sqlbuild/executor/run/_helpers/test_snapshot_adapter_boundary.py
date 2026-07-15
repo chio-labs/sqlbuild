@@ -18,9 +18,9 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run._helpers.materializations.snapshot import execute_snapshot_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     SnapshotAdapterRenderingTestCase,
 )

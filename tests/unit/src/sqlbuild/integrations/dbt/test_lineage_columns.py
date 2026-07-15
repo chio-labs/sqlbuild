@@ -24,10 +24,10 @@ from sqlbuild.integrations.dbt._helpers.lineage.output import (
 )
 from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtColumnLineageTrace,
     DbtCombinedGraph,
+    DbtManifestIndex,
     DbtSourceSchemaInspectionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtLineageDirection, DbtLineageOutputFormat

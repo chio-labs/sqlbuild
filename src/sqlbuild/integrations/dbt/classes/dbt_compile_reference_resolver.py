@@ -13,7 +13,7 @@ from sqlbuild.integrations.dbt.main.manifest.validate_compile_model_names import
 from sqlbuild.integrations.dbt.main.manifest.validate_compile_model_reference import (
     validate_compile_model_reference,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 
 
 class DbtCompileReferenceResolver:

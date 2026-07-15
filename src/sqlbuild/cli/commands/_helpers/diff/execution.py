@@ -21,7 +21,7 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
     resolve_target_connection_config,
 )
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline

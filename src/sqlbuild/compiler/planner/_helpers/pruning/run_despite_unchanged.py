@@ -12,7 +12,7 @@ from sqlbuild.compiler.planner.constants import (
     RUN_DESPITE_UNCHANGED_MINUTE_SUFFIX,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.planning.model_downstream_closure import (
+from sqlbuild.compiler.planner.main.selection.model_downstream_closure import (
     build_downstream_model_names,
 )
 from sqlbuild.compiler.planner.models import (

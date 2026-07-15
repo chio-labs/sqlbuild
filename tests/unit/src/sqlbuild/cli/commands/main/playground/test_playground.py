@@ -10,8 +10,8 @@ from sqlbuild.cli.commands._helpers.playground import (
 )
 from sqlbuild.cli.commands._helpers.playground.copy import create_playground_project
 from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
-from sqlbuild.cli.commands.main.commands.playground import run_playground
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.main.workspace.playground import run_playground
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,
     RunPlaygroundTestCase,
@@ -222,7 +222,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 ),
                 (
                     Path("checks/orders_export.py"),
-                    ("@check(depends_on=orders_export", "ctx.result_of(orders_export)"),
+                    (
+                        "@check(depends_on=orders_export",
+                        "ctx.result_of(node_function=orders_export)",
+                    ),
                 ),
             ),
         ),

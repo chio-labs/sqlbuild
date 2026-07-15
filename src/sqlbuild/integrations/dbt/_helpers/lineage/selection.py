@@ -10,16 +10,14 @@ from sqlbuild.integrations.dbt._helpers.graph.core import (
     sqlbuild_model_graph_key,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.manifest.models import (
-    DbtManifestIndex,
-    DbtManifestModel,
-    DbtManifestSource,
-)
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
     DbtLineageGraph,
     DbtLineageNode,
+    DbtManifestIndex,
+    DbtManifestModel,
+    DbtManifestSource,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,

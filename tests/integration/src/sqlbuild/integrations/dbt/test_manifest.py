@@ -11,8 +11,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
+from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtManifestIndex
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtManifestCompileTestCase,
     RealDbtSeedContentIdentityTestCase,

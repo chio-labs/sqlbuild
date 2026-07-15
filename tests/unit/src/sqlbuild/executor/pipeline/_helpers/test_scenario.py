@@ -10,6 +10,7 @@ import pytest
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.pipeline._helpers import scenario as scenario_pipeline
 from sqlbuild.executor.scenario._helpers.local import execution as local_scenario
 from sqlbuild.executor.scenario.constants import (
@@ -19,7 +20,6 @@ from sqlbuild.executor.scenario.constants import (
 )
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotStateResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
-from sqlbuild.executor.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     ScenarioFailureHelpTestCase,
     ScenarioLocalPipelineTestCase,

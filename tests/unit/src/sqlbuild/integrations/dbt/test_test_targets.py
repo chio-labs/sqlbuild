@@ -11,7 +11,7 @@ from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
     resolve_dbt_sql_test_target_names,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtSqlTestFixtureNameTestCase,
     DbtSqlTestMultipleBoundaryTestCase,

@@ -36,14 +36,14 @@ from sqlbuild.compiler.pipeline.main.relation_targets import (
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.planning.build_resources import expand_build_resource_selection
-from sqlbuild.compiler.planner.main.planning.plan_entry import (
+from sqlbuild.compiler.planner.main.execution.plan_entry import (
     build_plan_output_from_model_changes_phase,
 )
-from sqlbuild.compiler.planner.main.planning.selection import resolve_project_selectors
-from sqlbuild.compiler.planner.main.planning.warehouse_snapshot import (
+from sqlbuild.compiler.planner.main.execution.warehouse_snapshot import (
     build_warehouse_snapshot_phase,
 )
+from sqlbuild.compiler.planner.main.selection.build_resources import expand_build_resource_selection
+from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,

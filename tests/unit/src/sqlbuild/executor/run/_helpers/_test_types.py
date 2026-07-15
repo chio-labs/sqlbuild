@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.executor.contracts.types import ExecutionPhase
 from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus
-from sqlbuild.executor.types import ExecutionPhase
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ from sqlbuild.integrations.dbt._helpers.runtime.constants import (
     DBT_SOURCE_FRESHNESS_MINUTE_PERIODS,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestSource
+from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestSource
 from sqlbuild.spec.contracts.models import (
     SourceEntry,
     SourceFreshnessAgePolicy,

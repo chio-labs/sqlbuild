@@ -2,8 +2,7 @@
 
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph as _build
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtManifestIndex
 
 
 def build_dbt_combined_graph(

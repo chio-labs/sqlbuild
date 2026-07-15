@@ -17,7 +17,7 @@ from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     BuildRuntimeParams,
 )
-from sqlbuild.executor.types import ExecutionStatus
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.build._test_types import (
     BuildExecutionTestCase,
 )

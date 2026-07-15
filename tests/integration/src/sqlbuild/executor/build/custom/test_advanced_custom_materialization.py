@@ -18,9 +18,9 @@ from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     ExistingRelationTestCase,
     PartitionTrackingTestCase,

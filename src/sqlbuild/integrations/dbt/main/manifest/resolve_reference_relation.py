@@ -3,7 +3,7 @@
 from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
     resolve_dbt_reference_relation as _resolve,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 
 
 def resolve_dbt_reference_relation(

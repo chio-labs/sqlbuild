@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureResult,
 )
-from sqlbuild.executor.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

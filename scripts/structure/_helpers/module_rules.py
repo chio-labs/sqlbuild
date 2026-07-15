@@ -217,7 +217,7 @@ _SC052_DBT_REF_SCAN_ALLOWED_PATHS: tuple[str, ...] = (
     "src/sqlbuild/integrations/dbt/_helpers/manifest/compile_refs.py",
 )
 _SC054_SELECTOR_PLUS_PARSE_ALLOWED_PATHS: tuple[str, ...] = (
-    "src/sqlbuild/compiler/planner/main/planning/selector_expansion.py",
+    "src/sqlbuild/compiler/planner/main/selection/selector_expansion.py",
 )
 _SC062_MACRO_LOAD_ALLOWED_PATHS: tuple[str, ...] = (
     "src/sqlbuild/compiler/compile/main/build_compile_inputs.py",
@@ -1366,7 +1366,7 @@ def check_no_ad_hoc_selector_plus_parsing(
                 line=node.lineno,
                 message=(
                     "planner and dbt selector code must parse + markers with "
-                    "sqlbuild.compiler.planner.main.planning.selector_expansion.split_selector_expansion"
+                    "sqlbuild.compiler.planner.main.selection.selector_expansion.split_selector_expansion"
                 ),
             )
         )

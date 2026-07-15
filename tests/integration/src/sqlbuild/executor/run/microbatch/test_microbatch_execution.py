@@ -19,9 +19,9 @@ from sqlbuild.compiler.planner.constants import (
 )
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
+from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.types import ExecutionPhase, ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     build_test_audit_gate_metadata,
     build_test_audit_plan_entry,

@@ -14,18 +14,18 @@ from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
-from sqlbuild.compiler.planner.main.planning.graph_changes_only import (
+from sqlbuild.compiler.planner.main.changes.graph_changes_only import (
     build_graph_changes_only_propagation,
 )
-from sqlbuild.compiler.planner.main.planning.graph_identity import (
-    build_expected_graph_identity_hashes,
-)
-from sqlbuild.compiler.planner.main.planning.local_node_planning import classify_local_node_plan
-from sqlbuild.compiler.planner.main.planning.selection_staleness import (
+from sqlbuild.compiler.planner.main.changes.selection_staleness import (
     classify_selection_staleness_warnings,
 )
-from sqlbuild.compiler.planner.main.planning.stale_warning_message import (
+from sqlbuild.compiler.planner.main.changes.stale_warning_message import (
     format_stale_upstream_warning_message,
+)
+from sqlbuild.compiler.planner.main.execution.local_node_planning import classify_local_node_plan
+from sqlbuild.compiler.planner.main.identity.graph_identity import (
+    build_expected_graph_identity_hashes,
 )
 from sqlbuild.compiler.planner.models import (
     GraphChangesOnlyPropagationInput,
@@ -64,15 +64,13 @@ from sqlbuild.integrations.dbt._helpers.runtime.node_source_watermarks import (
 from sqlbuild.integrations.dbt._helpers.runtime.source_freshness import (
     translate_manifest_sources_to_sqlbuild_sources,
 )
-from sqlbuild.integrations.dbt.manifest.models import (
+from sqlbuild.integrations.dbt.models import (
+    DbtCombinedGraph,
+    DbtCombinedGraphKey,
     DbtManifestIndex,
     DbtManifestModel,
     DbtManifestSeed,
     DbtManifestSource,
-)
-from sqlbuild.integrations.dbt.models import (
-    DbtCombinedGraph,
-    DbtCombinedGraphKey,
     DbtModelPlanEntry,
     DbtModelPlanningResult,
 )

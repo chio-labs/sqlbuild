@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner.main.planning.selector_parse import parse_project_selector
+from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector
 from sqlbuild.compiler.planner.types import SelectorKind
 from sqlbuild.compiler.python_nodes._helpers.selectors import resolve_python_node_selectors

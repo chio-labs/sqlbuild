@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-import sqlbuild.cli.commands.main.commands.init as init_module
+import sqlbuild.cli.commands.main.workspace.init as init_module
 from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaffoldTestCase
 
 

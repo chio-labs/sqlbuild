@@ -643,7 +643,7 @@ def test_given_source_loader_reads_unselected_task_payload_when_loading_then_run
                     f"from {test_case.dependency_dir}.prepare import prepare_events\n\n"
                     "@loader(depends_on=[prepare_events])\n"
                     "def raw_events(ctx):\n"
-                    "    payload = ctx.result_of(prepare_events).payload\n"
+                    "    payload = ctx.result_of(node_function=prepare_events).payload\n"
                     "    return [{'event_id': payload['event_id']}]\n"
                 ),
             ),

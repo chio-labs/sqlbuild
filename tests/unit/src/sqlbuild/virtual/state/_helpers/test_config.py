@@ -13,7 +13,7 @@ from sqlbuild.spec.contracts.models import (
     StateConfig,
     TargetConfig,
 )
-from sqlbuild.virtual.state._helpers.config import resolve_state_backend_config
+from sqlbuild.virtual.state._helpers.state_runtime.config import resolve_state_backend_config
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import StateBackendConfig
 from tests.unit.src.sqlbuild.virtual.state._helpers._test_types import (

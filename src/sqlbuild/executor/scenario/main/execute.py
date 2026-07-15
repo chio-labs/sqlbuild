@@ -9,10 +9,10 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run.main.execute import execute_table_entry, execute_view_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_MODEL_FAILED
-from sqlbuild.executor.types import ExecutionStatus
 
 
 def execute_scenario_model(

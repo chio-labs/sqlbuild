@@ -10,7 +10,7 @@ from sqlbuild.cli.commands._helpers.skills.update import (
     generated_marker,
     update_sqlbuild_skills,
 )
-from sqlbuild.cli.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
 from tests.unit.src.sqlbuild.cli.commands.main.skills._test_types import (
     SkillUpdateErrorTestCase,
     SkillUpdateTestCase,

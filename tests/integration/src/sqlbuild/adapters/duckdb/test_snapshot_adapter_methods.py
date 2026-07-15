@@ -12,7 +12,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     SnapshotAdapterMethodsTestCase,
     SnapshotTransactionRollbackTestCase,
 )
-from tests.integration.src.sqlbuild.adapters.duckdb.snapshot_helpers import (
+from tests.integration.src.sqlbuild.adapters.duckdb.helpers import (
     InsertFaultDuckDbAdapter,
 )
 

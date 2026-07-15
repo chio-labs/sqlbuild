@@ -157,7 +157,7 @@ def prepare_python_dag_project(root: Path) -> Path:
                 "",
                 "@check(depends_on=warehouse_export, tags=['loader'])",
                 "def check_loader_export(ctx):",
-                "    return ctx.pass_('loader rows available')",
+                "    return ctx.pass_(message='loader rows available')",
             )
         )
         + "\n",

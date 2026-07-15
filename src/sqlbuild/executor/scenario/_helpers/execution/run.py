@@ -7,6 +7,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, ScenarioRelationMap
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario._helpers.execution.model_execution import execute_scenario_models
 from sqlbuild.executor.scenario._helpers.lifecycle.expectations import (
@@ -28,7 +29,6 @@ from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
     ScenarioStepResults,
 )
-from sqlbuild.executor.types import ExecutionStatus
 
 
 def execute_scenario_run_steps(

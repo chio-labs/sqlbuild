@@ -9,10 +9,10 @@ from collections.abc import Callable, Sequence
 from typing import cast
 
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
-from sqlbuild.compiler.planner.main.planning.model_materialization_label import (
+from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
+from sqlbuild.compiler.planner.main.execution.model_materialization_label import (
     model_materialization_label,
 )
-from sqlbuild.compiler.planner.main.planning.query_diff import format_query_diff
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     DependencyBaselinePlanEntry,

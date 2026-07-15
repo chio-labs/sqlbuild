@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands._helpers.skills.update import generated_marker
-from sqlbuild.cli.commands.main.commands.entry import main
+from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.e2e.src.sqlbuild.cli.commands.main.skills._test_types import (
     SkillsCliOverwriteTestCase,
     SkillsCliTestCase,

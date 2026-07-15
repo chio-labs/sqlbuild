@@ -25,6 +25,7 @@ from sqlbuild.executor.build.models import (
     NodeCompletion,
     SeedExecutionResult,
 )
+from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.main.execute import (
@@ -37,7 +38,6 @@ from sqlbuild.executor.run.main.execute import (
 )
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
-from sqlbuild.executor.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 

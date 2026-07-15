@@ -46,7 +46,7 @@ from sqlbuild.compiler.planner._helpers.identity.functions import (
 from sqlbuild.compiler.planner._helpers.identity.standard import (
     build_standard_model_version_identities,
 )
-from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,

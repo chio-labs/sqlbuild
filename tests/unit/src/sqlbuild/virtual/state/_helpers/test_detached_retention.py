@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from sqlbuild.virtual.state._helpers.detached_retention import (
+from sqlbuild.virtual.state._helpers.state_lifecycle.detached_retention import (
     build_detached_environment_inspection,
 )
 from sqlbuild.virtual.state.models import (

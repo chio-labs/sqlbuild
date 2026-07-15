@@ -16,7 +16,7 @@ from sqlbuild.compiler.planner.constants import (
     SCENARIO_PLAN_RELATION_COLLISION,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.planning.is_scenario_artifact_physical_name import (
+from sqlbuild.compiler.planner.main.scenarios.is_scenario_artifact_physical_name import (
     is_scenario_artifact_physical_name,
 )
 from sqlbuild.compiler.planner.models import (
