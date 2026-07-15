@@ -2001,7 +2001,7 @@ For a database engine with no built-in support, subclass `BaseAdapter`. It provi
 
 ```python
 # adapters/my_database.py
-from sqlbuild.adapter.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.base.base_adapter import BaseAdapter
 
 class MyDatabaseAdapter(BaseAdapter):
     adapter_name = "my_database"
