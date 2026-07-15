@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands._helpers.check.core import format_check_json, write_check_results
-from sqlbuild.cli.commands._helpers.check.models import (
+from sqlbuild.cli.commands.models import (
     CheckCommandRequest,
     CheckExecutionPreparation,
     CheckInvocation,

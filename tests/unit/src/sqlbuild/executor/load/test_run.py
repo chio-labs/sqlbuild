@@ -9,7 +9,6 @@ import pytest
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (
     LoadCallbacks,
@@ -17,6 +16,7 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     ExternalLoadPipelineTestCase,

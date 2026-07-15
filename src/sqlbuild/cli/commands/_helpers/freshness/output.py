@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 
-from sqlbuild.cli.commands._helpers.freshness.models import (
+from sqlbuild.cli.commands.models import (
     FreshnessCommandResult,
     FreshnessSourceResult,
 )
-from sqlbuild.cli.commands._helpers.freshness.types import FreshnessSourceStatus
+from sqlbuild.cli.commands.types import FreshnessSourceStatus
 
 
 def format_freshness_text(result: FreshnessCommandResult) -> str:

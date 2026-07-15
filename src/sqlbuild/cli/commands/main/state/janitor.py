@@ -20,7 +20,11 @@ from sqlbuild.cli.commands._helpers.janitor_runtime.invocation import (
     resolve_janitor_invocation,
     resolve_janitor_settings,
 )
-from sqlbuild.cli.commands._helpers.janitor_runtime.models import (
+from sqlbuild.cli.commands._helpers.janitor_runtime.planning import (
+    build_janitor_execution_plan,
+    inspect_janitor_retention,
+)
+from sqlbuild.cli.commands.models import (
     JanitorCommandRequest,
     JanitorCompileContext,
     JanitorConnectionContext,
@@ -28,10 +32,6 @@ from sqlbuild.cli.commands._helpers.janitor_runtime.models import (
     JanitorPlanningResult,
     JanitorRetentionInspection,
     JanitorSettings,
-)
-from sqlbuild.cli.commands._helpers.janitor_runtime.planning import (
-    build_janitor_execution_plan,
-    inspect_janitor_retention,
 )
 from sqlbuild.executor.janitor.models import JanitorExecutionResult
 

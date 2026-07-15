@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.scenario_execution.constants import SUCCESS_STATUS
-from sqlbuild.cli.commands._helpers.scenario_execution.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands._helpers.scenario_output.result_output import render_result_error
+from sqlbuild.cli.commands.constants import SUCCESS_STATUS
+from sqlbuild.cli.commands.models import ScenarioRunOutputContext
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult

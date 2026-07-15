@@ -21,20 +21,20 @@ from sqlbuild.cli.commands._helpers.scenario_capture.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
     scenario_snapshot_capture_warning,
 )
-from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
-    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
-    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
-)
 from sqlbuild.cli.commands._helpers.scenario_execution.local_run import run_local_scenarios
-from sqlbuild.cli.commands._helpers.scenario_execution.models import (
-    ScenarioRunOutputContext,
-    ScenarioSnapshotLimitInputs,
-)
 from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
 from sqlbuild.cli.commands._helpers.scenario_execution.warehouse_run import (
     run_warehouse_scenarios,
 )
+from sqlbuild.cli.commands.constants import (
+    SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
+    SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
+)
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
+    ScenarioRunOutputContext,
+    ScenarioSnapshotLimitInputs,
+)
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult

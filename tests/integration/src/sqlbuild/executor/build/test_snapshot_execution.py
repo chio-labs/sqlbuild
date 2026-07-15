@@ -16,7 +16,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePip
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.contracts.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.build._test_types import (
     BuildExecutionTestCase,
     SnapshotCheckExecutionTestCase,

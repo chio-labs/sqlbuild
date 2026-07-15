@@ -7,10 +7,6 @@ from pathlib import Path
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt._helpers.profile.constants import (
-    DBT_DUCKDB_MEMORY_DATABASE,
-    DBT_PROFILE_CONNECTION_SOURCE,
-)
 from sqlbuild.integrations.dbt._helpers.profile.load import (
     default_profiles_dir,
     load_dbt_project_metadata,
@@ -29,6 +25,8 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.spec.contracts.models import DbtConfig, ProjectConfig
 
+_DBT_DUCKDB_MEMORY_DATABASE: str = ":memory:"
+_DBT_PROFILE_CONNECTION_SOURCE: str = "dbt_profile"
 _DBT_PROFILE_CONNECTION_ROUTING_KEYS: frozenset[str] = frozenset(
     {"source", "profile", "target", "project_dir", "profiles_dir"}
 )
@@ -66,7 +64,7 @@ def resolve_connection_config(
         adapter_name == BuiltinAdapter.DUCKDB
         and isinstance(database, str)
         and not Path(database).is_absolute()
-        and database != DBT_DUCKDB_MEMORY_DATABASE
+        and database != _DBT_DUCKDB_MEMORY_DATABASE
     ):
         config["database"] = str(project_dir / database)
     return config
@@ -108,7 +106,7 @@ def resolve_dbt_profile_raw_connection(
 ) -> NormalizedDbtProfileConnection | None:
     """Resolve a raw connection config if it references a dbt profile."""
 
-    if raw_config.get("source") != DBT_PROFILE_CONNECTION_SOURCE:
+    if raw_config.get("source") != _DBT_PROFILE_CONNECTION_SOURCE:
         return None
     dbt_config: DbtConfig = project_config.dbt
     dbt_project_dir: Path | None = _resolve_optional_path(

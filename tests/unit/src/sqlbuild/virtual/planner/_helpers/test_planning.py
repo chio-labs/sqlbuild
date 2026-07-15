@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.hooks.models import SqlHookEntry
+from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy

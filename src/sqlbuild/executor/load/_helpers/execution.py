@@ -6,8 +6,8 @@ from collections.abc import Callable
 
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionIndexes, LoadExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry

@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
-from sqlbuild.compiler.planner._helpers.resolve.constants import (
+from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )

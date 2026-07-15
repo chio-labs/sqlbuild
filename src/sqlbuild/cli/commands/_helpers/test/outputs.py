@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.test.models import TestCommandRequest, TestInvocation
+from sqlbuild.cli.commands.models import TestCommandRequest, TestInvocation
 from sqlbuild.cli.output.main.sql_test_execution_json import format_test_execution_json
 from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
 from sqlbuild.executor.testing.models import SqlTestExecutionResult

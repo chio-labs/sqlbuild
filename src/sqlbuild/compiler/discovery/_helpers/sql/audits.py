@@ -10,13 +10,17 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
-from sqlbuild.compiler.discovery._helpers.sql.constants import (
-    AUDIT_HEADER_ONLY_PATTERN,
-    AUDIT_HEADER_PATTERN,
-)
 from sqlbuild.compiler.discovery.exceptions import SqlAuditParseError
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock
 
+_AUDIT_HEADER_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*AUDIT\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
+    re.DOTALL,
+)
+_AUDIT_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*AUDIT\s*\((?P<header>.*?)\)\s*;\s*",
+    re.DOTALL | re.MULTILINE,
+)
 _SUPPORTED_AUDIT_HEADER_KEYS: frozenset[str] = frozenset(
     {"name", "severity", "run_scope", "always_run"}
 )
@@ -51,7 +55,7 @@ def parse_sql_audit_file(*, contents: str, file_path: Path) -> tuple[DiscoveredA
 
 
 def _split_sql_audit_blocks(*, file_path: Path, contents: str) -> tuple[str, ...]:
-    matches: tuple[re.Match[str], ...] = tuple(AUDIT_HEADER_ONLY_PATTERN.finditer(contents))
+    matches: tuple[re.Match[str], ...] = tuple(_AUDIT_HEADER_ONLY_PATTERN.finditer(contents))
     if not matches:
         return ()
     if contents[: matches[0].start()].strip():
@@ -77,7 +81,7 @@ def _parse_single_sql_audit_block(
     raw_audit_block: str,
     audit_index: int,
 ) -> DiscoveredAuditBlock:
-    header_match: re.Match[str] | None = AUDIT_HEADER_PATTERN.match(raw_audit_block)
+    header_match: re.Match[str] | None = _AUDIT_HEADER_PATTERN.match(raw_audit_block)
     if header_match is None:
         raise SqlAuditParseError(
             f"SQL audit '{file_path}' must start with an AUDIT() header as the first "

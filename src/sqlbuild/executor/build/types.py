@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from sqlbuild.compiler.planner.models import ModelPlanEntry
 
-from sqlbuild.executor.contracts.types import ExecutionStatus as ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus as ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind as ExecutionResourceKind
 
 

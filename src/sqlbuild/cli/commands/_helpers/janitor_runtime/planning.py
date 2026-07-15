@@ -31,7 +31,7 @@ from sqlbuild.cli.commands._helpers.janitor_retention.state_cleanup import (
     state_janitor_retention,
     virtual_state_prune_candidates,
 )
-from sqlbuild.cli.commands._helpers.janitor_runtime.models import (
+from sqlbuild.cli.commands.models import (
     JanitorCompileContext,
     JanitorConnectionContext,
     JanitorInvocation,
@@ -47,7 +47,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorStateCandidates,
 )
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
     DetachedVirtualEnvironmentInspection,

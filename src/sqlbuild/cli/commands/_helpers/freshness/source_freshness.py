@@ -15,7 +15,7 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.executor.build.models import BuildExecutionResult
-from sqlbuild.executor.contracts.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def append_eligible_standard_source_freshness_records(

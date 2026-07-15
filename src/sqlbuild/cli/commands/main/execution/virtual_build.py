@@ -6,10 +6,6 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.build_planning.models import (
-    VirtualBuildCliRequest,
-    VirtualBuildExecution,
-)
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_node_output import (
     write_python_node_results,
 )
@@ -19,6 +15,10 @@ from sqlbuild.cli.commands._helpers.build_virtual.virtual_checks import (
 from sqlbuild.cli.commands._helpers.build_virtual.virtual_execution import execute_virtual_build
 from sqlbuild.cli.commands._helpers.check.core import check_results_failed
 from sqlbuild.cli.commands.classes.build_progress_callbacks import format_build_footer
+from sqlbuild.cli.commands.models import (
+    VirtualBuildCliRequest,
+    VirtualBuildExecution,
+)
 from sqlbuild.cli.output.main.build_execution_json import format_build_execution_json
 from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.target_artifacts.main.write_python_check_runtime_target import (

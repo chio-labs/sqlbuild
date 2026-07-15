@@ -15,18 +15,18 @@ from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import FunctionPlanEntry
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
 from sqlbuild.errors.contracts.main.error_message import error_message
 from sqlbuild.executor.build.models import FunctionExecutionResult
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.functions.constants import (
     FUNCTION_EXECUTION_FAILED_CODE,
     FUNCTION_PYTHON_UNSUPPORTED_CODE,
     FUNCTION_TABLE_UNSUPPORTED_CODE,
     FUNCTION_TARGET_INVALID_CODE,
 )
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_function(

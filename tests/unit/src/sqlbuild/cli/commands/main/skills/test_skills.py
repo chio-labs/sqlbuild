@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.skills.models import SkillUpdateResult
 from sqlbuild.cli.commands._helpers.skills.update import (
     ensure_generated_marker,
     generated_marker,
     update_sqlbuild_skills,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import SkillUpdateResult
 from tests.unit.src.sqlbuild.cli.commands.main.skills._test_types import (
     SkillUpdateErrorTestCase,
     SkillUpdateTestCase,

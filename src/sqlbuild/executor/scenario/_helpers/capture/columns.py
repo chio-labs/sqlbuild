@@ -11,7 +11,7 @@ from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.scenario.constants import (
     BIGQUERY_BIGNUMERIC_TYPE,
     BIGQUERY_BYTES_TYPE,

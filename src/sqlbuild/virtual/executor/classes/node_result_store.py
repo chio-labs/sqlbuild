@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.models import (
     NodeResultEnvelope,
     NodeResultQuery,

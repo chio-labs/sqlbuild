@@ -11,7 +11,7 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.executor.build.models import SeedExecutionResult
-from sqlbuild.executor.contracts.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.main.execute import execute_seed
 from tests.unit.src.sqlbuild.executor.seed.main._test_types import (
     SeedFingerprintFailureTestCase,

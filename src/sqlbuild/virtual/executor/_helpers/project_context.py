@@ -10,8 +10,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
-from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.executor.models import VirtualProjectContext
 
 

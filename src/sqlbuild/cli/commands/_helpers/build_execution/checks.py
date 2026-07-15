@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.cli.commands._helpers.build_planning.models import (
-    BuildCommandRequest,
-    BuildInvocation,
-    BuildRunOutcome,
-)
 from sqlbuild.cli.commands._helpers.check.core import (
     load_results_by_loader_name,
     record_python_run_state_results,
     relevant_check_functions,
     write_check_results,
+)
+from sqlbuild.cli.commands.models import (
+    BuildCommandRequest,
+    BuildInvocation,
+    BuildRunOutcome,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult

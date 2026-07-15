@@ -8,14 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.integrations.dbt._helpers.profile.constants import (
-    DBT_FALSE_VALUES,
-    DBT_JINJA_MARKERS,
-    DBT_NUMBER_DECIMAL_SEPARATOR,
-    DBT_TRUE_VALUES,
-)
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import ResolvedDbtProfileOutput, SelectedDbtProfileOutput
+
+_DBT_FALSE_VALUES: frozenset[str] = frozenset({"false", "0", "no", "n", "off"})
+_DBT_JINJA_MARKERS: tuple[str, ...] = ("{{", "{%", "{#")
+_DBT_NUMBER_DECIMAL_SEPARATOR: str = "."
+_DBT_TRUE_VALUES: frozenset[str] = frozenset({"true", "1", "yes", "y", "on"})
 
 
 class _Missing:
@@ -103,7 +102,7 @@ def _render_string(
     target: _TargetContext,
     cli_vars: Mapping[str, object],
 ) -> object:
-    if all(marker not in value for marker in DBT_JINJA_MARKERS):
+    if all(marker not in value for marker in _DBT_JINJA_MARKERS):
         return value
     try:
         from jinja2 import StrictUndefined
@@ -158,9 +157,9 @@ def _as_bool(value: object) -> bool:
         return value
     if isinstance(value, str):
         normalized: str = value.strip().lower()
-        if normalized in DBT_TRUE_VALUES:
+        if normalized in _DBT_TRUE_VALUES:
             return True
-        if normalized in DBT_FALSE_VALUES:
+        if normalized in _DBT_FALSE_VALUES:
             return False
     raise DbtProfileError(f"Cannot coerce {value!r} to bool")
 
@@ -173,7 +172,7 @@ def _as_number(value: object) -> int | float:
     if isinstance(value, str):
         stripped: str = value.strip()
         try:
-            if DBT_NUMBER_DECIMAL_SEPARATOR in stripped:
+            if _DBT_NUMBER_DECIMAL_SEPARATOR in stripped:
                 return float(stripped)
             return int(stripped)
         except ValueError as error:

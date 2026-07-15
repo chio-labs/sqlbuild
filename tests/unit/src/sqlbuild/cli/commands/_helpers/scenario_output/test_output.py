@@ -8,7 +8,6 @@ import pytest
 from sqlbuild.cli.commands._helpers.scenario_capture.capture_run import _write_capture_result
 from sqlbuild.cli.commands._helpers.scenario_output.result_output import write_scenario_result
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario.models import (
     ScenarioExpectedExpectationExecutionResult,
     ScenarioRunResult,
@@ -16,6 +15,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureResult,
     ScenarioSnapshotCaptureRunResult,
 )
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers.scenario_output._test_types import (
     ScenarioCaptureOutputTestCase,
     ScenarioRunOutputTestCase,

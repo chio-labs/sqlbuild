@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import TargetConfig
-from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
-from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.state.constants import DUCKDB_MEMORY_DATABASE
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import StateBackendConfig

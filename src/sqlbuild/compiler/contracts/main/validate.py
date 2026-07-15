@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.types import TypeDialect
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.contracts._helpers.columns import collect_model_column_contract_diagnostics
 from sqlbuild.compiler.contracts.models import ContractValidationResult
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.planner.types import ContractPolicy
 
 

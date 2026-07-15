@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands._helpers.plan.invocation import resolve_plan_invocation
-from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest, PlanInvocation
 from sqlbuild.cli.commands._helpers.plan.outputs import write_plan_command_output
 from sqlbuild.cli.commands._helpers.plan.planning import compile_plan_pipeline
+from sqlbuild.cli.commands.models import PlanCommandRequest, PlanInvocation
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 
 

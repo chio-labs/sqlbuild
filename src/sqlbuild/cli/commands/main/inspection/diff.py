@@ -9,17 +9,17 @@ from sqlbuild.cli.commands._helpers.diff.execution import (
     prepare_virtual_diff,
 )
 from sqlbuild.cli.commands._helpers.diff.invocation import resolve_diff_invocation
-from sqlbuild.cli.commands._helpers.diff.models import (
+from sqlbuild.cli.commands._helpers.diff.outputs import (
+    resolve_diff_exit_code,
+    write_standard_diff_output,
+    write_virtual_diff_output,
+)
+from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     DiffInvocation,
     StandardDiffPreparation,
     VirtualDiffPreparation,
     VirtualDiffRunOutcome,
-)
-from sqlbuild.cli.commands._helpers.diff.outputs import (
-    resolve_diff_exit_code,
-    write_standard_diff_output,
-    write_virtual_diff_output,
 )
 from sqlbuild.executor.diff.models import DiffExecutionResult
 

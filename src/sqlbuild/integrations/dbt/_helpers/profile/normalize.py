@@ -3,24 +3,40 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter
-from sqlbuild.integrations.dbt._helpers.profile.constants import (
-    DBT_BIGQUERY_SUPPORTED_METHODS,
-    DBT_BIGQUERY_UNSUPPORTED_METHODS,
-    DBT_DATABRICKS_PAT_AUTH_TYPE,
-    DBT_DUCKDB_UNSUPPORTED_PROFILE_KEYS,
-    DBT_PROFILE_HOST_KEY,
-    DBT_PROFILE_HTTP_PATH_KEY,
-    DBT_PROFILE_KEYFILE_KEY,
-    DBT_PROFILE_LOCATION_KEY,
-    DBT_PROFILE_SCHEMA_KEY,
-    DBT_PROFILE_TOKEN_KEY,
-    DBT_SQLSERVER_SQL_AUTHENTICATION,
-)
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import (
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
+
+_DBT_BIGQUERY_SUPPORTED_METHODS: frozenset[str] = frozenset({"oauth", "service-account"})
+_DBT_BIGQUERY_UNSUPPORTED_METHODS: frozenset[str] = frozenset(
+    {"oauth-secrets", "service-account-json", "external-oauth-wif"}
+)
+_DBT_DATABRICKS_PAT_AUTH_TYPE: str = "pat"
+_DBT_DUCKDB_UNSUPPORTED_PROFILE_KEYS: frozenset[str] = frozenset(
+    {
+        "config_options",
+        "disable_transactions",
+        "external_root",
+        "filesystems",
+        "is_ducklake",
+        "keep_open",
+        "module_paths",
+        "plugins",
+        "remote",
+        "retries",
+        "secrets",
+        "use_credential_provider",
+    }
+)
+_DBT_PROFILE_HOST_KEY: str = "host"
+_DBT_PROFILE_HTTP_PATH_KEY: str = "http_path"
+_DBT_PROFILE_KEYFILE_KEY: str = "keyfile"
+_DBT_PROFILE_LOCATION_KEY: str = "location"
+_DBT_PROFILE_SCHEMA_KEY: str = "schema"
+_DBT_PROFILE_TOKEN_KEY: str = "token"
+_DBT_SQLSERVER_SQL_AUTHENTICATION: str = "sql"
 
 
 def normalize_dbt_profile_connection(
@@ -71,7 +87,7 @@ def _normalize_duckdb(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtPro
             connection[key] = output[key]
     warnings: list[str] = []
     unsupported_keys: tuple[str, ...] = tuple(
-        sorted(key for key in output if key in DBT_DUCKDB_UNSUPPORTED_PROFILE_KEYS)
+        sorted(key for key in output if key in _DBT_DUCKDB_UNSUPPORTED_PROFILE_KEYS)
     )
     if unsupported_keys:
         warnings.append(
@@ -139,7 +155,7 @@ def _normalize_snowflake(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbt
 def _normalize_bigquery(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtProfileConnection:
     output: dict[str, object] = dict(resolved.output)
     method: str | None = _string_or_none(output.get("method"))
-    if method in DBT_BIGQUERY_UNSUPPORTED_METHODS:
+    if method in _DBT_BIGQUERY_UNSUPPORTED_METHODS:
         raise DbtProfileError(
             "dbt BigQuery profile method "
             f"'{method}' is not supported by SQLBuild dbt-profile normalization yet. "
@@ -149,11 +165,11 @@ def _normalize_bigquery(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbtP
     connection: dict[str, object] = {}
     if project is not None:
         connection["project"] = project
-    if DBT_PROFILE_LOCATION_KEY in output:
-        connection["location"] = output[DBT_PROFILE_LOCATION_KEY]
-    if DBT_PROFILE_KEYFILE_KEY in output:
-        connection["credentials_path"] = output[DBT_PROFILE_KEYFILE_KEY]
-    if method is not None and method not in DBT_BIGQUERY_SUPPORTED_METHODS:
+    if _DBT_PROFILE_LOCATION_KEY in output:
+        connection["location"] = output[_DBT_PROFILE_LOCATION_KEY]
+    if _DBT_PROFILE_KEYFILE_KEY in output:
+        connection["credentials_path"] = output[_DBT_PROFILE_KEYFILE_KEY]
+    if method is not None and method not in _DBT_BIGQUERY_SUPPORTED_METHODS:
         raise DbtProfileError(
             "dbt BigQuery profile method "
             f"'{method}' is not supported by SQLBuild dbt-profile normalization yet. "
@@ -184,7 +200,7 @@ def _normalize_databricks(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDb
         )
     )
     auth_type: str | None = _string_or_none(output.get("auth_type"))
-    if auth_type is not None and auth_type != DBT_DATABRICKS_PAT_AUTH_TYPE:
+    if auth_type is not None and auth_type != _DBT_DATABRICKS_PAT_AUTH_TYPE:
         raise DbtProfileError(
             "dbt Databricks profile auth_type "
             f"'{auth_type}' is not supported by SQLBuild dbt-profile normalization yet. "
@@ -196,18 +212,18 @@ def _normalize_databricks(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDb
             "dbt-profile normalization yet: " + ", ".join(unsupported_auth_keys)
         )
     connection: dict[str, object] = {}
-    if DBT_PROFILE_HOST_KEY in output:
-        connection["server_hostname"] = output[DBT_PROFILE_HOST_KEY]
-    if DBT_PROFILE_HTTP_PATH_KEY in output:
-        connection["http_path"] = output[DBT_PROFILE_HTTP_PATH_KEY]
-    if DBT_PROFILE_TOKEN_KEY in output:
-        connection["token"] = output[DBT_PROFILE_TOKEN_KEY]
+    if _DBT_PROFILE_HOST_KEY in output:
+        connection["server_hostname"] = output[_DBT_PROFILE_HOST_KEY]
+    if _DBT_PROFILE_HTTP_PATH_KEY in output:
+        connection["http_path"] = output[_DBT_PROFILE_HTTP_PATH_KEY]
+    if _DBT_PROFILE_TOKEN_KEY in output:
+        connection["token"] = output[_DBT_PROFILE_TOKEN_KEY]
     catalog: object | None = output.get("catalog", output.get("database"))
     if catalog is None:
         catalog = "hive_metastore"
     connection["catalog"] = catalog
-    if DBT_PROFILE_SCHEMA_KEY in output:
-        connection["schema"] = output[DBT_PROFILE_SCHEMA_KEY]
+    if _DBT_PROFILE_SCHEMA_KEY in output:
+        connection["schema"] = output[_DBT_PROFILE_SCHEMA_KEY]
     return NormalizedDbtProfileConnection(
         adapter=BuiltinAdapter.DATABRICKS.value,
         connection=connection,
@@ -224,7 +240,7 @@ def _normalize_sqlserver(*, resolved: ResolvedDbtProfileOutput) -> NormalizedDbt
             "dbt-profile normalization yet"
         )
     authentication: str | None = _string_or_none(output.get("authentication", output.get("auth")))
-    if authentication is not None and authentication.lower() != DBT_SQLSERVER_SQL_AUTHENTICATION:
+    if authentication is not None and authentication.lower() != _DBT_SQLSERVER_SQL_AUTHENTICATION:
         raise DbtProfileError(
             "dbt SQL Server authentication mode "
             f"'{authentication}' is not supported by SQLBuild dbt-profile normalization yet. "

@@ -15,7 +15,7 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 

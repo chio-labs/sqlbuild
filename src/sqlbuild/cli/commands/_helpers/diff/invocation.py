@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.diff.models import DiffCommandRequest, DiffInvocation
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import DiffCommandRequest, DiffInvocation
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 

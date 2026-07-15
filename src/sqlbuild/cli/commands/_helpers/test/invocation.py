@@ -9,8 +9,11 @@ from typing import TextIO
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
-from sqlbuild.cli.commands._helpers.runtime.models import AdapterConnectionContext
-from sqlbuild.cli.commands._helpers.test.models import TestCommandRequest, TestInvocation
+from sqlbuild.cli.commands.models import (
+    AdapterConnectionContext,
+    TestCommandRequest,
+    TestInvocation,
+)
 from sqlbuild.cli.progress.main.build_command_progress_reporters import (
     build_command_progress_reporters,
 )

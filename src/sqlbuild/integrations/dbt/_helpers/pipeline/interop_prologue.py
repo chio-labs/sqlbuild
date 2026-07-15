@@ -70,11 +70,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtProductionRefCompileResult,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtSupportedResourceType
-from sqlbuild.spec.contracts.models import DbtProductionRefConfig
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.resolution.main.resolve_effective_force import resolve_effective_force
+from sqlbuild.spec.contracts.main.resolve_effective_force import resolve_effective_force
+from sqlbuild.spec.contracts.models import DbtProductionRefConfig
 
 
 def resolve_dbt_execution_invocation(

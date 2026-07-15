@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.contracts.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

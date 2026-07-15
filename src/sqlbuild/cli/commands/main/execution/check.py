@@ -7,16 +7,16 @@ from sqlbuild.cli.commands._helpers.check.execution import (
     prepare_check_execution,
 )
 from sqlbuild.cli.commands._helpers.check.invocation import resolve_check_invocation
-from sqlbuild.cli.commands._helpers.check.models import (
-    CheckCommandRequest,
-    CheckExecutionPreparation,
-    CheckInvocation,
-)
 from sqlbuild.cli.commands._helpers.check.outputs import (
     resolve_check_exit_code,
     write_check_completion_output,
 )
 from sqlbuild.cli.commands._helpers.check.planning import compile_check_plan
+from sqlbuild.cli.commands.models import (
+    CheckCommandRequest,
+    CheckExecutionPreparation,
+    CheckInvocation,
+)
 from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult

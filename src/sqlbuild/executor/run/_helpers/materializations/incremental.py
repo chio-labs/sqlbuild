@@ -17,9 +17,8 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange, RelationReuseKind
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run._helpers.execution.final_audits import (
     run_delta_scope_audits,
     run_final_scope_audits,
@@ -52,6 +51,8 @@ from sqlbuild.executor.run.models import (
     PostHookPhaseOutcome,
     RuntimeCursorSpec,
 )
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 

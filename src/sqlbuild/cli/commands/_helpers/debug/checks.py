@@ -8,12 +8,12 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.debug.models import DebugLine, DebugResult
-from sqlbuild.cli.commands._helpers.debug.types import DebugCheckStatus
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
+from sqlbuild.cli.commands.models import DebugLine, DebugResult
+from sqlbuild.cli.commands.types import DebugCheckStatus
 from sqlbuild.compiler.discovery.constants import (
     LEGACY_LOCAL_CONFIG_FILENAME,
     LEGACY_PROJECT_CONFIG_FILENAME,
@@ -22,7 +22,7 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredProvider
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 

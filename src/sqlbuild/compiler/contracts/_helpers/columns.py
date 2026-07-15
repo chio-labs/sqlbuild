@@ -7,12 +7,16 @@ from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
+    CompilerDiagnostic,
     InferredColumn,
+    RelatedLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledResourceType,
+    DiagnosticPhase,
+    DiagnosticSeverity,
+)
 from sqlbuild.compiler.contracts.constants import NOT_NULL_AUDIT_NAME
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLocation
-from sqlbuild.compiler.diagnostics.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.spec.contracts.models import SchemaColumn, SourceLocation

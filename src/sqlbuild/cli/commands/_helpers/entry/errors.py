@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable, Sequence
 
-from sqlbuild.cli.commands._helpers.entry.constants import NO_COLOR_OPTION
 from sqlbuild.cli.commands.classes.sqlbuild_argument_parser import SqlbuildArgumentParser
+from sqlbuild.cli.commands.constants import NO_COLOR_OPTION
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
 
 

@@ -20,8 +20,8 @@ from dagster import (
     materialize,
 )
 
-from sqlbuild.cli.commands._helpers.playground.models import PlaygroundCommandRequest
 from sqlbuild.cli.commands.main.workspace.playground import run_playground
+from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from sqlbuild.integrations.dagster import (
     SqlBuildCliResource,
     SqlBuildProject,

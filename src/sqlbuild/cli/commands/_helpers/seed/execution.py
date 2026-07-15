@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.seed.models import (
+from sqlbuild.cli.commands.models import (
     SeedExecutionPreparation,
     SeedInvocation,
     SeedRunOutcome,

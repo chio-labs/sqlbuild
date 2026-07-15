@@ -30,9 +30,8 @@ from sqlbuild.compiler.planner.types import (
     SnapshotStrategy,
 )
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run._helpers.execution.final_audits import (
     run_delta_scope_audits,
     run_final_scope_audits,
@@ -57,6 +56,8 @@ from sqlbuild.executor.run.models import (
     ModelMaterializationContext,
     PostHookPhaseOutcome,
 )
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 _DEFAULT_VALID_FROM_COLUMN: str = "valid_from"

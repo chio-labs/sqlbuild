@@ -6,7 +6,7 @@ import base64
 import binascii
 import json
 
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 
 
 def encode_json_b64(*, value: object, label: str, node_name: str) -> str:

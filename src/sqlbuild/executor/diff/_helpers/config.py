@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from typing import cast
 
 from sqlbuild.adapter.contract.models import RowDiffTolerance, RowDiffTolerances
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff.constants import (
     ROW_DIFF_ABSOLUTE_TOLERANCE_KEY,
     ROW_DIFF_RELATIVE_TOLERANCE_KEY,

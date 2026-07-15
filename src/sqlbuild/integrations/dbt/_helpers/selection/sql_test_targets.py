@@ -26,12 +26,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.integrations.dbt._helpers.selection.constants import (
-    DBT_BLOCK_COMMENT_OPEN,
-    DBT_LINE_COMMENT_OPEN,
-    DBT_QUALIFIED_EXPECTED_NAME_SEPARATOR,
-    DBT_SINGLE_QUOTE,
-)
 from sqlbuild.integrations.dbt.constants import (
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_MATERIALIZED_KEY,
@@ -47,6 +41,11 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.types import DbtChainNodeBoundaryKind, DbtSupportedResourceType
 from sqlbuild.spec.contracts.models import SchemaSeedEntry, SourceEntry
+
+_DBT_BLOCK_COMMENT_OPEN: str = "/*"
+_DBT_LINE_COMMENT_OPEN: str = "--"
+_DBT_QUALIFIED_EXPECTED_NAME_SEPARATOR: str = "__"
+_DBT_SINGLE_QUOTE: str = "'"
 
 
 def resolve_dbt_sql_test_target_names(
@@ -654,9 +653,9 @@ def _resolve_expected_model(
 ) -> DbtManifestModel | None:
     package_name: str | None = None
     model_name: str = expected_name
-    if DBT_QUALIFIED_EXPECTED_NAME_SEPARATOR in expected_name:
+    if _DBT_QUALIFIED_EXPECTED_NAME_SEPARATOR in expected_name:
         package_name, model_name = expected_name.split(
-            DBT_QUALIFIED_EXPECTED_NAME_SEPARATOR, maxsplit=1
+            _DBT_QUALIFIED_EXPECTED_NAME_SEPARATOR, maxsplit=1
         )
     if package_name is not None:
         dbt_model: DbtManifestModel | None = manifest.models_by_package_and_name.get(
@@ -824,18 +823,18 @@ def _replace_in_sql_code(*, sql: str, target: str, replacement: str) -> str:
     length: int = len(sql)
     while index < length:
         char: str = sql[index]
-        if char == DBT_SINGLE_QUOTE:
+        if char == _DBT_SINGLE_QUOTE:
             end: int = _scan_single_quote(sql=sql, start=index)
             out.append(sql[index:end])
             index = end
             continue
-        if sql.startswith(DBT_LINE_COMMENT_OPEN, index):
+        if sql.startswith(_DBT_LINE_COMMENT_OPEN, index):
             end = sql.find("\n", index)
             end = length if end == -1 else end
             out.append(sql[index:end])
             index = end
             continue
-        if sql.startswith(DBT_BLOCK_COMMENT_OPEN, index):
+        if sql.startswith(_DBT_BLOCK_COMMENT_OPEN, index):
             end = sql.find("*/", index + 2)
             end = length if end == -1 else end + 2
             out.append(sql[index:end])
@@ -854,8 +853,8 @@ def _scan_single_quote(*, sql: str, start: int) -> int:
     index: int = start + 1
     length: int = len(sql)
     while index < length:
-        if sql[index] == DBT_SINGLE_QUOTE:
-            if index + 1 < length and sql[index + 1] == DBT_SINGLE_QUOTE:
+        if sql[index] == _DBT_SINGLE_QUOTE:
+            if index + 1 < length and sql[index + 1] == _DBT_SINGLE_QUOTE:
                 index += 2
                 continue
             return index + 1

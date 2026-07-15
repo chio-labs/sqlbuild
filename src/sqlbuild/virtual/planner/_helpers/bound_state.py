@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import time
-from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -13,8 +11,7 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
-from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.freshness.main.current_records import (
     build_current_virtual_source_freshness_records,
 )
@@ -161,27 +158,3 @@ def read_virtual_bound_state(
         )
     finally:
         backend.close(state_connection)
-
-
-def open_planning_connection(
-    *,
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    on_connection_start: Callable[[int], None] | None,
-    on_connection_complete: ConnectionElapsedCallback | None,
-    on_connection_error: ConnectionElapsedCallback | None,
-) -> Any:
-    """Open one warehouse connection for planning with progress callbacks."""
-
-    if on_connection_start is not None:
-        on_connection_start(1)
-    start: float = time.monotonic()
-    try:
-        connection: Any = adapter.connect(connection_config)
-    except Exception:
-        if on_connection_error is not None:
-            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
-        raise
-    if on_connection_complete is not None:
-        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
-    return connection

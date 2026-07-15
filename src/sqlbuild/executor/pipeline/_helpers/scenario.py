@@ -17,7 +17,6 @@ from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
 from sqlbuild.errors.contracts.main.error_message import error_message
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_INTERNAL,
@@ -35,8 +34,9 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotStateResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.resolution.main.scenario_local_type_overrides_for_dialect import (
+from sqlbuild.spec.contracts.main.scenario_local_type_overrides_for_dialect import (
     scenario_local_type_overrides_for_dialect,
 )
 

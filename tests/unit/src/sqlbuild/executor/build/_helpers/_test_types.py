@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.contracts.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.executor.build._helpers.helpers import ModelPlanOverride
 

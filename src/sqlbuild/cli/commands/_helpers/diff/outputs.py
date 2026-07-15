@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.diff.models import (
+from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures, render_diff_output
+from sqlbuild.cli.commands._helpers.diff.virtual_output import format_virtual_diff_header
+from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     StandardDiffPreparation,
     VirtualDiffPreparation,
     VirtualDiffRunOutcome,
 )
-from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures, render_diff_output
-from sqlbuild.cli.commands._helpers.diff.virtual_output import format_virtual_diff_header
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.presentation.main.supports_color import supports_color
 

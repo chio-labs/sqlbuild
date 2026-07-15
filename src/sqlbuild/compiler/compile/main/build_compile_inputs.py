@@ -26,6 +26,7 @@ from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
     CompileModelInput,
     CompileProjectInputs,
+    CompilerDiagnostic,
     CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
@@ -35,19 +36,18 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
     ModelInputBuildContext,
 )
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.contracts.models import SettingsConfig, TargetConfig
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
-from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.models import SettingsConfig, TargetConfig
 
 
 def build_compile_inputs(

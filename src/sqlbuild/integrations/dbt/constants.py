@@ -65,6 +65,7 @@ DBT_HARD_COPY_FLAG: str = "--hard-copy"
 DBT_MAX_COLUMN_EXAMPLES_FLAG: str = "--max-column-examples"
 DBT_MAX_ROW_ONLY_EXAMPLES_FLAG: str = "--max-row-only-examples"
 DBT_NO_SQL_VALIDATION_FLAG: str = "--no-sql-validation"
+DBT_PATH_SELECTOR_SEPARATOR: str = "~"
 DBT_REPLAY_FULL: str = "full"
 DBT_REPLAY_FORWARD_ONLY: str = "forward_only"
 DBT_REPLAY_NOOP_POLICIES: frozenset[str] = frozenset({"", "forward_only"})

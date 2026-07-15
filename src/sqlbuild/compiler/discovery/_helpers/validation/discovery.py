@@ -5,8 +5,6 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from sqlbuild.assets import get_asset_definition
-from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import integration_loader_name
 from sqlbuild.compiler.discovery.constants import CURRENT_DIRECTORY_PATH, RESERVED_MODEL_NAMES
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedDiscoveryError
@@ -24,7 +22,10 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredTaskFunction,
 )
-from sqlbuild.loaders import get_loader_definition
+from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
+from sqlbuild.python_nodes.main.read_check_definition import read_check_definition
+from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition
+from sqlbuild.python_nodes.main.read_task_definition import read_task_definition
 from sqlbuild.python_nodes.models import (
     AssetDefinition,
     CheckDefinition,
@@ -33,7 +34,6 @@ from sqlbuild.python_nodes.models import (
     TaskDefinition,
 )
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
-from sqlbuild.tasks import get_task_definition
 
 
 def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> None:
@@ -444,22 +444,22 @@ def _validate_check_dependencies(
 
 def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:
     loader_definition: LoaderDefinition | None = (
-        get_loader_definition(dependency) if callable(dependency) else None
+        read_loader_definition(dependency) if callable(dependency) else None
     )
     if loader_definition is not None:
         return ("name", loader_definition.name)
     task_definition: TaskDefinition | None = (
-        get_task_definition(dependency) if callable(dependency) else None
+        read_task_definition(dependency) if callable(dependency) else None
     )
     if task_definition is not None:
         return ("name", task_definition.name)
     asset_definition: AssetDefinition | None = (
-        get_asset_definition(dependency) if callable(dependency) else None
+        read_asset_definition(dependency) if callable(dependency) else None
     )
     if asset_definition is not None:
         return ("name", asset_definition.name)
     check_definition: CheckDefinition | None = (
-        get_check_definition(dependency) if callable(dependency) else None
+        read_check_definition(dependency) if callable(dependency) else None
     )
     if check_definition is not None:
         return ("name", check_definition.name)

@@ -25,7 +25,13 @@ from sqlbuild.cli.commands._helpers.scenario_capture.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
     scenario_snapshot_capture_warning,
 )
-from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
+from sqlbuild.cli.commands._helpers.scenario_execution.local_run import run_local_scenarios
+from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
+from sqlbuild.cli.commands._helpers.scenario_execution.warehouse_run import (
+    run_warehouse_scenarios,
+)
+from sqlbuild.cli.commands._helpers.scenario_output.result_output import render_result_error
+from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
@@ -33,19 +39,13 @@ from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
     SQL_VALIDATION_CONFIG_KEY,
     SUCCESS_STATUS,
 )
-from sqlbuild.cli.commands._helpers.scenario_execution.local_run import run_local_scenarios
-from sqlbuild.cli.commands._helpers.scenario_execution.models import (
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
     LocalSnapshotSyncInputs,
     ScenarioRunOutputContext,
     ScenarioSnapshotLimitInputs,
     ScenarioTestCommandRequest,
 )
-from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
-from sqlbuild.cli.commands._helpers.scenario_execution.warehouse_run import (
-    run_warehouse_scenarios,
-)
-from sqlbuild.cli.commands._helpers.scenario_output.result_output import render_result_error
-from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.output.main.scenario_snapshot_execution_json import (
     format_scenario_snapshot_execution_json,
 )
@@ -75,10 +75,10 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.models import ConnectionHooks
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.resolution.main.resolve_effective_scenario_config import (
+from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
     resolve_effective_scenario_config,
 )
 

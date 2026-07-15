@@ -13,8 +13,11 @@ from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, DiscoveredLoaderFunction
-from sqlbuild.compiler.hooks.models import PythonHookEntry
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredHookFunction,
+    DiscoveredLoaderFunction,
+    PythonHookEntry,
+)
 from sqlbuild.compiler.node_source_watermarks.constants import NODE_SOURCE_WATERMARK_TABLE_NAME
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput, SourceLoadPlanEntry
@@ -31,8 +34,8 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
 )
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.run.models import HookContext
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (

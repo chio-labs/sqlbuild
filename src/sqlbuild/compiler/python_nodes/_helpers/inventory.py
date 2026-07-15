@@ -6,8 +6,6 @@ import inspect
 from collections.abc import Callable
 from typing import get_type_hints
 
-from sqlbuild.assets import get_asset_definition
-from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -28,8 +26,11 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.loaders import get_loader_definition
 from sqlbuild.providers import Provider
+from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
+from sqlbuild.python_nodes.main.read_check_definition import read_check_definition
+from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition
+from sqlbuild.python_nodes.main.read_task_definition import read_task_definition
 from sqlbuild.python_nodes.models import (
     AssetDefinition,
     CheckDefinition,
@@ -37,7 +38,6 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
     TaskDefinition,
 )
-from sqlbuild.tasks import get_task_definition
 
 
 def build_python_node_graph(*, discovered_inputs: DiscoveredProjectInputs) -> PythonNodeGraph:
@@ -351,22 +351,22 @@ def _provider_usages(
 
 def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:
     loader_definition: LoaderDefinition | None = (
-        get_loader_definition(dependency) if callable(dependency) else None
+        read_loader_definition(dependency) if callable(dependency) else None
     )
     if loader_definition is not None:
         return ("name", loader_definition.name)
     task_definition: TaskDefinition | None = (
-        get_task_definition(dependency) if callable(dependency) else None
+        read_task_definition(dependency) if callable(dependency) else None
     )
     if task_definition is not None:
         return ("name", task_definition.name)
     asset_definition: AssetDefinition | None = (
-        get_asset_definition(dependency) if callable(dependency) else None
+        read_asset_definition(dependency) if callable(dependency) else None
     )
     if asset_definition is not None:
         return ("name", asset_definition.name)
     check_definition: CheckDefinition | None = (
-        get_check_definition(dependency) if callable(dependency) else None
+        read_check_definition(dependency) if callable(dependency) else None
     )
     if check_definition is not None:
         return ("name", check_definition.name)

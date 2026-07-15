@@ -6,13 +6,13 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
-    FAILED_STATUS,
-    SUCCESS_STATUS,
-)
 from sqlbuild.cli.commands._helpers.scenario_output.scenario_runtime import (
     write_local_scenario_runtime_target,
     write_scenario_runtime_target,
+)
+from sqlbuild.cli.commands.constants import (
+    FAILED_STATUS,
+    SUCCESS_STATUS,
 )
 from sqlbuild.compiler.planner.models import ScenarioArtifactName, ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind

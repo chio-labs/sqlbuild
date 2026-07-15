@@ -4,13 +4,13 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.lineage.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.cli.commands._helpers.lineage.selection import (
     select_column_target_lineage,
     select_selector_lineage,
     select_target_lineage,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from sqlbuild.cli.commands._helpers.entry.models import CliEntrypointHandlers
+from sqlbuild.cli.commands.models import CliEntrypointHandlers
 
 
 class JsonOutputRequest(Protocol):

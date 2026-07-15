@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.cli.commands._helpers.audit.models import (
+from sqlbuild.cli.commands.models import (
     AuditExecutionPreparation,
     AuditInvocation,
 )

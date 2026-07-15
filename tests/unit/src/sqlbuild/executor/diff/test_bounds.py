@@ -4,7 +4,7 @@ import pytest
 
 from sqlbuild.adapter.contract.models import CursorValue
 from sqlbuild.adapter.contract.types import CursorKind
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.bounds import resolve_bounded_cursors
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     ResolveBoundedCursorsErrorTestCase,

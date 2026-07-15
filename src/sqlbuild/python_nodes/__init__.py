@@ -1,1 +1,1 @@
-"""Public Python-node implementation helpers."""
+"""Public Python-node authoring domain."""

@@ -11,20 +11,20 @@ from sqlbuild.cli.commands._helpers.compile.lineage import (
     build_compile_lineage,
     compile_analysis_lineage_mode,
 )
-from sqlbuild.cli.commands._helpers.compile.models import (
-    CompileAnalysis,
-    CompileProfileFlags,
-    CompileWriteResult,
-    WrittenTarget,
-)
 from sqlbuild.cli.commands._helpers.compile.status import (
     complete_compile_phase,
     elapsed_ms,
     start_compile_phase,
 )
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_static_compile_target
-from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.models import (
+    CompileAnalysis,
+    CompileProfileFlags,
+    CompileWriteResult,
+    WrittenTarget,
+)
+from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
@@ -39,7 +39,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 

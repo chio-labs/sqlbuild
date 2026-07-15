@@ -7,16 +7,16 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.build_planning.models import (
-    VirtualBuildCliRequest,
-    VirtualBuildExecution,
-    VirtualBuildPlanHookConfig,
-)
 from sqlbuild.cli.commands._helpers.input.parsing import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )
 from sqlbuild.cli.commands.classes.virtual_build_plan_hook import VirtualBuildPlanHook
+from sqlbuild.cli.commands.models import (
+    VirtualBuildCliRequest,
+    VirtualBuildExecution,
+    VirtualBuildPlanHookConfig,
+)
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )

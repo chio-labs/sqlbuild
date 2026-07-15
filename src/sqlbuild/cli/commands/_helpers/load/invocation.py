@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.load.models import LoadCommandRequest, LoadInvocation
 from sqlbuild.cli.commands._helpers.load.selection import (
     select_load_entries,
     select_load_reference_entries,
 )
+from sqlbuild.cli.commands.models import LoadCommandRequest, LoadInvocation
 from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs

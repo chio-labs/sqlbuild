@@ -1,1 +1,0 @@
-"""Internal specification resolution helpers."""

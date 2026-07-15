@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.scenario_execution.constants import (
+from sqlbuild.cli.commands.constants import (
     GRAPH_SELECTOR_EXPANSION_MARKER,
     GRAPH_SELECTOR_PATH_MARKER,
     SCENARIO_CLI_NONE_DISCOVERED,

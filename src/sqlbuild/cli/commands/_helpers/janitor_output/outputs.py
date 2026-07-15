@@ -10,7 +10,7 @@ from sqlbuild.cli.commands._helpers.janitor_output.output import (
     write_disabled,
     write_plan,
 )
-from sqlbuild.cli.commands._helpers.janitor_runtime.models import (
+from sqlbuild.cli.commands.models import (
     JanitorInvocation,
     JanitorPlanningResult,
 )

@@ -7,10 +7,11 @@ import pytest
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.execution.results import build_failed_result
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     BuildFailedResultTestCase,
 )

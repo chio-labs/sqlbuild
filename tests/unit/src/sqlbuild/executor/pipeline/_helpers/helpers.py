@@ -27,7 +27,7 @@ from sqlbuild.compiler.planner.models import (
     ScenarioRelationPlan,
     SeedPlanEntry,
 )
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_JSONL_INVALID
 from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadResult,

@@ -20,8 +20,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
-from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
 from sqlbuild.virtual.reconcile.constants import RECONCILE_REPAIR_VIEW_COMMAND
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime

@@ -4,15 +4,15 @@ import json
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.freshness.models import (
-    FreshnessCommandResult,
-    FreshnessSourceResult,
-)
 from sqlbuild.cli.commands._helpers.freshness.output import (
     format_freshness_json,
     format_freshness_text,
 )
-from sqlbuild.cli.commands._helpers.freshness.types import FreshnessSourceStatus
+from sqlbuild.cli.commands.models import (
+    FreshnessCommandResult,
+    FreshnessSourceResult,
+)
+from sqlbuild.cli.commands.types import FreshnessSourceStatus
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers.freshness._test_types import (
     FreshnessOutputTestCase,

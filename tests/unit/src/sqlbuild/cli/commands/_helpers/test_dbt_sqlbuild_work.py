@@ -8,8 +8,8 @@ import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.dbt import sqlbuild_work as work_module
-from sqlbuild.cli.commands._helpers.dbt.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.commands._helpers.dbt.sqlbuild_work import execute_sqlbuild_test_work
+from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.compiler.planner.models import PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome

@@ -8,21 +8,21 @@ from sqlbuild.cli.commands._helpers.input.parsing import (
     parse_cursor_integer,
     parse_cursor_timestamp,
 )
-from sqlbuild.cli.commands._helpers.load.models import (
+from sqlbuild.cli.commands.classes.load_progress_reporter import LoadProgressReporter
+from sqlbuild.cli.commands.models import (
     LoadCommandRequest,
     LoadExecutionPreparation,
     LoadInvocation,
     LoadRunOutcome,
 )
-from sqlbuild.cli.commands.classes.load_progress_reporter import LoadProgressReporter
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (
     LoadCallbacks,
     LoadExecutionResult,
     LoadRuntimeParams,
 )
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_load_plan(

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.executor.contracts.types import LifecycleNodeStatus
+from sqlbuild.executor.scheduling.types import LifecycleNodeStatus
 
 
 @dataclass(frozen=True)

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast
 
+from sqlbuild.python_nodes.main.apply_factory import apply_factory
+from sqlbuild.python_nodes.main.read_factory_definition import read_factory_definition
 from sqlbuild.python_nodes.models import FactoryDefinition
 
 __all__ = ("factory", "get_factory_definition")
@@ -15,15 +16,10 @@ def factory(
 ) -> Callable[..., object]:
     """Mark a Python function as a SQLBuild Python-node factory."""
 
-    factory_function: Any = cast(Any, function)
-    factory_function.__sqlbuild_factory__ = FactoryDefinition(name=factory_function.__name__)
-    return function
+    return apply_factory(function)
 
 
 def get_factory_definition(function: Callable[..., object]) -> FactoryDefinition | None:
     """Return SQLBuild factory metadata from a decorated function, if present."""
 
-    value: Any = getattr(function, "__sqlbuild_factory__", None)
-    if isinstance(value, FactoryDefinition):
-        return value
-    return None
+    return read_factory_definition(function)

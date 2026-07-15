@@ -6,9 +6,9 @@ import json
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.compile.constants import TARGET_DIRECTORY_NAME
-from sqlbuild.cli.commands._helpers.compile.models import WrittenTarget
-from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
+from sqlbuild.cli.commands.models import WrittenTarget
+from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -19,11 +19,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
     CompiledSource,
     CompiledSqlTest,
+    CompilerDiagnostic,
+    RelatedLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic, RelatedLocation
-from sqlbuild.compiler.diagnostics.types import DiagnosticSeverity
-from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.compile.types import CompiledResourceType, DiagnosticSeverity
+from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.presentation.classes.cli_style import CliStyle

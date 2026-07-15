@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.compile.models import WrittenTarget
 from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
 )
+from sqlbuild.cli.commands.models import WrittenTarget
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonExecutionLayersTestCase,

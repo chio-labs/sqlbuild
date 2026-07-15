@@ -6,11 +6,6 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.compile.models import (
-    CompileAnalysis,
-    CompileCommandRequest,
-    CompileWriteResult,
-)
 from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
@@ -22,7 +17,12 @@ from sqlbuild.cli.commands._helpers.compile.pipeline import (
     write_compile_dag_artifact,
 )
 from sqlbuild.cli.commands._helpers.compile.status import elapsed_ms, start_compile_status
-from sqlbuild.cli.commands._helpers.compile.types import CompileLineageMode
+from sqlbuild.cli.commands.models import (
+    CompileAnalysis,
+    CompileCommandRequest,
+    CompileWriteResult,
+)
+from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.supports_color import supports_color
 

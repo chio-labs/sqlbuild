@@ -14,7 +14,7 @@ from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from sqlbuild.adapter.discovery.main.project_adapters import discover_project_adapters
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.config.core import resolve_dbt_config
-from sqlbuild.integrations.dbt._helpers.planning.constants import DBT_DEFER_FLAG
+from sqlbuild.integrations.dbt.constants import DBT_DEFER_FLAG
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.models import DbtCliConfigOverrides, DbtCliOptions, ResolvedDbtConfig
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig

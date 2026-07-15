@@ -15,9 +15,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     DiscoveredMaterializationFile,
     DiscoveredProviderUsage,
+    PythonHookEntry,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.hooks.models import PythonHookEntry
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import upstream_loader_dependency_names
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_entries
 from sqlbuild.compiler.planner._helpers.output.audit_entry import plan_audit

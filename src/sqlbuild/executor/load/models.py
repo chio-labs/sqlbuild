@@ -18,12 +18,12 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.contracts.types import ExecutionStatus
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.constants import LOADER_RELATION_QUALIFIER_SEPARATOR
 from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry

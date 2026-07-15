@@ -8,7 +8,6 @@ import time
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.cli.commands.models import AuditDisplayEntry, ExecutionCounts
 from sqlbuild.cli.progress.main.expectation_detail import format_expectation_detail
 from sqlbuild.cli.progress.main.expectation_name import format_expectation_name
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
@@ -1027,3 +1026,6 @@ def _truncate_name(*, name: str, width: int) -> str:
     if len(name) <= width:
         return name
     return name[: width - 3] + "..."
+
+
+from sqlbuild.cli.commands.models import AuditDisplayEntry, ExecutionCounts  # noqa: E402,F401

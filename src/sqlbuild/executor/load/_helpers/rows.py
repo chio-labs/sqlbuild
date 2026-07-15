@@ -9,7 +9,7 @@ from decimal import Decimal
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import LoaderLogicalType
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoaderRowsSchema
 from sqlbuild.spec.contracts.models import SourceColumnEntry
 

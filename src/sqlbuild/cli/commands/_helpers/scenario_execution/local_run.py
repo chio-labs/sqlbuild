@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.scenario_execution.models import ScenarioRunOutputContext
 from sqlbuild.cli.commands._helpers.scenario_output.result_output import complete_scenario_run
+from sqlbuild.cli.commands.models import ScenarioRunOutputContext
 from sqlbuild.cli.output.main.scenario_execution_json import (
     format_scenario_execution_json,
 )

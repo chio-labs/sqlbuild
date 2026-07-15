@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.plan.models import PlanCommandRequest, PlanInvocation
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
@@ -14,7 +13,11 @@ from sqlbuild.cli.commands._helpers.runtime.mode_policy import (
     enforce_no_defer_to_in_virtual_mode,
     enforce_virtual_only_flags_in_virtual_mode,
 )
-from sqlbuild.cli.commands._helpers.runtime.models import AdapterConnectionContext
+from sqlbuild.cli.commands.models import (
+    AdapterConnectionContext,
+    PlanCommandRequest,
+    PlanInvocation,
+)
 from sqlbuild.cli.progress.main.build_command_progress_reporters import (
     build_command_progress_reporters,
 )
@@ -23,7 +26,7 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.resolution.main.resolve_effective_force import resolve_effective_force
+from sqlbuild.spec.contracts.main.resolve_effective_force import resolve_effective_force
 
 
 def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:

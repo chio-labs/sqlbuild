@@ -5,11 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.lineage.constants import (
-    JSON_OUTPUT_FORMAT,
-    LIST_OUTPUT_FORMAT,
-)
-from sqlbuild.cli.commands._helpers.lineage.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.cli.commands._helpers.lineage.output import (
     format_column_lineage_json,
     format_column_lineage_list,
@@ -25,14 +20,19 @@ from sqlbuild.cli.commands._helpers.lineage.selection import (
     select_target_lineage,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.constants import (
+    JSON_OUTPUT_FORMAT,
+    LIST_OUTPUT_FORMAT,
+)
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import ColumnLineageTrace, LineageGraph
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 

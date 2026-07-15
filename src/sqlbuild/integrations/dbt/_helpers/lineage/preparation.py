@@ -35,7 +35,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLineagePreparation,
     DbtManifestIndex,
 )
-from sqlbuild.spec.resolution.main.resolve_effective_adapter_name import (
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 

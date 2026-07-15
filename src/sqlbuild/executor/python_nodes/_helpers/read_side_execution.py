@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.executor.contracts.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def _sql_result_name(result: object) -> str | None:

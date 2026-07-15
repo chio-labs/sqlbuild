@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.debug.models import (
+from sqlbuild.cli.commands._helpers.debug.output import format_debug_json, format_debug_text
+from sqlbuild.cli.commands.models import (
     DebugLine,
     DebugResult,
 )
-from sqlbuild.cli.commands._helpers.debug.output import format_debug_json, format_debug_text
-from sqlbuild.cli.commands._helpers.debug.types import DebugCheckStatus
+from sqlbuild.cli.commands.types import DebugCheckStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers.debug._test_types import (
     DebugOutputTestCase,
 )

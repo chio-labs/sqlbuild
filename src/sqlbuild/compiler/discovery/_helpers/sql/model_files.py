@@ -7,43 +7,52 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlbuild.compiler.discovery._helpers.sql.constants import (
-    MODEL_HEADER_CLOSE_BRACKET,
-    MODEL_HEADER_CLOSE_PAREN,
-    MODEL_HEADER_COLUMNS_KEY,
-    MODEL_HEADER_COMMA,
-    MODEL_HEADER_END_TOKEN,
-    MODEL_HEADER_ESCAPE_CHARACTER,
-    MODEL_HEADER_FALSE_VALUE,
-    MODEL_HEADER_FLOAT_PATTERN,
-    MODEL_HEADER_HOOK_CALL_NAMES,
-    MODEL_HEADER_HOOK_FIELD_NAMES,
-    MODEL_HEADER_INTEGER_PATTERN,
-    MODEL_HEADER_KEY_VALUE_SEPARATOR,
-    MODEL_HEADER_NULL_VALUE,
-    MODEL_HEADER_OPEN_BRACKET,
-    MODEL_HEADER_OPEN_PAREN,
-    MODEL_HEADER_PATTERN,
-    MODEL_HEADER_QUOTE_NAMES,
-    MODEL_HEADER_RELATION_CALL_NAMES,
-    MODEL_HEADER_SQL_HOOK_CALL,
-    MODEL_HEADER_STRING_TOKEN,
-    MODEL_HEADER_SYMBOL_TOKEN,
-    MODEL_HEADER_SYMBOLS,
-    MODEL_HEADER_TRUE_VALUE,
-    MODEL_HEADER_WORD_TOKEN,
-    SQL_FROM_INITIAL,
-    SQL_FROM_KEYWORD,
-    SQL_IDENTIFIER_SEPARATOR,
-    SQL_SELECT_INITIAL,
-    SQL_SELECT_KEYWORD,
-    SQL_UNION_INITIAL,
-    SQL_UNION_KEYWORD,
-    SQL_UNION_LOWER_KEYWORD,
-)
 from sqlbuild.compiler.discovery.exceptions import ModelHeaderSyntaxError, ModelSqlParseError
-from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceLocation
+
+_MODEL_HEADER_END_TOKEN: str = "end"
+_MODEL_HEADER_WORD_TOKEN: str = "word"
+_MODEL_HEADER_STRING_TOKEN: str = "string"
+_MODEL_HEADER_SYMBOL_TOKEN: str = "symbol"
+_MODEL_HEADER_SYMBOLS: frozenset[str] = frozenset({"(", ")", "[", "]", ","})
+_MODEL_HEADER_OPEN_PAREN: str = "("
+_MODEL_HEADER_CLOSE_PAREN: str = ")"
+_MODEL_HEADER_OPEN_BRACKET: str = "["
+_MODEL_HEADER_CLOSE_BRACKET: str = "]"
+_MODEL_HEADER_COMMA: str = ","
+_MODEL_HEADER_KEY_VALUE_SEPARATOR: str = ":"
+_MODEL_HEADER_QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
+_MODEL_HEADER_ESCAPE_CHARACTER: str = "\\"
+_MODEL_HEADER_COLUMNS_KEY: str = "columns"
+_MODEL_HEADER_RELATION_CALL_NAMES: frozenset[str] = frozenset(
+    {
+        SqlReferenceKind.REF.function_name,
+        SqlReferenceKind.SEED.function_name,
+        SqlReferenceKind.SOURCE.function_name,
+    }
+)
+_MODEL_HEADER_SQL_HOOK_CALL: str = "sql"
+_MODEL_HEADER_HOOK_CALL_NAMES: frozenset[str] = frozenset({_MODEL_HEADER_SQL_HOOK_CALL, "python"})
+_MODEL_HEADER_HOOK_FIELD_NAMES: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
+_MODEL_HEADER_TRUE_VALUE: str = "true"
+_MODEL_HEADER_FALSE_VALUE: str = "false"
+_MODEL_HEADER_NULL_VALUE: str = "null"
+_SQL_IDENTIFIER_SEPARATOR: str = "_"
+_SQL_SELECT_KEYWORD: str = "SELECT"
+_SQL_UNION_KEYWORD: str = "UNION"
+_SQL_FROM_KEYWORD: str = "FROM"
+_SQL_SELECT_INITIAL: str = _SQL_SELECT_KEYWORD[0]
+_SQL_UNION_INITIAL: str = _SQL_UNION_KEYWORD[0]
+_SQL_FROM_INITIAL: str = _SQL_FROM_KEYWORD[0]
+_SQL_UNION_LOWER_KEYWORD: str = _SQL_UNION_KEYWORD.lower()
+_MODEL_HEADER_INTEGER_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
+_MODEL_HEADER_FLOAT_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+)$")
+_MODEL_HEADER_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*MODEL\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
+    re.DOTALL,
+)
 
 
 @dataclass(frozen=True)
@@ -56,7 +65,7 @@ class _ModelHeaderToken:
 def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
     """Parse a raw SQL model file into header values and SQL body."""
 
-    header_match: re.Match[str] | None = MODEL_HEADER_PATTERN.match(contents)
+    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
     if header_match is None:
         raise ModelSqlParseError(
             f"SQL model '{file_path}' must start with a MODEL(...) header as the first "
@@ -78,7 +87,7 @@ def model_header_column_locations(
 ) -> dict[str, SourceLocation]:
     """Return authored locations for MODEL(columns) declarations."""
 
-    header_match: re.Match[str] | None = MODEL_HEADER_PATTERN.match(contents)
+    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
     if header_match is None:
         return {}
     header: str = header_match.group("header")
@@ -91,20 +100,20 @@ def model_header_column_locations(
     token_index: int = 0
     while token_index < len(tokens):
         token: _ModelHeaderToken = tokens[token_index]
-        if token.kind == MODEL_HEADER_END_TOKEN:
+        if token.kind == _MODEL_HEADER_END_TOKEN:
             break
         if (
-            token.kind == MODEL_HEADER_WORD_TOKEN
-            and token.value == MODEL_HEADER_COLUMNS_KEY
+            token.kind == _MODEL_HEADER_WORD_TOKEN
+            and token.value == _MODEL_HEADER_COLUMNS_KEY
             and depth == 0
         ):
             next_token: _ModelHeaderToken = tokens[token_index + 1]
             if (
-                next_token.kind == MODEL_HEADER_SYMBOL_TOKEN
-                and next_token.value == MODEL_HEADER_OPEN_PAREN
+                next_token.kind == _MODEL_HEADER_SYMBOL_TOKEN
+                and next_token.value == _MODEL_HEADER_OPEN_PAREN
             ):
                 in_columns = True
-        elif in_columns and token.kind == MODEL_HEADER_WORD_TOKEN and depth == 1:
+        elif in_columns and token.kind == _MODEL_HEADER_WORD_TOKEN and depth == 1:
             if line_starts is None:
                 line_starts = _line_starts(contents)
             locations[token.value] = _location_for_header_token(
@@ -114,9 +123,9 @@ def model_header_column_locations(
                 relative_path=relative_path,
                 line_starts=line_starts,
             )
-        if token.kind == MODEL_HEADER_SYMBOL_TOKEN and token.value == MODEL_HEADER_OPEN_PAREN:
+        if token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == _MODEL_HEADER_OPEN_PAREN:
             depth += 1
-        elif token.kind == MODEL_HEADER_SYMBOL_TOKEN and token.value == MODEL_HEADER_CLOSE_PAREN:
+        elif token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == _MODEL_HEADER_CLOSE_PAREN:
             depth -= 1
             if in_columns and depth == 0:
                 break
@@ -129,7 +138,7 @@ def model_output_column_locations(
 ) -> dict[str, SourceLocation]:
     """Return authored locations for simple SELECT output expressions."""
 
-    header_match: re.Match[str] | None = MODEL_HEADER_PATTERN.match(contents)
+    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
     if header_match is None:
         return {}
     sql_start: int = header_match.start("sql")
@@ -162,26 +171,26 @@ def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
     select_list_end: int | None = None
     in_quote: str | None = None
     length: int = len(sql)
-    has_union_candidate: bool = SQL_UNION_LOWER_KEYWORD in sql.lower()
+    has_union_candidate: bool = _SQL_UNION_LOWER_KEYWORD in sql.lower()
     while index < length:
         character: str = sql[index]
         if in_quote is not None:
-            if character == MODEL_HEADER_ESCAPE_CHARACTER:
+            if character == _MODEL_HEADER_ESCAPE_CHARACTER:
                 index += 2
                 continue
             if character == in_quote:
                 in_quote = None
             index += 1
             continue
-        if character in MODEL_HEADER_QUOTE_NAMES:
+        if character in _MODEL_HEADER_QUOTE_NAMES:
             in_quote = character
             index += 1
             continue
-        if character == MODEL_HEADER_OPEN_PAREN:
+        if character == _MODEL_HEADER_OPEN_PAREN:
             depth += 1
             index += 1
             continue
-        if character == MODEL_HEADER_CLOSE_PAREN:
+        if character == _MODEL_HEADER_CLOSE_PAREN:
             depth = max(0, depth - 1)
             index += 1
             continue
@@ -190,21 +199,21 @@ def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
             continue
         upper_character: str = character.upper()
         if select_list_start is None:
-            if upper_character == SQL_SELECT_INITIAL and _keyword_at(
-                sql=sql, keyword=SQL_SELECT_KEYWORD, index=index
+            if upper_character == _SQL_SELECT_INITIAL and _keyword_at(
+                sql=sql, keyword=_SQL_SELECT_KEYWORD, index=index
             ):
-                select_list_start = index + len(SQL_SELECT_KEYWORD)
+                select_list_start = index + len(_SQL_SELECT_KEYWORD)
                 index = select_list_start
                 continue
         else:
-            if upper_character == SQL_UNION_INITIAL and _keyword_at(
-                sql=sql, keyword=SQL_UNION_KEYWORD, index=index
+            if upper_character == _SQL_UNION_INITIAL and _keyword_at(
+                sql=sql, keyword=_SQL_UNION_KEYWORD, index=index
             ):
                 return None
             if (
                 select_list_end is None
-                and upper_character == SQL_FROM_INITIAL
-                and _keyword_at(sql=sql, keyword=SQL_FROM_KEYWORD, index=index)
+                and upper_character == _SQL_FROM_INITIAL
+                and _keyword_at(sql=sql, keyword=_SQL_FROM_KEYWORD, index=index)
             ):
                 select_list_end = index
                 if not has_union_candidate:
@@ -326,22 +335,22 @@ def _find_top_level_keyword(*, sql: str, keyword: str, start: int) -> int | None
     while index < len(sql):
         character: str = sql[index]
         if in_quote is not None:
-            if character == MODEL_HEADER_ESCAPE_CHARACTER:
+            if character == _MODEL_HEADER_ESCAPE_CHARACTER:
                 index += 2
                 continue
             if character == in_quote:
                 in_quote = None
             index += 1
             continue
-        if character in MODEL_HEADER_QUOTE_NAMES:
+        if character in _MODEL_HEADER_QUOTE_NAMES:
             in_quote = character
             index += 1
             continue
-        if character == MODEL_HEADER_OPEN_PAREN:
+        if character == _MODEL_HEADER_OPEN_PAREN:
             depth += 1
             index += 1
             continue
-        if character == MODEL_HEADER_CLOSE_PAREN:
+        if character == _MODEL_HEADER_CLOSE_PAREN:
             depth = max(0, depth - 1)
             index += 1
             continue
@@ -360,22 +369,22 @@ def _split_top_level_select_items(*, sql: str, start: int, end: int) -> tuple[tu
     while index < end:
         character: str = sql[index]
         if in_quote is not None:
-            if character == MODEL_HEADER_ESCAPE_CHARACTER:
+            if character == _MODEL_HEADER_ESCAPE_CHARACTER:
                 index += 2
                 continue
             if character == in_quote:
                 in_quote = None
             index += 1
             continue
-        if character in MODEL_HEADER_QUOTE_NAMES:
+        if character in _MODEL_HEADER_QUOTE_NAMES:
             in_quote = character
             index += 1
             continue
-        if character == MODEL_HEADER_OPEN_PAREN:
+        if character == _MODEL_HEADER_OPEN_PAREN:
             depth += 1
-        elif character == MODEL_HEADER_CLOSE_PAREN:
+        elif character == _MODEL_HEADER_CLOSE_PAREN:
             depth = max(0, depth - 1)
-        elif character == MODEL_HEADER_COMMA and depth == 0:
+        elif character == _MODEL_HEADER_COMMA and depth == 0:
             items.append((item_start, index))
             item_start = index + 1
         index += 1
@@ -427,8 +436,8 @@ def _keyword_at(*, sql: str, keyword: str, index: int) -> bool:
         return False
     before: str = sql[index - 1] if index > 0 else " "
     after: str = sql[end] if end < len(sql) else " "
-    return not (before.isalnum() or before == SQL_IDENTIFIER_SEPARATOR) and not (
-        after.isalnum() or after == SQL_IDENTIFIER_SEPARATOR
+    return not (before.isalnum() or before == _SQL_IDENTIFIER_SEPARATOR) and not (
+        after.isalnum() or after == _SQL_IDENTIFIER_SEPARATOR
     )
 
 
@@ -450,7 +459,7 @@ class _ModelHeaderParser:
         self._index: int = 0
 
     def parse(self) -> dict[str, object]:
-        if self._peek().kind == MODEL_HEADER_END_TOKEN:
+        if self._peek().kind == _MODEL_HEADER_END_TOKEN:
             return {}
         values: dict[str, object] = self._parse_map(end_symbol=None)
         self._expect_end()
@@ -459,96 +468,96 @@ class _ModelHeaderParser:
     def _parse_map(self, *, end_symbol: str | None) -> dict[str, object]:
         values: dict[str, object] = {}
         while not self._is_at_end_symbol(end_symbol):
-            if self._match_symbol(MODEL_HEADER_COMMA):
+            if self._match_symbol(_MODEL_HEADER_COMMA):
                 continue
             key: str = self._consume_key()
-            if self._match_symbol(MODEL_HEADER_KEY_VALUE_SEPARATOR):
+            if self._match_symbol(_MODEL_HEADER_KEY_VALUE_SEPARATOR):
                 raise ModelHeaderSyntaxError(
                     f"unexpected ':' after key '{key}'; use SQLBuild syntax '{key} value'"
                 )
-            if self._is_at_end_symbol(end_symbol) or self._peek().kind == MODEL_HEADER_END_TOKEN:
+            if self._is_at_end_symbol(end_symbol) or self._peek().kind == _MODEL_HEADER_END_TOKEN:
                 raise ModelHeaderSyntaxError(
                     f"unexpected token '{key}' without a value; quote values with spaces"
                 )
             values[key] = (
                 self._parse_hook_field_value(key)
-                if key in MODEL_HEADER_HOOK_FIELD_NAMES
+                if key in _MODEL_HEADER_HOOK_FIELD_NAMES
                 else self._parse_value()
             )
-            self._match_symbol(MODEL_HEADER_COMMA)
+            self._match_symbol(_MODEL_HEADER_COMMA)
         if end_symbol is not None:
             self._consume_symbol(end_symbol)
         return values
 
     def _parse_value(self) -> object:
         token: _ModelHeaderToken = self._peek()
-        if token.kind == MODEL_HEADER_STRING_TOKEN:
+        if token.kind == _MODEL_HEADER_STRING_TOKEN:
             self._advance()
             return token.value
-        if token.kind == MODEL_HEADER_WORD_TOKEN:
+        if token.kind == _MODEL_HEADER_WORD_TOKEN:
             self._advance()
             if (
-                self._peek().kind == MODEL_HEADER_SYMBOL_TOKEN
-                and self._peek().value == MODEL_HEADER_OPEN_PAREN
+                self._peek().kind == _MODEL_HEADER_SYMBOL_TOKEN
+                and self._peek().value == _MODEL_HEADER_OPEN_PAREN
             ):
                 self._advance()
-                if token.value in MODEL_HEADER_RELATION_CALL_NAMES:
+                if token.value in _MODEL_HEADER_RELATION_CALL_NAMES:
                     return self._parse_relation_call(token.value)
-                if token.value in MODEL_HEADER_HOOK_CALL_NAMES:
+                if token.value in _MODEL_HEADER_HOOK_CALL_NAMES:
                     return self._parse_hook_call(token.value)
-                return {token.value: self._parse_map(end_symbol=MODEL_HEADER_CLOSE_PAREN)}
+                return {token.value: self._parse_map(end_symbol=_MODEL_HEADER_CLOSE_PAREN)}
             return _parse_word_value(token.value)
-        if self._match_symbol(MODEL_HEADER_OPEN_BRACKET):
+        if self._match_symbol(_MODEL_HEADER_OPEN_BRACKET):
             return self._parse_list()
-        if self._match_symbol(MODEL_HEADER_OPEN_PAREN):
-            return self._parse_map(end_symbol=MODEL_HEADER_CLOSE_PAREN)
+        if self._match_symbol(_MODEL_HEADER_OPEN_PAREN):
+            return self._parse_map(end_symbol=_MODEL_HEADER_CLOSE_PAREN)
         raise ModelHeaderSyntaxError(f"expected value at position {token.position}")
 
     def _parse_list(self) -> list[object]:
         values: list[object] = []
-        while not self._is_at_end_symbol(MODEL_HEADER_CLOSE_BRACKET):
-            if self._match_symbol(MODEL_HEADER_COMMA):
+        while not self._is_at_end_symbol(_MODEL_HEADER_CLOSE_BRACKET):
+            if self._match_symbol(_MODEL_HEADER_COMMA):
                 continue
             values.append(self._parse_value())
-            self._match_symbol(MODEL_HEADER_COMMA)
-        self._consume_symbol(MODEL_HEADER_CLOSE_BRACKET)
+            self._match_symbol(_MODEL_HEADER_COMMA)
+        self._consume_symbol(_MODEL_HEADER_CLOSE_BRACKET)
         return values
 
     def _parse_hook_field_value(self, field_name: str) -> list[object]:
-        if not self._match_symbol(MODEL_HEADER_OPEN_BRACKET):
+        if not self._match_symbol(_MODEL_HEADER_OPEN_BRACKET):
             token: _ModelHeaderToken = self._peek()
             raise ModelHeaderSyntaxError(
                 f"{field_name} must be a list of typed sql(...) or python(...) hook entries "
                 f"at position {token.position}"
             )
         values: list[object] = []
-        while not self._is_at_end_symbol(MODEL_HEADER_CLOSE_BRACKET):
-            if self._match_symbol(MODEL_HEADER_COMMA):
+        while not self._is_at_end_symbol(_MODEL_HEADER_CLOSE_BRACKET):
+            if self._match_symbol(_MODEL_HEADER_COMMA):
                 continue
             values.append(self._parse_hook_list_entry(field_name))
-            self._match_symbol(MODEL_HEADER_COMMA)
-        self._consume_symbol(MODEL_HEADER_CLOSE_BRACKET)
+            self._match_symbol(_MODEL_HEADER_COMMA)
+        self._consume_symbol(_MODEL_HEADER_CLOSE_BRACKET)
         return values
 
     def _parse_hook_list_entry(self, field_name: str) -> object:
         token: _ModelHeaderToken = self._peek()
-        if token.kind == MODEL_HEADER_STRING_TOKEN:
+        if token.kind == _MODEL_HEADER_STRING_TOKEN:
             self._advance()
             return token.value
-        if token.kind != MODEL_HEADER_WORD_TOKEN:
+        if token.kind != _MODEL_HEADER_WORD_TOKEN:
             raise ModelHeaderSyntaxError(
                 f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
             )
         self._advance()
         if (
-            self._peek().kind != MODEL_HEADER_SYMBOL_TOKEN
-            or self._peek().value != MODEL_HEADER_OPEN_PAREN
+            self._peek().kind != _MODEL_HEADER_SYMBOL_TOKEN
+            or self._peek().value != _MODEL_HEADER_OPEN_PAREN
         ):
             raise ModelHeaderSyntaxError(
                 f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
             )
         self._advance()
-        if token.value not in MODEL_HEADER_HOOK_CALL_NAMES:
+        if token.value not in _MODEL_HEADER_HOOK_CALL_NAMES:
             raise ModelHeaderSyntaxError(
                 f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
             )
@@ -556,41 +565,41 @@ class _ModelHeaderParser:
 
     def _parse_relation_call(self, name: str) -> str:
         token: _ModelHeaderToken = self._peek()
-        if token.kind != MODEL_HEADER_STRING_TOKEN:
+        if token.kind != _MODEL_HEADER_STRING_TOKEN:
             raise ModelHeaderSyntaxError(f"{name}(...) requires a double-quoted relation name")
         self._advance()
         relation_name: str = token.value.replace('"', '\\"')
-        self._consume_symbol(MODEL_HEADER_CLOSE_PAREN)
+        self._consume_symbol(_MODEL_HEADER_CLOSE_PAREN)
         return f'{name}("{relation_name}")'
 
     def _parse_hook_call(self, name: str) -> SqlHookEntry | PythonHookEntry:
-        if name == MODEL_HEADER_SQL_HOOK_CALL:
+        if name == _MODEL_HEADER_SQL_HOOK_CALL:
             statement_token: _ModelHeaderToken = self._peek()
-            if statement_token.kind != MODEL_HEADER_STRING_TOKEN:
+            if statement_token.kind != _MODEL_HEADER_STRING_TOKEN:
                 raise ModelHeaderSyntaxError("sql(...) requires a quoted SQL string")
             self._advance()
-            if self._match_symbol(MODEL_HEADER_COMMA):
+            if self._match_symbol(_MODEL_HEADER_COMMA):
                 raise ModelHeaderSyntaxError("sql(...) does not accept additional arguments")
-            self._consume_symbol(MODEL_HEADER_CLOSE_PAREN)
+            self._consume_symbol(_MODEL_HEADER_CLOSE_PAREN)
             return SqlHookEntry(statement=statement_token.value)
 
         hook_name_token: _ModelHeaderToken = self._peek()
-        if hook_name_token.kind != MODEL_HEADER_STRING_TOKEN:
+        if hook_name_token.kind != _MODEL_HEADER_STRING_TOKEN:
             raise ModelHeaderSyntaxError("python(...) requires a quoted hook name")
         self._advance()
         kwargs: dict[str, object] = {}
-        while self._match_symbol(MODEL_HEADER_COMMA):
-            if self._is_at_end_symbol(MODEL_HEADER_CLOSE_PAREN):
+        while self._match_symbol(_MODEL_HEADER_COMMA):
+            if self._is_at_end_symbol(_MODEL_HEADER_CLOSE_PAREN):
                 break
             key: str = self._consume_key()
-            self._consume_symbol(MODEL_HEADER_KEY_VALUE_SEPARATOR)
+            self._consume_symbol(_MODEL_HEADER_KEY_VALUE_SEPARATOR)
             kwargs[key] = self._parse_value()
-        self._consume_symbol(MODEL_HEADER_CLOSE_PAREN)
+        self._consume_symbol(_MODEL_HEADER_CLOSE_PAREN)
         return PythonHookEntry(name=hook_name_token.value, kwargs=kwargs)
 
     def _consume_key(self) -> str:
         token: _ModelHeaderToken = self._peek()
-        if token.kind != MODEL_HEADER_WORD_TOKEN:
+        if token.kind != _MODEL_HEADER_WORD_TOKEN:
             raise ModelHeaderSyntaxError(f"expected key at position {token.position}")
         self._advance()
         return token.value
@@ -598,12 +607,12 @@ class _ModelHeaderParser:
     def _is_at_end_symbol(self, symbol: str | None) -> bool:
         token: _ModelHeaderToken = self._peek()
         if symbol is None:
-            return token.kind == MODEL_HEADER_END_TOKEN
-        return token.kind == MODEL_HEADER_SYMBOL_TOKEN and token.value == symbol
+            return token.kind == _MODEL_HEADER_END_TOKEN
+        return token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == symbol
 
     def _match_symbol(self, symbol: str) -> bool:
         token: _ModelHeaderToken = self._peek()
-        if token.kind == MODEL_HEADER_SYMBOL_TOKEN and token.value == symbol:
+        if token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == symbol:
             self._advance()
             return True
         return False
@@ -616,7 +625,7 @@ class _ModelHeaderParser:
 
     def _expect_end(self) -> None:
         token: _ModelHeaderToken = self._peek()
-        if token.kind != MODEL_HEADER_END_TOKEN:
+        if token.kind != _MODEL_HEADER_END_TOKEN:
             raise ModelHeaderSyntaxError(
                 f"unexpected token '{token.value}' at position {token.position}"
             )
@@ -638,25 +647,25 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
         if character.isspace():
             index += 1
             continue
-        if character in MODEL_HEADER_SYMBOLS:
+        if character in _MODEL_HEADER_SYMBOLS:
             tokens.append(
-                _ModelHeaderToken(kind=MODEL_HEADER_SYMBOL_TOKEN, value=character, position=index)
+                _ModelHeaderToken(kind=_MODEL_HEADER_SYMBOL_TOKEN, value=character, position=index)
             )
             index += 1
             continue
-        if character == MODEL_HEADER_KEY_VALUE_SEPARATOR:
+        if character == _MODEL_HEADER_KEY_VALUE_SEPARATOR:
             tokens.append(
-                _ModelHeaderToken(kind=MODEL_HEADER_SYMBOL_TOKEN, value=character, position=index)
+                _ModelHeaderToken(kind=_MODEL_HEADER_SYMBOL_TOKEN, value=character, position=index)
             )
             index += 1
             continue
-        if character in MODEL_HEADER_QUOTE_NAMES:
+        if character in _MODEL_HEADER_QUOTE_NAMES:
             string_value: str
             next_index: int
             string_value, next_index = _read_quoted_string(header=header, start=index)
             tokens.append(
                 _ModelHeaderToken(
-                    kind=MODEL_HEADER_STRING_TOKEN, value=string_value, position=index
+                    kind=_MODEL_HEADER_STRING_TOKEN, value=string_value, position=index
                 )
             )
             index = next_index
@@ -667,13 +676,13 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
             next_character: str = header[next_index]
             if (
                 next_character.isspace()
-                or next_character in MODEL_HEADER_SYMBOLS
-                or next_character == MODEL_HEADER_KEY_VALUE_SEPARATOR
+                or next_character in _MODEL_HEADER_SYMBOLS
+                or next_character == _MODEL_HEADER_KEY_VALUE_SEPARATOR
             ):
                 break
-            if next_character in MODEL_HEADER_QUOTE_NAMES:
+            if next_character in _MODEL_HEADER_QUOTE_NAMES:
                 raise ModelHeaderSyntaxError(
-                    f"unexpected {MODEL_HEADER_QUOTE_NAMES[next_character]} quote inside "
+                    f"unexpected {_MODEL_HEADER_QUOTE_NAMES[next_character]} quote inside "
                     "bare value "
                     f"at position {next_index}; quote the whole value"
                 )
@@ -681,20 +690,20 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
         value = header[index:next_index]
         if not value:
             raise ModelHeaderSyntaxError(f"unexpected character '{character}' at position {index}")
-        tokens.append(_ModelHeaderToken(kind=MODEL_HEADER_WORD_TOKEN, value=value, position=index))
+        tokens.append(_ModelHeaderToken(kind=_MODEL_HEADER_WORD_TOKEN, value=value, position=index))
         index = next_index
-    tokens.append(_ModelHeaderToken(kind=MODEL_HEADER_END_TOKEN, value="", position=len(header)))
+    tokens.append(_ModelHeaderToken(kind=_MODEL_HEADER_END_TOKEN, value="", position=len(header)))
     return tokens
 
 
 def _read_quoted_string(*, header: str, start: int) -> tuple[str, int]:
     value_parts: list[str] = []
     quote: str = header[start]
-    quote_name: str = MODEL_HEADER_QUOTE_NAMES[quote]
+    quote_name: str = _MODEL_HEADER_QUOTE_NAMES[quote]
     index: int = start + 1
     while index < len(header):
         character: str = header[index]
-        if character == MODEL_HEADER_ESCAPE_CHARACTER:
+        if character == _MODEL_HEADER_ESCAPE_CHARACTER:
             if index + 1 >= len(header):
                 raise ModelHeaderSyntaxError(f"unterminated escape at position {index}")
             value_parts.append(header[index + 1])
@@ -708,14 +717,14 @@ def _read_quoted_string(*, header: str, start: int) -> tuple[str, int]:
 
 
 def _parse_word_value(value: str) -> object:
-    if value == MODEL_HEADER_TRUE_VALUE:
+    if value == _MODEL_HEADER_TRUE_VALUE:
         return True
-    if value == MODEL_HEADER_FALSE_VALUE:
+    if value == _MODEL_HEADER_FALSE_VALUE:
         return False
-    if value == MODEL_HEADER_NULL_VALUE:
+    if value == _MODEL_HEADER_NULL_VALUE:
         return None
-    if MODEL_HEADER_INTEGER_PATTERN.match(value):
+    if _MODEL_HEADER_INTEGER_PATTERN.match(value):
         return int(value)
-    if MODEL_HEADER_FLOAT_PATTERN.match(value):
+    if _MODEL_HEADER_FLOAT_PATTERN.match(value):
         return float(value)
     return value

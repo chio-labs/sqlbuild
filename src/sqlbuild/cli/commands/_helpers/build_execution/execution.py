@@ -4,13 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.cli.commands._helpers.build_planning.models import (
-    BuildCommandRequest,
-    BuildExecutionPreparation,
-    BuildInvocation,
-    BuildRunOutcome,
-    StandardLifecycleCallbacks,
-)
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_lifecycle import (
     prepare_standard_python_lifecycle,
 )
@@ -22,6 +15,13 @@ from sqlbuild.cli.commands._helpers.input.parsing import (
     parse_cursor_timestamp,
 )
 from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
+from sqlbuild.cli.commands.models import (
+    BuildCommandRequest,
+    BuildExecutionPreparation,
+    BuildInvocation,
+    BuildRunOutcome,
+    StandardLifecycleCallbacks,
+)
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )

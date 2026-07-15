@@ -11,7 +11,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeStatus,
     SkipMode,
 )
-from sqlbuild.executor.contracts.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.python_nodes._helpers.results import (
     build_python_node_failure_result,
     evaluate_python_node_fan_in,

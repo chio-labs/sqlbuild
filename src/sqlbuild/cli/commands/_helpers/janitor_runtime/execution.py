@@ -6,7 +6,7 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.cli.commands._helpers.janitor_runtime.models import (
+from sqlbuild.cli.commands.models import (
     JanitorCompileContext,
     JanitorConnectionContext,
     JanitorInvocation,

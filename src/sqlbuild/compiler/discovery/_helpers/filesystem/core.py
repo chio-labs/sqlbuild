@@ -14,8 +14,6 @@ from typing import get_type_hints
 
 from pydantic import ValidationError
 
-from sqlbuild.assets import get_asset_definition
-from sqlbuild.checks import get_check_definition
 from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
 from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery._helpers.sql.functions import parse_function_sql
@@ -65,20 +63,23 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     DiscoveredTaskFunction,
 )
-from sqlbuild.factories import get_factory_definition
-from sqlbuild.hooks import get_hook_definition
-from sqlbuild.loaders import LoaderDefinition, get_loader_definition
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.providers import Provider
+from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
+from sqlbuild.python_nodes.main.read_check_definition import read_check_definition
+from sqlbuild.python_nodes.main.read_factory_definition import read_factory_definition
+from sqlbuild.python_nodes.main.read_hook_definition import read_hook_definition
+from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition
+from sqlbuild.python_nodes.main.read_task_definition import read_task_definition
 from sqlbuild.python_nodes.models import (
     AssetDefinition,
     CheckDefinition,
     FactoryDefinition,
     HookDefinition,
+    LoaderDefinition,
     TaskDefinition,
 )
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
-from sqlbuild.tasks import get_task_definition
 
 _PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")
 _PYTHON_NODE_FACTORY_FOLDERS: tuple[str, ...] = (*_PYTHON_NODE_KIND_FOLDERS, "factories")
@@ -486,7 +487,7 @@ def discover_hook_functions(
         for _, value in inspect.getmembers(module, inspect.isfunction):
             if value.__module__ != module.__name__:
                 continue
-            hook_definition: HookDefinition | None = get_hook_definition(value)
+            hook_definition: HookDefinition | None = read_hook_definition(value)
             if hook_definition is None:
                 continue
             existing_path: Path | None = seen_names.get(hook_definition.name)
@@ -700,7 +701,7 @@ def _append_module_python_nodes(
     for _, value in inspect.getmembers(module, inspect.isfunction):
         if value.__module__ != module.__name__:
             continue
-        factory_definition: FactoryDefinition | None = get_factory_definition(value)
+        factory_definition: FactoryDefinition | None = read_factory_definition(value)
         if factory_definition is None:
             continue
         generated_functions: tuple[Callable[..., object], ...] = _call_factory(
@@ -739,7 +740,7 @@ def _append_python_node_function(
     provider_by_name: dict[str, DiscoveredProvider] | None = None,
 ) -> bool:
     resolved_provider_by_name: dict[str, DiscoveredProvider] = provider_by_name or {}
-    loader_definition: LoaderDefinition | None = get_loader_definition(function)
+    loader_definition: LoaderDefinition | None = read_loader_definition(function)
     if loader_definition is not None:
         _validate_python_node_kind(
             actual_kind="loader",
@@ -769,7 +770,7 @@ def _append_python_node_function(
             )
         )
         return True
-    task_definition: TaskDefinition | None = get_task_definition(function)
+    task_definition: TaskDefinition | None = read_task_definition(function)
     if task_definition is not None:
         _validate_python_node_kind(
             actual_kind="task",
@@ -798,7 +799,7 @@ def _append_python_node_function(
             )
         )
         return True
-    asset_definition: AssetDefinition | None = get_asset_definition(function)
+    asset_definition: AssetDefinition | None = read_asset_definition(function)
     if asset_definition is not None:
         _validate_python_node_kind(
             actual_kind="asset",
@@ -829,7 +830,7 @@ def _append_python_node_function(
             )
         )
         return True
-    check_definition: CheckDefinition | None = get_check_definition(function)
+    check_definition: CheckDefinition | None = read_check_definition(function)
     if check_definition is not None:
         _validate_python_node_kind(
             actual_kind="check",

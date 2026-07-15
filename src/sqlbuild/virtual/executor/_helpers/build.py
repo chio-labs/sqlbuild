@@ -95,9 +95,9 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import SnapshotsConfig
-from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
-from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.executor._helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor._helpers.rewrite import (
     build_destination_from_physical_relation,

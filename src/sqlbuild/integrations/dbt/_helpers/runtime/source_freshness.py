@@ -5,11 +5,6 @@ from __future__ import annotations
 import re
 from typing import cast
 
-from sqlbuild.integrations.dbt._helpers.runtime.constants import (
-    DBT_SOURCE_FRESHNESS_DAY_PERIODS,
-    DBT_SOURCE_FRESHNESS_HOUR_PERIODS,
-    DBT_SOURCE_FRESHNESS_MINUTE_PERIODS,
-)
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestSource
 from sqlbuild.spec.contracts.models import (
@@ -19,6 +14,9 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
+_DBT_SOURCE_FRESHNESS_DAY_PERIODS: frozenset[str] = frozenset({"day", "days"})
+_DBT_SOURCE_FRESHNESS_HOUR_PERIODS: frozenset[str] = frozenset({"hour", "hours"})
+_DBT_SOURCE_FRESHNESS_MINUTE_PERIODS: frozenset[str] = frozenset({"minute", "minutes"})
 _PLAIN_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -134,11 +132,11 @@ def _translate_duration(*, value: object, unique_id: str, field_name: str) -> st
 
 def _duration_unit(period: str) -> str | None:
     normalized: str = period.strip().lower()
-    if normalized in DBT_SOURCE_FRESHNESS_MINUTE_PERIODS:
+    if normalized in _DBT_SOURCE_FRESHNESS_MINUTE_PERIODS:
         return "m"
-    if normalized in DBT_SOURCE_FRESHNESS_HOUR_PERIODS:
+    if normalized in _DBT_SOURCE_FRESHNESS_HOUR_PERIODS:
         return "h"
-    if normalized in DBT_SOURCE_FRESHNESS_DAY_PERIODS:
+    if normalized in _DBT_SOURCE_FRESHNESS_DAY_PERIODS:
         return "d"
     return None
 

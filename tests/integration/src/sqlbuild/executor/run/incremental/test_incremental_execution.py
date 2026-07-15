@@ -11,13 +11,13 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.hooks.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
-from sqlbuild.executor.contracts.types import ExecutionPhase, ExecutionStatus
 from sqlbuild.executor.run._helpers.materializations.incremental import execute_incremental_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.helpers import (
     build_test_audit_gate_metadata,
     build_test_audit_plan_entry,

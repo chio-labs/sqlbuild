@@ -15,11 +15,6 @@ from sqlbuild.compiler.planner.models import SelectorExpansion
 from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
     resolve_sqlbuild_model_dbt_refs,
 )
-from sqlbuild.integrations.dbt._helpers.planning.constants import (
-    DBT_DATA_TEST_SELECTOR,
-    DBT_PATH_SELECTOR_SEPARATOR,
-    DBT_UNIT_TEST_SELECTOR,
-)
 from sqlbuild.integrations.dbt._helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt._helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
 from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
@@ -27,6 +22,7 @@ from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
     resolve_dbt_sql_test_target_names,
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
+from sqlbuild.integrations.dbt.constants import DBT_PATH_SELECTOR_SEPARATOR
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
@@ -38,6 +34,9 @@ from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
+
+_DBT_DATA_TEST_SELECTOR: str = "test_type:data"
+_DBT_UNIT_TEST_SELECTOR: str = "test_type:unit"
 
 
 def plan_dbt_interop_command(
@@ -260,9 +259,9 @@ def resolve_sqlbuild_test_actions(
     term: str
     for term in select:
         parsed: SelectorExpansion = split_selector_expansion(term)
-        if parsed.core == DBT_DATA_TEST_SELECTOR:
+        if parsed.core == _DBT_DATA_TEST_SELECTOR:
             has_data_selector = True
-        elif parsed.core == DBT_UNIT_TEST_SELECTOR:
+        elif parsed.core == _DBT_UNIT_TEST_SELECTOR:
             has_unit_selector = True
     if has_data_selector and not has_unit_selector:
         return (DbtInteropSqlbuildTestAction.AUDIT,)

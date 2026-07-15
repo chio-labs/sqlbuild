@@ -14,9 +14,9 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
+from sqlbuild.runtime.contracts.main.open_connection import open_connection_with_hooks
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.planner._helpers.bound_state import (
-    open_planning_connection,
     read_virtual_bound_state,
     resolve_virtual_environment_name,
 )
@@ -60,12 +60,10 @@ def run_virtual_plan_pipeline(
         cli_vars=resolved.cli_vars,
         external_sql_reference_resolver=resolved.external_sql_reference_resolver,
     )
-    connection: Any = open_planning_connection(
+    connection: Any = open_connection_with_hooks(
         adapter=adapter,
         connection_config=connection_config,
-        on_connection_start=resolved_hooks.on_connection_start,
-        on_connection_complete=resolved_hooks.on_connection_complete,
-        on_connection_error=resolved_hooks.on_connection_error,
+        hooks=resolved_hooks,
     )
     try:
         bound: VirtualBoundState = read_virtual_bound_state(

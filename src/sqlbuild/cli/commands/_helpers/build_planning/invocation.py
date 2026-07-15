@@ -6,10 +6,6 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.build_planning.models import (
-    BuildCommandRequest,
-    BuildInvocation,
-)
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
@@ -17,8 +13,12 @@ from sqlbuild.cli.commands._helpers.runtime.mode_policy import (
     enforce_no_defer_to_in_virtual_mode,
     enforce_virtual_only_flags_in_virtual_mode,
 )
-from sqlbuild.cli.commands._helpers.runtime.models import AdapterConnectionContext
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import (
+    AdapterConnectionContext,
+    BuildCommandRequest,
+    BuildInvocation,
+)
 from sqlbuild.cli.progress.main.build_command_progress_reporters import (
     build_command_progress_reporters,
 )
@@ -27,10 +27,10 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.spec.contracts.main.resolve_effective_force import resolve_effective_force
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import TargetConfig
-from sqlbuild.spec.resolution.main.resolve_effective_force import resolve_effective_force
-from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
-from sqlbuild.spec.resolution.main.resolve_target_name import resolve_target_name
 
 
 def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation:

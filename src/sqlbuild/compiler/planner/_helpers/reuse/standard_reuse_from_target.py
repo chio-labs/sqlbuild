@@ -27,8 +27,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
-from sqlbuild.spec.resolution.main.resolve_target_config import resolve_target_config
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 
