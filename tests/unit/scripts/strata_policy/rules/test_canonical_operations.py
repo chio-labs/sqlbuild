@@ -64,6 +64,12 @@ def test_given_import_when_checking_color_entry_then_matches_contract(
             expected_fault_count=1,
         ),
         CustomRuleTestCase(
+            description="qualified dbt reference comparison faults",
+            path="src/sqlbuild/integrations/dbt/_helpers/planning/ref_scan.py",
+            source=("is_dbt = reference.ref_kind == references.SqlReferenceKind.DBT_REF\n"),
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
             description="central dbt reference comparison passes",
             path="src/sqlbuild/integrations/dbt/_helpers/manifest/sqlbuild_refs.py",
             source="is_dbt = reference.ref_kind == SqlReferenceKind.DBT_REF\n",
@@ -99,6 +105,15 @@ def test_given_dbt_code_when_checking_reference_resolution_then_matches_contract
             path="src/sqlbuild/integrations/dbt/_helpers/planning/projection.py",
             source="key = GraphNodeKey(node_type='dbt', node_name='model')\n",
             expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="qualified graph key construction faults per call",
+            path="src/sqlbuild/integrations/dbt/_helpers/planning/projection.py",
+            source=(
+                "graph = models.GraphNodeKey(node_type='dbt', node_name='model')\n"
+                "stale = models.SelectionStalenessNodeKey(node_type='dbt', node_name='model')\n"
+            ),
+            expected_fault_count=2,
         ),
         CustomRuleTestCase(
             description="central graph key construction passes",
@@ -223,6 +238,14 @@ def test_given_freshness_code_when_checking_batch_write_then_matches_contract(
             source="SOURCE_FRESHNESS = 'table'\nsql = 'INSERT INTO table VALUES (1)'\n",
             expected_fault_count=0,
         ),
+        CustomRuleTestCase(
+            description="tooling freshness INSERT faults",
+            path="scripts/example/main/probe.py",
+            source="SOURCE_FRESHNESS = 'table'\nsql = 'INSERT INTO table VALUES (1)'\n",
+            expected_fault_count=1,
+            scope="tooling",
+            scope_root="scripts",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -259,6 +282,12 @@ def test_given_freshness_code_when_checking_sql_ownership_then_matches_contract(
                 """
             ),
             expected_fault_count=2,
+        ),
+        CustomRuleTestCase(
+            description="qualified secondary macro call faults",
+            path="src/sqlbuild/example/main/build.py",
+            source="loaded = macros.load_project_macros(())\n",
+            expected_fault_count=1,
         ),
         CustomRuleTestCase(
             description="compile input macro load passes",

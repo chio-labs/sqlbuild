@@ -185,7 +185,7 @@ def provider_public_surface(*, module: ast.Module, ctx: RuleContext) -> list[Fau
     remediation="Move _helpers/, classes/, or shared/ beside main/.",
 )
 def main_support_placement(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
-    if ctx.scope() != ROOT_SCOPE_NAME:
+    if ctx.scope() not in POLICY_EVALUATION_SCOPES:
         return []
     parts: tuple[str, ...] = ctx.repo_relative_parts()
     for index, part in enumerate(parts[:-1]):

@@ -64,6 +64,24 @@ def test_given_module_when_checking_dev_tooling_location_then_matches_contract(
             expected_fault_count=1,
         ),
         CustomRuleTestCase(
+            description="common module faults",
+            path="src/sqlbuild/example/main/common.py",
+            source="def build() -> None:\n    pass\n",
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="helpers module faults",
+            path="src/sqlbuild/example/helpers.py",
+            source="def build() -> None:\n    pass\n",
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="adapter-local helpers module faults",
+            path="src/sqlbuild/adapters/clickhouse/helpers.py",
+            source="def render_clickhouse_sql() -> str:\n    return 'SELECT 1'\n",
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
             description="domain module passes",
             path="src/sqlbuild/example/main/build.py",
             source="def build() -> None:\n    pass\n",
@@ -183,9 +201,18 @@ def test_given_client_module_when_checking_class_count_then_matches_contract(
             expected_fault_count=1,
         ),
         CustomRuleTestCase(
-            description="client class-only module passes",
+            description="client imports and class methods pass",
             path="src/sqlbuild/adapters/example/client.py",
-            source="class ExampleClient:\n    pass\n",
+            source=dedent(
+                """
+                from sqlbuild.adapters.example.models import ExampleConfig
+
+                class ExampleClient:
+                    @classmethod
+                    def from_config(cls, config: ExampleConfig) -> "ExampleClient":
+                        return cls()
+                """
+            ),
             expected_fault_count=0,
         ),
     ],
@@ -329,6 +356,26 @@ def test_given_provider_module_when_checking_surface_then_matches_contract(
             path="src/sqlbuild/example/main/_helpers/build.py",
             source="def build() -> None:\n    pass\n",
             expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="shared package below main faults",
+            path="src/sqlbuild/example/main/shared/__init__.py",
+            source="",
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="CLI shared package below main faults",
+            path="src/sqlbuild/cli/commands/main/shared/__init__.py",
+            source="",
+            expected_fault_count=1,
+        ),
+        CustomRuleTestCase(
+            description="tooling support package below main faults",
+            path="scripts/example/main/_helpers/build.py",
+            source="def build() -> None:\n    pass\n",
+            expected_fault_count=1,
+            scope="tooling",
+            scope_root="scripts",
         ),
         CustomRuleTestCase(
             description="flat main entry passes",
