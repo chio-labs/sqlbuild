@@ -10,12 +10,33 @@ from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.providers import Provider
-from sqlbuild.shared.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
-from sqlbuild.shared.types import PythonCheckSeverity
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.schema import SchemaModelEntry, SchemaSeedEntry, SourceLocation
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
+from sqlbuild.python_nodes.types import PythonCheckSeverity
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    ProjectConfig,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SourceColumnEntry,
+    SourceEntry,
+    SourceLocation,
+)
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
+
+
+@dataclass(frozen=True)
+class SqlHookEntry:
+    """A model lifecycle hook that executes SQL."""
+
+    statement: str
+
+
+@dataclass(frozen=True)
+class PythonHookEntry:
+    """A model lifecycle hook that invokes a discovered Python hook."""
+
+    name: str
+    kwargs: dict[str, object]
 
 
 @dataclass(frozen=True)

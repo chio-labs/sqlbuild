@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
@@ -21,6 +21,7 @@ from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     WriteSourceFreshnessIndexTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.source_freshness.main.helpers import (
+    FailingSourceFreshnessExecute,
     FakeSourceFreshnessExecute,
     FakeSourceFreshnessWriteExecute,
     render_create_source_freshness_index_sqls,
@@ -186,7 +187,7 @@ def test_given_read_failure_when_reading_source_freshness_then_raises_operator_g
     with pytest.raises(SourceFreshnessInputError) as exc_info:
         read_latest_source_freshness(
             connection=object(),
-            execute=FakeSourceFreshnessExecute(rows=[], read_error=test_case.read_error),
+            execute=FailingSourceFreshnessExecute(read_error=test_case.read_error),
             table_exists=True,
             database=None,
             schema="main",

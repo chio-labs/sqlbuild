@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.executor.clone.helpers.operations import clone_relation, recreate_view
+from sqlbuild.executor.clone._helpers.operations import clone_relation, recreate_view
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
-from sqlbuild.shared.models import RelationLookup
+from sqlbuild.executor.clone.types import CloneItemCallback
 
 
 def _ensure_destination_schemas(
@@ -29,7 +29,7 @@ def _ensure_destination_schemas(
     recorder: StatementRecorder = StatementRecorder()
     for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
         adapter.ensure_schema(
-            destination_connection,
+            connection=destination_connection,
             database=database,
             schema=schema,
             statement_recorder=recorder,
@@ -46,7 +46,7 @@ def execute_clone(
     origin_connection: Any,
     destination_connection: Any,
     hard_copy: bool,
-    on_item: Callable[[int, int, CloneItemResult], None] | None = None,
+    on_item: CloneItemCallback | None = None,
 ) -> CloneExecutionResult:
     origin_models_by_name: dict[str, ModelPlanEntry] = {
         entry.name: entry for entry in origin_model_entries
@@ -118,6 +118,6 @@ def execute_clone(
             )
         results.append(item_result)
         if on_item is not None:
-            on_item(index, total, item_result)
+            on_item(index=index, total=total, item=item_result)
 
     return CloneExecutionResult(item_results=tuple(results))

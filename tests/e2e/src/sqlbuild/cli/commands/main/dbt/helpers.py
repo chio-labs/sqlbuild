@@ -4,10 +4,10 @@ import base64
 import json
 import os
 import pty
-import select
 import subprocess
-import time
-from collections.abc import Mapping, Sequence
+import threading
+from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 from pathlib import Path
 from shutil import copytree
 from typing import cast
@@ -25,23 +25,21 @@ DBT_INTEROP_FIXTURE_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "dbt_
 def dbt_executable() -> str:
     """Return the dbt executable for e2e tests, honoring DBT_EXECUTABLE."""
 
-    override: str | None = os.environ.get("DBT_EXECUTABLE")
-    if override is not None and override.strip():
-        return override.strip()
-    return "dbt"
+    return os.environ.get("DBT_EXECUTABLE", "dbt").strip() or "dbt"
 
 
 def skip_unless_dbt_is_runnable() -> None:
     """Skip e2e dbt tests when the dbt CLI is unavailable."""
 
-    result: subprocess.CompletedProcess[str] = subprocess.run(
-        (dbt_executable(), "--version"),
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    if result.returncode != 0:
-        pytest.skip(f"dbt CLI is not runnable: {result.stderr or result.stdout}")
+    try:
+        subprocess.run(
+            (dbt_executable(), "--version"),
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as error:
+        pytest.skip(f"dbt CLI is not runnable: {error.stderr or error.stdout}")
 
 
 def prepare_dbt_init_duckdb_workspace(*, tmp_path: Path, workspace_name: str) -> Path:
@@ -99,8 +97,7 @@ def initialize_dbt_init_git_repo(*, workspace: Path, production_ref: str) -> Non
     _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=workspace)
     _run_git(args=("add", "."), cwd=workspace)
     _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
-    if production_ref != "main":
-        _run_git(args=("branch", production_ref), cwd=workspace)
+    _run_git(args=("update-ref", f"refs/heads/{production_ref}", "HEAD"), cwd=workspace)
     _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
 
 
@@ -144,12 +141,21 @@ def prepare_dbt_diff_workspace(
         include_unique_key=include_unique_key,
         include_cursor_meta=include_cursor_meta,
     )
-    if include_second_model:
-        _write_dbt_diff_customers_model(workspace=workspace)
-    if include_view_model:
-        write_dbt_clone_summary_view_model(workspace=workspace, amount_cents=900)
-    if include_defer_clone_chain:
-        write_dbt_defer_clone_chain_models(workspace=workspace)
+    for writer in {
+        False: (),
+        True: (_write_dbt_diff_customers_model,),
+    }[include_second_model]:
+        writer(workspace=workspace)
+    for writer in {
+        False: (),
+        True: (write_dbt_clone_summary_view_model,),
+    }[include_view_model]:
+        writer(workspace=workspace, amount_cents=900)
+    for writer in {
+        False: (),
+        True: (write_dbt_defer_clone_chain_models,),
+    }[include_defer_clone_chain]:
+        writer(workspace=workspace)
     (profiles_dir / "profiles.yml").write_text(
         "analytics:\n"
         "  target: dev\n"
@@ -164,13 +170,14 @@ def prepare_dbt_diff_workspace(
         "      schema: prod\n",
         encoding="utf-8",
     )
-    production_ref_block: str = (
-        "\n[dbt.production_ref]\n"
-        f'git_ref = "{production_ref_git_ref}"\n'
-        'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n'
-        if include_production_ref
-        else ""
-    )
+    production_ref_block: str = {
+        False: "",
+        True: (
+            "\n[dbt.production_ref]\n"
+            f'git_ref = "{production_ref_git_ref}"\n'
+            'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n'
+        ),
+    }[include_production_ref]
     (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
         'name = "analytics_sqb"\n'
         'adapter = "duckdb"\n'
@@ -260,13 +267,14 @@ def write_dbt_diff_orders_model(
 ) -> None:
     """Write the dbt orders model used by diff E2Es."""
 
-    config_lines: list[str] = ["    materialized='table'"]
-    if include_unique_key:
-        config_lines.append("    unique_key='order_id'")
-    if include_cursor_meta:
-        config_lines.append(
-            "    meta={'sqlbuild': {'cursor': 'updated_at', 'cursor_type': 'timestamp'}}"
-        )
+    config_lines: list[str] = [
+        "    materialized='table'",
+        *{False: (), True: ("    unique_key='order_id'",)}[include_unique_key],
+        *{
+            False: (),
+            True: ("    meta={'sqlbuild': {'cursor': 'updated_at', 'cursor_type': 'timestamp'}}",),
+        }[include_cursor_meta],
+    ]
     config_block: str = "{{ config(\n" + ",\n".join(config_lines) + "\n) }}\n"
     selects: tuple[str, ...] = tuple(
         f"select {order_id} as order_id, {amount_cents} as amount_cents, "
@@ -299,6 +307,18 @@ def _initialize_dbt_diff_git(*, workspace: Path) -> None:
     _run_git(args=("branch", "prod"), cwd=workspace)
 
 
+def _capture_pty_output(
+    *, master_fd: int, output_parts: list[bytes], reader_done: threading.Event
+) -> None:
+    try:
+        for chunk in iter(partial(os.read, master_fd, 4096), b""):
+            output_parts.append(chunk)
+    except OSError:
+        return
+    finally:
+        reader_done.set()
+
+
 def run_sqb_with_pty(
     *, command: tuple[str, ...], project_dir: Path, input_text: str, timeout_seconds: float = 60.0
 ) -> subprocess.CompletedProcess[str]:
@@ -320,36 +340,30 @@ def run_sqb_with_pty(
     )
     os.close(slave_fd)
     output_parts: list[bytes] = []
-    input_written: bool = False
-    deadline: float = time.monotonic() + timeout_seconds
+    reader_done: threading.Event = threading.Event()
+    reader: threading.Thread = threading.Thread(
+        target=_capture_pty_output,
+        kwargs={"master_fd": master_fd, "output_parts": output_parts, "reader_done": reader_done},
+        daemon=True,
+    )
+    reader.start()
     try:
-        while process.poll() is None:
-            if time.monotonic() > deadline:
-                process.kill()
-                raise subprocess.TimeoutExpired(command, timeout_seconds)
-            readable: list[int]
-            readable, _, _ = select.select([master_fd], [], [], 0.05)
-            if readable:
-                try:
-                    output_parts.append(os.read(master_fd, 4096))
-                except OSError:
-                    break
-            if not input_written:
-                os.write(master_fd, input_text.encode())
-                input_written = True
-        while True:
-            readable, _, _ = select.select([master_fd], [], [], 0)
-            if not readable:
-                break
-            try:
-                output_parts.append(os.read(master_fd, 4096))
-            except OSError:
-                break
+        os.write(master_fd, input_text.encode())
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        raise subprocess.TimeoutExpired(command, timeout_seconds) from None
     finally:
+        reader_done.wait(timeout=1.0)
         os.close(master_fd)
+        reader.join(timeout=1.0)
     output: str = b"".join(output_parts).decode(errors="replace")
     return subprocess.CompletedProcess(
-        args=("sqb", *command), returncode=process.returncode or 0, stdout=output, stderr=""
+        args=("sqb", *command),
+        returncode=cast(int, process.returncode),
+        stdout=output,
+        stderr="",
     )
 
 
@@ -359,11 +373,9 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
     root_dir: Path = tmp_path / "dbt_interop"
     copytree(DBT_INTEROP_FIXTURE_DIR, root_dir)
     local_config_path: Path = root_dir / "sqlbuild_project" / "sqlbuild_local.toml"
-    if local_config_path.exists():
-        local_config_path.unlink()
+    local_config_path.unlink(missing_ok=True)
     db_path: Path = root_dir / "sqlbuild_project" / "dbt_interop.duckdb"
-    if db_path.exists():
-        db_path.unlink()
+    db_path.unlink(missing_ok=True)
     profiles_path: Path = root_dir / "profiles" / "profiles.yml"
     profiles_path.write_text(
         "analytics:\n"
@@ -1322,11 +1334,14 @@ def _write_local_dbt_package(*, project_dir: Path, include_seed: bool = False) -
         "sources:\n  - name: raw\n    schema: finance_raw\n    tables:\n      - name: orders\n",
         encoding="utf-8",
     )
-    if include_seed:
+    seed_contents: str
+    for seed_contents in {False: (), True: ("country_code,country_name\nFR,France\n",)}[
+        include_seed
+    ]:
         package_seeds_dir: Path = package_dir / "seeds"
         package_seeds_dir.mkdir()
         package_seeds_dir.joinpath("countries.csv").write_text(
-            "country_code,country_name\nFR,France\n",
+            seed_contents,
             encoding="utf-8",
         )
 
@@ -1489,14 +1504,13 @@ def assert_dbt_lineage_json_payload(
     assert isinstance(nodes_payload, Sequence)
     assert isinstance(edges_payload, Sequence)
     assert isinstance(focus_payload, Sequence)
-    nodes: list[Mapping[str, object]] = [
-        cast(Mapping[str, object], node) for node in nodes_payload if isinstance(node, dict)
-    ]
+    assert all(isinstance(node, dict) for node in nodes_payload)
+    assert all(isinstance(edge, dict) for edge in edges_payload)
+    nodes: list[Mapping[str, object]] = [cast(Mapping[str, object], node) for node in nodes_payload]
     assert [node["id"] for node in nodes] == list(expected_node_ids)
     assert [
         (cast(Mapping[str, object], edge)["from"], cast(Mapping[str, object], edge)["to"])
         for edge in edges_payload
-        if isinstance(edge, dict)
     ] == list(expected_edges)
     assert list(focus_payload) == list(expected_focus)
     assert payload["direction"] == expected_direction
@@ -1525,6 +1539,7 @@ def assert_dbt_column_lineage_json_payload(
     assert isinstance(target_payload, dict)
     assert isinstance(trace_payload, Sequence)
     assert isinstance(metadata_payload, dict)
+    assert all(isinstance(edge, dict) for edge in trace_payload)
     target: Mapping[str, object] = cast(Mapping[str, object], target_payload)
     metadata: Mapping[str, object] = cast(Mapping[str, object], metadata_payload)
     assert (
@@ -1542,7 +1557,6 @@ def assert_dbt_column_lineage_json_payload(
             ),
         )
         for edge in trace_payload
-        if isinstance(edge, dict)
     ] == list(expected_edges)
     assert payload["direction"] == expected_direction
     assert metadata["warnings"] == list(expected_warnings), metadata["warnings"]
@@ -1608,8 +1622,9 @@ def apply_dbt_lineage_error_setup(
 ) -> None:
     """Apply optional setup for a dbt lineage error E2E."""
 
-    if test_case.setup is not None:
-        test_case.setup(project_dir)
+    setup: Callable[[Path], None] | None
+    for setup in {False: (), True: (test_case.setup,)}[test_case.setup is not None]:
+        cast(Callable[[Path], None], setup)(project_dir)
 
 
 def query_dbt_phase11_source_freshness_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
@@ -1618,14 +1633,19 @@ def query_dbt_phase11_source_freshness_rows(*, project_dir: Path) -> list[tuple[
     from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, table_exists
 
     db_path: Path = project_dir / "dbt_phase11.duckdb"
-    if not table_exists(db_path=db_path, table_name="_sqlbuild_source_freshness"):
-        return []
+    table_is_present: bool = table_exists(db_path=db_path, table_name="_sqlbuild_source_freshness")
     return query_duckdb(
         db_path=db_path,
-        sql=(
-            "SELECT source_name, data_version FROM main._sqlbuild_source_freshness "
-            "ORDER BY source_name, data_version"
-        ),
+        sql={
+            False: (
+                "SELECT CAST(NULL AS VARCHAR) AS source_name, "
+                "CAST(NULL AS VARCHAR) AS data_version WHERE FALSE"
+            ),
+            True: (
+                "SELECT source_name, data_version FROM main._sqlbuild_source_freshness "
+                "ORDER BY source_name, data_version"
+            ),
+        }[table_is_present],
     )
 
 
@@ -1637,14 +1657,21 @@ def query_dbt_phase11_schema_source_freshness_rows(
     from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, table_exists
 
     db_path: Path = project_dir / "dbt_phase11.duckdb"
-    if not table_exists(db_path=db_path, table_name="_sqlbuild_source_freshness", schema=schema):
-        return []
+    table_is_present: bool = table_exists(
+        db_path=db_path, table_name="_sqlbuild_source_freshness", schema=schema
+    )
     return query_duckdb(
         db_path=db_path,
-        sql=(
-            f"SELECT source_name, data_version FROM {schema}._sqlbuild_source_freshness "
-            "ORDER BY source_name, data_version"
-        ),
+        sql={
+            False: (
+                "SELECT CAST(NULL AS VARCHAR) AS source_name, "
+                "CAST(NULL AS VARCHAR) AS data_version WHERE FALSE"
+            ),
+            True: (
+                f"SELECT source_name, data_version FROM {schema}._sqlbuild_source_freshness "
+                "ORDER BY source_name, data_version"
+            ),
+        }[table_is_present],
     )
 
 
@@ -1831,9 +1858,10 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
         "        tests: [not_null]\n",
         encoding="utf-8",
     )
-    replay_line: str = (
-        f'replay_on_change = "{replay_on_change}"\n' if replay_on_change is not None else ""
-    )
+    replay_line: str = {
+        False: "",
+        True: f'replay_on_change = "{replay_on_change}"\n',
+    }[replay_on_change is not None]
     (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
         'name = "dbt_phase11"\n'
         'adapter = "duckdb"\n'
@@ -1946,7 +1974,10 @@ def seed_dbt_phase11_sources(*, project_dir: Path, stale_orders: bool) -> None:
 
     from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb
 
-    loaded_at: str = "2000-01-01 00:00:00" if stale_orders else "2999-01-01 00:00:00"
+    loaded_at: str = {
+        False: "2999-01-01 00:00:00",
+        True: "2000-01-01 00:00:00",
+    }[stale_orders]
     db_path: Path = project_dir / "dbt_phase11.duckdb"
     execute_duckdb(
         db_path=db_path,
@@ -2011,10 +2042,31 @@ def assert_dbt_local_replay_rows(
 ) -> None:
     """Assert replayed rows in the retained local DuckDB for a dbt scenario."""
 
+    assertion_strategy: Callable[..., None] = {
+        False: _skip_dbt_local_replay_row_assertion,
+        True: _assert_dbt_local_replay_row_query,
+    }[bool(rows_sql)]
+    assertion_strategy(
+        project_dir=project_dir,
+        scenario_name=scenario_name,
+        rows_sql=rows_sql,
+        expected_rows=expected_rows,
+    )
+
+
+def _skip_dbt_local_replay_row_assertion(**_kwargs: object) -> None:
+    return
+
+
+def _assert_dbt_local_replay_row_query(
+    *,
+    project_dir: Path,
+    scenario_name: str,
+    rows_sql: str,
+    expected_rows: tuple[tuple[object, ...], ...],
+) -> None:
     from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
 
-    if not rows_sql:
-        return
     db_path: Path = project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb"
     rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
     assert tuple(rows) == expected_rows

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
-from sqlbuild.executor.testing.helpers.comparison_sql import (
+from sqlbuild.executor.testing._helpers.comparison_sql import (
     format_sql,
     lift_step_ctes,
     unique_cte_suffix,
@@ -13,8 +13,8 @@ from sqlbuild.executor.testing.helpers.comparison_sql import (
 
 
 def build_sql_test_comparison_sql(
-    test_entry: SqlTestPlanEntry,
     *,
+    test_entry: SqlTestPlanEntry,
     set_difference_operator: str = "EXCEPT",
     sql_analysis_dialect: str | None = None,
 ) -> str:
@@ -39,8 +39,8 @@ def build_sql_test_comparison_sql(
         expected_cte: str = f"__expected__{cte_suffix}"
         actual_sql: str
         actual_sql, lifted_ctes = lift_step_ctes(
-            step.resolved_sql,
-            lifted_ctes,
+            sql=step.resolved_sql,
+            lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
         )
         comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
@@ -48,8 +48,8 @@ def build_sql_test_comparison_sql(
             continue
         expected_sql: str
         expected_sql, lifted_ctes = lift_step_ctes(
-            step.expected_cte_sql,
-            lifted_ctes,
+            sql=step.expected_cte_sql,
+            lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
         )
         comparison_ctes.append(f"{expected_cte} AS ({expected_sql})")
@@ -73,8 +73,8 @@ def build_sql_test_comparison_sql(
         assertion_cte: str = f"__assert__{assertion_suffix}"
         assertion_sql: str
         assertion_sql, lifted_ctes = lift_step_ctes(
-            assertion.resolved_sql,
-            lifted_ctes,
+            sql=assertion.resolved_sql,
+            lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
         )
         comparison_ctes.append(f"{assertion_cte} AS ({assertion_sql})")
@@ -92,7 +92,7 @@ def build_sql_test_comparison_sql(
         return ""
     comparison_sql: str = f"WITH {', '.join(cte_parts)} " + " UNION ALL ".join(select_parts)
     return format_sql(
-        comparison_sql,
+        sql=comparison_sql,
         sql_analysis_dialect=sql_analysis_dialect,
         sql_analysis_enabled=test_entry.sql_analysis_enabled,
     )

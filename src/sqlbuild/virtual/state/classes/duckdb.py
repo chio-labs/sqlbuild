@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
 from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
 from sqlbuild.executor.node_results.models import (
@@ -12,9 +13,14 @@ from sqlbuild.executor.node_results.models import (
     NodeResultQuery,
     NodeResultRecord,
 )
+from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
+from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
+    DUCKDB_DATETIME_TYPE_TOKEN,
+    DUCKDB_INTEGER_TYPE_TOKEN,
+    DUCKDB_TIMESTAMP_TYPE_TOKEN,
     FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
     MODEL_VERSION_TABLE,
@@ -25,6 +31,7 @@ from sqlbuild.virtual.state.constants import (
     RECONCILE_EVENT_TABLE,
     SEED_VERSION_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
+    STATE_BOOLEAN_TRUE,
     STATE_MIGRATION_EVENTS_TABLE,
     STATE_OPERATION_EVENT_TABLE,
     STATE_OPERATION_TABLE,
@@ -44,8 +51,6 @@ from sqlbuild.virtual.state.exceptions import (
     StateBackupNotFoundError,
     StateSchemaInvalidError,
 )
-from sqlbuild.virtual.state.helpers.events import backup_id, event_id
-from sqlbuild.virtual.state.helpers.validation import build_validation_result
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
@@ -98,12 +103,13 @@ class DuckDbStateBackend(StateBackend):
     def close(self, connection: Any) -> None:
         connection.close()
 
-    def initialize(self, connection: Any, *, schema: str, sqlbuild_version: str) -> None:
+    def initialize(self, *, connection: Any, schema: str, sqlbuild_version: str) -> None:
         connection.execute("BEGIN")
         try:
             connection.execute(f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier(schema)}")
             connection.execute(
-                f"CREATE TABLE IF NOT EXISTS {self._qualified_name(schema, STATE_VERSION_TABLE)} ("
+                "CREATE TABLE IF NOT EXISTS "
+                f"{self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)} ("
                 "schema_version INTEGER NOT NULL, "
                 "sqlbuild_version TEXT NOT NULL, "
                 "updated_at TIMESTAMP NOT NULL"
@@ -111,7 +117,7 @@ class DuckDbStateBackend(StateBackend):
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS "
-                f"{self._qualified_name(schema, STATE_MIGRATION_EVENTS_TABLE)} ("
+                f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} ("
                 "event_id TEXT NOT NULL, "
                 "action TEXT NOT NULL, "
                 "backup_id TEXT, "
@@ -120,15 +126,17 @@ class DuckDbStateBackend(StateBackend):
                 "created_at TIMESTAMP NOT NULL"
                 ")"
             )
-            self._create_additional_state_tables(connection, schema=schema)
-            connection.execute(f"DELETE FROM {self._qualified_name(schema, STATE_VERSION_TABLE)}")
+            self._create_additional_state_tables(connection=connection, schema=schema)
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, STATE_VERSION_TABLE)} "
+                f"DELETE FROM {self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)}"
+            )
+            connection.execute(
+                f"INSERT INTO {self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)} "
                 "(schema_version, sqlbuild_version, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
                 [CURRENT_STATE_SCHEMA_VERSION, sqlbuild_version],
             )
             self._record_event(
-                connection,
+                connection=connection,
                 schema=schema,
                 action=StateMigrationAction.INIT,
                 backup_id_value=None,
@@ -140,7 +148,7 @@ class DuckDbStateBackend(StateBackend):
             connection.execute("ROLLBACK")
             raise
 
-    def validate_schema(self, connection: Any, *, schema: str) -> StateSchemaValidationResult:
+    def inspect_schema(self, *, connection: Any, schema: str) -> StateSchemaValidationResult:
         tables: set[str] = {
             row[0]
             for row in connection.execute(
@@ -170,8 +178,10 @@ class DuckDbStateBackend(StateBackend):
             existing_indexes_by_table=indexes_by_table,
         )
 
-    def create_backup(self, connection: Any, *, schema: str) -> str:
-        validation: StateSchemaValidationResult = self.validate_schema(connection, schema=schema)
+    def create_backup(self, *, connection: Any, schema: str) -> str:
+        validation: StateSchemaValidationResult = self.inspect_schema(
+            connection=connection, schema=schema
+        )
         if not validation.valid:
             raise StateSchemaInvalidError("Cannot backup invalid state schema")
         backup_id_value: str = backup_id()
@@ -185,11 +195,12 @@ class DuckDbStateBackend(StateBackend):
             table_name: str
             for table_name in STATE_TABLES:
                 connection.execute(
-                    f"CREATE TABLE {self._qualified_name(backup_schema, table_name)} AS "
-                    f"SELECT * FROM {self._qualified_name(schema, table_name)}"
+                    f"CREATE TABLE {self._qualified_name(schema=backup_schema, table=table_name)} "
+                    "AS "
+                    f"SELECT * FROM {self._qualified_name(schema=schema, table=table_name)}"
                 )
             self._record_event(
-                connection,
+                connection=connection,
                 schema=schema,
                 action=StateMigrationAction.BACKUP,
                 backup_id_value=backup_id_value,
@@ -202,30 +213,32 @@ class DuckDbStateBackend(StateBackend):
             raise
         return backup_id_value
 
-    def rollback(self, connection: Any, *, schema: str, backup_id: str | None = None) -> str:
-        backup_id_value: str = backup_id or self._latest_backup_id(connection, schema=schema)
+    def rollback(self, *, connection: Any, schema: str, backup_id: str | None = None) -> str:
+        backup_id_value: str = backup_id or self._latest_backup_id(
+            connection=connection, schema=schema
+        )
         backup_schema: str = self._backup_schema_name(
             schema=schema,
             backup_id_value=backup_id_value,
         )
-        if not self._schema_exists(connection, schema=backup_schema):
+        if not self._schema_exists(connection=connection, schema=backup_schema):
             raise StateBackupNotFoundError(f"State backup schema '{backup_schema}' does not exist")
         connection.execute("BEGIN")
         try:
             table_name: str
             for table_name in STATE_TABLES:
                 connection.execute(
-                    f"DROP TABLE IF EXISTS {self._qualified_name(schema, table_name)}"
+                    f"DROP TABLE IF EXISTS {self._qualified_name(schema=schema, table=table_name)}"
                 )
             connection.execute(f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier(schema)}")
             for table_name in STATE_TABLES:
                 connection.execute(
-                    f"CREATE TABLE {self._qualified_name(schema, table_name)} AS "
-                    f"SELECT * FROM {self._qualified_name(backup_schema, table_name)}"
+                    f"CREATE TABLE {self._qualified_name(schema=schema, table=table_name)} AS "
+                    f"SELECT * FROM {self._qualified_name(schema=backup_schema, table=table_name)}"
                 )
-            self._create_state_indexes(connection, schema=schema)
+            self._create_state_indexes(connection=connection, schema=schema)
             self._record_event(
-                connection,
+                connection=connection,
                 schema=schema,
                 action=StateMigrationAction.ROLLBACK,
                 backup_id_value=backup_id_value,
@@ -238,12 +251,12 @@ class DuckDbStateBackend(StateBackend):
             raise
         return backup_id_value
 
-    def reset(self, connection: Any, *, schema: str) -> None:
+    def reset(self, *, connection: Any, schema: str) -> None:
         connection.execute("BEGIN")
         try:
             for table_name in STATE_TABLES:
                 connection.execute(
-                    f"DROP TABLE IF EXISTS {self._qualified_name(schema, table_name)}"
+                    f"DROP TABLE IF EXISTS {self._qualified_name(schema=schema, table=table_name)}"
                 )
             connection.execute("COMMIT")
         except BaseException:
@@ -251,24 +264,24 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def upsert_model_version(
-        self, connection: Any, *, schema: str, record: ModelVersionRecord
+        self, *, connection: Any, schema: str, record: ModelVersionRecord
     ) -> None:
         connection.execute("BEGIN")
         try:
             existing_created_at: datetime | None = self._created_at_for_key(
-                connection,
+                connection=connection,
                 schema=schema,
                 table_name=MODEL_VERSION_TABLE,
                 where_sql="model_name = ? AND version_hash = ?",
                 params=[record.model_name, record.version_hash],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+                f"DELETE FROM {self._qualified_name(schema=schema, table=MODEL_VERSION_TABLE)} "
                 "WHERE model_name = ? AND version_hash = ?",
                 [record.model_name, record.version_hash],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema=schema, table=MODEL_VERSION_TABLE)} "
                 "(model_name, version_hash, definition_identity_hash, "
                 "identity_metadata_hash, definition_text_b64, identity_metadata_json_b64, "
                 "compiled_sql_b64, status, "
@@ -293,13 +306,13 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_model_version(
-        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+        self, *, connection: Any, schema: str, model_name: str, version_hash: str
     ) -> ModelVersionRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
             "SELECT model_name, version_hash, definition_identity_hash, "
             "identity_metadata_hash, definition_text_b64, identity_metadata_json_b64, "
             "compiled_sql_b64, status "
-            f"FROM {self._qualified_name(schema, MODEL_VERSION_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=MODEL_VERSION_TABLE)} "
             "WHERE model_name = ? AND version_hash = ?",
             [model_name, version_hash],
         ).fetchone()
@@ -317,24 +330,24 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def upsert_function_version(
-        self, connection: Any, *, schema: str, record: FunctionVersionRecord
+        self, *, connection: Any, schema: str, record: FunctionVersionRecord
     ) -> None:
         connection.execute("BEGIN")
         try:
             existing_created_at: datetime | None = self._created_at_for_key(
-                connection,
+                connection=connection,
                 schema=schema,
                 table_name=FUNCTION_VERSION_TABLE,
                 where_sql="function_name = ? AND version_hash = ?",
                 params=[record.function_name, record.version_hash],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+                f"DELETE FROM {self._qualified_name(schema=schema, table=FUNCTION_VERSION_TABLE)} "
                 "WHERE function_name = ? AND version_hash = ?",
                 [record.function_name, record.version_hash],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema=schema, table=FUNCTION_VERSION_TABLE)} "
                 "(function_name, version_hash, language, returns, arguments_json_b64, "
                 "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
                 "body_sql_b64, definition_text_b64, status, created_at, updated_at) "
@@ -362,13 +375,13 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_function_version(
-        self, connection: Any, *, schema: str, function_name: str, version_hash: str
+        self, *, connection: Any, schema: str, function_name: str, version_hash: str
     ) -> FunctionVersionRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
             "SELECT function_name, version_hash, language, returns, arguments_json_b64, "
             "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
             "body_sql_b64, definition_text_b64, status "
-            f"FROM {self._qualified_name(schema, FUNCTION_VERSION_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=FUNCTION_VERSION_TABLE)} "
             "WHERE function_name = ? AND version_hash = ?",
             [function_name, version_hash],
         ).fetchone()
@@ -390,24 +403,24 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def upsert_seed_version(
-        self, connection: Any, *, schema: str, record: SeedVersionRecord
+        self, *, connection: Any, schema: str, record: SeedVersionRecord
     ) -> None:
         connection.execute("BEGIN")
         try:
             existing_created_at: datetime | None = self._created_at_for_key(
-                connection,
+                connection=connection,
                 schema=schema,
                 table_name=SEED_VERSION_TABLE,
                 where_sql="seed_name = ? AND version_hash = ?",
                 params=[record.seed_name, record.version_hash],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, SEED_VERSION_TABLE)} "
+                f"DELETE FROM {self._qualified_name(schema=schema, table=SEED_VERSION_TABLE)} "
                 "WHERE seed_name = ? AND version_hash = ?",
                 [record.seed_name, record.version_hash],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, SEED_VERSION_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema=schema, table=SEED_VERSION_TABLE)} "
                 "(seed_name, version_hash, identity_metadata_hash, "
                 "identity_metadata_json_b64, status, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
@@ -426,12 +439,12 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_seed_version(
-        self, connection: Any, *, schema: str, seed_name: str, version_hash: str
+        self, *, connection: Any, schema: str, seed_name: str, version_hash: str
     ) -> SeedVersionRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
             "SELECT seed_name, version_hash, identity_metadata_hash, "
             "identity_metadata_json_b64, status "
-            f"FROM {self._qualified_name(schema, SEED_VERSION_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=SEED_VERSION_TABLE)} "
             "WHERE seed_name = ? AND version_hash = ?",
             [seed_name, version_hash],
         ).fetchone()
@@ -446,24 +459,26 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def upsert_python_node_version(
-        self, connection: Any, *, schema: str, record: PythonNodeVersionRecord
+        self, *, connection: Any, schema: str, record: PythonNodeVersionRecord
     ) -> None:
         connection.execute("BEGIN")
         try:
             existing_created_at: datetime | None = self._created_at_for_key(
-                connection,
+                connection=connection,
                 schema=schema,
                 table_name=PYTHON_NODE_VERSION_TABLE,
                 where_sql="node_type = ? AND node_name = ? AND version_hash = ?",
                 params=[record.node_type, record.node_name, record.version_hash],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                "DELETE FROM "
+                f"{self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} "
                 "WHERE node_type = ? AND node_name = ? AND version_hash = ?",
                 [record.node_type, record.node_name, record.version_hash],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+                "INSERT INTO "
+                f"{self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} "
                 "(node_type, node_name, version_hash, definition_hash, "
                 "identity_metadata_hash, definition_json_b64, identity_metadata_json_b64, "
                 "status, created_at, updated_at) "
@@ -488,8 +503,8 @@ class DuckDbStateBackend(StateBackend):
 
     def get_python_node_version(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         node_type: str,
         node_name: str,
@@ -498,7 +513,7 @@ class DuckDbStateBackend(StateBackend):
         row: tuple[Any, ...] | None = connection.execute(
             "SELECT node_type, node_name, version_hash, definition_hash, "
             "identity_metadata_hash, definition_json_b64, identity_metadata_json_b64, status "
-            f"FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} "
             "WHERE node_type = ? AND node_name = ? AND version_hash = ?",
             [node_type, node_name, version_hash],
         ).fetchone()
@@ -517,14 +532,14 @@ class DuckDbStateBackend(StateBackend):
 
     def insert_node_result(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         record: NodeResultRecord,
     ) -> None:
         connection.execute(
-            f"INSERT INTO {self._qualified_name(schema, NODE_RESULTS_TABLE)} "
+            f"INSERT INTO {self._qualified_name(schema=schema, table=NODE_RESULTS_TABLE)} "
             "(virtual_environment_name, node_type, node_name, target_database, target_schema, "
             "target_name, run_id, status, payload_json_b64, metadata_json_b64, error_message, "
             "materialized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -538,10 +553,10 @@ class DuckDbStateBackend(StateBackend):
                 record.run_id,
                 record.status,
                 encode_node_result_json(
-                    record.payload, label="payload", node_name=record.node_name
+                    value=record.payload, label="payload", node_name=record.node_name
                 ),
                 encode_node_result_json(
-                    record.metadata, label="metadata", node_name=record.node_name
+                    value=record.metadata, label="metadata", node_name=record.node_name
                 ),
                 record.error_message,
                 self._materialized_storage(record.materialized),
@@ -551,8 +566,8 @@ class DuckDbStateBackend(StateBackend):
 
     def read_node_results(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         query: NodeResultQuery,
@@ -563,9 +578,15 @@ class DuckDbStateBackend(StateBackend):
             "virtual_environment_name = ?",
             "node_type = ?",
             "node_name = ?",
-            self._optional_equality_sql("target_database", query.target_database, "?"),
-            self._optional_equality_sql("target_schema", query.target_schema, "?"),
-            self._optional_equality_sql("target_name", query.target_name, "?"),
+            self._optional_equality_sql(
+                column="target_database", value=query.target_database, placeholder="?"
+            ),
+            self._optional_equality_sql(
+                column="target_schema", value=query.target_schema, placeholder="?"
+            ),
+            self._optional_equality_sql(
+                column="target_name", value=query.target_name, placeholder="?"
+            ),
         ]
         params: list[object] = [virtual_environment_name, query.node_type, query.node_name]
         for value in (query.target_database, query.target_schema, query.target_name):
@@ -582,7 +603,7 @@ class DuckDbStateBackend(StateBackend):
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT node_type, node_name, run_id, status, payload_json_b64, metadata_json_b64, "
             "error_message, materialized, created_at "
-            f"FROM {self._qualified_name(schema, NODE_RESULTS_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=NODE_RESULTS_TABLE)} "
             f"WHERE {' AND '.join(predicates)} "
             "ORDER BY created_at DESC, run_id DESC LIMIT ?",
             params,
@@ -590,24 +611,24 @@ class DuckDbStateBackend(StateBackend):
         return tuple(self._node_result_row_to_envelope(row) for row in rows)
 
     def upsert_physical_relation(
-        self, connection: Any, *, schema: str, record: PhysicalRelationRecord
+        self, *, connection: Any, schema: str, record: PhysicalRelationRecord
     ) -> None:
         connection.execute("BEGIN")
         try:
             existing_created_at: datetime | None = self._created_at_for_key(
-                connection,
+                connection=connection,
                 schema=schema,
                 table_name=PHYSICAL_RELATION_TABLE,
                 where_sql="artifact_type = ? AND artifact_name = ? AND version_hash = ?",
                 params=[record.artifact_type.value, record.artifact_name, record.version_hash],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                f"DELETE FROM {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_TABLE)} "
                 "WHERE artifact_type = ? AND artifact_name = ? AND version_hash = ?",
                 [record.artifact_type.value, record.artifact_name, record.version_hash],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_TABLE)} "
                 "(artifact_type, artifact_name, version_hash, database_name, schema_name, "
                 "relation_name, relation_type, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
@@ -629,8 +650,8 @@ class DuckDbStateBackend(StateBackend):
 
     def get_physical_relation_for_artifact(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         artifact_type: PhysicalArtifactType,
         artifact_name: str,
@@ -639,7 +660,7 @@ class DuckDbStateBackend(StateBackend):
         row: tuple[Any, ...] | None = connection.execute(
             "SELECT artifact_type, artifact_name, version_hash, database_name, schema_name, "
             "relation_name, relation_type "
-            f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_TABLE)} "
             "WHERE artifact_type = ? AND artifact_name = ? AND version_hash = ?",
             [artifact_type.value, artifact_name, version_hash],
         ).fetchone()
@@ -657,8 +678,8 @@ class DuckDbStateBackend(StateBackend):
 
     def list_physical_relations_for_artifact(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         artifact_type: PhysicalArtifactType,
         artifact_name: str,
@@ -666,7 +687,7 @@ class DuckDbStateBackend(StateBackend):
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT artifact_type, artifact_name, version_hash, database_name, schema_name, "
             "relation_name, relation_type "
-            f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_TABLE)} "
             "WHERE artifact_type = ? AND artifact_name = ? "
             "ORDER BY updated_at DESC, version_hash DESC",
             [artifact_type.value, artifact_name],
@@ -685,24 +706,26 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def upsert_physical_relation_ancestry(
-        self, connection: Any, *, schema: str, record: PhysicalRelationAncestryRecord
+        self, *, connection: Any, schema: str, record: PhysicalRelationAncestryRecord
     ) -> None:
         connection.execute("BEGIN")
         try:
             existing_created_at: datetime | None = self._created_at_for_key(
-                connection,
+                connection=connection,
                 schema=schema,
                 table_name=PHYSICAL_RELATION_ANCESTRY_TABLE,
                 where_sql="model_name = ? AND version_hash = ?",
                 params=[record.model_name, record.version_hash],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+                "DELETE FROM "
+                f"{self._qualified_name(schema=schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
                 "WHERE model_name = ? AND version_hash = ?",
                 [record.model_name, record.version_hash],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+                "INSERT INTO "
+                f"{self._qualified_name(schema=schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
                 "(model_name, version_hash, parent_model_name, parent_version_hash, "
                 "seed_strategy, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
@@ -721,12 +744,12 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_physical_relation_ancestry(
-        self, connection: Any, *, schema: str, model_name: str, version_hash: str
+        self, *, connection: Any, schema: str, model_name: str, version_hash: str
     ) -> PhysicalRelationAncestryRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
             "SELECT model_name, version_hash, parent_model_name, parent_version_hash, "
             "seed_strategy "
-            f"FROM {self._qualified_name(schema, PHYSICAL_RELATION_ANCESTRY_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
             "WHERE model_name = ? AND version_hash = ?",
             [model_name, version_hash],
         ).fetchone()
@@ -741,23 +764,25 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def upsert_virtual_environment(
-        self, connection: Any, *, schema: str, record: VirtualEnvironmentRecord
+        self, *, connection: Any, schema: str, record: VirtualEnvironmentRecord
     ) -> None:
         connection.execute("BEGIN")
         try:
-            self._upsert_virtual_environment_record(connection, schema=schema, record=record)
+            self._upsert_virtual_environment_record(
+                connection=connection, schema=schema, record=record
+            )
             connection.execute("COMMIT")
         except BaseException:
             connection.execute("ROLLBACK")
             raise
 
     def get_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> VirtualEnvironmentRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
             "SELECT virtual_environment_name, status, baseline_virtual_environment_name, "
             "finalized_at "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
             "WHERE virtual_environment_name = ?",
             [virtual_environment_name],
         ).fetchone()
@@ -771,11 +796,11 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def list_virtual_environments(
-        self, connection: Any, *, schema: str
+        self, *, connection: Any, schema: str
     ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT virtual_environment_name, status, updated_at "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
             "ORDER BY updated_at DESC, virtual_environment_name DESC"
         ).fetchall()
         return tuple(
@@ -788,24 +813,25 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def delete_virtual_environment(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> None:
         connection.execute("BEGIN")
         try:
             connection.execute(
                 "DELETE FROM "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "WHERE virtual_environment_name = ?",
                 [virtual_environment_name],
             )
             connection.execute(
                 "DELETE FROM "
-                f"{self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                f"{self._qualified_name(schema=schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
                 "WHERE virtual_environment_name = ?",
                 [virtual_environment_name],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+                "DELETE FROM "
+                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
                 "WHERE virtual_environment_name = ?",
                 [virtual_environment_name],
             )
@@ -816,15 +842,15 @@ class DuckDbStateBackend(StateBackend):
 
     def replace_virtual_environment_node_refs(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         node_type: str,
         refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
     ) -> None:
         self.replace_virtual_environment_node_ref_groups(
-            connection,
+            connection=connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
             refs_by_node_type={node_type: refs},
@@ -832,8 +858,8 @@ class DuckDbStateBackend(StateBackend):
 
     def replace_virtual_environment_node_ref_groups(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
@@ -841,7 +867,7 @@ class DuckDbStateBackend(StateBackend):
         connection.execute("BEGIN")
         try:
             self._replace_virtual_environment_node_ref_groups(
-                connection,
+                connection=connection,
                 schema=schema,
                 virtual_environment_name=virtual_environment_name,
                 refs_by_node_type=refs_by_node_type,
@@ -853,17 +879,19 @@ class DuckDbStateBackend(StateBackend):
 
     def upsert_virtual_environment_and_replace_node_ref_groups(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         record: VirtualEnvironmentRecord,
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
     ) -> None:
         connection.execute("BEGIN")
         try:
-            self._upsert_virtual_environment_record(connection, schema=schema, record=record)
+            self._upsert_virtual_environment_record(
+                connection=connection, schema=schema, record=record
+            )
             self._replace_virtual_environment_node_ref_groups(
-                connection,
+                connection=connection,
                 schema=schema,
                 virtual_environment_name=record.virtual_environment_name,
                 refs_by_node_type=refs_by_node_type,
@@ -875,15 +903,15 @@ class DuckDbStateBackend(StateBackend):
 
     def get_virtual_environment_node_refs(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         node_type: str,
     ) -> tuple[VirtualEnvironmentNodeRefRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT virtual_environment_name, node_type, node_name, version_hash "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
             "WHERE virtual_environment_name = ? AND node_type = ? ORDER BY node_name",
             [virtual_environment_name, node_type],
         ).fetchall()
@@ -899,14 +927,14 @@ class DuckDbStateBackend(StateBackend):
 
     def upsert_virtual_environment_node_ref(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         ref: VirtualEnvironmentNodeRefRecord,
     ) -> None:
         connection.execute(
             "INSERT INTO "
-            f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+            f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
             "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
             "VALUES (?, ?, ?, ?, now()) "
             "ON CONFLICT (virtual_environment_name, node_type, node_name) "
@@ -916,14 +944,14 @@ class DuckDbStateBackend(StateBackend):
 
     def replace_virtual_environment_model_refs(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         refs: tuple[VirtualEnvironmentModelRefRecord, ...],
     ) -> None:
         self.replace_virtual_environment_node_refs(
-            connection,
+            connection=connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
             node_type="model",
@@ -939,10 +967,10 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def get_virtual_environment_model_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
         refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = self.get_virtual_environment_node_refs(
-            connection,
+            connection=connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
             node_type="model",
@@ -958,47 +986,52 @@ class DuckDbStateBackend(StateBackend):
 
     def replace_virtual_environment_function_refs(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
     ) -> None:
         ref: VirtualEnvironmentFunctionRefRecord
         for ref in refs:
-            if ref.node_type not in {"udf", "table_fn"}:
+            if ref.node_type not in {
+                CompiledResourceType.UDF,
+                CompiledResourceType.TABLE_FN,
+            }:
                 raise StateBackendConfigError("Function ref node_type must be 'udf' or 'table_fn'")
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]] = {}
+        for node_type in ("udf", "table_fn"):
+            node_refs: list[VirtualEnvironmentNodeRefRecord] = []
+            for ref in refs:
+                if ref.node_type == node_type:
+                    node_refs.append(
+                        VirtualEnvironmentNodeRefRecord(
+                            virtual_environment_name=ref.virtual_environment_name,
+                            node_type=ref.node_type,
+                            node_name=ref.function_name,
+                            version_hash=ref.version_hash,
+                        )
+                    )
+            refs_by_node_type[node_type] = tuple(node_refs)
         self.replace_virtual_environment_node_ref_groups(
-            connection,
+            connection=connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
-            refs_by_node_type={
-                node_type: tuple(
-                    VirtualEnvironmentNodeRefRecord(
-                        virtual_environment_name=ref.virtual_environment_name,
-                        node_type=ref.node_type,
-                        node_name=ref.function_name,
-                        version_hash=ref.version_hash,
-                    )
-                    for ref in refs
-                    if ref.node_type == node_type
-                )
-                for node_type in ("udf", "table_fn")
-            },
+            refs_by_node_type=refs_by_node_type,
         )
 
     def get_virtual_environment_function_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
             *self.get_virtual_environment_node_refs(
-                connection,
+                connection=connection,
                 schema=schema,
                 virtual_environment_name=virtual_environment_name,
                 node_type="udf",
             ),
             *self.get_virtual_environment_node_refs(
-                connection,
+                connection=connection,
                 schema=schema,
                 virtual_environment_name=virtual_environment_name,
                 node_type="table_fn",
@@ -1016,14 +1049,14 @@ class DuckDbStateBackend(StateBackend):
 
     def replace_virtual_environment_seed_refs(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
     ) -> None:
         self.replace_virtual_environment_node_refs(
-            connection,
+            connection=connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
             node_type="seed",
@@ -1039,10 +1072,10 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def get_virtual_environment_seed_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentSeedRefRecord, ...]:
         refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = self.get_virtual_environment_node_refs(
-            connection,
+            connection=connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
             node_type="seed",
@@ -1058,13 +1091,13 @@ class DuckDbStateBackend(StateBackend):
 
     def upsert_virtual_environment_python_node_ref(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         ref: VirtualEnvironmentPythonNodeRefRecord,
     ) -> None:
         self.upsert_virtual_environment_node_ref(
-            connection,
+            connection=connection,
             schema=schema,
             ref=VirtualEnvironmentNodeRefRecord(
                 virtual_environment_name=ref.virtual_environment_name,
@@ -1075,11 +1108,11 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def get_virtual_environment_python_node_refs(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentPythonNodeRefRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT virtual_environment_name, node_type, node_name, version_hash "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
             "WHERE virtual_environment_name = ? "
             "AND node_type IN ('task', 'loader', 'asset', 'check', 'hook') "
             "ORDER BY node_type, node_name",
@@ -1095,26 +1128,33 @@ class DuckDbStateBackend(StateBackend):
             for row in rows
         )
 
-    def count_unreferenced_python_node_versions(self, connection: Any, *, schema: str) -> int:
+    def count_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
         row: tuple[Any, ...] = connection.execute(
             "SELECT COUNT(*) "
-            f"FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} versions "
+            f"FROM {self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} versions "
             "WHERE NOT EXISTS ("
             "SELECT 1 "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} refs "
+            "FROM "
+            f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+            "refs "
             "WHERE refs.node_type = versions.node_type "
             "AND refs.node_name = versions.node_name "
             "AND refs.version_hash = versions.version_hash)"
         ).fetchone()
         return int(row[0])
 
-    def prune_unreferenced_python_node_versions(self, connection: Any, *, schema: str) -> int:
-        before_count: int = self.count_unreferenced_python_node_versions(connection, schema=schema)
+    def prune_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
+        before_count: int = self.count_unreferenced_python_node_versions(
+            connection=connection, schema=schema
+        )
         connection.execute(
-            f"DELETE FROM {self._qualified_name(schema, PYTHON_NODE_VERSION_TABLE)} versions "
+            "DELETE FROM "
+            f"{self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} versions "
             "WHERE NOT EXISTS ("
             "SELECT 1 "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} refs "
+            "FROM "
+            f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+            "refs "
             "WHERE refs.node_type = versions.node_type "
             "AND refs.node_name = versions.node_name "
             "AND refs.version_hash = versions.version_hash)"
@@ -1123,8 +1163,8 @@ class DuckDbStateBackend(StateBackend):
 
     def replace_virtual_environment_source_freshness(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         records: tuple[SourceFreshnessRecord, ...],
@@ -1166,13 +1206,15 @@ class DuckDbStateBackend(StateBackend):
                     ],
                 )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                "DELETE FROM "
+                f"{self._qualified_name(schema=schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
                 "WHERE virtual_environment_name = ? "
                 f"AND source_name NOT IN (SELECT source_name FROM {temp_table_name})",
                 [virtual_environment_name],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+                "INSERT INTO "
+                f"{self._qualified_name(schema=schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
                 "(virtual_environment_name, source_name, strategy, value_kind, data_version, "
                 "data_version_hash, observed_at, updated_at) "
                 "SELECT virtual_environment_name, source_name, strategy, value_kind, "
@@ -1193,12 +1235,12 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_virtual_environment_source_freshness(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[SourceFreshnessRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT virtual_environment_name, source_name, strategy, value_kind, "
             "data_version, data_version_hash, observed_at "
-            f"FROM {self._qualified_name(schema, SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
             "WHERE virtual_environment_name = ? ORDER BY source_name",
             [virtual_environment_name],
         ).fetchall()
@@ -1217,8 +1259,8 @@ class DuckDbStateBackend(StateBackend):
 
     def create_virtual_environment_checkpoint(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         checkpoint: VirtualEnvironmentCheckpointRecord,
         refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
@@ -1228,15 +1270,17 @@ class DuckDbStateBackend(StateBackend):
         connection.execute("BEGIN")
         try:
             checkpoint_model_ref_table: str = self._qualified_name(
-                schema,
-                VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
+                schema=schema,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
             )
             checkpoint_seed_ref_table: str = self._qualified_name(
-                schema,
-                VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
+                schema=schema,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                "INSERT INTO "
+                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)}"
+                " "
                 "(checkpoint_id, virtual_environment_name, created_at) "
                 "VALUES (?, ?, CURRENT_TIMESTAMP)",
                 [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
@@ -1251,8 +1295,8 @@ class DuckDbStateBackend(StateBackend):
             function_ref: VirtualEnvironmentCheckpointFunctionRefRecord
             for function_ref in function_refs:
                 checkpoint_function_ref_table: str = self._qualified_name(
-                    schema,
-                    VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+                    schema=schema,
+                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
                 )
                 connection.execute(
                     "INSERT INTO "
@@ -1278,11 +1322,12 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def list_virtual_environment_checkpoints(
-        self, connection: Any, *, schema: str, virtual_environment_name: str
+        self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT checkpoint_id, virtual_environment_name, created_at "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+            "FROM "
+            f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
             "WHERE virtual_environment_name = ? ORDER BY created_at DESC, checkpoint_id DESC",
             [virtual_environment_name],
         ).fetchall()
@@ -1296,11 +1341,15 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def get_virtual_environment_checkpoint_model_refs(
-        self, connection: Any, *, schema: str, checkpoint_id: str
+        self, *, connection: Any, schema: str, checkpoint_id: str
     ) -> tuple[VirtualEnvironmentCheckpointModelRefRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
-            f"SELECT checkpoint_id, model_name, version_hash "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE)} "
+            "SELECT checkpoint_id, model_name, version_hash FROM "
+            + self._qualified_name(
+                schema=schema,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
+            )
+            + " "
             "WHERE checkpoint_id = ? ORDER BY model_name",
             [checkpoint_id],
         ).fetchall()
@@ -1314,11 +1363,11 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def get_virtual_environment_checkpoint_function_refs(
-        self, connection: Any, *, schema: str, checkpoint_id: str
+        self, *, connection: Any, schema: str, checkpoint_id: str
     ) -> tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...]:
         checkpoint_function_ref_table: str = self._qualified_name(
-            schema,
-            VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+            schema=schema,
+            table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
         )
         rows: list[tuple[Any, ...]] = connection.execute(
             f"SELECT checkpoint_id, function_name, version_hash "
@@ -1336,11 +1385,15 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def get_virtual_environment_checkpoint_seed_refs(
-        self, connection: Any, *, schema: str, checkpoint_id: str
+        self, *, connection: Any, schema: str, checkpoint_id: str
     ) -> tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
-            f"SELECT checkpoint_id, seed_name, version_hash "
-            f"FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE)} "
+            "SELECT checkpoint_id, seed_name, version_hash FROM "
+            + self._qualified_name(
+                schema=schema,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
+            )
+            + " "
             "WHERE checkpoint_id = ? ORDER BY seed_name",
             [checkpoint_id],
         ).fetchall()
@@ -1354,18 +1407,24 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def delete_virtual_environment_checkpoint(
-        self, connection: Any, *, schema: str, checkpoint_id: str
+        self, *, connection: Any, schema: str, checkpoint_id: str
     ) -> None:
         connection.execute("BEGIN")
         try:
             checkpoint_function_ref_table: str = self._qualified_name(
-                schema,
-                VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+                schema=schema,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+            )
+            checkpoint_seed_ref_table: str = self._qualified_name(
+                schema=schema,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
+            )
+            checkpoint_model_ref_table: str = self._qualified_name(
+                schema=schema,
+                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
             )
             connection.execute(
-                "DELETE FROM "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE)} "
-                "WHERE checkpoint_id = ?",
+                f"DELETE FROM {checkpoint_seed_ref_table} WHERE checkpoint_id = ?",
                 [checkpoint_id],
             )
             connection.execute(
@@ -1373,13 +1432,13 @@ class DuckDbStateBackend(StateBackend):
                 [checkpoint_id],
             )
             connection.execute(
-                "DELETE FROM "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE)} "
-                "WHERE checkpoint_id = ?",
+                f"DELETE FROM {checkpoint_model_ref_table} WHERE checkpoint_id = ?",
                 [checkpoint_id],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)} "
+                "DELETE FROM "
+                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)}"
+                " "
                 "WHERE checkpoint_id = ?",
                 [checkpoint_id],
             )
@@ -1389,24 +1448,24 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def upsert_state_operation(
-        self, connection: Any, *, schema: str, record: StateOperationRecord
+        self, *, connection: Any, schema: str, record: StateOperationRecord
     ) -> None:
         connection.execute("BEGIN")
         try:
             existing_created_at: datetime | None = self._created_at_for_key(
-                connection,
+                connection=connection,
                 schema=schema,
                 table_name=STATE_OPERATION_TABLE,
                 where_sql="operation_id = ?",
                 params=[record.operation_id],
             )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+                f"DELETE FROM {self._qualified_name(schema=schema, table=STATE_OPERATION_TABLE)} "
                 "WHERE operation_id = ?",
                 [record.operation_id],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema=schema, table=STATE_OPERATION_TABLE)} "
                 "(operation_id, operation_type, status, virtual_environment_name, "
                 "created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
@@ -1424,11 +1483,11 @@ class DuckDbStateBackend(StateBackend):
             raise
 
     def get_state_operation(
-        self, connection: Any, *, schema: str, operation_id: str
+        self, *, connection: Any, schema: str, operation_id: str
     ) -> StateOperationRecord | None:
         row: tuple[Any, ...] | None = connection.execute(
             "SELECT operation_id, operation_type, status, virtual_environment_name "
-            f"FROM {self._qualified_name(schema, STATE_OPERATION_TABLE)} "
+            f"FROM {self._qualified_name(schema=schema, table=STATE_OPERATION_TABLE)} "
             "WHERE operation_id = ?",
             [operation_id],
         ).fetchone()
@@ -1442,10 +1501,10 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def create_state_operation_event(
-        self, connection: Any, *, schema: str, record: StateOperationEventRecord
+        self, *, connection: Any, schema: str, record: StateOperationEventRecord
     ) -> None:
         connection.execute(
-            f"INSERT INTO {self._qualified_name(schema, STATE_OPERATION_EVENT_TABLE)} "
+            f"INSERT INTO {self._qualified_name(schema=schema, table=STATE_OPERATION_EVENT_TABLE)} "
             "(event_id, operation_id, action, status, message, created_at) "
             "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
             [
@@ -1458,10 +1517,10 @@ class DuckDbStateBackend(StateBackend):
         )
 
     def create_reconcile_event(
-        self, connection: Any, *, schema: str, record: ReconcileEventRecord
+        self, *, connection: Any, schema: str, record: ReconcileEventRecord
     ) -> None:
         connection.execute(
-            f"INSERT INTO {self._qualified_name(schema, RECONCILE_EVENT_TABLE)} "
+            f"INSERT INTO {self._qualified_name(schema=schema, table=RECONCILE_EVENT_TABLE)} "
             "(event_id, action, status, message, created_at) "
             "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
             [record.event_id, record.action.value, record.status.value, record.message],
@@ -1469,8 +1528,8 @@ class DuckDbStateBackend(StateBackend):
 
     def acquire_lock(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         lock_key: str,
         owner_id: str,
@@ -1479,12 +1538,12 @@ class DuckDbStateBackend(StateBackend):
         connection.execute("BEGIN")
         try:
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                f"DELETE FROM {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
                 "WHERE lock_key = ? AND expires_at <= CURRENT_TIMESTAMP",
                 [lock_key],
             )
             connection.execute(
-                f"INSERT INTO {self._qualified_name(schema, LOCK_TABLE)} "
+                f"INSERT INTO {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
                 "(lock_key, owner_id, expires_at, created_at, updated_at) "
                 "VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 [lock_key, owner_id, expires_at],
@@ -1497,7 +1556,7 @@ class DuckDbStateBackend(StateBackend):
             except BaseException:
                 pass
             active_row: tuple[Any, ...] | None = connection.execute(
-                f"SELECT owner_id FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                f"SELECT owner_id FROM {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
                 "WHERE lock_key = ? AND expires_at > CURRENT_TIMESTAMP",
                 [lock_key],
             ).fetchone()
@@ -1505,11 +1564,11 @@ class DuckDbStateBackend(StateBackend):
                 return False
             raise
 
-    def release_lock(self, connection: Any, *, schema: str, lock_key: str, owner_id: str) -> bool:
+    def release_lock(self, *, connection: Any, schema: str, lock_key: str, owner_id: str) -> bool:
         connection.execute("BEGIN")
         try:
             existing_row: tuple[Any, ...] | None = connection.execute(
-                f"SELECT owner_id FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                f"SELECT owner_id FROM {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
                 "WHERE lock_key = ? AND owner_id = ?",
                 [lock_key, owner_id],
             ).fetchone()
@@ -1517,7 +1576,7 @@ class DuckDbStateBackend(StateBackend):
                 connection.execute("COMMIT")
                 return False
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} "
+                f"DELETE FROM {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
                 "WHERE lock_key = ? AND owner_id = ?",
                 [lock_key, owner_id],
             )
@@ -1527,38 +1586,40 @@ class DuckDbStateBackend(StateBackend):
             connection.execute("ROLLBACK")
             raise
 
-    def list_active_locks(self, connection: Any, *, schema: str) -> tuple[StateLockRecord, ...]:
+    def list_active_locks(self, *, connection: Any, schema: str) -> tuple[StateLockRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT lock_key, owner_id, expires_at FROM "
-            f"{self._qualified_name(schema, LOCK_TABLE)} "
+            f"{self._qualified_name(schema=schema, table=LOCK_TABLE)} "
             "WHERE expires_at > CURRENT_TIMESTAMP ORDER BY lock_key"
         ).fetchall()
         return tuple(
             StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
         )
 
-    def list_expired_locks(self, connection: Any, *, schema: str) -> tuple[StateLockRecord, ...]:
+    def list_expired_locks(self, *, connection: Any, schema: str) -> tuple[StateLockRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT lock_key, owner_id, expires_at FROM "
-            f"{self._qualified_name(schema, LOCK_TABLE)} "
+            f"{self._qualified_name(schema=schema, table=LOCK_TABLE)} "
             "WHERE expires_at <= CURRENT_TIMESTAMP ORDER BY lock_key"
         ).fetchall()
         return tuple(
             StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
         )
 
-    def delete_lock(self, connection: Any, *, schema: str, lock_key: str) -> None:
+    def delete_lock(self, *, connection: Any, schema: str, lock_key: str) -> None:
         connection.execute(
-            f"DELETE FROM {self._qualified_name(schema, LOCK_TABLE)} WHERE lock_key = ?",
+            "DELETE FROM "
+            f"{self._qualified_name(schema=schema, table=LOCK_TABLE)} WHERE lock_key = ?",
             [lock_key],
         )
 
-    def list_state_backups(self, connection: Any, *, schema: str) -> tuple[StateBackupRecord, ...]:
+    def list_state_backups(self, *, connection: Any, schema: str) -> tuple[StateBackupRecord, ...]:
         prefix: str = f"{schema}__backup_%"
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT s.schema_name, e.backup_id, MAX(e.created_at) "
             "FROM information_schema.schemata s "
-            f"LEFT JOIN {self._qualified_name(schema, STATE_MIGRATION_EVENTS_TABLE)} e "
+            "LEFT JOIN "
+            f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} e "
             "ON s.schema_name = ? || e.backup_id "
             "WHERE s.schema_name LIKE ? "
             "GROUP BY s.schema_name, e.backup_id ORDER BY s.schema_name DESC",
@@ -1573,11 +1634,11 @@ class DuckDbStateBackend(StateBackend):
             for row in rows
         )
 
-    def delete_state_backup(self, connection: Any, *, schema: str, backup_id: str) -> None:
+    def delete_state_backup(self, *, connection: Any, schema: str, backup_id: str) -> None:
         backup_schema: str = self._backup_schema_name(schema=schema, backup_id_value=backup_id)
         connection.execute(f"DROP SCHEMA IF EXISTS {self._quote_identifier(backup_schema)} CASCADE")
 
-    def _latest_backup_id(self, connection: Any, *, schema: str) -> str:
+    def _latest_backup_id(self, *, connection: Any, schema: str) -> str:
         prefix: str = f"{schema}__backup_%"
         rows: list[tuple[str]] = connection.execute(
             "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE ? "
@@ -1588,7 +1649,7 @@ class DuckDbStateBackend(StateBackend):
             raise StateBackupNotFoundError("No state backup is available for rollback")
         return rows[0][0].removeprefix(f"{schema}__backup_")
 
-    def _schema_exists(self, connection: Any, *, schema: str) -> bool:
+    def _schema_exists(self, *, connection: Any, schema: str) -> bool:
         rows: list[tuple[str]] = connection.execute(
             "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?",
             [schema],
@@ -1597,8 +1658,8 @@ class DuckDbStateBackend(StateBackend):
 
     def _record_event(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         action: StateMigrationAction,
         backup_id_value: str | None,
@@ -1606,7 +1667,8 @@ class DuckDbStateBackend(StateBackend):
         message: str | None,
     ) -> None:
         connection.execute(
-            f"INSERT INTO {self._qualified_name(schema, STATE_MIGRATION_EVENTS_TABLE)} "
+            "INSERT INTO "
+            f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} "
             "(event_id, action, backup_id, status, message, created_at) "
             "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
             [event_id(), action.value, backup_id_value, status.value, message],
@@ -1614,22 +1676,23 @@ class DuckDbStateBackend(StateBackend):
 
     def _created_at_for_key(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         table_name: str,
         where_sql: str,
         params: list[object],
     ) -> datetime | None:
         row: tuple[Any, ...] | None = connection.execute(
-            f"SELECT created_at FROM {self._qualified_name(schema, table_name)} WHERE {where_sql}",
+            f"SELECT created_at FROM {self._qualified_name(schema=schema, table=table_name)} "
+            f"WHERE {where_sql}",
             params,
         ).fetchone()
         if row is None:
             return None
         return row[0]
 
-    def _create_additional_state_tables(self, connection: Any, *, schema: str) -> None:
+    def _create_additional_state_tables(self, *, connection: Any, schema: str) -> None:
         table_name: str
         columns: dict[str, StateColumnType]
         for table_name, columns in STATE_TABLE_COLUMNS.items():
@@ -1640,20 +1703,21 @@ class DuckDbStateBackend(StateBackend):
                 for column_name, column_type in columns.items()
             )
             connection.execute(
-                f"CREATE TABLE IF NOT EXISTS {self._qualified_name(schema, table_name)} "
+                "CREATE TABLE IF NOT EXISTS "
+                f"{self._qualified_name(schema=schema, table=table_name)} "
                 f"({column_sql})"
             )
             column_name: str
             column_type: StateColumnType
             for column_name, column_type in columns.items():
                 connection.execute(
-                    f"ALTER TABLE {self._qualified_name(schema, table_name)} "
+                    f"ALTER TABLE {self._qualified_name(schema=schema, table=table_name)} "
                     f"ADD COLUMN IF NOT EXISTS {self._quote_identifier(column_name)} "
                     f"{self._state_column_sql_type(column_type)}"
                 )
-        self._create_state_indexes(connection, schema=schema)
+        self._create_state_indexes(connection=connection, schema=schema)
 
-    def _create_state_indexes(self, connection: Any, *, schema: str) -> None:
+    def _create_state_indexes(self, *, connection: Any, schema: str) -> None:
         table_name: str
         indexes: dict[str, tuple[str, ...]]
         for table_name, indexes in STATE_TABLE_INDEXES.items():
@@ -1663,7 +1727,7 @@ class DuckDbStateBackend(StateBackend):
                 column_sql: str = ", ".join(self._quote_identifier(column) for column in columns)
                 connection.execute(
                     f"CREATE UNIQUE INDEX IF NOT EXISTS {self._quote_identifier(index_name)} "
-                    f"ON {self._qualified_name(schema, table_name)} ({column_sql})"
+                    f"ON {self._qualified_name(schema=schema, table=table_name)} ({column_sql})"
                 )
 
     def _state_column_sql_type(self, column_type: StateColumnType) -> str:
@@ -1679,7 +1743,7 @@ class DuckDbStateBackend(StateBackend):
     def _node_result_row_to_envelope(self, row: tuple[Any, ...]) -> NodeResultEnvelope:
         node_name: str = str(row[1])
         metadata: object = decode_node_result_json(
-            str(row[5]), label="metadata", node_name=node_name
+            value=str(row[5]), label="metadata", node_name=node_name
         )
         normalized_metadata: dict[str, object] = (
             {str(key): value for key, value in metadata.items()}
@@ -1691,14 +1755,16 @@ class DuckDbStateBackend(StateBackend):
             node_name=node_name,
             run_id=str(row[2]),
             status=str(row[3]),
-            payload=decode_node_result_json(str(row[4]), label="payload", node_name=node_name),
+            payload=decode_node_result_json(
+                value=str(row[4]), label="payload", node_name=node_name
+            ),
             metadata=normalized_metadata,
             error_message=str(row[6]) if row[6] is not None else None,
             materialized=self._parse_materialized(row[7]),
             ts=row[8],
         )
 
-    def _optional_equality_sql(self, column: str, value: object | None, placeholder: str) -> str:
+    def _optional_equality_sql(self, *, column: str, value: object | None, placeholder: str) -> str:
         if value is None:
             return f"{column} IS NULL"
         return f"{column} = {placeholder}"
@@ -1711,12 +1777,12 @@ class DuckDbStateBackend(StateBackend):
     def _parse_materialized(self, value: object) -> bool | None:
         if value is None:
             return None
-        return str(value).lower() == "true"
+        return str(value).lower() == STATE_BOOLEAN_TRUE
 
     def _quote_identifier(self, identifier: str) -> str:
         return '"' + identifier.replace('"', '""') + '"'
 
-    def _qualified_name(self, schema: str, table: str) -> str:
+    def _qualified_name(self, *, schema: str, table: str) -> str:
         return f"{self._quote_identifier(schema)}.{self._quote_identifier(table)}"
 
     def _validate_source_freshness_records(
@@ -1763,22 +1829,22 @@ class DuckDbStateBackend(StateBackend):
             seen_node_names.add(ref.node_name)
 
     def _upsert_virtual_environment_record(
-        self, connection: Any, *, schema: str, record: VirtualEnvironmentRecord
+        self, *, connection: Any, schema: str, record: VirtualEnvironmentRecord
     ) -> None:
         existing_created_at: datetime | None = self._created_at_for_key(
-            connection,
+            connection=connection,
             schema=schema,
             table_name=VIRTUAL_ENVIRONMENT_TABLE,
             where_sql="virtual_environment_name = ?",
             params=[record.virtual_environment_name],
         )
         connection.execute(
-            f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            f"DELETE FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
             "WHERE virtual_environment_name = ?",
             [record.virtual_environment_name],
         )
         connection.execute(
-            f"INSERT INTO {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_TABLE)} "
+            f"INSERT INTO {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
             "(virtual_environment_name, status, baseline_virtual_environment_name, "
             "created_at, updated_at, finalized_at) "
             "VALUES (?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, ?)",
@@ -1793,8 +1859,8 @@ class DuckDbStateBackend(StateBackend):
 
     def _replace_virtual_environment_node_ref_groups(
         self,
-        connection: Any,
         *,
+        connection: Any,
         schema: str,
         virtual_environment_name: str,
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
@@ -1831,17 +1897,19 @@ class DuckDbStateBackend(StateBackend):
                     ],
                 )
             connection.execute(
-                f"DELETE FROM {self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                "DELETE FROM "
+                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "WHERE virtual_environment_name = ? AND node_type = ? "
                 "AND NOT EXISTS ("
                 f"SELECT 1 FROM {temp_table_name} incoming "
                 "WHERE incoming.node_name = "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)}.node_name)",
+                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)}"
+                ".node_name)",
                 [virtual_environment_name, node_type],
             )
             connection.execute(
                 "INSERT INTO "
-                f"{self._qualified_name(schema, VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
+                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
                 "SELECT virtual_environment_name, node_type, node_name, version_hash, now() "
                 f"FROM {temp_table_name} "
@@ -1853,13 +1921,13 @@ class DuckDbStateBackend(StateBackend):
     def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
         return f"{schema}__backup_{backup_id_value}"
 
-    def _state_type_matches(self, actual_type: str, expected_type: StateColumnType) -> bool:
+    def _state_type_matches(self, *, actual_type: str, expected_type: StateColumnType) -> bool:
         actual: str = actual_type.lower()
         match expected_type:
             case StateColumnType.INTEGER:
-                return "int" in actual
+                return DUCKDB_INTEGER_TYPE_TOKEN in actual
             case StateColumnType.TEXT:
                 return any(token in actual for token in ("text", "varchar", "character", "string"))
             case StateColumnType.TIMESTAMP:
-                return "timestamp" in actual or "datetime" in actual
+                return DUCKDB_TIMESTAMP_TYPE_TOKEN in actual or DUCKDB_DATETIME_TYPE_TOKEN in actual
         return False

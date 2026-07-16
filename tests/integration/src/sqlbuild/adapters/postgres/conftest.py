@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.postgres.client import PostgresAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from tests.integration.src.sqlbuild.adapters.postgres.helpers import build_unique_schema_name
 
 
@@ -58,9 +58,9 @@ def connection(
     postgres_schema: str,
 ) -> Iterator[Any]:
     conn: Any = adapter.connect(postgres_container_config)
-    adapter.execute(conn, f"CREATE SCHEMA IF NOT EXISTS {postgres_schema}")
+    adapter.execute(connection=conn, sql=f"CREATE SCHEMA IF NOT EXISTS {postgres_schema}")
     try:
         yield conn
     finally:
-        adapter.execute(conn, f"DROP SCHEMA IF EXISTS {postgres_schema} CASCADE")
+        adapter.execute(connection=conn, sql=f"DROP SCHEMA IF EXISTS {postgres_schema} CASCADE")
         adapter.close(conn)

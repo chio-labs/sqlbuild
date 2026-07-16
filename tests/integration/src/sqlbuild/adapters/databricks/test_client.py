@@ -6,7 +6,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
     QueryResult,
@@ -14,19 +15,18 @@ from sqlbuild.adapter.shared.models import (
     RowDiffSampleCell,
     RowDiffSampleRow,
     SchemaDiffResult,
-    StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.types import FunctionNullabilityRule
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
+from sqlbuild.adapter.contract.types import FunctionNullabilityRule
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.executor.run._helpers.reuse.core import create_relation_from_reuse_origin
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
 from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
 from tests.integration.src.sqlbuild.adapters.databricks._test_types import (
@@ -109,8 +109,8 @@ def test_given_expression_rule_when_querying_then_databricks_matches_nullability
     assert rule is not None
 
     result: QueryResult = adapter.query(
-        connection,
-        f"SELECT {test_case.sql_expression} IS NULL AS is_null",
+        connection=connection,
+        sql=f"SELECT {test_case.sql_expression} IS NULL AS is_null",
         limit=None,
     )
 
@@ -159,7 +159,7 @@ def test_given_sql_when_querying_then_returns_expected_result(
     )
     sql: str = test_case.sql.replace("__sqb_query_temp", ddl_target)
 
-    result: QueryResult = adapter.query(connection, sql, limit=test_case.limit)
+    result: QueryResult = adapter.query(connection=connection, sql=sql, limit=test_case.limit)
 
     assert result == test_case.expected_result
 
@@ -217,43 +217,43 @@ def test_given_relations_when_introspecting_then_returns_expected_metadata(
     execute_statements(adapter=adapter, connection=connection, statements=rewritten_statements)
 
     relation_exists: bool = adapter.relation_exists(
-        connection,
+        connection=connection,
         database=databricks_catalog,
         schema=databricks_schema,
         name="orders",
     )
     schema_exists: bool = adapter.schema_exists(
-        connection,
+        connection=connection,
         database=databricks_catalog,
         schema=databricks_schema,
     )
     relation_names: tuple[str, ...] = tuple(
         relation.name
         for relation in adapter.list_relations(
-            connection,
+            connection=connection,
             database=databricks_catalog,
             schemas=(databricks_schema,),
         )
     )
     columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-        connection,
+        connection=connection,
         database=databricks_catalog,
         schema=databricks_schema,
         name="orders",
     )
     all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-        connection,
+        connection=connection,
         database=databricks_catalog,
         schemas=(databricks_schema,),
         names=("orders",),
     )
     query_column_names: tuple[str, ...] = adapter.query_column_names(
-        connection,
-        "SELECT * FROM (SELECT 1 AS order_id, 'ok' AS status) AS named_rows",
+        connection=connection,
+        sql="SELECT * FROM (SELECT 1 AS order_id, 'ok' AS status) AS named_rows",
     )
     described_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
-        connection,
-        orders_relation,
+        connection=connection,
+        relation=orders_relation,
     )
 
     assert relation_exists == test_case.expected_relation_exists
@@ -299,15 +299,15 @@ def test_given_delta_table_dml_when_getting_freshness_metadata_then_version_adva
         ),
     )
     initial_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
-        connection,
+        connection=connection,
         database=databricks_catalog,
         schema=databricks_schema,
         name=table_name,
     )
 
-    adapter.execute(connection, f"INSERT INTO {table_target} VALUES (2)")
+    adapter.execute(connection=connection, sql=f"INSERT INTO {table_target} VALUES (2)")
     changed_metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
-        connection,
+        connection=connection,
         database=databricks_catalog,
         schema=databricks_schema,
         name=table_name,
@@ -318,7 +318,7 @@ def test_given_delta_table_dml_when_getting_freshness_metadata_then_version_adva
         name=table_name,
     )
     batch_metadata: TableFreshnessMetadata = adapter.get_tables_freshness_metadata(
-        connection,
+        connection=connection,
         requests=(batch_request,),
     )[batch_request]
 
@@ -335,7 +335,7 @@ def test_given_delta_table_dml_when_getting_freshness_metadata_then_version_adva
     assert isinstance(changed_data_version, datetime)
     assert changed_data_version > initial_data_version
     initial_hash: str = source_freshness_record_from_observation(
-        SourceFreshnessObservation(
+        observation=SourceFreshnessObservation(
             source_name="raw_orders",
             strategy=SourceFreshnessStrategy.ADAPTER,
             data_version=initial_data_version,
@@ -345,7 +345,7 @@ def test_given_delta_table_dml_when_getting_freshness_metadata_then_version_adva
         virtual_environment_name="dev",
     ).data_version_hash
     repeated_initial_hash: str = source_freshness_record_from_observation(
-        SourceFreshnessObservation(
+        observation=SourceFreshnessObservation(
             source_name="raw_orders",
             strategy=SourceFreshnessStrategy.ADAPTER,
             data_version=initial_data_version,
@@ -355,7 +355,7 @@ def test_given_delta_table_dml_when_getting_freshness_metadata_then_version_adva
         virtual_environment_name="dev",
     ).data_version_hash
     changed_hash: str = source_freshness_record_from_observation(
-        SourceFreshnessObservation(
+        observation=SourceFreshnessObservation(
             source_name="raw_orders",
             strategy=SourceFreshnessStrategy.ADAPTER,
             data_version=changed_data_version,
@@ -433,7 +433,9 @@ def test_given_relations_when_diffing_schema_then_returns_expected_result(
         ),
     )
 
-    result: SchemaDiffResult = adapter.diff_schema(connection, left=left_name, right=right_name)
+    result: SchemaDiffResult = adapter.diff_schema(
+        connection=connection, left=left_name, right=right_name
+    )
 
     assert result == test_case.expected_result
 
@@ -511,7 +513,7 @@ def test_given_relations_when_diffing_rows_then_returns_expected_result(
     )
 
     result: RowDiffResult = adapter.diff_rows(
-        connection,
+        connection=connection,
         left=left_name,
         right=right_name,
         unique_key=test_case.unique_key,
@@ -578,7 +580,7 @@ def test_given_relations_when_sampling_unequal_rows_then_returns_expected_exampl
     )
 
     unequal_samples: tuple[RowDiffSampleRow, ...] = adapter.sample_unequal_rows(
-        connection,
+        connection=connection,
         left=left_name,
         right=right_name,
         unique_key=test_case.unique_key,
@@ -635,7 +637,7 @@ def test_given_relations_when_sampling_side_only_rows_then_returns_expected_exam
     )
 
     side_only_samples: tuple[tuple[tuple[str, object], ...], ...] = adapter.sample_side_only_rows(
-        connection,
+        connection=connection,
         left=left_name,
         right=right_name,
         unique_key=test_case.unique_key,
@@ -684,14 +686,14 @@ def test_given_seed_and_table_flow_when_materializing_then_returns_expected_rows
     recorder: StatementRecorder = build_statement_recorder()
 
     adapter.load_seed(
-        connection,
+        connection=connection,
         destination=seed_target,
         file_path=seed_path,
         columns=(ColumnInfo(name="id", type="INTEGER"), ColumnInfo(name="name", type="VARCHAR")),
         statement_recorder=recorder,
     )
     adapter.create_table_as(
-        connection,
+        connection=connection,
         destination=table_target,
         sql=f"SELECT id, name FROM {seed_target} ORDER BY id",
         statement_recorder=recorder,
@@ -742,8 +744,8 @@ def test_given_reuse_origin_when_creating_relation_then_databricks_uses_expected
     )
     recorder: StatementRecorder = build_statement_recorder()
     adapter.execute(
-        connection,
-        f"CREATE OR REPLACE TABLE {origin} AS "
+        connection=connection,
+        sql=f"CREATE OR REPLACE TABLE {origin} AS "
         "SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob'",
     )
 
@@ -801,7 +803,7 @@ def test_given_merge_source_when_merging_then_target_matches_expected_rows(
     execute_statements(adapter=adapter, connection=connection, statements=setup_sql)
 
     adapter.merge(
-        connection,
+        connection=connection,
         destination=target_name,
         sql=test_case.source_sql,
         unique_key=test_case.unique_key,
@@ -862,7 +864,7 @@ def test_given_fingerprint_row_when_written_to_databricks_then_base64_sql_round_
         connection=connection,
         execute=adapter.execute,
         table_exists=adapter.relation_exists(
-            connection,
+            connection=connection,
             database=databricks_catalog,
             schema=databricks_schema,
             name=FINGERPRINT_TABLE_NAME,

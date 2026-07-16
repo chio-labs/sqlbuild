@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.integrations.dbt.helpers.graph.core import (
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.integrations.dbt._helpers.graph.core import (
     build_dbt_combined_graph,
     expand_combined_downstream,
     expand_combined_upstream,
 )
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCombinedGraph
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.models import DbtCombinedGraph, DbtManifestIndex
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtCombinedGraphTestCase
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     build_compiled_project_with_models,
@@ -129,8 +128,8 @@ def test_given_manifest_and_compiled_project_when_building_graph_then_returns_ex
     assert (
         graph_key_stable_ids(
             expand_combined_downstream(
-                graph_key_from_stable_id(test_case.expected_downstream_from),
-                graph.downstream_deps,
+                key=graph_key_from_stable_id(test_case.expected_downstream_from),
+                downstream=graph.downstream_deps,
             )
         )
         == test_case.expected_downstream_keys
@@ -138,8 +137,8 @@ def test_given_manifest_and_compiled_project_when_building_graph_then_returns_ex
     assert (
         graph_key_stable_ids(
             expand_combined_upstream(
-                graph_key_from_stable_id(test_case.expected_upstream_from),
-                graph.upstream_deps,
+                key=graph_key_from_stable_id(test_case.expected_upstream_from),
+                upstream=graph.upstream_deps,
             )
         )
         == test_case.expected_upstream_keys

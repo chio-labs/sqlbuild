@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.python_nodes.helpers.unified_selectors import (
+from sqlbuild.compiler.python_nodes._helpers.unified_selectors import (
     validate_python_sql_selection_dependencies,
 )
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlSelection

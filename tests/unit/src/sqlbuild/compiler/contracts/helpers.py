@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -12,7 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.models.schema import (
+from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
     SchemaModelEntry,
@@ -51,7 +52,10 @@ def make_contract_project(
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql="SELECT 1 AS id",
                 config=CompileModelConfig(
-                    values={} if contract is None else {"contract": contract}
+                    values=cast(
+                        dict[str, object],
+                        ({}, {"contract": contract})[contract is not None],
+                    )
                 ),
                 destination=CompiledRelationLocation(
                     database=None,
@@ -76,18 +80,19 @@ def make_contract_project(
                         for name, column_type in declared_columns
                     ),
                 ),
-                inferred_columns=None
-                if inferred_columns is None
-                else tuple(
-                    InferredColumn(
-                        name=name,
-                        type=column_type,
-                        nullability=(inferred_nullability_by_column or {}).get(
-                            name, InferredNullability.UNKNOWN
-                        ),
-                    )
-                    for name, column_type in inferred_columns
-                ),
+                inferred_columns=(
+                    None,
+                    tuple(
+                        InferredColumn(
+                            name=name,
+                            type=column_type,
+                            nullability=(inferred_nullability_by_column or {}).get(
+                                name, InferredNullability.UNKNOWN
+                            ),
+                        )
+                        for name, column_type in (inferred_columns or ())
+                    ),
+                )[inferred_columns is not None],
             ),
         ),
     )
@@ -96,6 +101,6 @@ def make_contract_project(
 def _column_audits(
     *, name: str, declared_not_null_columns: tuple[str, ...]
 ) -> tuple[SchemaAuditInstance, ...]:
-    if name not in declared_not_null_columns:
-        return ()
-    return (SchemaAuditInstance(definition_name="not_null"),)
+    return ((), (SchemaAuditInstance(definition_name="not_null"),))[
+        name in declared_not_null_columns
+    ]

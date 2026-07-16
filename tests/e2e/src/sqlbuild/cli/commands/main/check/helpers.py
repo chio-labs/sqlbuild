@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from tests.e2e.src.sqlbuild.cli.commands.main.check._test_types import CheckCommandTestCase
@@ -53,27 +54,29 @@ from tasks.orders import export_customers, export_orders
 
 @check(depends_on=export_orders)
 def check_orders_export(ctx):
-    return ctx.pass_("orders exported")
+    return ctx.pass_(message="orders exported")
 
 
 @check(depends_on=export_orders, severity="warn")
 def warn_orders_export(ctx):
-    return ctx.fail("warning check failed")
+    return ctx.fail(message="warning check failed")
 
 
 @check(depends_on=orders_asset, tags=("asset",), group="python-checks")
 def check_orders_asset(ctx):
-    return ctx.result_of(orders_asset).payload["asset_rows"] == 3
+    return ctx.result_of(node_function=orders_asset).payload["asset_rows"] == 3
 
 
 @check(depends_on=(export_orders, export_customers), tags=("multi",), group="python-checks")
 def check_order_customer_exports(ctx):
-    return ctx.pass_(metadata={"orders": ctx.result_of(export_orders).metadata["rows"]})
+    return ctx.pass_(
+        metadata={"orders": ctx.result_of(node_function=export_orders).metadata["rows"]}
+    )
 
 
 @check(depends_on=[export_orders], severity="error", tags=("failure",), group="python-checks")
 def fail_orders_export(ctx):
-    return ctx.fail("orders export failed")
+    return ctx.fail(message="orders export failed")
 
 
 @check(depends_on=export_orders, severity="error", tags=("failure",), group="python-checks")
@@ -170,7 +173,7 @@ from assets.orders import orders_export
 
 @check(depends_on=orders_export)
 def check_orders_export(ctx):
-    return ctx.result_of(orders_export).payload["order_count"] == 1
+    return ctx.result_of(node_function=orders_export).payload["order_count"] == 1
 """,
         },
     )
@@ -221,7 +224,7 @@ from tasks.export import export_virtual_orders
 
 @check(depends_on=export_virtual_orders)
 def check_virtual_orders(ctx):
-    return ctx.pass_("virtual orders exported")
+    return ctx.pass_(message="virtual orders exported")
 """,
         },
     )
@@ -272,7 +275,7 @@ from tasks.export import export_virtual_orders
 
 @check(depends_on=export_virtual_orders)
 def fail_virtual_orders(ctx):
-    return ctx.fail("virtual orders failed")
+    return ctx.fail(message="virtual orders failed")
 """,
         },
     )
@@ -281,25 +284,24 @@ def fail_virtual_orders(ctx):
 def prepare_check_project_by_kind(*, tmp_path: Path, project_kind: str) -> Path:
     """Create the project fixture for a check command test case."""
 
-    if project_kind == "terminal_loader":
-        return prepare_terminal_loader_check_project(tmp_path=tmp_path)
-    if project_kind == "virtual":
-        return prepare_virtual_python_check_project(tmp_path=tmp_path)
-    if project_kind == "virtual_failure":
-        return prepare_virtual_failing_python_check_project(tmp_path=tmp_path)
-    return prepare_python_check_project(tmp_path=tmp_path)
+    project_factories: dict[str, Callable[..., Path]] = {
+        "standard": prepare_python_check_project,
+        "terminal_loader": prepare_terminal_loader_check_project,
+        "virtual": prepare_virtual_python_check_project,
+        "virtual_failure": prepare_virtual_failing_python_check_project,
+    }
+    return project_factories[project_kind](tmp_path=tmp_path)
 
 
 def initialize_state_when_requested(*, project_dir: Path, test_case: CheckCommandTestCase) -> None:
     """Initialize virtual state for test cases that need it."""
 
-    if not test_case.initialize_state:
-        return
-    init_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("state", "init"),
-        project_dir=project_dir,
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+    for _ in range(int(test_case.initialize_state)):
+        init_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("state", "init"),
+            project_dir=project_dir,
+        )
+        assert init_result.returncode == 0, init_result.stdout + init_result.stderr
 
 
 def resolve_check_command(*, project_dir: Path, command: tuple[str, ...]) -> tuple[str, ...]:

@@ -19,9 +19,9 @@ from sqlbuild.virtual.state.models import (
 
 
 def create_finalized_virtual_environment_checkpoint(
+    *,
     backend: StateBackend,
     connection: Any,
-    *,
     schema: str,
     virtual_environment_name: str,
     refs: tuple[VirtualEnvironmentModelRefRecord, ...],
@@ -33,7 +33,7 @@ def create_finalized_virtual_environment_checkpoint(
     timestamp: str = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
     checkpoint_id: str = f"chk_{timestamp}_{uuid.uuid4().hex}"
     backend.create_virtual_environment_checkpoint(
-        connection,
+        connection=connection,
         schema=schema,
         checkpoint=VirtualEnvironmentCheckpointRecord(
             checkpoint_id=checkpoint_id,

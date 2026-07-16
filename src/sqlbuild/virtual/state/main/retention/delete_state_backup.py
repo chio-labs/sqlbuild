@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state.helpers.runtime import build_state_runtime
+from sqlbuild.virtual.state._helpers.state_runtime.runtime import build_state_runtime
 
 
 def delete_state_backup(
@@ -23,6 +23,8 @@ def delete_state_backup(
     )
     connection: Any = backend.connect(config.connection)
     try:
-        backend.delete_state_backup(connection, schema=config.schema, backup_id=backup_id)
+        backend.delete_state_backup(
+            connection=connection, schema=config.schema, backup_id=backup_id
+        )
     finally:
         backend.close(connection)

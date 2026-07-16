@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import gettempdir
-from typing import Any
+from types import MappingProxyType
+from typing import Any, cast
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
@@ -34,16 +36,17 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
 )
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.identity.functions import (
+from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
 )
-from sqlbuild.compiler.planner.helpers.identity.standard import (
+from sqlbuild.compiler.planner._helpers.identity.standard import (
     build_standard_model_version_identities,
 )
-from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,
@@ -52,11 +55,14 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     StandardModelVersionIdentities,
 )
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
-from sqlbuild.shared.types import SqlReferenceKind
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, SettingsConfig
-from sqlbuild.spec.models.schema import SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    ProjectConfig,
+    SchemaSeedEntry,
+    SettingsConfig,
+    SourceEntry,
+)
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,
@@ -168,7 +174,7 @@ def build_project_from_test_case(
                     qualified_name=f"{target_schema}.{function_name}",
                 ),
                 language=language,
-                entry_point="main" if language == FunctionLanguage.PYTHON else None,
+                entry_point=(None, "main")[language == FunctionLanguage.PYTHON],
                 replay_on_change=test_case.function_replay_on_changes.get(function_name),
             )
         )
@@ -219,7 +225,7 @@ def build_standard_pruning_project(
             )
         )
     project: CompiledProject = assemble_compiled_project(
-        CompileProjectInputs(
+        inputs=CompileProjectInputs(
             project_config=ProjectConfig(name="demo", adapter="duckdb"),
             local_config=LocalConfig(),
             discovered_inputs=DiscoveredProjectInputs(
@@ -250,7 +256,7 @@ def write_standard_model_state(
 ) -> StandardModelVersionIdentities:
     """Create prior model relations and matching standard fingerprints."""
 
-    adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS staging")
+    adapter.execute(connection=connection, sql="CREATE SCHEMA IF NOT EXISTS staging")
     identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=project.functions,
         seeds=project.seeds,
@@ -265,10 +271,10 @@ def write_standard_model_state(
     for model in project.models:
         config_values: dict[str, object] = model.config.values
         materialized: object | None = config_values.get("materialized")
-        existing_relation_sql: str = "VIEW" if materialized == "view" else "TABLE"
+        existing_relation_sql: str = {"view": "VIEW"}.get(str(materialized), "TABLE")
         adapter.execute(
-            connection,
-            f"CREATE OR REPLACE {existing_relation_sql} staging.{model.name} AS SELECT 1 AS id",
+            connection=connection,
+            sql=f"CREATE OR REPLACE {existing_relation_sql} staging.{model.name} AS SELECT 1 AS id",
         )
         write_fingerprint(
             connection=connection,
@@ -299,9 +305,7 @@ def _settings_bool(settings: dict[str, object], key: str, *, default: bool) -> b
     """Read a boolean setting from legacy test-case settings dictionaries."""
 
     raw_value: object | None = settings.get(key)
-    if isinstance(raw_value, bool):
-        return raw_value
-    return default
+    return cast(bool, (default, raw_value)[isinstance(raw_value, bool)])
 
 
 def build_project_from_source_cursor_input_test_case(
@@ -377,8 +381,6 @@ def write_previous_function_fingerprints(
 ) -> None:
     """Write previous function definition fingerprints for planner tests."""
 
-    if not test_case.previous_function_bodies:
-        return
     previous_case: BuildExecutionPlanTestCase = replace(
         test_case,
         function_bodies={**test_case.function_bodies, **test_case.previous_function_bodies},
@@ -397,7 +399,7 @@ def write_previous_function_fingerprints(
             database=function.destination.database,
             schema=function.destination.schema or "",
             fingerprint=Fingerprint(
-                node_type="table_fn" if function.return_columns else "udf",
+                node_type=("udf", "table_fn")[bool(function.return_columns)],
                 node_name=function.name,
                 target_database=function.destination.database,
                 target_schema=function.destination.schema,
@@ -495,9 +497,21 @@ def _ensure_test_seed_file(seed_name: str) -> Path:
     seed_dir: Path = Path(gettempdir()) / "sqlbuild_planner_seed_fixtures"
     seed_dir.mkdir(parents=True, exist_ok=True)
     seed_path: Path = seed_dir / f"{seed_name}.csv"
-    if not seed_path.exists():
-        seed_path.write_text("id,code\n1,US\n", encoding="utf-8")
+    _SEED_FILE_WRITERS[seed_path.exists()](seed_path)
     return seed_path
+
+
+def _write_seed_file(seed_path: Path) -> None:
+    seed_path.write_text("id,code\n1,US\n", encoding="utf-8")
+
+
+def _keep_seed_file(seed_path: Path) -> None:
+    del seed_path
+
+
+_SEED_FILE_WRITERS: MappingProxyType[bool, Callable[[Path], None]] = MappingProxyType(
+    {False: _write_seed_file, True: _keep_seed_file}
+)
 
 
 def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
@@ -505,7 +519,7 @@ def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
 
     def grouped(model: type) -> dict[str, Any]:
         names: frozenset[str] = frozenset(field.name for field in fields(model))
-        return {name: kwargs.pop(name) for name in list(kwargs) if name in names}
+        return {name: kwargs.pop(name) for name in names & kwargs.keys()}
 
     selection: PlannerSelection = PlannerSelection(**grouped(PlannerSelection))
     overrides: PlannerOverrides = PlannerOverrides(**grouped(PlannerOverrides))

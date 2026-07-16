@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import signal
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from types import FrameType
@@ -13,14 +13,17 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.commands.main.commands.entry import main
+from sqlbuild.cli.commands.main.entrypoint.entry import main
 
 
 def run_advanced_compile_benchmark(
     *, project_dir: Path, model_count: int, expected_max_seconds: float
 ) -> float:
-    if os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1":
-        pytest.skip("SQLBUILD_SKIP_PERFORMANCE_TESTS=1")
+    skip_actions: dict[bool, Callable[[], None]] = {
+        False: _continue_compile_benchmark,
+        True: _skip_compile_benchmark,
+    }
+    skip_actions[os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1"]()
 
     _write_advanced_compile_project(project_dir=project_dir, model_count=model_count)
     with _fail_after_seconds(expected_max_seconds):
@@ -74,9 +77,18 @@ def _write_advanced_compile_project(*, project_dir: Path, model_count: int) -> N
         ),
         encoding="utf-8",
     )
-    for index in range(model_count):
-        model_sql: str = _base_model_sql() if index == 0 else _chain_model_sql(index=index)
+    (models_dir / "model_00000.sql").write_text(_base_model_sql(), encoding="utf-8")
+    for index in range(1, model_count):
+        model_sql: str = _chain_model_sql(index=index)
         (models_dir / f"model_{index:05d}.sql").write_text(model_sql, encoding="utf-8")
+
+
+def _continue_compile_benchmark() -> None:
+    return None
+
+
+def _skip_compile_benchmark() -> None:
+    pytest.skip("SQLBUILD_SKIP_PERFORMANCE_TESTS=1")
 
 
 def _base_model_sql() -> str:

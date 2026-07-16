@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.adapter.shared.types import FrameworkType
-from sqlbuild.executor.node_results.helpers.sql import build_create_table_sql
+from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.executor.node_results._helpers.sql import build_create_table_sql
 
 
 def build_node_results_create_table_sql(

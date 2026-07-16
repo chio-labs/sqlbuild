@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 from textwrap import dedent
 
@@ -689,9 +690,12 @@ def test_given_virtual_seed_change_when_plan_and_build_json_then_seed_reason_is_
     )
     assert build_result.returncode == 0, build_result.stderr
     build_payload: dict[str, object] = json.loads(build_result.stdout)
-    seed_assets: list[dict[str, object]] = [
-        dict(asset) for asset in build_payload["assets"] if dict(asset).get("kind") == "seed"
-    ]
+    assets_by_kind: defaultdict[object, list[dict[str, object]]] = defaultdict(list)
+    for asset in build_payload["assets"]:
+        typed_asset: dict[str, object] = dict(asset)
+        assets_by_kind[typed_asset.get("kind")].append(typed_asset)
+    seed_assets: list[dict[str, object]] = assets_by_kind["seed"]
+    assert len(seed_assets) == 1
     assert seed_assets[0]["name"] == expected_seed_name
     assert seed_assets[0]["reason"] == expected_seed_reason
 
@@ -1908,8 +1912,8 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "\n"
                 "@task(depends_on=model('orders'))\n"
                 "def summarize_loader(ctx):\n"
-                "    result = ctx.result_of(raw_orders)\n"
-                "    history = ctx.results_of(raw_orders, limit=1)\n"
+                "    result = ctx.result_of(node_function=raw_orders)\n"
+                "    history = ctx.results_of(node_function=raw_orders, limit=1)\n"
                 "    output = Path(__file__).parents[1].joinpath('loader_result.txt')\n"
                 "    output.write_text(\n"
                 "        f\"{result.metadata['loader_name']}:{result.metadata['source_name']}:\"\n"
@@ -1917,7 +1921,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "    )\n"
                 "    history_output = Path(__file__).parents[1].joinpath('history_result.txt')\n"
                 "    history_output.write_text(\n"
-                "        f\"{ctx.result_of(produce_result).payload['value']}:{len(history)}\"\n"
+                "        f\"{ctx.result_of(node_function=produce_result).payload['value']}:{len(history)}\"\n"
                 "    )\n"
                 "    return ctx.result(metadata={'summarized': True})\n"
             ),
@@ -1926,7 +1930,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "from tasks.results import produce_result\n\n"
                 "@asset(depends_on=produce_result)\n"
                 "def publish_result(ctx):\n"
-                "    payload = ctx.result_of(produce_result).payload\n"
+                "    payload = ctx.result_of(node_function=produce_result).payload\n"
                 "    return ctx.result(payload=payload, materialized=True)\n"
             ),
             "models/orders.sql": (
@@ -1939,8 +1943,8 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "@check(depends_on=(publish_result, summarize_loader))\n"
                 "def check_produce_result(ctx):\n"
                 "    return (\n"
-                "        ctx.result_of(produce_result).payload['value'] == 42\n"
-                "        and ctx.result_of(publish_result).payload['value'] == 42\n"
+                "        ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
+                "        and ctx.result_of(node_function=publish_result).payload['value'] == 42\n"
                 "    )\n"
             ),
         },
@@ -2128,7 +2132,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                     "from sqlbuild.tasks import task\n\n"
                     "@task(depends_on=model('orders'))\n"
                     "def prepare_orders(ctx):\n"
-                    "    return ctx.skip('not needed', mode=SkipMode.SOFT)\n"
+                    "    return ctx.skip(reason='not needed', mode=SkipMode.SOFT)\n"
                 ),
             },
             command=("--no-color", "build", "--select", "orders"),
@@ -2169,7 +2173,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                     "from sqlbuild.tasks import task\n\n"
                     "@task\n"
                     "def prepare_events(ctx):\n"
-                    "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+                    "    return ctx.skip(reason='no input', mode=SkipMode.HARD)\n"
                 ),
                 "loaders/events.py": (
                     "from tasks.prepare import prepare_events\n"
@@ -2579,7 +2583,7 @@ def test_given_virtual_read_side_python_skip_when_building_then_prints_python_sk
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def skip_fact_orders(ctx):\n"
-                "    return ctx.skip('profile not needed')\n"
+                "    return ctx.skip(reason='profile not needed')\n"
             ),
         },
     )
@@ -2891,7 +2895,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
         f"FROM ({ctx.sql}) AS model_sql"
     )
     exists = ctx.adapter.relation_exists(
-        ctx.connection,
+        connection=ctx.connection,
         database=ctx.destination_database,
         schema=ctx.destination_schema,
         name=ctx.destination_name,
@@ -3079,12 +3083,12 @@ database = "state.duckdb"
 
     payload: dict[str, object] = json.loads(execution_json_path.read_text(encoding="utf-8"))
     assets: list[dict[str, object]] = list(payload["assets"])  # type: ignore[arg-type]
-    function_assets: dict[str, dict[str, object]] = {
-        str(asset["name"]): asset for asset in assets if asset.get("kind") in {"udf", "table_fn"}
-    }
+    assets_by_name: dict[str, dict[str, object]] = {str(asset["name"]): asset for asset in assets}
+    assert len(assets_by_name) == len(assets)
     function_name: str
     for function_name in test_case.expected_function_names:
-        assert function_assets[function_name]["status"] == "success"
+        assert assets_by_name[function_name]["kind"] in {"udf", "table_fn"}
+        assert assets_by_name[function_name]["status"] == "success"
 
     query_sql: str
     expected_rows: tuple[tuple[object, ...], ...]
@@ -4948,9 +4952,9 @@ def test_given_view_refresh_failure_when_promoting_then_operation_is_marked_fail
         | {
             "adapters/failing_duckdb.py": (
                 "from typing import Any\n"
-                "from sqlbuild.adapter.shared.models import StatementRecorder\n"
-                "from sqlbuild.adapter.shared.exceptions import AdapterUserError\n"
-                "from sqlbuild.adapters.duckdb.client import DuckDbAdapter\n\n"
+                "from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder\n"
+                "from sqlbuild.adapter.contract.exceptions import AdapterUserError\n"
+                "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n"
                 "class FailingDuckDbAdapter(DuckDbAdapter):\n"
                 "    adapter_name = 'failing_duckdb'\n\n"
                 "    def create_view_as(\n"

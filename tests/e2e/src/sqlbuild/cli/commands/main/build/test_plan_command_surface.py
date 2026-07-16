@@ -20,7 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_sh
             description="plan select no-color scopes to marts",
             command=("--no-color", "plan", "--select", "path:models/marts", "--force"),
             expected_exit_code=0,
-            expected_fragments=(
+            expected_stdout_fragments=(
                 "Plan ready (10 selected)",
                 "Functions (2 standard run)",
                 "is_completed_order",
@@ -29,7 +29,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_sh
                 "python udf",
                 "Models (8 standard run)",
             ),
-            expected_stream="stdout",
+            expected_stderr_fragments=(),
         ),
         PlanCommandBuildE2ETestCase(
             description="plan exclude removes marts branch from selected scope",
@@ -43,12 +43,12 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_sh
                 "hourly_order_activity",
             ),
             expected_exit_code=0,
-            expected_fragments=(
+            expected_stdout_fragments=(
                 "Plan ready (9 selected)",
                 "Functions (2 standard run)",
                 "Models (7 standard run)",
             ),
-            expected_stream="stdout",
+            expected_stderr_fragments=(),
         ),
     ],
     ids=lambda case: case.description,
@@ -71,7 +71,8 @@ def test_given_plan_command_variants_when_running_cli_then_scope_behavior_matche
         project_dir=project_dir,
     )
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    rendered: str = result.stdout if test_case.expected_stream == "stdout" else result.stderr
     fragment: str
-    for fragment in test_case.expected_fragments:
-        assert fragment in rendered, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout + result.stderr
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr, result.stdout + result.stderr

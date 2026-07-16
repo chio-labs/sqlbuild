@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     RowDiffResult,
     RowDiffSampleRow,
@@ -117,8 +117,7 @@ class BigQueryRenderDeleteInsertTestCase:
 class BigQuerySchemaDiffTestCase:
     description: str
     expected_result: SchemaDiffResult
-    left_relation_columns: tuple[ColumnInfo, ...] | None = None
-    right_relation_columns: tuple[ColumnInfo, ...] | None = None
+    relation_columns: dict[str, tuple[ColumnInfo, ...]]
 
 
 @dataclass(frozen=True)

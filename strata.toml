@@ -1,0 +1,169 @@
+roots = ["src/sqlbuild"]
+tests = ["tests"]
+tooling = ["scripts"]
+rule_paths = ["scripts/strata_policy/rules"]
+select = ["SF", "XSB"]
+
+[evaluation]
+exclude = ["tests/e2e/fixtures/**"]
+
+[thresholds]
+max_positional_args = 1
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapter/contract/__init__.py"
+reason = "The adapter contract intentionally owns overrideable behavior through its class hierarchy rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/bigquery/__init__.py"
+reason = "The BigQuery backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/databricks/constants.py"
+reason = "The Databricks backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/duckdb/__init__.py"
+reason = "The DuckDB backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/motherduck/__init__.py"
+reason = "The MotherDuck backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/postgres/__init__.py"
+reason = "The Postgres backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/snowflake/__init__.py"
+reason = "The Snowflake backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR309"
+path = "src/sqlbuild/adapters/sqlserver/__init__.py"
+reason = "The SQL Server backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapter/contract/classes/base_adapter.py"
+reason = "The adapter contract intentionally keeps its overrideable methods on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapter/contract/classes/duckdb_backed_adapter.py"
+reason = "The shared DuckDB-backed adapter intentionally keeps overrideable methods on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/bigquery/classes/bigquery_adapter.py"
+reason = "The BigQuery adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/databricks/classes/databricks_adapter.py"
+reason = "The Databricks adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/postgres/classes/postgres_adapter.py"
+reason = "The Postgres adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/snowflake/classes/snowflake_adapter.py"
+reason = "The Snowflake adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/adapters/sqlserver/classes/sqlserver_adapter.py"
+reason = "The SQL Server adapter intentionally keeps overrideable backend behavior on one class."
+
+[[rule_exceptions]]
+rule = "SFR601"
+path = "src/sqlbuild/virtual/state/classes/postgres.py"
+reason = "The Postgres state backend intentionally keeps its transactional storage contract on one class."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/integrations/dbt/_helpers/profile/render.py"
+symbols = ["_render_string.env_var", "_render_string.var"]
+reason = "These Jinja globals preserve dbt's external positional call protocol."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/integrations/dlt/classes/sqlbuild_dlt_progress_collector.py"
+symbols = [
+    "SqlbuildDltProgressCollector.on_start_trace",
+    "SqlbuildDltProgressCollector.on_start_trace_step",
+    "SqlbuildDltProgressCollector.on_end_trace_step",
+    "SqlbuildDltProgressCollector.on_end_trace",
+    "SqlbuildDltProgressCollector.update",
+]
+reason = "These collector methods preserve dlt's external positional progress protocol."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/loaders.py"
+symbols = ["loader"]
+reason = "Bare @loader is evaluated by Python as loader(function), requiring positional function calling."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/assets.py"
+symbols = ["asset"]
+reason = "Bare @asset is evaluated by Python as asset(function), requiring positional function calling."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/hooks.py"
+symbols = ["hook"]
+reason = "Bare @hook is evaluated by Python as hook(function), requiring positional function calling."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/tasks.py"
+symbols = ["task"]
+reason = "Bare @task is evaluated by Python as task(function), requiring positional function calling."
+
+[[rule_exceptions]]
+rule = "SFR402"
+path = "src/sqlbuild/integrations/dagster/__init__.py"
+reason = "These imports preserve Dagster's documented external package-root APIs."
+
+[[rule_exceptions]]
+rule = "SFR402"
+path = "src/sqlbuild/integrations/rivers/__init__.py"
+reason = "These imports preserve Rivers' documented external package-root APIs."
+
+[[rule_exceptions]]
+rule = "SFS120"
+path = "src/sqlbuild/integrations/dagster/classes/sqlbuild_cli_resource.py"
+symbols = ["SqlBuildCliResource.cli"]
+reason = "This method follows Dagster's public cli(args, *, ...) positional convention."
+
+[[rule_exceptions]]
+rule = "SFL101"
+path = "scripts/strata_policy/rules/adapter_ownership.py"
+reason = "Strata 0.16.0 does not classify tooling rules/ as a role for sibling _helpers imports, despite SFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "SFL101"
+path = "scripts/strata_policy/rules/canonical_operations.py"
+reason = "Strata 0.16.0 does not classify tooling rules/ as a role for sibling _helpers imports, despite SFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "SFL101"
+path = "scripts/strata_policy/rules/module_boundaries.py"
+reason = "Strata 0.16.0 does not classify tooling rules/ as a role for sibling _helpers imports, despite SFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "SFL101"
+path = "scripts/strata_policy/rules/orchestration_dataflow.py"
+reason = "Strata 0.16.0 does not classify tooling rules/ as a role for sibling _helpers imports, despite SFR704 requiring that layout."

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
-from sqlbuild.executor.scenario.helpers.local.execution import (
+from sqlbuild.executor.scenario._helpers.local.execution import (
     execute_local_scenario_load_only_run as _execute_local_scenario_load_only_run,
 )
 from sqlbuild.executor.scenario.models import ScenarioRunResult

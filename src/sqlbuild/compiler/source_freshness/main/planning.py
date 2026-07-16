@@ -6,12 +6,12 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
-from sqlbuild.compiler.source_freshness.helpers.planning import (
+from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.compiler.source_freshness._helpers.planning import (
     build_standard_source_freshness_planning_result as _build_planning_result,
 )
 from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_standard_source_freshness_planning_result(

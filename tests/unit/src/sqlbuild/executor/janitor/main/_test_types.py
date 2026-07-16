@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.executor.janitor.models import JanitorRelationKey
+from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.executor.janitor.models import (
+    JanitorRelationKey,
+    JanitorVirtualStatePruneCandidate,
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,9 @@ class JanitorPlanTestCase:
     expected_virtual_state_table_names: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_relation_reasons: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_schema_sources: tuple[str, ...] = field(default_factory=tuple)
+    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
+        default_factory=tuple
+    )
 
 
 @dataclass(frozen=True)
@@ -33,6 +39,9 @@ class JanitorExecuteTestCase:
     expected_dropped_targets: tuple[str, ...]
     expected_pruned_table_names: tuple[str, ...] = field(default_factory=tuple)
     expected_pruned_virtual_table_names: tuple[str, ...] = field(default_factory=tuple)
+    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
+        default_factory=tuple
+    )
 
 
 @dataclass(frozen=True)

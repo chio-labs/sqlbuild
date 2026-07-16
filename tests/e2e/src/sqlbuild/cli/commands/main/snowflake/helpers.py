@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import dbt_executable
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_source_loader_strategies,
@@ -99,10 +99,9 @@ def build_snowflake_dependency_baseline_project_toml(
 def build_snowflake_virtual_seed_project_toml(
     *, database_name: str, schema_name: str, unsuffixed_virtual_env: str | None = None
 ) -> str:
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         'name = "snowflake_virtual_seed"\n'
@@ -242,8 +241,8 @@ def cleanup_snowflake_schema(*, schema_name: str) -> None:
     connection: Any = adapter.connect(config)
     try:
         adapter.execute(
-            connection,
-            f"DROP SCHEMA IF EXISTS {database_name}.{schema_name} CASCADE",
+            connection=connection,
+            sql=f"DROP SCHEMA IF EXISTS {database_name}.{schema_name} CASCADE",
         )
     finally:
         adapter.close(connection)
@@ -357,7 +356,7 @@ def execute_snowflake_sql(*, schema_name: str, sql: str) -> None:
     config: dict[str, object] = build_snowflake_connection_config(schema=schema_name)
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 
@@ -551,8 +550,7 @@ def assert_snowflake_dbt_clone_lifecycle(
     _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
     _run_git(args=("branch", "prod"), cwd=workspace)
     process_env: dict[str, str] = dict(os.environ)
-    if env is not None:
-        process_env.update(env)
+    process_env.update(env or {})
     subprocess.run(
         (
             dbt_executable(),

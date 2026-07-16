@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,

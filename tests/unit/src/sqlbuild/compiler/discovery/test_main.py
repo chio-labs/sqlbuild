@@ -168,31 +168,30 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
         tuple(str(schema_file.relative_path) for schema_file in discovered_inputs.schema_files)
         == test_case.expected_schema_paths
     )
-    assert (
-        tuple(
-            tuple(model_entry.name for model_entry in schema_file.model_entries)
-            for schema_file in discovered_inputs.schema_files
-        )
-        == test_case.expected_schema_model_names
-    )
-    assert (
-        tuple(
-            tuple(seed_entry.name for seed_entry in schema_file.seed_entries)
-            for schema_file in discovered_inputs.schema_files
-        )
-        == test_case.expected_schema_seed_names
-    )
+    actual_schema_model_names: list[tuple[str, ...]] = []
+    actual_schema_seed_names: list[tuple[str, ...]] = []
+    for schema_file in discovered_inputs.schema_files:
+        model_names: list[str] = []
+        for model_entry in schema_file.model_entries:
+            model_names.append(model_entry.name)
+        actual_schema_model_names.append(tuple(model_names))
+        seed_names: list[str] = []
+        for seed_entry in schema_file.seed_entries:
+            seed_names.append(seed_entry.name)
+        actual_schema_seed_names.append(tuple(seed_names))
+    assert tuple(actual_schema_model_names) == test_case.expected_schema_model_names
+    assert tuple(actual_schema_seed_names) == test_case.expected_schema_seed_names
     assert (
         tuple(str(source_file.relative_path) for source_file in discovered_inputs.source_files)
         == test_case.expected_source_paths
     )
-    assert (
-        tuple(
-            tuple(source_entry.name for source_entry in source_file.source_entries)
-            for source_file in discovered_inputs.source_files
-        )
-        == test_case.expected_source_entry_names
-    )
+    actual_source_entry_names: list[tuple[str, ...]] = []
+    for source_file in discovered_inputs.source_files:
+        source_names: list[str] = []
+        for source_entry in source_file.source_entries:
+            source_names.append(source_entry.name)
+        actual_source_entry_names.append(tuple(source_names))
+    assert tuple(actual_source_entry_names) == test_case.expected_source_entry_names
     assert (
         tuple(str(seed_file.relative_path) for seed_file in discovered_inputs.seed_files)
         == test_case.expected_seed_paths
@@ -286,11 +285,13 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert tuple(provider.settings.__class__ for provider in discovered_inputs.providers) == tuple(
         provider.provider_class for provider in discovered_inputs.providers
     )
+    adapter_paths: tuple[str | None, ...] = (
+        None,
+        str(getattr(discovered_inputs.adapter_file, "relative_path", "")),
+    )
     assert (
-        None
-        if discovered_inputs.adapter_file is None
-        else str(discovered_inputs.adapter_file.relative_path)
-    ) == test_case.expected_adapter_path
+        adapter_paths[discovered_inputs.adapter_file is not None] == test_case.expected_adapter_path
+    )
     assert discovered_inputs.project_config.name == "demo"
     assert discovered_inputs.project_config.adapter == "duckdb"
     assert discovered_inputs.local_config.target == "dev"

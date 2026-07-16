@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.virtual.planner.helpers.semantics_facts import (
+from sqlbuild.virtual.planner._helpers.semantics_facts import (
     build_bound_identity_facts,
     build_expected_identity_facts,
     build_staleness_facts,

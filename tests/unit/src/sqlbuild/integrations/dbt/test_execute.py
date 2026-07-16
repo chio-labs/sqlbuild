@@ -8,8 +8,15 @@ from typing import cast
 import pytest
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
+from sqlbuild.integrations.dbt._helpers.pipeline import execute as execute_helpers
+from sqlbuild.integrations.dbt._helpers.pipeline import (
+    execution_phases as execution_phases_module,
+)
+from sqlbuild.integrations.dbt._helpers.pipeline import interop_prologue as prologue_module
+from sqlbuild.integrations.dbt._helpers.pipeline.defer_clone import resolve_dbt_defer_clone_from
+from sqlbuild.integrations.dbt._helpers.planning.plan import build_dbt_interop_plan
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
+from sqlbuild.integrations.dbt.main.pipeline import execute as execute_module
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandExecutionResult,
@@ -20,17 +27,10 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
     DbtNodeExecutionResult,
 )
-from sqlbuild.integrations.dbt.pipeline.helpers import execute as execute_helpers
-from sqlbuild.integrations.dbt.pipeline.helpers import (
-    execution_phases as execution_phases_module,
-)
-from sqlbuild.integrations.dbt.pipeline.helpers import interop_prologue as prologue_module
-from sqlbuild.integrations.dbt.pipeline.helpers.defer_clone import resolve_dbt_defer_clone_from
-from sqlbuild.integrations.dbt.pipeline.main import execute as execute_module
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
 )
-from sqlbuild.spec.models.project import (
+from sqlbuild.spec.contracts.models import (
     DbtConfig,
     DbtProductionRefConfig,
     LocalConfig,

@@ -1,9 +1,9 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.cli.commands.helpers.compile.types import CompileLineageMode
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -48,6 +48,7 @@ class MainTestCase:
     expected_state_backup_id: str | None = None
     expected_auto_approve: bool = False
     expected_vars: dict[str, object] | None = None
+    expected_command_vars: dict[str, object] = field(default_factory=dict)
     expected_direct_state_history_versions: int | None = None
     expected_dbt_init_project_dir: str | None = None
     expected_dbt_init_profiles_dir: str | None = None

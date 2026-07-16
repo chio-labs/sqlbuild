@@ -6,7 +6,7 @@ from __future__ import annotations
 def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, str]:
     """Build an inline project with a two-model SQL unit-test chain."""
 
-    sql_analysis_value: str = "true" if sql_analysis_enabled else "false"
+    sql_analysis_value: str = {False: "false", True: "true"}[sql_analysis_enabled]
     return {
         "sqlbuild_project.toml": (
             'name = "demo"\n'
@@ -70,7 +70,7 @@ def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, s
 def build_assertion_test_project_files(*, failing: bool) -> dict[str, str]:
     """Build an inline project with a SQL unit-test zero-row assertion."""
 
-    amount: int = -10 if failing else 10
+    amount: int = {False: 10, True: -10}[failing]
     return {
         "sqlbuild_project.toml": (
             'name = "assertion_demo"\n'

@@ -10,7 +10,7 @@ class RenderAuditSqlTestCase:
     model_locations: dict[str, str]
     source_map_entries: dict[str, tuple[str | None, str | None, str | None]]
     expected_sql_fragment: str
-    relation_overrides: dict[str, str] = field(default_factory=dict)
+    relation_overrides: dict[str, str] | None = None
     seed_locations: dict[str, str] = field(default_factory=dict)
     adapter_name: str | None = None
 
@@ -50,3 +50,19 @@ class AuditGateSingleFieldIdentityTestCase:
     right_attachment_kind: AuditAttachmentKind = AuditAttachmentKind.MODEL
     left_always_run: bool = False
     right_always_run: bool = False
+
+
+@dataclass(frozen=True)
+class ParseAuditInstanceTestCase:
+    description: str
+    raw_audit: object
+    expected_definition_name: str
+    expected_always_run: bool
+    expected_argument_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ParseAuditInstanceErrorTestCase:
+    description: str
+    raw_audit: object
+    expected_error_fragment: str

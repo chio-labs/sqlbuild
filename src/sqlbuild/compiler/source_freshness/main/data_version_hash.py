@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.source_freshness.helpers.state import (
+from sqlbuild.compiler.source_freshness._helpers.state import (
     source_freshness_data_version_hash as _source_freshness_data_version_hash,
 )
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
 def source_freshness_data_version_hash(

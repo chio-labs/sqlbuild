@@ -5,20 +5,20 @@ import subprocess
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.virtual.planner.helpers.planning import (
+from sqlbuild.virtual.planner._helpers.planning import (
     build_expected_local_hashes,
     build_expected_version_hashes,
     build_model_fingerprint_metadata_jsons,
 )
-from sqlbuild.virtual.shared.helpers.encoding import encode_state_text
+from sqlbuild.virtual.state._helpers.state_runtime.backend import build_state_backend
+from sqlbuild.virtual.state._helpers.state_runtime.config import resolve_state_backend_config
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.helpers.backend import build_state_backend
-from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
+from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     StateBackendConfig,
@@ -78,6 +78,7 @@ def direct_changes_only_orders_model_sql(
     columns_fragment: str,
     extra_select_fragment: str = "",
 ) -> str:
+    columns_separator: str = {False: "", True: ","}[bool(columns_fragment)]
     return (
         "MODEL (\n"
         "  materialized incremental,\n"
@@ -86,7 +87,7 @@ def direct_changes_only_orders_model_sql(
         "  cursor_type integer,\n"
         "  unique_key id"
         f"{policy_fragment}"
-        f"{',' if columns_fragment else ''}\n"
+        f"{columns_separator}\n"
         f"  {columns_fragment}\n"
         ");\n\n"
         "SELECT\n"
@@ -188,15 +189,16 @@ def prepare_virtual_run_despite_unchanged_project(
     source_freshness_type: str = "timestamp",
     warehouse_column_type: str = "TIMESTAMP",
 ) -> Path:
-    freshness_fragment: str = (
-        "\n"
-        "    freshness:\n"
-        "      strategy: column\n"
-        "      column: order_ts\n"
-        f"      type: {source_freshness_type}"
-        if include_freshness
-        else ""
-    )
+    freshness_fragment: str = {
+        False: "",
+        True: (
+            "\n"
+            "    freshness:\n"
+            "      strategy: column\n"
+            "      column: order_ts\n"
+            f"      type: {source_freshness_type}"
+        ),
+    }[include_freshness]
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name=project_name,
@@ -268,7 +270,8 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "@asset(depends_on=prepare_orders)\n"
                 "def publish_prepared_orders(ctx):\n"
                 "    return ctx.result(\n"
-                "        payload=ctx.result_of(prepare_orders).payload, materialized=True\n"
+                "        payload=ctx.result_of(node_function=prepare_orders).payload,"
+                " materialized=True\n"
                 "    )\n"
             ),
             "loaders/raw.py": (
@@ -302,7 +305,8 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=profile_fact_orders)\n"
                 "def notify_fact_orders(ctx):\n"
-                "    return ctx.result(metadata=ctx.result_of(profile_fact_orders).payload)\n"
+                "    return ctx.result("
+                "metadata=ctx.result_of(node_function=profile_fact_orders).payload)\n"
             ),
         },
     )
@@ -313,9 +317,7 @@ def seed_matching_virtual_refs(
 ) -> None:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     adapter: DuckDbAdapter = DuckDbAdapter()
-    effective_source_project_dir: Path = (
-        source_project_dir if source_project_dir is not None else project_dir
-    )
+    effective_source_project_dir: Path = source_project_dir or project_dir
     source_discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_source_project_dir
     )
@@ -340,7 +342,7 @@ def seed_matching_virtual_refs(
         model_name: str
         for model_name in model_names:
             backend.upsert_model_version(
-                connection,
+                connection=connection,
                 schema=config.schema,
                 record=ModelVersionRecord(
                     model_name=model_name,
@@ -353,7 +355,7 @@ def seed_matching_virtual_refs(
                 ),
             )
         backend.upsert_virtual_environment(
-            connection,
+            connection=connection,
             schema=config.schema,
             record=VirtualEnvironmentRecord(
                 virtual_environment_name="dev",
@@ -361,7 +363,7 @@ def seed_matching_virtual_refs(
             ),
         )
         backend.replace_virtual_environment_model_refs(
-            connection,
+            connection=connection,
             schema=config.schema,
             virtual_environment_name="dev",
             refs=tuple(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,

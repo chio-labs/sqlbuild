@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.source_freshness.helpers.state import (
+from sqlbuild.compiler.source_freshness._helpers.state import (
     source_freshness_records_equivalent as _source_freshness_records_equivalent,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessComparableRecord

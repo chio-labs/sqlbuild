@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state.helpers.runtime import build_state_runtime
+from sqlbuild.virtual.state._helpers.state_runtime.runtime import build_state_runtime
 from sqlbuild.virtual.state.models import VirtualEnvironmentModelRefRecord
 
 
@@ -25,7 +25,7 @@ def get_virtual_environment_model_refs(
     connection: Any = backend.connect(config.connection)
     try:
         return backend.get_virtual_environment_model_refs(
-            connection,
+            connection=connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
         )

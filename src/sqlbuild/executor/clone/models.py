@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 
 
@@ -18,6 +18,18 @@ class CloneItemResult:
     destination_relation: str | None = None
     duration_seconds: float | None = None
     executed_statements: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class PrephaseProgressRow:
+    """One clone prephase progress row."""
+
+    label: str
+    name: str
+    status: str
+    duration_seconds: float | None = None
+    caused_by_names: tuple[str, ...] = ()
+    detail: str = ""
 
 
 @dataclass(frozen=True)

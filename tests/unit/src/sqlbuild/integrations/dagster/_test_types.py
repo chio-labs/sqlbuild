@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 
@@ -98,8 +99,7 @@ class DagsterCliSelectionTestCase:
     selected_asset_keys: tuple[tuple[str, ...], ...]
     command_args: tuple[str, ...]
     expected_selectors: tuple[str, ...]
-    expected_uses_select_file: bool
-    expected_uses_json_output: bool
+    assert_selector_transport: Callable[..., None]
 
 
 @dataclass(frozen=True)

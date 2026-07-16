@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.main.execute import execute_source_load
@@ -17,16 +17,16 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     SourceLoadExecutionContextTestCase,
     SourceLoadNoneReturnTestCase,
 )
 from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
-from tests.unit.src.sqlbuild.executor.python_nodes.helpers.helpers import ExecutionSlackProvider
+from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import ExecutionSlackProvider
 
 
 @pytest.mark.parametrize(

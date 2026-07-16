@@ -1,51 +1,40 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Literal
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
 
-type SelectionStalenessEngine = Literal["native", "dbt"]
-
-
-@dataclass(frozen=True)
-class SelectionStalenessEngineOverride:
-    description: str = "engine override"
-    exact_command: tuple[str, ...] | None = None
-    repair_command: tuple[str, ...] | None = None
-    expected_exact_stdout_fragments: tuple[str, ...] | None = None
-    unexpected_exact_stdout_fragments: tuple[str, ...] | None = None
-    expected_repair_stdout_fragments: tuple[str, ...] | None = None
-    unexpected_repair_stdout_fragments: tuple[str, ...] | None = None
-    xfail_reason: str | None = None
+type SelectionStalenessRows = tuple[tuple[object, ...], ...]
+type SelectionStalenessFiles = tuple[tuple[str, str], ...]
 
 
-@dataclass(frozen=True)
-class SelectionStalenessE2ETestCase:
-    description: str
-    project_name: str
-    scenario: str
-    graph: str
-    exact_command: tuple[str, ...] = field(default_factory=tuple)
-    repair_command: tuple[str, ...] = field(default_factory=tuple)
-    expected_exact_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-    unexpected_exact_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_repair_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-    unexpected_repair_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_rows_after_baseline: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-    expected_rows_after_exact: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-    expected_rows_after_second_exact: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-    expected_rows_after_repair: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-    leaf_materialization: str = "table"
-    repeat_exact_selection: bool = False
-    engines: tuple[SelectionStalenessEngine, ...] = ("native", "dbt")
-    engine_overrides: dict[SelectionStalenessEngine, SelectionStalenessEngineOverride] = field(
-        default_factory=dict
-    )
-    notes: str = ""
+class SelectionStalenessRunner(Protocol):
+    def __call__(
+        self,
+        *,
+        tmp_path: Path,
+        test_case: SelectionStalenessEngineE2ETestCase,
+    ) -> None: ...
 
 
 @dataclass(frozen=True)
 class SelectionStalenessEngineE2ETestCase:
     description: str
-    engine: SelectionStalenessEngine
-    scenario: SelectionStalenessE2ETestCase
-    expected_rows_after_repair: tuple[tuple[object, ...], ...]
+    project_name: str
+    graph: str
+    runner: SelectionStalenessRunner
+    baseline_files: SelectionStalenessFiles
+    mutated_files: SelectionStalenessFiles
+    baseline_command: tuple[str, ...]
+    exact_commands: tuple[tuple[str, ...], ...]
+    repair_command: tuple[str, ...]
+    expected_exact_stdout_fragments: tuple[str, ...]
+    unexpected_exact_stdout_fragments: tuple[str, ...]
+    expected_repair_stdout_fragments: tuple[str, ...]
+    unexpected_repair_stdout_fragments: tuple[str, ...]
+    expected_rows_after_baseline: SelectionStalenessRows
+    expected_rows_after_exact_commands: tuple[SelectionStalenessRows, ...]
+    expected_rows_after_repair: SelectionStalenessRows
+    database_relative_path: Path
+    fact_rows_query: str
+    notes: str = ""

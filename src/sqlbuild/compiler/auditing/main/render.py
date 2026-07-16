@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.auditing.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.compiler.shared.helpers.sources import render_source_relation
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.compiler.references.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def render_audit_sql(
@@ -84,6 +84,6 @@ def _render_sources(
         entry: SourceEntry | None = source_map.get(source_name)
         if entry is None:
             return match.group(0)
-        return render_source_relation(entry, adapter=adapter)
+        return render_source_relation(entry=entry, adapter=adapter)
 
     return SOURCE_PATTERN.sub(_replace, sql)

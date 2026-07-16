@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, ClassVar, cast
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     QueryResult,
     RelationInfo,
@@ -17,24 +20,22 @@ from sqlbuild.adapter.shared.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.cli.commands.helpers.diff.output import has_diff_failures
-from sqlbuild.compiler.compile.helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile.helpers.refs.references import extract_sql_references
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures
+from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
+    CompiledSqlTest,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
-)
-from sqlbuild.compiler.compile.models.sql_tests import (
-    CompiledModelSqlTestPayload,
-    CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
@@ -59,17 +60,23 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner, build_dbt_ls_argv
-from sqlbuild.integrations.dbt.helpers.graph.core import (
+from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
+from sqlbuild.integrations.dbt._helpers.graph.core import (
     build_dbt_combined_graph,
     dbt_model_graph_key,
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt.helpers.lineage.selection import select_dbt_lineage_target
-from sqlbuild.integrations.dbt.helpers.manifest.compile_refs import DbtCompileReferenceResolver
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt._helpers.lineage.selection import select_dbt_lineage_target
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.pipeline.diff import (
+    DbtDiffOptions,
+    parse_dbt_diff_options,
+)
+from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
+    DbtCompileReferenceResolver,
+)
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
@@ -79,19 +86,34 @@ from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtLineageGraph,
     DbtLsNode,
-)
-from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
-    DbtDiffOptions,
-    parse_dbt_diff_options,
+    DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
     DbtLineageDirection,
 )
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.schema import SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SchemaSeedEntry, SourceEntry
+
+
+def _build_present_field(name: str, value: object) -> dict[str, object]:
+    return {name: value}
+
+
+def _build_absent_field(name: str, value: object) -> dict[str, object]:
+    del name, value
+    return {}
+
+
+_OPTIONAL_FIELD_BUILDERS: MappingProxyType[bool, Callable[[str, object], dict[str, object]]] = (
+    MappingProxyType(
+        {
+            True: _build_present_field,
+            False: _build_absent_field,
+        }
+    )
+)
 
 
 def build_cli_overrides(
@@ -146,10 +168,10 @@ class MappingDbtInvoker:
 
     def __call__(self, argv: tuple[str, ...], cwd: Path | None) -> DbtCommandResult:
         self.calls.append((argv, cwd))
-        result: DbtCommandResult | None = self.results_by_argv.get(argv)
-        if result is not None:
-            return result
-        return DbtCommandResult(argv=argv, returncode=0, stdout="")
+        return self.results_by_argv.get(
+            argv,
+            DbtCommandResult(argv=argv, returncode=0, stdout=""),
+        )
 
 
 class CompileOnlyDbtRunner(DbtRunner):
@@ -173,9 +195,9 @@ def emit_connection_progress(**kwargs: object) -> None:
     assert callable(start)
     assert callable(complete)
     on_start: Callable[[int], None] = cast(Callable[[int], None], start)
-    on_complete: Callable[[int, float], None] = cast(Callable[[int, float], None], complete)
+    on_complete: ConnectionElapsedCallback = cast(ConnectionElapsedCallback, complete)
     on_start(1)
-    on_complete(1, 0.0)
+    on_complete(1, elapsed_seconds=0.0)
 
 
 def build_dbt_ls_command_result(
@@ -387,8 +409,6 @@ def build_dbt_sql_test_target_manifest(
         compiled_code=fact_compiled_code,
         depends_on_nodes=("model.analytics.stg_orders",),
     )
-    if fact_compiled_code is None:
-        fact_node.pop("compiled_code", None)
     nodes: tuple[dict[str, object], ...] = (
         build_manifest_model_node(
             unique_id="model.analytics.stg_orders",
@@ -398,10 +418,7 @@ def build_dbt_sql_test_target_manifest(
             compiled_code="select * from raw.orders",
         ),
         fact_node,
-    )
-    if include_ambiguous_package:
-        nodes = (
-            *nodes,
+        *(
             build_manifest_model_node(
                 unique_id="model.finance.fact_orders",
                 package_name="finance",
@@ -410,139 +427,21 @@ def build_dbt_sql_test_target_manifest(
                 compiled_code="select 1 as order_id",
             ),
         )
+        * int(include_ambiguous_package),
+    )
     return build_dbt_manifest_index(raw_data=build_manifest_data(nodes=nodes))
 
 
 def build_dbt_sql_test_target_success_manifest(*, manifest_kind: str) -> DbtManifestIndex:
     """Build a success manifest variant for dbt SQL test target tests."""
 
-    if manifest_kind == "source_dependency":
-        return build_dbt_sql_test_source_seed_manifest(dependency_kind="source")
-    if manifest_kind == "source_unquoted":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="source",
-            relation_name="raw.orders",
-            compiled_code="select * from raw.orders",
-        )
-    if manifest_kind == "source_three_part":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="source",
-            relation_name='"warehouse"."raw"."orders"',
-            compiled_code='select * from "warehouse"."raw"."orders"',
-        )
-    if manifest_kind == "source_alias":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="source",
-            relation_name='"raw"."orders_alias"',
-            compiled_code='select * from "raw"."orders_alias"',
-        )
-    if manifest_kind == "source_ambiguous_fixture":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="source",
-            include_ambiguous_package=True,
-        )
-    if manifest_kind == "chain_source_dependency":
-        return build_dbt_sql_test_model_chain_manifest(dependency_kind="source")
-    if manifest_kind == "seed_dependency":
-        return build_dbt_sql_test_source_seed_manifest(dependency_kind="seed")
-    if manifest_kind == "seed_unquoted":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="seed",
-            relation_name="analytics.countries",
-            compiled_code="select * from analytics.countries",
-        )
-    if manifest_kind == "seed_three_part":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="seed",
-            relation_name='"warehouse"."analytics"."countries"',
-            compiled_code='select * from "warehouse"."analytics"."countries"',
-        )
-    if manifest_kind == "seed_alias":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="seed",
-            relation_name='"analytics"."countries_alias"',
-            compiled_code='select * from "analytics"."countries_alias"',
-        )
-    if manifest_kind == "seed_ambiguous_fixture":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="seed",
-            include_ambiguous_package=True,
-        )
-    if manifest_kind == "chain_seed_dependency":
-        return build_dbt_sql_test_model_chain_manifest(dependency_kind="seed")
-    if manifest_kind == "chain_snapshot_boundary":
-        return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="snapshot")
-    if manifest_kind == "chain_ephemeral_boundary":
-        return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="ephemeral")
-    if manifest_kind == "unquoted":
-        return build_dbt_sql_test_target_manifest(
-            dep_relation_name="analytics.stg_orders",
-            fact_compiled_code="select * from analytics.stg_orders where amount_cents > 0",
-        )
-    if manifest_kind == "three_part":
-        return build_dbt_sql_test_target_manifest(
-            dep_relation_name='"warehouse"."analytics"."stg_orders"',
-            fact_compiled_code=(
-                'select * from "warehouse"."analytics"."stg_orders" where amount_cents > 0'
-            ),
-        )
-    if manifest_kind == "alias":
-        return build_dbt_sql_test_target_manifest(
-            dep_relation_name='"analytics"."stg_orders_alias"',
-            fact_compiled_code='select * from "analytics"."stg_orders_alias"',
-        )
-    if manifest_kind == "ambiguous":
-        return build_dbt_sql_test_target_manifest(include_ambiguous_package=True)
-    if manifest_kind == "relation_in_string_and_comment":
-        return build_dbt_sql_test_target_manifest(
-            dep_relation_name="analytics.stg_orders",
-            fact_compiled_code=(
-                "-- upstream analytics.stg_orders\n"
-                "select *, 'analytics.stg_orders' as src "
-                "from analytics.stg_orders where amount_cents > 0"
-            ),
-        )
-    return build_dbt_sql_test_target_manifest()
+    return _DBT_SQL_TEST_SUCCESS_MANIFEST_FACTORIES[manifest_kind]()
 
 
 def build_dbt_sql_test_target_error_manifest(*, manifest_kind: str) -> DbtManifestIndex:
     """Build an error manifest variant for dbt SQL test target tests."""
 
-    if manifest_kind in {"source_dependency", "source_ambiguous_fixture"}:
-        return build_dbt_sql_test_source_seed_manifest(dependency_kind="source")
-    if manifest_kind == "source_unresolved_relation":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="source",
-            compiled_code="select * from raw.unexpected_orders",
-        )
-    if manifest_kind == "chain_missing_compiled_sql":
-        return build_dbt_sql_test_model_chain_manifest(
-            dependency_kind="source",
-            upstream_compiled_code=None,
-        )
-    if manifest_kind == "chain_unresolved_relation":
-        return build_dbt_sql_test_model_chain_manifest(
-            dependency_kind="source",
-            upstream_compiled_code="select * from raw.unexpected_orders",
-        )
-    if manifest_kind == "chain_snapshot_boundary":
-        return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="snapshot")
-    if manifest_kind == "chain_ephemeral_boundary":
-        return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="ephemeral")
-    if manifest_kind in {"seed_dependency", "seed_ambiguous_fixture"}:
-        return build_dbt_sql_test_source_seed_manifest(dependency_kind="seed")
-    if manifest_kind == "seed_unresolved_relation":
-        return build_dbt_sql_test_source_seed_manifest(
-            dependency_kind="seed",
-            compiled_code="select * from analytics.unexpected_countries",
-        )
-    if manifest_kind == "ambiguous":
-        return build_dbt_sql_test_target_manifest(include_ambiguous_package=True)
-    if manifest_kind == "missing_compiled_sql":
-        return build_dbt_sql_test_target_manifest(fact_compiled_code=None)
-    return build_dbt_sql_test_target_manifest(
-        fact_compiled_code="select * from analytics.unexpected_orders"
-    )
+    return _DBT_SQL_TEST_ERROR_MANIFEST_FACTORIES[manifest_kind]()
 
 
 def build_dbt_sql_test_source_seed_manifest(
@@ -554,63 +453,62 @@ def build_dbt_sql_test_source_seed_manifest(
 ) -> DbtManifestIndex:
     """Build a dbt SQL test manifest with a source or seed dependency."""
 
-    dependency_unique_id: str = (
-        "source.analytics.raw.orders" if dependency_kind == "source" else "seed.analytics.countries"
-    )
-    default_relation_name: str = (
-        '"raw"."orders"' if dependency_kind == "source" else '"analytics"."countries"'
-    )
-    default_compiled_code: str = (
-        'select * from "raw"."orders"'
-        if dependency_kind == "source"
-        else 'select * from "analytics"."countries"'
-    )
-    source_nodes: tuple[dict[str, object], ...] = (
-        (
+    dependency_unique_ids: dict[str, str] = {
+        "source": "source.analytics.raw.orders",
+        "seed": "seed.analytics.countries",
+    }
+    default_relation_names: dict[str, str] = {
+        "source": '"raw"."orders"',
+        "seed": '"analytics"."countries"',
+    }
+    default_compiled_codes: dict[str, str] = {
+        "source": 'select * from "raw"."orders"',
+        "seed": 'select * from "analytics"."countries"',
+    }
+    resolved_relation_name: str = relation_name or default_relation_names[dependency_kind]
+    resolved_compiled_code: str = compiled_code or default_compiled_codes[dependency_kind]
+    source_nodes_by_kind: dict[str, tuple[dict[str, object], ...]] = {
+        "source": (
             build_manifest_source_node(
                 unique_id="source.analytics.raw.orders",
                 package_name="analytics",
                 source_name="raw",
                 name="orders",
-                relation_name=relation_name or default_relation_name,
+                relation_name=resolved_relation_name,
             ),
-        )
-        if dependency_kind == "source"
-        else ()
-    )
-    if dependency_kind == "source" and include_ambiguous_package:
-        source_nodes = (
-            *source_nodes,
-            build_manifest_source_node(
-                unique_id="source.finance.raw.orders",
-                package_name="finance",
-                source_name="raw",
-                name="orders",
-                relation_name='"finance_raw"."orders"',
-            ),
-        )
-    seed_nodes: tuple[dict[str, object], ...] = (
-        (
+            *(
+                build_manifest_source_node(
+                    unique_id="source.finance.raw.orders",
+                    package_name="finance",
+                    source_name="raw",
+                    name="orders",
+                    relation_name='"finance_raw"."orders"',
+                ),
+            )
+            * int(include_ambiguous_package),
+        ),
+        "seed": (),
+    }
+    seed_nodes_by_kind: dict[str, tuple[dict[str, object], ...]] = {
+        "source": (),
+        "seed": (
             build_manifest_seed_node(
                 unique_id="seed.analytics.countries",
                 package_name="analytics",
                 name="countries",
-                relation_name=relation_name or default_relation_name,
+                relation_name=resolved_relation_name,
             ),
-        )
-        if dependency_kind == "seed"
-        else ()
-    )
-    if dependency_kind == "seed" and include_ambiguous_package:
-        seed_nodes = (
-            *seed_nodes,
-            build_manifest_seed_node(
-                unique_id="seed.finance.countries",
-                package_name="finance",
-                name="countries",
-                relation_name='"finance"."countries"',
-            ),
-        )
+            *(
+                build_manifest_seed_node(
+                    unique_id="seed.finance.countries",
+                    package_name="finance",
+                    name="countries",
+                    relation_name='"finance"."countries"',
+                ),
+            )
+            * int(include_ambiguous_package),
+        ),
+    }
     return build_dbt_manifest_index(
         raw_data=build_manifest_data(
             nodes=(
@@ -619,13 +517,45 @@ def build_dbt_sql_test_source_seed_manifest(
                     package_name="analytics",
                     name="fact_orders",
                     relation_name='"analytics"."fact_orders"',
-                    compiled_code=compiled_code or default_compiled_code,
-                    depends_on_nodes=(dependency_unique_id,),
+                    compiled_code=resolved_compiled_code,
+                    depends_on_nodes=(dependency_unique_ids[dependency_kind],),
                 ),
-                *seed_nodes,
+                *seed_nodes_by_kind[dependency_kind],
             ),
-            sources=source_nodes,
+            sources=source_nodes_by_kind[dependency_kind],
         )
+    )
+
+
+def build_dbt_sql_test_source_manifest(
+    *,
+    relation_name: str | None = None,
+    compiled_code: str | None = None,
+    include_ambiguous_package: bool = False,
+) -> DbtManifestIndex:
+    """Build a dbt SQL test manifest with a source dependency."""
+
+    return build_dbt_sql_test_source_seed_manifest(
+        dependency_kind="source",
+        relation_name=relation_name,
+        compiled_code=compiled_code,
+        include_ambiguous_package=include_ambiguous_package,
+    )
+
+
+def build_dbt_sql_test_seed_manifest(
+    *,
+    relation_name: str | None = None,
+    compiled_code: str | None = None,
+    include_ambiguous_package: bool = False,
+) -> DbtManifestIndex:
+    """Build a dbt SQL test manifest with a seed dependency."""
+
+    return build_dbt_sql_test_source_seed_manifest(
+        dependency_kind="seed",
+        relation_name=relation_name,
+        compiled_code=compiled_code,
+        include_ambiguous_package=include_ambiguous_package,
     )
 
 
@@ -634,8 +564,20 @@ def build_dbt_sql_test_model_chain_manifest(
 ) -> DbtManifestIndex:
     """Build a dbt SQL test manifest with a dbt model chain."""
 
-    source_nodes: tuple[dict[str, object], ...] = (
-        (
+    default_compiled_codes: dict[str, str] = {
+        "source": 'select order_id from "raw"."orders"',
+        "seed": 'select country_code from "analytics"."countries"',
+    }
+    compiled_codes_by_default_state: dict[bool, str | None] = {
+        True: default_compiled_codes[dependency_kind],
+        False: cast(str | None, upstream_compiled_code),
+    }
+    dependency_unique_ids: dict[str, str] = {
+        "source": "source.analytics.raw.orders",
+        "seed": "seed.analytics.countries",
+    }
+    source_nodes_by_kind: dict[str, tuple[dict[str, object], ...]] = {
+        "source": (
             build_manifest_source_node(
                 unique_id="source.analytics.raw.orders",
                 package_name="analytics",
@@ -643,34 +585,20 @@ def build_dbt_sql_test_model_chain_manifest(
                 name="orders",
                 relation_name='"raw"."orders"',
             ),
-        )
-        if dependency_kind == "source"
-        else ()
-    )
-    seed_nodes: tuple[dict[str, object], ...] = (
-        (
+        ),
+        "seed": (),
+    }
+    seed_nodes_by_kind: dict[str, tuple[dict[str, object], ...]] = {
+        "source": (),
+        "seed": (
             build_manifest_seed_node(
                 unique_id="seed.analytics.countries",
                 package_name="analytics",
                 name="countries",
                 relation_name='"analytics"."countries"',
             ),
-        )
-        if dependency_kind == "seed"
-        else ()
-    )
-    upstream_dependency_unique_id: str = (
-        "source.analytics.raw.orders" if dependency_kind == "source" else "seed.analytics.countries"
-    )
-    compiled_code: str | None = (
-        (
-            'select order_id from "raw"."orders"'
-            if dependency_kind == "source"
-            else 'select country_code from "analytics"."countries"'
-        )
-        if upstream_compiled_code == "default"
-        else cast(str | None, upstream_compiled_code)
-    )
+        ),
+    }
     return build_dbt_manifest_index(
         raw_data=build_manifest_data(
             nodes=(
@@ -679,8 +607,10 @@ def build_dbt_sql_test_model_chain_manifest(
                     package_name="analytics",
                     name="stg_orders",
                     relation_name='"analytics"."stg_orders"',
-                    compiled_code=compiled_code,
-                    depends_on_nodes=(upstream_dependency_unique_id,),
+                    compiled_code=compiled_codes_by_default_state[
+                        upstream_compiled_code == "default"
+                    ],
+                    depends_on_nodes=(dependency_unique_ids[dependency_kind],),
                 ),
                 build_manifest_model_node(
                     unique_id="model.analytics.fact_orders",
@@ -690,18 +620,35 @@ def build_dbt_sql_test_model_chain_manifest(
                     compiled_code='select order_id from "analytics"."stg_orders"',
                     depends_on_nodes=("model.analytics.stg_orders",),
                 ),
-                *seed_nodes,
+                *seed_nodes_by_kind[dependency_kind],
             ),
-            sources=source_nodes,
+            sources=source_nodes_by_kind[dependency_kind],
         )
     )
+
+
+def build_dbt_sql_test_source_chain_manifest(
+    *, upstream_compiled_code: str | None | object = "default"
+) -> DbtManifestIndex:
+    """Build a dbt model chain ending at a source dependency."""
+
+    return build_dbt_sql_test_model_chain_manifest(
+        dependency_kind="source",
+        upstream_compiled_code=upstream_compiled_code,
+    )
+
+
+def build_dbt_sql_test_seed_chain_manifest() -> DbtManifestIndex:
+    """Build a dbt model chain ending at a seed dependency."""
+
+    return build_dbt_sql_test_model_chain_manifest(dependency_kind="seed")
 
 
 def build_dbt_sql_test_boundary_chain_manifest(*, boundary_kind: str) -> DbtManifestIndex:
     """Build a dbt chain manifest whose intermediate node is a snapshot or ephemeral."""
 
-    intermediate_node: dict[str, object] = (
-        build_manifest_model_node(
+    intermediate_nodes: dict[str, dict[str, object]] = {
+        "ephemeral": build_manifest_model_node(
             unique_id="model.analytics.stg_orders",
             package_name="analytics",
             name="stg_orders",
@@ -709,9 +656,8 @@ def build_dbt_sql_test_boundary_chain_manifest(*, boundary_kind: str) -> DbtMani
             compiled_code='select order_id from "raw"."orders"',
             materialized="ephemeral",
             depends_on_nodes=("source.analytics.raw.orders",),
-        )
-        if boundary_kind == "ephemeral"
-        else build_manifest_model_node(
+        ),
+        "snapshot": build_manifest_model_node(
             unique_id="snapshot.analytics.stg_orders",
             package_name="analytics",
             name="stg_orders",
@@ -720,8 +666,9 @@ def build_dbt_sql_test_boundary_chain_manifest(*, boundary_kind: str) -> DbtMani
             resource_type="snapshot",
             materialized="table",
             depends_on_nodes=("source.analytics.raw.orders",),
-        )
-    )
+        ),
+    }
+    intermediate_node: dict[str, object] = intermediate_nodes[boundary_kind]
     intermediate_unique_id: str = str(intermediate_node["unique_id"])
     return build_dbt_manifest_index(
         raw_data=build_manifest_data(
@@ -747,6 +694,180 @@ def build_dbt_sql_test_boundary_chain_manifest(*, boundary_kind: str) -> DbtMani
             ),
         )
     )
+
+
+def build_dbt_sql_test_snapshot_chain_manifest() -> DbtManifestIndex:
+    """Build a dbt model chain with a snapshot boundary."""
+
+    return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="snapshot")
+
+
+def build_dbt_sql_test_ephemeral_chain_manifest() -> DbtManifestIndex:
+    """Build a dbt model chain with an ephemeral boundary."""
+
+    return build_dbt_sql_test_boundary_chain_manifest(boundary_kind="ephemeral")
+
+
+def build_dbt_sql_test_target_missing_compiled_manifest() -> DbtManifestIndex:
+    """Build a dbt target manifest without compiled SQL for the target."""
+
+    return build_dbt_sql_test_target_manifest(fact_compiled_code=None)
+
+
+_DBT_SQL_TEST_SUCCESS_MANIFEST_FACTORIES: MappingProxyType[str, Callable[[], DbtManifestIndex]] = (
+    MappingProxyType(
+        {
+            "default": build_dbt_sql_test_target_manifest,
+            "source_dependency": partial(
+                build_dbt_sql_test_source_seed_manifest, dependency_kind="source"
+            ),
+            "source_unquoted": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="source",
+                relation_name="raw.orders",
+                compiled_code="select * from raw.orders",
+            ),
+            "source_three_part": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="source",
+                relation_name='"warehouse"."raw"."orders"',
+                compiled_code='select * from "warehouse"."raw"."orders"',
+            ),
+            "source_alias": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="source",
+                relation_name='"raw"."orders_alias"',
+                compiled_code='select * from "raw"."orders_alias"',
+            ),
+            "source_ambiguous_fixture": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="source",
+                include_ambiguous_package=True,
+            ),
+            "chain_source_dependency": partial(
+                build_dbt_sql_test_model_chain_manifest, dependency_kind="source"
+            ),
+            "seed_dependency": partial(
+                build_dbt_sql_test_source_seed_manifest, dependency_kind="seed"
+            ),
+            "seed_unquoted": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="seed",
+                relation_name="analytics.countries",
+                compiled_code="select * from analytics.countries",
+            ),
+            "seed_three_part": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="seed",
+                relation_name='"warehouse"."analytics"."countries"',
+                compiled_code='select * from "warehouse"."analytics"."countries"',
+            ),
+            "seed_alias": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="seed",
+                relation_name='"analytics"."countries_alias"',
+                compiled_code='select * from "analytics"."countries_alias"',
+            ),
+            "seed_ambiguous_fixture": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="seed",
+                include_ambiguous_package=True,
+            ),
+            "chain_seed_dependency": partial(
+                build_dbt_sql_test_model_chain_manifest, dependency_kind="seed"
+            ),
+            "chain_snapshot_boundary": partial(
+                build_dbt_sql_test_boundary_chain_manifest, boundary_kind="snapshot"
+            ),
+            "chain_ephemeral_boundary": partial(
+                build_dbt_sql_test_boundary_chain_manifest, boundary_kind="ephemeral"
+            ),
+            "unquoted": partial(
+                build_dbt_sql_test_target_manifest,
+                dep_relation_name="analytics.stg_orders",
+                fact_compiled_code="select * from analytics.stg_orders where amount_cents > 0",
+            ),
+            "three_part": partial(
+                build_dbt_sql_test_target_manifest,
+                dep_relation_name='"warehouse"."analytics"."stg_orders"',
+                fact_compiled_code=(
+                    'select * from "warehouse"."analytics"."stg_orders" where amount_cents > 0'
+                ),
+            ),
+            "alias": partial(
+                build_dbt_sql_test_target_manifest,
+                dep_relation_name='"analytics"."stg_orders_alias"',
+                fact_compiled_code='select * from "analytics"."stg_orders_alias"',
+            ),
+            "ambiguous": partial(
+                build_dbt_sql_test_target_manifest, include_ambiguous_package=True
+            ),
+            "relation_in_string_and_comment": partial(
+                build_dbt_sql_test_target_manifest,
+                dep_relation_name="analytics.stg_orders",
+                fact_compiled_code=(
+                    "-- upstream analytics.stg_orders\n"
+                    "select *, 'analytics.stg_orders' as src "
+                    "from analytics.stg_orders where amount_cents > 0"
+                ),
+            ),
+        }
+    )
+)
+_DBT_SQL_TEST_ERROR_MANIFEST_FACTORIES: MappingProxyType[str, Callable[[], DbtManifestIndex]] = (
+    MappingProxyType(
+        {
+            "default": partial(
+                build_dbt_sql_test_target_manifest,
+                fact_compiled_code="select * from analytics.unexpected_orders",
+            ),
+            "source_dependency": partial(
+                build_dbt_sql_test_source_seed_manifest, dependency_kind="source"
+            ),
+            "source_ambiguous_fixture": partial(
+                build_dbt_sql_test_source_seed_manifest, dependency_kind="source"
+            ),
+            "source_unresolved_relation": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="source",
+                compiled_code="select * from raw.unexpected_orders",
+            ),
+            "chain_missing_compiled_sql": partial(
+                build_dbt_sql_test_model_chain_manifest,
+                dependency_kind="source",
+                upstream_compiled_code=None,
+            ),
+            "chain_unresolved_relation": partial(
+                build_dbt_sql_test_model_chain_manifest,
+                dependency_kind="source",
+                upstream_compiled_code="select * from raw.unexpected_orders",
+            ),
+            "chain_snapshot_boundary": partial(
+                build_dbt_sql_test_boundary_chain_manifest, boundary_kind="snapshot"
+            ),
+            "chain_ephemeral_boundary": partial(
+                build_dbt_sql_test_boundary_chain_manifest, boundary_kind="ephemeral"
+            ),
+            "seed_dependency": partial(
+                build_dbt_sql_test_source_seed_manifest, dependency_kind="seed"
+            ),
+            "seed_ambiguous_fixture": partial(
+                build_dbt_sql_test_source_seed_manifest, dependency_kind="seed"
+            ),
+            "seed_unresolved_relation": partial(
+                build_dbt_sql_test_source_seed_manifest,
+                dependency_kind="seed",
+                compiled_code="select * from analytics.unexpected_countries",
+            ),
+            "ambiguous": partial(
+                build_dbt_sql_test_target_manifest, include_ambiguous_package=True
+            ),
+            "missing_compiled_sql": partial(
+                build_dbt_sql_test_target_manifest, fact_compiled_code=None
+            ),
+        }
+    )
+)
 
 
 def build_project_with_source_relation_collision() -> CompiledProject:
@@ -815,18 +936,29 @@ def build_project_with_seed_relation_collision(
 def build_dbt_sql_test_target_error_project(*, project_kind: str) -> CompiledProject:
     """Build an error project variant for dbt SQL test target tests."""
 
-    if project_kind == "model_name_collision":
-        return build_project_with_expected_sql_test_targets(
-            expected_model_names=("fact_orders",),
-            sqlbuild_model_names=("fact_orders",),
-        )
-    if project_kind == "source_relation_collision":
-        return build_project_with_source_relation_collision()
-    if project_kind == "seed_relation_collision":
-        return build_project_with_seed_relation_collision()
-    if project_kind == "seed_relation_collision_unqualified":
-        return build_project_with_seed_relation_collision(qualified_name=None)
-    return build_project_with_expected_sql_test_targets(expected_model_names=("fact_orders",))
+    return _DBT_SQL_TEST_ERROR_PROJECT_FACTORIES[project_kind]()
+
+
+_DBT_SQL_TEST_ERROR_PROJECT_FACTORIES: MappingProxyType[str, Callable[[], CompiledProject]] = (
+    MappingProxyType(
+        {
+            "default": partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+            ),
+            "model_name_collision": partial(
+                build_project_with_expected_sql_test_targets,
+                expected_model_names=("fact_orders",),
+                sqlbuild_model_names=("fact_orders",),
+            ),
+            "source_relation_collision": build_project_with_source_relation_collision,
+            "seed_relation_collision": build_project_with_seed_relation_collision,
+            "seed_relation_collision_unqualified": partial(
+                build_project_with_seed_relation_collision, qualified_name=None
+            ),
+        }
+    )
+)
 
 
 def resolve_dbt_sql_test_fixture_names(
@@ -838,37 +970,65 @@ def resolve_dbt_sql_test_fixture_names(
     """Resolve dbt-backed SQL test fixture names for a source or seed."""
 
     resolver: DbtCompileReferenceResolver = DbtCompileReferenceResolver(dbt_manifest=manifest)
-    if fixture_kind == "model":
-        return resolver.extend_sql_test_model_names(known_model_names=known_names)
-    if fixture_kind == "source":
-        return resolver.extend_sql_test_source_names(known_source_names=known_names)
+    fixture_resolvers: dict[str, Callable[..., set[str]]] = {
+        "model": resolver.extend_sql_test_model_names,
+        "source": resolver.extend_sql_test_source_names,
+        "seed": resolver.extend_sql_test_seed_names,
+    }
+    fixture_keywords: dict[str, str] = {
+        "model": "known_model_names",
+        "source": "known_source_names",
+        "seed": "known_seed_names",
+    }
+    return fixture_resolvers[fixture_kind](**{fixture_keywords[fixture_kind]: known_names})
+
+
+def resolve_dbt_sql_test_model_fixture_names(
+    manifest: DbtManifestIndex, known_names: set[str]
+) -> set[str]:
+    """Resolve dbt-backed model fixture names."""
+
+    resolver: DbtCompileReferenceResolver = DbtCompileReferenceResolver(dbt_manifest=manifest)
+    return resolver.extend_sql_test_model_names(known_model_names=known_names)
+
+
+def resolve_dbt_sql_test_source_fixture_names(
+    manifest: DbtManifestIndex, known_names: set[str]
+) -> set[str]:
+    """Resolve dbt-backed source fixture names."""
+
+    resolver: DbtCompileReferenceResolver = DbtCompileReferenceResolver(dbt_manifest=manifest)
+    return resolver.extend_sql_test_source_names(known_source_names=known_names)
+
+
+def resolve_dbt_sql_test_seed_fixture_names(
+    manifest: DbtManifestIndex, known_names: set[str]
+) -> set[str]:
+    """Resolve dbt-backed seed fixture names."""
+
+    resolver: DbtCompileReferenceResolver = DbtCompileReferenceResolver(dbt_manifest=manifest)
     return resolver.extend_sql_test_seed_names(known_seed_names=known_names)
 
 
 def extract_dbt_ls_selects(argv: tuple[str, ...]) -> tuple[str, ...]:
     """Extract select terms from a dbt ls argv for assertions."""
 
-    if "--select" not in argv:
-        return ()
-    values: list[str] = []
-    index: int = argv.index("--select") + 1
-    while index < len(argv) and not argv[index].startswith("--"):
-        values.append(argv[index])
-        index += 1
-    return tuple(values)
+    return _extract_dbt_option_values(argv=argv, option="--select")
 
 
 def extract_dbt_ls_excludes(argv: tuple[str, ...]) -> tuple[str, ...]:
     """Extract exclude terms from a dbt ls argv for assertions."""
 
-    if "--exclude" not in argv:
-        return ()
-    values: list[str] = []
-    index: int = argv.index("--exclude") + 1
-    while index < len(argv) and not argv[index].startswith("--"):
-        values.append(argv[index])
-        index += 1
-    return tuple(values)
+    return _extract_dbt_option_values(argv=argv, option="--exclude")
+
+
+def _extract_dbt_option_values(*, argv: tuple[str, ...], option: str) -> tuple[str, ...]:
+    command: str = " ".join(argv)
+    pattern: str = rf"(?:^| ){re.escape(option)}((?: (?!--)\S+)*)"
+    match: re.Match[str] = cast(
+        re.Match[str], re.search(pattern, command) or re.match(r"()", command)
+    )
+    return tuple(match.group(1).split())
 
 
 def build_manifest_data(
@@ -909,41 +1069,48 @@ def build_manifest_model_node(
 ) -> dict[str, object]:
     """Build a minimal dbt manifest model node."""
 
+    resolved_raw_codes: dict[bool, str] = {
+        True: f"select * from {name}",
+        False: cast(str, raw_code),
+    }
     node: dict[str, object] = {
         "unique_id": unique_id,
         "resource_type": resource_type,
         "package_name": package_name,
         "name": name,
-        "raw_code": raw_code if raw_code is not None else f"select * from {name}",
+        "raw_code": resolved_raw_codes[raw_code is None],
     }
-    if relation_name is not None:
-        node["relation_name"] = relation_name
-    if compiled_code is not None:
-        node["compiled_code"] = compiled_code
-    if database is not None:
-        node["database"] = database
-    if schema is not None:
-        node["schema"] = schema
-    if alias is not None:
-        node["alias"] = alias
-    if checksum is not None:
-        node["checksum"] = {"checksum": checksum}
-    if fqn:
-        node["fqn"] = list(fqn)
-    if depends_on_nodes or depends_on_macro_ids:
-        node["depends_on"] = {
-            "nodes": list(depends_on_nodes),
-            "macros": list(depends_on_macro_ids),
-        }
-    if materialized is not None:
-        config: dict[str, object] = {"materialized": materialized}
-        if incremental_strategy is not None:
-            config["incremental_strategy"] = incremental_strategy
-        if meta is not None:
-            config["meta"] = meta
-        if config_overrides is not None:
-            config.update(config_overrides)
-        node["config"] = config
+    optional_fields: tuple[tuple[str, object, bool], ...] = (
+        ("relation_name", relation_name, relation_name is not None),
+        ("compiled_code", compiled_code, compiled_code is not None),
+        ("database", database, database is not None),
+        ("schema", schema, schema is not None),
+        ("alias", alias, alias is not None),
+        ("checksum", {"checksum": checksum}, checksum is not None),
+        ("fqn", list(fqn), bool(fqn)),
+        (
+            "depends_on",
+            {
+                "nodes": list(depends_on_nodes),
+                "macros": list(depends_on_macro_ids),
+            },
+            bool(depends_on_nodes or depends_on_macro_ids),
+        ),
+    )
+    field_name: str
+    field_value: object
+    is_present: bool
+    for field_name, field_value, is_present in optional_fields:
+        node.update(_OPTIONAL_FIELD_BUILDERS[is_present](field_name, field_value))
+    config: dict[str, object] = {"materialized": materialized}
+    config.update(
+        _OPTIONAL_FIELD_BUILDERS[incremental_strategy is not None](
+            "incremental_strategy", incremental_strategy
+        )
+    )
+    config.update(_OPTIONAL_FIELD_BUILDERS[meta is not None]("meta", meta))
+    config.update(config_overrides or {})
+    node.update(_OPTIONAL_FIELD_BUILDERS[materialized is not None]("config", config))
     return node
 
 
@@ -984,22 +1151,21 @@ def build_manifest_source_node(
         "source_name": source_name,
         "name": name,
     }
-    if relation_name is not None:
-        node["relation_name"] = relation_name
-    if database is not None:
-        node["database"] = database
-    if schema is not None:
-        node["schema"] = schema
-    if identifier is not None:
-        node["identifier"] = identifier
-    if loaded_at_field is not None:
-        node["loaded_at_field"] = loaded_at_field
-    if loaded_at_query is not None:
-        node["loaded_at_query"] = loaded_at_query
-    if freshness is not None:
-        node["freshness"] = freshness
-    if freshness_filter is not None:
-        node["filter"] = freshness_filter
+    optional_fields: tuple[tuple[str, object, bool], ...] = (
+        ("relation_name", relation_name, relation_name is not None),
+        ("database", database, database is not None),
+        ("schema", schema, schema is not None),
+        ("identifier", identifier, identifier is not None),
+        ("loaded_at_field", loaded_at_field, loaded_at_field is not None),
+        ("loaded_at_query", loaded_at_query, loaded_at_query is not None),
+        ("freshness", freshness, freshness is not None),
+        ("filter", freshness_filter, freshness_filter is not None),
+    )
+    field_name: str
+    field_value: object
+    is_present: bool
+    for field_name, field_value, is_present in optional_fields:
+        node.update(_OPTIONAL_FIELD_BUILDERS[is_present](field_name, field_value))
     return node
 
 
@@ -1025,22 +1191,21 @@ def build_manifest_seed_node(
         "package_name": package_name,
         "name": name,
     }
-    if relation_name is not None:
-        node["relation_name"] = relation_name
-    if database is not None:
-        node["database"] = database
-    if schema is not None:
-        node["schema"] = schema
-    if alias is not None:
-        node["alias"] = alias
-    if checksum is not None:
-        node["checksum"] = {"checksum": checksum}
-    if config_overrides is not None:
-        node["config"] = config_overrides
-    if root_path is not None:
-        node["root_path"] = root_path
-    if original_file_path is not None:
-        node["original_file_path"] = original_file_path
+    optional_fields: tuple[tuple[str, object, bool], ...] = (
+        ("relation_name", relation_name, relation_name is not None),
+        ("database", database, database is not None),
+        ("schema", schema, schema is not None),
+        ("alias", alias, alias is not None),
+        ("checksum", {"checksum": checksum}, checksum is not None),
+        ("config", config_overrides, config_overrides is not None),
+        ("root_path", root_path, root_path is not None),
+        ("original_file_path", original_file_path, original_file_path is not None),
+    )
+    field_name: str
+    field_value: object
+    is_present: bool
+    for field_name, field_value, is_present in optional_fields:
+        node.update(_OPTIONAL_FIELD_BUILDERS[is_present](field_name, field_value))
     return node
 
 
@@ -1080,16 +1245,16 @@ def build_compiled_project_with_model_specs(
             CompileModelInput(
                 model_file=model_file,
                 config=CompileModelConfig(
-                    values={"tags": tags_by_model_name.get(model_name, ())}
-                    if model_name in tags_by_model_name
-                    else {}
+                    values=_OPTIONAL_FIELD_BUILDERS[model_name in tags_by_model_name](
+                        "tags", tags_by_model_name.get(model_name, ())
+                    )
                 ),
                 query_sql=sql,
                 references=extract_sql_references(sql),
             )
         )
     return assemble_compiled_project(
-        CompileProjectInputs(
+        inputs=CompileProjectInputs(
             project_config=ProjectConfig(name="demo", adapter="duckdb"),
             local_config=LocalConfig(),
             discovered_inputs=DiscoveredProjectInputs(
@@ -1106,9 +1271,13 @@ def graph_edge_stable_ids(
 ) -> dict[str, tuple[str, ...]]:
     """Render graph edges as stable IDs for assertions."""
 
-    return {
-        key.stable_id: tuple(dep.stable_id for dep in deps) for key, deps in graph_edges.items()
-    }
+    stable_edges: dict[str, tuple[str, ...]] = {}
+    for key, deps in graph_edges.items():
+        stable_deps: list[str] = []
+        for dep in deps:
+            stable_deps.append(dep.stable_id)
+        stable_edges[key.stable_id] = tuple(stable_deps)
+    return stable_edges
 
 
 def graph_key_stable_ids(keys: frozenset[DbtCombinedGraphKey]) -> tuple[str, ...]:
@@ -1123,14 +1292,24 @@ def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
     owner, resource_type, name = stable_id.split(":", maxsplit=2)
     owner_enum: DbtCombinedGraphOwner = DbtCombinedGraphOwner(owner)
     resource_type_enum: DbtCombinedGraphResourceType = DbtCombinedGraphResourceType(resource_type)
-    if (
-        owner_enum == DbtCombinedGraphOwner.DBT
-        and resource_type_enum == DbtCombinedGraphResourceType.SOURCE
-    ):
-        return dbt_source_graph_key(name)
-    if owner_enum == DbtCombinedGraphOwner.DBT:
-        return dbt_model_graph_key(name)
-    return sqlbuild_model_graph_key(name)
+    factories: dict[
+        tuple[DbtCombinedGraphOwner, DbtCombinedGraphResourceType],
+        Callable[[str], DbtCombinedGraphKey],
+    ] = {
+        (
+            DbtCombinedGraphOwner.DBT,
+            DbtCombinedGraphResourceType.SOURCE,
+        ): dbt_source_graph_key,
+        (
+            DbtCombinedGraphOwner.DBT,
+            DbtCombinedGraphResourceType.MODEL,
+        ): dbt_model_graph_key,
+        (
+            DbtCombinedGraphOwner.SQLBUILD,
+            DbtCombinedGraphResourceType.MODEL,
+        ): sqlbuild_model_graph_key,
+    }
+    return factories[(owner_enum, resource_type_enum)](name)
 
 
 def write_dbt_test_fingerprint(
@@ -1231,18 +1410,17 @@ def build_column_lineage_manifest_data() -> dict[str, object]:
     )
 
 
-def build_column_lineage_star_manifest_data(*, include_source_schema: bool) -> dict[str, object]:
+def build_column_lineage_star_manifest_data() -> dict[str, object]:
     """Build manifest data for SELECT * dbt column lineage tests."""
 
     source: dict[str, object] = build_manifest_source_node(
         unique_id="source.analytics.raw.orders",
         relation_name='"db"."raw"."orders"',
     )
-    if include_source_schema:
-        source["columns"] = {
-            "order_id": {"name": "order_id", "data_type": "INTEGER"},
-            "amount": {"name": "amount", "data_type": "INTEGER"},
-        }
+    source["columns"] = {
+        "order_id": {"name": "order_id", "data_type": "INTEGER"},
+        "amount": {"name": "amount", "data_type": "INTEGER"},
+    }
     return build_manifest_data(
         nodes=(
             build_manifest_model_node(
@@ -1423,51 +1601,16 @@ class FakeLineageSourceSchemaAdapter(BaseAdapter):
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         del connection
         self.get_all_columns_calls.append((database, schemas, names))
-        requested_names: frozenset[str] | None = frozenset(names) if names is not None else None
-        return {
-            relation_name: columns
-            for relation_name, columns in self.columns_by_relation.items()
-            if requested_names is None or relation_name in requested_names
-        }
+        return dict(self.columns_by_relation)
 
 
-class FakeReusePlanAdapter(BaseAdapter):
-    """Adapter stub for dbt reuse origin relation listing tests."""
+class EmptyLineageSourceSchemaAdapter(FakeLineageSourceSchemaAdapter):
+    """Adapter stub that reports no dbt source columns."""
 
-    adapter_name: ClassVar[str] = "fake_reuse_plan"
+    adapter_name: ClassVar[str] = "empty_lineage_source_schema"
 
-    def __init__(self, relations: tuple[RelationInfo, ...]) -> None:
-        self.relations: tuple[RelationInfo, ...] = relations
-        self.list_relation_calls: list[
-            tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
-        ] = []
-
-    def connect(self, config: dict[str, object]) -> object:
-        return object()
-
-    def execute(self, connection: object, sql: str) -> object:
-        raise AssertionError("execute should not be called in reuse plan tests")
-
-    def close(self, connection: object) -> None:
-        return None
-
-    def list_relations(
-        self,
-        connection: object,
-        *,
-        database: str | None,
-        schemas: tuple[str, ...] | None,
-        names: tuple[str, ...] | None = None,
-    ) -> tuple[RelationInfo, ...]:
-        del connection
-        self.list_relation_calls.append((database, schemas, names))
-        return tuple(
-            relation
-            for relation in self.relations
-            if relation.database == database
-            and (schemas is None or relation.schema in schemas)
-            and (names is None or relation.name in names)
-        )
+    def __init__(self) -> None:
+        super().__init__({})
 
 
 class CountingModelPlanningAdapter(DuckDbAdapter):
@@ -1511,7 +1654,7 @@ class CountingModelPlanningAdapter(DuckDbAdapter):
     ) -> tuple[RelationInfo, ...]:
         self.list_relation_calls.append((database, schemas, names))
         return super().list_relations(
-            connection,
+            connection=connection,
             database=database,
             schemas=schemas,
             names=names,
@@ -1527,7 +1670,7 @@ class CountingModelPlanningAdapter(DuckDbAdapter):
     ) -> bool:
         self.relation_exists_calls.append((database, schema, name))
         return super().relation_exists(
-            connection,
+            connection=connection,
             database=database,
             schema=schema,
             name=name,
@@ -1589,14 +1732,14 @@ def setup_dbt_model_planning_state(
 ) -> None:
     """Create optional relation and fingerprint state for dbt model planning tests."""
 
-    if create_relation:
-        adapter.execute(connection, "CREATE TABLE main.orders AS SELECT 1 AS id")
-    if fingerprint_hash is not None:
+    for _requested_relation in range(int(create_relation)):
+        adapter.execute(connection=connection, sql="CREATE TABLE main.orders AS SELECT 1 AS id")
+    for requested_fingerprint_hash in (fingerprint_hash,) * int(fingerprint_hash is not None):
         write_dbt_test_fingerprint(
             adapter=adapter,
             connection=connection,
             unique_id=unique_id,
-            version_hash=fingerprint_hash,
+            version_hash=cast(str, requested_fingerprint_hash),
         )
 
 
@@ -1613,10 +1756,8 @@ def build_dbt_diff_manifest_model_node(
     """Build a dbt manifest model node with diff-relevant config and meta."""
 
     config: dict[str, object] = {"materialized": "table"}
-    if unique_key is not None:
-        config["unique_key"] = unique_key
-    if config_meta is not None:
-        config["meta"] = config_meta
+    config.update(_OPTIONAL_FIELD_BUILDERS[unique_key is not None]("unique_key", unique_key))
+    config.update(_OPTIONAL_FIELD_BUILDERS[config_meta is not None]("meta", config_meta))
     node: dict[str, object] = {
         "unique_id": unique_id,
         "resource_type": "model",
@@ -1628,8 +1769,7 @@ def build_dbt_diff_manifest_model_node(
         "raw_code": f"select * from {name}",
         "config": config,
     }
-    if node_meta is not None:
-        node["meta"] = node_meta
+    node.update(_OPTIONAL_FIELD_BUILDERS[node_meta is not None]("meta", node_meta))
     return node
 
 
@@ -1716,12 +1856,18 @@ def build_dbt_clone_reuse_manifest_index(
 ) -> DbtManifestIndex:
     """Build a reuse manifest index for clone executor tests."""
 
-    if not include_model:
-        return build_dbt_manifest_index(raw_data=build_manifest_data(nodes=()))
-    return build_dbt_clone_manifest_index(
-        schema="prod",
+    model_node: dict[str, object] = build_manifest_model_node(
+        unique_id="model.analytics.dbt_orders",
+        package_name="analytics",
+        name="dbt_orders",
         relation_name="prod.dbt_orders",
+        schema="prod",
+        alias="dbt_orders",
         materialized=materialized,
+        raw_code="{{ config(materialized='view') }}\nSELECT 99 AS order_id, 'raw' AS status",
+    )
+    return build_dbt_manifest_index(
+        raw_data=build_manifest_data(nodes=(model_node,) * int(include_model))
     )
 
 
@@ -1735,7 +1881,7 @@ def create_dbt_clone_relation(
 ) -> None:
     """Create a dbt clone table from literal rows in a real DuckDB schema."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     selects: list[str] = []
     row: tuple[object, ...]
     for row in rows:
@@ -1743,7 +1889,9 @@ def create_dbt_clone_relation(
         status: str = cast(str, row[1])
         selects.append(f"SELECT {order_id} AS order_id, '{status}' AS status")
     union_sql: str = " UNION ALL ".join(selects)
-    adapter.execute(connection, f"CREATE OR REPLACE TABLE {schema}.{name} AS {union_sql}")
+    adapter.execute(
+        connection=connection, sql=f"CREATE OR REPLACE TABLE {schema}.{name} AS {union_sql}"
+    )
 
 
 def create_dbt_clone_relation_when_requested(
@@ -1756,8 +1904,8 @@ def create_dbt_clone_relation_when_requested(
 ) -> None:
     """Create a dbt clone fixture relation when requested by a test case."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
-    if create:
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    for _requested_relation in range(int(create)):
         create_dbt_clone_relation(
             adapter=adapter,
             connection=connection,
@@ -1772,8 +1920,8 @@ def read_dbt_clone_rows(
     """Read deterministic dbt clone rows from DuckDB."""
 
     result: QueryResult = adapter.query(
-        connection,
-        f"SELECT order_id, status FROM {schema}.{name} ORDER BY order_id",
+        connection=connection,
+        sql=f"SELECT order_id, status FROM {schema}.{name} ORDER BY order_id",
         limit=None,
     )
     return result.rows
@@ -1789,10 +1937,10 @@ def assert_dbt_clone_execution_result(
     """Assert dbt clone execution result fields."""
 
     assert len(result.item_results) == expected_item_count
-    if expected_item_count == 0:
-        return
-    assert result.item_results[0].action == expected_action
-    assert result.item_results[0].status == expected_status
+    actual_outcomes: tuple[tuple[str, str], ...] = tuple(
+        (item.action, item.status) for item in result.item_results
+    )
+    assert actual_outcomes == ((expected_action, expected_status),) * expected_item_count
 
 
 def create_dbt_diff_relation(
@@ -1805,11 +1953,11 @@ def create_dbt_diff_relation(
 ) -> None:
     """Create a dbt diff order table from literal rows in a real DuckDB schema."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     union_sql: str = " UNION ALL ".join(
         f"SELECT {order_id} AS order_id, {amount} AS amount_cents" for order_id, amount in rows
     )
-    adapter.execute(connection, f"CREATE TABLE {schema}.{name} AS {union_sql}")
+    adapter.execute(connection=connection, sql=f"CREATE TABLE {schema}.{name} AS {union_sql}")
 
 
 def build_dbt_diff_schema_only_options() -> DbtDiffOptions:
@@ -1843,13 +1991,13 @@ def assert_dbt_diff_execution_result(
     """Assert dbt diff execution result shape, row counts, and failure flag."""
 
     assert tuple(item.name for item in result.model_results) == expected_model_names
-    row_result: RowDiffResult | None = (
-        result.model_results[0].row_result if result.model_results else None
+    row_result: RowDiffResult | None = next(
+        (item.row_result for item in result.model_results), None
     )
     assert (row_result is not None) == expected_has_row_result
-    unequal: int = row_result.unequal_count if row_result is not None else 0
-    left_only: int = row_result.left_only_count if row_result is not None else 0
-    right_only: int = row_result.right_only_count if row_result is not None else 0
+    unequal: int = getattr(row_result, "unequal_count", 0)
+    left_only: int = getattr(row_result, "left_only_count", 0)
+    right_only: int = getattr(row_result, "right_only_count", 0)
     assert unequal == expected_unequal_count
     assert left_only == expected_left_only_count
     assert right_only == expected_right_only_count
@@ -1861,10 +2009,10 @@ def create_dbt_diff_unique_key_relation(
 ) -> None:
     """Create a two-column-key dbt diff relation for unique key tests."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
     adapter.execute(
-        connection,
-        f"CREATE TABLE {schema}.dbt_orders AS "
+        connection=connection,
+        sql=f"CREATE TABLE {schema}.dbt_orders AS "
         f"SELECT 1 AS order_id, 1 AS line_id, {amount_cents} AS amount_cents",
     )
 
@@ -1878,8 +2026,10 @@ def create_dbt_diff_relation_with_columns(
 ) -> None:
     """Create a dbt diff relation from an explicit column projection."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
-    adapter.execute(connection, f"CREATE TABLE {schema}.dbt_orders AS SELECT {column_sql}")
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    adapter.execute(
+        connection=connection, sql=f"CREATE TABLE {schema}.dbt_orders AS SELECT {column_sql}"
+    )
 
 
 def create_dbt_diff_cursor_relation(
@@ -1892,13 +2042,15 @@ def create_dbt_diff_cursor_relation(
 ) -> None:
     """Create a dbt diff relation that carries a bounded cursor column."""
 
-    adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
-    cursor_value: str = (
-        "cast('2026-06-17 00:00:00' as timestamp)" if cursor_kind == "timestamp" else "10"
-    )
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    cursor_values: dict[str, str] = {
+        "timestamp": "cast('2026-06-17 00:00:00' as timestamp)",
+        "integer": "10",
+    }
+    cursor_value: str = cursor_values[cursor_kind]
     adapter.execute(
-        connection,
-        f"CREATE TABLE {schema}.dbt_orders AS "
+        connection=connection,
+        sql=f"CREATE TABLE {schema}.dbt_orders AS "
         f"SELECT 1 AS order_id, 100 AS amount_cents, {cursor_value} AS {cursor_column}",
     )
 
@@ -1908,13 +2060,12 @@ def create_dbt_diff_relation_when_requested(
 ) -> None:
     """Create a dbt diff relation only when requested, else just the schema."""
 
-    if not create:
-        adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema}")
-        return
-    create_dbt_diff_relation(
-        adapter=adapter,
-        connection=connection,
-        schema=schema,
-        name="dbt_orders",
-        rows=((1, 1),),
-    )
+    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    for _requested_relation in range(int(create)):
+        create_dbt_diff_relation(
+            adapter=adapter,
+            connection=connection,
+            schema=schema,
+            name="dbt_orders",
+            rows=((1, 1),),
+        )

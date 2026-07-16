@@ -112,23 +112,22 @@ def test_given_dbt_interop_project_when_running_plan_json_then_outputs_expected_
     assert isinstance(sqlbuild_payload, dict)
     assert isinstance(anchors_payload, Sequence)
     assert isinstance(path_translations_payload, Sequence)
+    assert all(isinstance(anchor, dict) for anchor in anchors_payload)
+    assert all(isinstance(translation, dict) for translation in path_translations_payload)
     typed_dbt_payload: Mapping[str, object] = cast(Mapping[str, object], dbt_payload)
     typed_sqlbuild_payload: Mapping[str, object] = cast(Mapping[str, object], sqlbuild_payload)
     assert typed_sqlbuild_payload["selected_models"] == list(test_case.expected_selected_models)
     assert typed_dbt_payload["skipped"] == test_case.expected_dbt_skipped
     assert typed_sqlbuild_payload["skipped"] == test_case.expected_sqlbuild_skipped
-    assert [
-        cast(Mapping[str, object], anchor)["term"]
-        for anchor in anchors_payload
-        if isinstance(anchor, dict)
-    ] == list(test_case.expected_anchor_terms)
+    assert [cast(Mapping[str, object], anchor)["term"] for anchor in anchors_payload] == list(
+        test_case.expected_anchor_terms
+    )
     assert [
         (
             cast(Mapping[str, object], translation)["from"],
             cast(Mapping[str, object], translation)["to"],
         )
         for translation in path_translations_payload
-        if isinstance(translation, dict)
     ] == list(test_case.expected_path_translations)
 
 

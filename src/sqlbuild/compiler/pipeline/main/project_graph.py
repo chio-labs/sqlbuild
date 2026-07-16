@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
-from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.shared.helpers.lineage_graph import (
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
+)
+from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.shared.helpers.selector_indexes import (
+from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
+from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.main.selection.build_model_path_index import (
     build_model_path_index,
+)
+from sqlbuild.compiler.planner.main.selection.build_model_tag_index import (
     build_model_tag_index,
 )
 

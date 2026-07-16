@@ -108,6 +108,9 @@ class NodeSourceWatermarkBuildE2ETestCase:
     expected_source_kinds_by_node: dict[str, tuple[str, ...]]
     expected_unknown_reasons_by_node: dict[str, tuple[str, ...]] = field(default_factory=dict)
     expected_absent_nodes: tuple[str, ...] = field(default_factory=tuple)
+    frontier_actions: tuple[tuple[tuple[int, ...], tuple[tuple[str, ...], ...]], ...] = field(
+        default_factory=tuple
+    )
 
 
 @dataclass(frozen=True)
@@ -782,8 +785,8 @@ class SelectorSurfaceBuildE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_exit_code: int
-    expected_fragments: tuple[str, ...]
-    expected_stream: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
     pre_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
 
 
@@ -935,8 +938,8 @@ class PlanCommandBuildE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_exit_code: int
-    expected_fragments: tuple[str, ...]
-    expected_stream: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

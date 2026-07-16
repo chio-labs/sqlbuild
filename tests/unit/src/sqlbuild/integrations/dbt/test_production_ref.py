@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.reuse import production_ref as production_ref_module
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtReuseUnavailableError
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.reuse import production_ref as production_ref_module
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
+    DbtManifestIndex,
     DbtProductionRefCompileResult,
 )
-from sqlbuild.spec.models.project import DbtProductionRefConfig
+from sqlbuild.spec.contracts.models import DbtProductionRefConfig
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtReuseCompileDepsTestCase,
     DbtReuseGitRefreshTestCase,

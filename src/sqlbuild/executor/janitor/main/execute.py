@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.executor.janitor.helpers.deletion import apply_janitor_deletions
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.executor.janitor._helpers.deletion import apply_janitor_deletions
 from sqlbuild.executor.janitor.models import (
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
@@ -44,38 +44,40 @@ def execute_janitor_plan(
     candidate: JanitorDeleteCandidate
     for candidate in plan.candidates:
         adapter.drop(
-            connection,
+            connection=connection,
             destination=candidate.key.display_name(),
             if_exists=True,
             statement_recorder=recorder,
         )
     deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = apply_janitor_deletions(
-        plan.checkpoint_candidates, delete_checkpoint
+        candidates=plan.checkpoint_candidates, delete=delete_checkpoint
     )
     deleted_detached_virtual_environments: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...
     ] = apply_janitor_deletions(
-        plan.detached_virtual_environment_candidates, delete_detached_virtual_environment
+        candidates=plan.detached_virtual_environment_candidates,
+        delete=delete_detached_virtual_environment,
     )
     deleted_expired_virtual_environments: tuple[JanitorExpiredVirtualEnvironmentCandidate, ...] = (
         apply_janitor_deletions(
-            plan.expired_virtual_environment_candidates, delete_expired_virtual_environment
+            candidates=plan.expired_virtual_environment_candidates,
+            delete=delete_expired_virtual_environment,
         )
     )
     deleted_state_backups: tuple[JanitorStateBackupCandidate, ...] = apply_janitor_deletions(
-        plan.state_backup_candidates, delete_state_backup
+        candidates=plan.state_backup_candidates, delete=delete_state_backup
     )
     deleted_expired_locks: tuple[JanitorExpiredLockCandidate, ...] = apply_janitor_deletions(
-        plan.expired_lock_candidates, delete_expired_lock
+        candidates=plan.expired_lock_candidates, delete=delete_expired_lock
     )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = apply_janitor_deletions(
-        plan.direct_state_prune_candidates,
-        lambda direct_state_candidate: adapter.execute(
-            connection, direct_state_candidate.prune_sql
+        candidates=plan.direct_state_prune_candidates,
+        delete=lambda direct_state_candidate: adapter.execute(
+            connection=connection, sql=direct_state_candidate.prune_sql
         ),
     )
     pruned_virtual_state: tuple[JanitorVirtualStatePruneCandidate, ...] = apply_janitor_deletions(
-        plan.virtual_state_prune_candidates, prune_virtual_state
+        candidates=plan.virtual_state_prune_candidates, delete=prune_virtual_state
     )
     return JanitorExecutionResult(
         deleted=plan.candidates,

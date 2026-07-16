@@ -4,19 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
 from sqlbuild.compiler.auditing.types import (
     AuditOutcome,
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
+    assert_no_unresolved_sql_markers,
+)
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
-from sqlbuild.shared.helpers.sql.resolution import assert_no_unresolved_sql_markers
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def execute_audit(
@@ -54,7 +56,7 @@ def execute_audit(
         sqlbuild_audit_name=audit.name,
         sqlbuild_column_name=audit.attached_column_name,
     ):
-        cursor: Any = adapter.execute(connection, executed_sql)
+        cursor: Any = adapter.execute(connection=connection, sql=executed_sql)
         rows: list[Any] = cursor.fetchall()
     row_count: int = len(rows)
 

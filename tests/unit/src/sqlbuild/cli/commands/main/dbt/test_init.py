@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-import sqlbuild.cli.commands.helpers.dbt_init.execution as dbt_init_execution
-import sqlbuild.cli.commands.helpers.dbt_init.invocation as dbt_init_invocation
-import sqlbuild.cli.commands.main.commands.dbt_init as dbt_init_module
-from sqlbuild.cli.commands.helpers.dbt_init.models import DbtInitCommandRequest
-from sqlbuild.cli.commands.helpers.dbt_init.prompt import resolve_production_git_ref
+import sqlbuild.cli.commands._helpers.dbt_init.execution as dbt_init_execution
+import sqlbuild.cli.commands._helpers.dbt_init.invocation as dbt_init_invocation
+import sqlbuild.cli.commands.main.dbt.dbt_init as dbt_init_module
+from sqlbuild.cli.commands._helpers.dbt_init.prompt import resolve_production_git_ref
+from sqlbuild.cli.commands.models import DbtInitCommandRequest
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import DbtInitRequest, DbtInitResult
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
+from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.shared.helpers.sources import render_source_relation
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import SqlResourceRefKind
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_python_relation_targets(
@@ -33,4 +35,4 @@ def build_python_relation_targets(
 
 def _source_relation(*, adapter: BaseAdapter, source_name: str, plan_output: PlanOutput) -> str:
     source_entry: SourceEntry = (plan_output.source_read_map or plan_output.source_map)[source_name]
-    return render_source_relation(source_entry, adapter=adapter)
+    return render_source_relation(entry=source_entry, adapter=adapter)

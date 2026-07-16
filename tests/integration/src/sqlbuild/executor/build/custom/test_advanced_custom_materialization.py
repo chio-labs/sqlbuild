@@ -9,10 +9,10 @@ from typing import Any
 import duckdb
 import pytest
 
-from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
@@ -20,7 +20,8 @@ from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     ExistingRelationTestCase,
     PartitionTrackingTestCase,
@@ -165,6 +166,7 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
             description="first run with no existing target passes None",
             expected_row_count=1,
             expected_existing_was_none=True,
+            existing_relation=None,
         ),
         ExistingRelationTestCase(
             description="subsequent run with existing target passes RelationInfo",
@@ -172,10 +174,12 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
                 "CREATE TABLE main.test_model (old_col INT)",
                 "INSERT INTO main.test_model VALUES (999)",
             ),
-            existing_database=None,
-            existing_schema="main",
-            existing_name="test_model",
-            existing_type="BASE TABLE",
+            existing_relation=RelationInfo(
+                database=None,
+                schema="main",
+                name="test_model",
+                relation_type="BASE TABLE",
+            ),
             expected_row_count=1,
             expected_existing_was_none=False,
         ),
@@ -191,16 +195,7 @@ def test_given_custom_materialization_when_target_state_varies_then_existing_rel
     for sql_stmt in test_case.setup_sql:
         connection.execute(sql_stmt)
 
-    existing: RelationInfo | None = (
-        RelationInfo(
-            database=test_case.existing_database,
-            schema=test_case.existing_schema,
-            name=test_case.existing_name or "",
-            relation_type=test_case.existing_type or "",
-        )
-        if test_case.existing_name is not None
-        else None
-    )
+    existing: RelationInfo | None = test_case.existing_relation
 
     entry: ModelPlanEntry = build_custom_plan_entry(sql="SELECT 1 AS id")
     captured: dict[str, Any] = {}
@@ -391,7 +386,7 @@ def test_given_build_with_custom_materialization_when_scheduled_then_routes_corr
     def custom_fn(ctx: MaterializationContext) -> MaterializationResult:
         augmented_sql: str = f"SELECT *, 'via_custom_fn' AS custom_marker FROM ({ctx.sql}) sub"
         ctx.adapter.create_table_as(
-            ctx.connection,
+            connection=ctx.connection,
             destination=ctx.destination,
             sql=augmented_sql,
             statement_recorder=ctx.statement_recorder,

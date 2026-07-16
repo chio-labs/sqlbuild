@@ -1,0 +1,1 @@
+"""CLI target artifact capabilities."""

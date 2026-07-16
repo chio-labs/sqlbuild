@@ -112,8 +112,7 @@ def prepare_waffle_shop(tmp_path: Path) -> Path:
     copytree(WAFFLE_SHOP_DIR, project_dir)
 
     db_path: Path = project_dir / "waffle_shop.duckdb"
-    if db_path.exists():
-        db_path.unlink()
+    db_path.unlink(missing_ok=True)
 
     return project_dir
 
@@ -129,11 +128,11 @@ def prepare_source_loader_strategies(
     copytree(SOURCE_LOADER_STRATEGIES_DIR, project_dir)
 
     db_path: Path = project_dir / "source_loader_strategies.duckdb"
-    if db_path.exists():
-        db_path.unlink()
+    db_path.unlink(missing_ok=True)
 
-    if project_toml is not None:
-        (project_dir / "sqlbuild_project.toml").write_text(project_toml, encoding="utf-8")
+    for project_config in (project_toml,) * int(project_toml is not None):
+        assert project_config is not None
+        (project_dir / "sqlbuild_project.toml").write_text(project_config, encoding="utf-8")
 
     return project_dir
 
@@ -309,8 +308,7 @@ def run_sqb(
     """Run an sqb CLI command via subprocess and return the result."""
 
     process_env: dict[str, str] = dict(os.environ)
-    if env is not None:
-        process_env.update(env)
+    process_env.update(env or {})
 
     return subprocess.run(
         ["uv", "run", "sqb", "--project-dir", str(project_dir), *command],
@@ -628,35 +626,37 @@ def build_real_warehouse_existing_snapshot_project_files(*, project_toml: str) -
 def build_current_check_customers_model_sql(*, changed: bool) -> str:
     """Build mutable current-check source model for live snapshot apply tests."""
 
-    if changed:
-        return (
+    return {
+        False: (
+            "MODEL (materialized table);\n\n"
+            "SELECT 1 AS customer_id, 'active' AS status\n"
+            "UNION ALL SELECT 2 AS customer_id, 'active' AS status\n"
+        ),
+        True: (
             "MODEL (materialized table);\n\n"
             "SELECT 1 AS customer_id, 'paused' AS status\n"
             "UNION ALL SELECT 2 AS customer_id, 'active' AS status\n"
-        )
-    return (
-        "MODEL (materialized table);\n\n"
-        "SELECT 1 AS customer_id, 'active' AS status\n"
-        "UNION ALL SELECT 2 AS customer_id, 'active' AS status\n"
-    )
+        ),
+    }[changed]
 
 
 def build_current_delete_customers_model_sql(*, changed: bool) -> str:
     """Build mutable current timestamp source model for hard-delete apply tests."""
 
-    if changed:
-        return (
+    return {
+        False: (
+            "MODEL (materialized table);\n\n"
+            "SELECT 1 AS customer_id, 'basic' AS plan, "
+            "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at\n"
+            "UNION ALL SELECT 2 AS customer_id, 'trial' AS plan, "
+            "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at\n"
+        ),
+        True: (
             "MODEL (materialized table);\n\n"
             "SELECT 1 AS customer_id, 'pro' AS plan, "
             "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS updated_at\n"
-        )
-    return (
-        "MODEL (materialized table);\n\n"
-        "SELECT 1 AS customer_id, 'basic' AS plan, "
-        "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at\n"
-        "UNION ALL SELECT 2 AS customer_id, 'trial' AS plan, "
-        "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at\n"
-    )
+        ),
+    }[changed]
 
 
 def build_historical_timestamp_extracts_model_sql(*, changed: bool) -> str:
@@ -671,13 +671,15 @@ def build_historical_timestamp_extracts_model_sql(*, changed: bool) -> str:
         "CAST('2026-01-01 00:00:00' AS TIMESTAMP) AS updated_at, "
         "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
     )
-    if changed:
-        sql += (
+    changed_sql: str = {
+        False: "",
+        True: (
             "UNION ALL SELECT 1 AS customer_id, 'pro' AS plan, "
             "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS updated_at, "
             "CAST('2026-01-04 00:00:00' AS TIMESTAMP) AS observed_at\n"
-        )
-    return sql
+        ),
+    }[changed]
+    return sql + changed_sql
 
 
 def build_historical_check_daily_model_sql(*, changed: bool) -> str:
@@ -692,14 +694,16 @@ def build_historical_check_daily_model_sql(*, changed: bool) -> str:
         "UNION ALL SELECT 1 AS customer_id, 'active' AS status, "
         "CAST('2026-01-02 00:00:00' AS TIMESTAMP) AS observed_at\n"
     )
-    if changed:
-        sql += (
+    changed_sql: str = {
+        False: "",
+        True: (
             "UNION ALL SELECT 1 AS customer_id, 'paused' AS status, "
             "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS observed_at\n"
             "UNION ALL SELECT 2 AS customer_id, 'active' AS status, "
             "CAST('2026-01-03 00:00:00' AS TIMESTAMP) AS observed_at\n"
-        )
-    return sql
+        ),
+    }[changed]
+    return sql + changed_sql
 
 
 def stringify_warehouse_rows(
@@ -707,4 +711,11 @@ def stringify_warehouse_rows(
 ) -> tuple[tuple[object, ...], ...]:
     """Normalize warehouse driver scalar differences for stable e2e assertions."""
 
-    return tuple(tuple(None if value is None else str(value) for value in row) for row in rows)
+    normalized_rows: list[tuple[object, ...]] = []
+    stringifiers: dict[type, Callable[[object], object]] = {type(None): lambda _value: None}
+    for row in rows:
+        normalized_row: list[object] = []
+        for value in row:
+            normalized_row.append(stringifiers.get(type(value), str)(value))
+        normalized_rows.append(tuple(normalized_row))
+    return tuple(normalized_rows)

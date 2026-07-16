@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlbuild.adapter.shared.models import SchemaDiffResult
+from sqlbuild.adapter.contract.models import SchemaDiffResult
 from sqlbuild.compiler.lineage.types import InferredNullability
 
 

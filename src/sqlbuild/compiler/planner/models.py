@@ -10,14 +10,14 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -32,6 +32,8 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
     GraphResourceKind,
+    LocalNodePlanAction,
+    LocalNodePlanReason,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -50,11 +52,9 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     StandardSourceFreshnessPlanningResult,
 )
-from sqlbuild.shared.types import ExecutionResourceKind
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig
-from sqlbuild.spec.models.schema import SeedCsvSettings
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SeedCsvSettings, SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 @dataclass(frozen=True)
@@ -63,6 +63,43 @@ class GraphNodeKey:
 
     node_type: str
     node_name: str
+
+
+@dataclass(frozen=True)
+class SelectorExpansion:
+    """One selector split into graph expansion flags and core text."""
+
+    core: str
+    upstream: bool = False
+    downstream: bool = False
+
+
+@dataclass(frozen=True)
+class LocalNodePlanInput:
+    """Local state used to classify one planner graph node."""
+
+    fingerprint_exists: bool
+    relation_exists: bool
+    full_refresh: bool = False
+    local_hash: str | None = None
+    previous_hash: str | None = None
+
+
+@dataclass(frozen=True)
+class LocalNodePlanOutcome:
+    """Local planner action and reason for one graph node."""
+
+    action: LocalNodePlanAction
+    reason: LocalNodePlanReason
+
+
+@dataclass(frozen=True)
+class ParsedScenarioArtifactName:
+    """Parsed physical name for one planner-owned scenario artifact."""
+
+    hash_prefix: str
+    kind: str
+    logical_name: str
 
 
 @dataclass(frozen=True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -65,11 +66,12 @@ def test_given_remove_column_mutation_when_planning_then_query_change_semantics_
         assert model["reason"] == test_case.expected_reason
         assert model["backfill"]["action"] == test_case.expected_backfill_action
         assert model["backfill"]["duration"] == test_case.expected_backfill_duration
-        non_stale_warnings: list[dict[str, object]] = [
-            warning
-            for warning in payload["warnings"]
-            if not str(warning["message"]).startswith("Stale inputs detected")
-        ]
+        warnings_by_stale_status: defaultdict[bool, list[dict[str, object]]] = defaultdict(list)
+        for warning in payload["warnings"]:
+            warnings_by_stale_status[
+                str(warning["message"]).startswith("Stale inputs detected")
+            ].append(warning)
+        non_stale_warnings: list[dict[str, object]] = warnings_by_stale_status[False]
         assert len(non_stale_warnings) == test_case.expected_warning_count
     finally:
         model_path.write_text(original_text, encoding="utf-8")

@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.shared.types import TypeDialect
-from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.compiler.contracts.helpers.columns import validate_model_column_contracts
+from sqlbuild.adapter.contract.types import TypeDialect
+from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.contracts._helpers.columns import collect_model_column_contract_diagnostics
 from sqlbuild.compiler.contracts.models import ContractValidationResult
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
+from sqlbuild.compiler.planner.types import ContractPolicy
 
 
-def validate_model_contracts(
-    project: CompiledProject,
+def evaluate_model_contracts(
     *,
+    project: CompiledProject,
     dialect: TypeDialect | str | None = None,
 ) -> ContractValidationResult:
-    """Validate model header column contracts against inferred output columns."""
+    """Evaluate model header column contracts against inferred output columns."""
 
     if not any(
-        model.config.values.get("contract") == "enforced"
+        model.config.values.get("contract") == ContractPolicy.ENFORCED
         or (model.schema_entry is not None and model.schema_entry.columns)
         for model in project.models
     ):
@@ -25,5 +25,5 @@ def validate_model_contracts(
 
     diagnostics: list[CompilerDiagnostic] = []
     for model in project.models:
-        diagnostics.extend(validate_model_column_contracts(model, dialect=dialect))
+        diagnostics.extend(collect_model_column_contract_diagnostics(model=model, dialect=dialect))
     return ContractValidationResult(diagnostics=tuple(diagnostics))

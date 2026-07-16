@@ -10,7 +10,7 @@ import pytest
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredSourceFile
 from sqlbuild.integrations.dlt.main.loaders import build_dlt_loader_functions
 from sqlbuild.integrations.dlt.models import DltResourceConfig, DltSourceConfig
-from sqlbuild.spec.models.source import IntegrationLoaderConfig, SourceEntry
+from sqlbuild.spec.contracts.models import IntegrationLoaderConfig, SourceEntry
 from tests.unit.src.sqlbuild.integrations.dlt._test_types import DltLoaderDiscoveryTestCase
 
 

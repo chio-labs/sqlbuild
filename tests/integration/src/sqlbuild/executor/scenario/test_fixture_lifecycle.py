@@ -5,14 +5,14 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
 from sqlbuild.compiler.planner.models import (
     ScenarioExecutionPlan,
     ScenarioFixturePlan,
@@ -20,12 +20,12 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.helpers.execution.model_execution import execute_scenario_models
-from sqlbuild.executor.scenario.helpers.lifecycle.expectations import (
+from sqlbuild.executor.scenario._helpers.execution.model_execution import execute_scenario_models
+from sqlbuild.executor.scenario._helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
     execute_scenario_expected_expectations,
 )
-from sqlbuild.executor.scenario.helpers.lifecycle.fixtures import (
+from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
 )
@@ -37,9 +37,8 @@ from sqlbuild.executor.scenario.models import (
     ScenarioExpectedExpectationExecutionResult,
     ScenarioFixtureExecutionResult,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.models import PythonHookEntry
-from sqlbuild.spec.models.schema import default_seed_csv_settings
+from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioAssertionExpectationIntegrationTestCase,
     ScenarioCleanupIntegrationTestCase,
@@ -209,7 +208,7 @@ def test_given_required_unmocked_seed_when_executing_then_loads_project_seed_to_
             ColumnInfo(name="country_code", type="VARCHAR"),
             ColumnInfo(name="country_name", type="VARCHAR"),
         ),
-        csv_settings=default_seed_csv_settings,
+        csv_settings=DEFAULT_SEED_CSV_SETTINGS,
     )
 
     results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(

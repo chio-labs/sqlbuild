@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
 )
@@ -33,13 +34,13 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.executor.run.helpers.materializations.microbatch import execute_microbatch_entry
+from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
 from sqlbuild.executor.run.models import (
     HookContext,
     ModelExecutionResult,
     ModelMaterializationContext,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,
@@ -68,21 +69,19 @@ def build_microbatch_plan_entry(
 
     target_schema: str | None = test_case.target_schema
     target_name: str = test_case.target_name
-    qualified: str | None = f"{target_schema}.{target_name}" if target_schema else target_name
-    action: PlanAction = _STRATEGY_TO_ACTION[test_case.incremental_strategy]
-    reason: PlanReason = PlanReason.NORMAL_INCREMENTAL
-    if test_case.is_full_refresh:
-        action = PlanAction.CREATE_TABLE
-        reason = PlanReason.FULL_REFRESH
+    qualified: str = f"{target_schema or ''}.{target_name}".lstrip(".")
+    action, reason = {
+        False: (_STRATEGY_TO_ACTION[test_case.incremental_strategy], PlanReason.NORMAL_INCREMENTAL),
+        True: (PlanAction.CREATE_TABLE, PlanReason.FULL_REFRESH),
+    }[test_case.is_full_refresh]
 
-    microbatch_range: CursorBounds | None = (
-        CursorBounds(
+    microbatch_range: CursorBounds | None = {
+        True: None,
+        False: CursorBounds(
             start=test_case.microbatch_start,
             end=test_case.microbatch_end,
-        )
-        if not test_case.is_full_refresh and test_case.use_plan_microbatch_range
-        else None
-    )
+        ),
+    }[test_case.is_full_refresh or not test_case.use_plan_microbatch_range]
     cursor_input_relations: tuple[CursorInputRelation, ...] = tuple(
         CursorInputRelation(
             relation=relation,
@@ -180,17 +179,23 @@ def verify_success_state(
             f"Query: {query}\nExpected: {expected_rows}\nActual: {actual_rows}"
         )
 
-    if test_case.expected_column_names:
-        cursor = connection.execute(f"SELECT * FROM {target_qualified} LIMIT 0")
-        actual_names: tuple[str, ...] = tuple(desc[0] for desc in cursor.description)
-        assert actual_names == test_case.expected_column_names
+    cursor = connection.execute(f"SELECT * FROM {target_qualified} LIMIT 0")
+    actual_names: tuple[str, ...] = tuple(desc[0] for desc in cursor.description)
+    name_normalizations: dict[tuple[str, ...], tuple[str, ...]] = {(): ()}
+    normalized_names: tuple[str, ...] = name_normalizations.get(
+        test_case.expected_column_names, actual_names
+    )
+    assert normalized_names == test_case.expected_column_names
 
-    if test_case.expected_delta_cleaned:
-        delta_qualified: str = _build_target_qualified(
-            target_schema=test_case.target_schema,
-            target_name=f"{test_case.target_name}__delta",
-        )
-        assert not _relation_exists(connection, delta_qualified)
+    delta_qualified: str = _build_target_qualified(
+        target_schema=test_case.target_schema,
+        target_name=f"{test_case.target_name}__delta",
+    )
+    delta_exists: bool = _relation_exists(connection, delta_qualified)
+    normalized_delta_exists: bool = {False: False}.get(
+        test_case.expected_delta_cleaned, delta_exists
+    )
+    assert not normalized_delta_exists
 
     statement_output: str = "\n".join(e.content for e in result.lifecycle_events)
     expected_fragment: str
@@ -209,17 +214,10 @@ def verify_failure_state(
     assert result.failed_phase == test_case.expected_failed_phase
     assert len(result.audit_results) == test_case.expected_audit_count
 
-    if test_case.expected_error_fragment is not None:
-        assert result.error_message is not None
-        assert test_case.expected_error_fragment in result.error_message
-
-    if test_case.expected_row_count is not None:
-        target_qualified: str = _build_target_qualified(
-            target_schema=test_case.target_schema, target_name=test_case.target_name
-        )
-        query_result: Any = connection.execute(f"SELECT COUNT(*) FROM {target_qualified}")
-        actual_count: int = query_result.fetchone()[0]
-        assert actual_count == test_case.expected_row_count
+    assert (test_case.expected_error_fragment or "") in (result.error_message or "")
+    _FAILURE_ROW_COUNT_VERIFIERS.get(
+        test_case.expected_row_count, _verify_present_failure_row_count
+    )(connection=connection, test_case=test_case)
 
     query: str
     expected_rows: tuple[tuple[object, ...], ...]
@@ -230,12 +228,15 @@ def verify_failure_state(
             f"Query: {query}\nExpected: {expected_rows}\nActual: {actual_rows}"
         )
 
-    if test_case.expected_delta_retained:
-        delta_qualified: str = _build_target_qualified(
-            target_schema=test_case.target_schema,
-            target_name=f"{test_case.target_name}__delta",
-        )
-        assert _relation_exists(connection, delta_qualified)
+    delta_qualified: str = _build_target_qualified(
+        target_schema=test_case.target_schema,
+        target_name=f"{test_case.target_name}__delta",
+    )
+    delta_exists: bool = _relation_exists(connection, delta_qualified)
+    normalized_delta_exists: bool = {False: False}.get(
+        test_case.expected_delta_retained, delta_exists
+    )
+    assert normalized_delta_exists == test_case.expected_delta_retained
 
 
 def _execute_test(
@@ -274,15 +275,9 @@ def _execute_test(
             source_map={},
             model_audits=model_audits,
             run_id="test_run",
-            query_change_tracking=(
-                test_case.query_change_tracking
-                if isinstance(test_case, MicrobatchSuccessTestCase)
-                else True
-            ),
-            hook_functions=tuple(
-                hook_function
-                for hook_function in getattr(test_case, "hook_functions", ())
-                if isinstance(hook_function, DiscoveredHookFunction)
+            query_change_tracking=getattr(test_case, "query_change_tracking", True),
+            hook_functions=cast(
+                tuple[DiscoveredHookFunction, ...], getattr(test_case, "hook_functions", ())
             ),
         ),
         declared_columns=(),
@@ -295,18 +290,18 @@ def _build_model_audits(
 ) -> tuple[AuditPlanEntry, ...]:
     """Build model audits from test case audit config."""
 
-    if test_case.audit_sql is None:
-        return ()
     resolved_target_name: str = _build_target_qualified(
         target_schema=test_case.target_schema,
         target_name=test_case.target_name,
     )
-    return (
+    audit: tuple[AuditPlanEntry, ...] = (
         AuditPlanEntry(
             key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name="test_audit"),
             name="test_audit",
-            resolved_sql=test_case.audit_sql.replace('__ref("orders")', resolved_target_name),
-            unresolved_sql=test_case.audit_sql,
+            resolved_sql=(test_case.audit_sql or "").replace(
+                '__ref("orders")', resolved_target_name
+            ),
+            unresolved_sql=test_case.audit_sql or "",
             attachment_kind=AuditAttachmentKind.MODEL,
             severity=AuditSeverity(test_case.audit_severity),
             requested_run_scope=test_case.audit_run_scope,
@@ -314,20 +309,38 @@ def _build_model_audits(
             attached_target_name="orders",
         ),
     )
+    return {True: (), False: audit}[test_case.audit_sql is None]
 
 
 def _build_target_qualified(*, target_schema: str | None, target_name: str) -> str:
-    if target_schema:
-        return f"{target_schema}.{target_name}"
-    return target_name
+    return f"{target_schema or ''}.{target_name}".lstrip(".")
 
 
 def _relation_exists(connection: Any, qualified_name: str) -> bool:
-    parts: list[str] = qualified_name.split(".")
-    schema: str | None = parts[0] if len(parts) > 1 else None
-    name: str = parts[-1]
+    schema: str
+    name: str
+    schema, _, name = qualified_name.rpartition(".")
+    name = name or schema
+    schema = schema.removesuffix(name)
     cursor: Any = connection.execute(
         "SELECT 1 FROM information_schema.tables "
-        f"WHERE table_name = '{name}'" + (f" AND table_schema = '{schema}'" if schema else "")
+        f"WHERE table_name = '{name}'" + f" AND table_schema = '{schema}'" * bool(schema)
     )
     return cursor.fetchone() is not None
+
+
+def _ignore_failure_row_count(*, connection: Any, test_case: MicrobatchFailureTestCase) -> None:
+    del connection, test_case
+
+
+def _verify_present_failure_row_count(
+    *, connection: Any, test_case: MicrobatchFailureTestCase
+) -> None:
+    target_qualified: str = _build_target_qualified(
+        target_schema=test_case.target_schema, target_name=test_case.target_name
+    )
+    actual_count: int = connection.execute(f"SELECT COUNT(*) FROM {target_qualified}").fetchone()[0]
+    assert actual_count == test_case.expected_row_count
+
+
+_FAILURE_ROW_COUNT_VERIFIERS: dict[object, Callable[..., None]] = {None: _ignore_failure_row_count}

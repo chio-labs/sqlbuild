@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -14,18 +14,18 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
-from sqlbuild.shared.models import ConnectionHooks
-from sqlbuild.virtual.planner.helpers.bound_state import (
-    open_planning_connection,
+from sqlbuild.runtime.contracts.main.open_connection import open_connection_with_hooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.virtual.planner._helpers.bound_state import (
     read_virtual_bound_state,
     resolve_virtual_environment_name,
 )
-from sqlbuild.virtual.planner.helpers.output import (
+from sqlbuild.virtual.planner._helpers.output import (
     attach_virtual_plan_metadata,
     build_virtual_plan_output,
     rewrite_virtual_plan_entries,
 )
-from sqlbuild.virtual.planner.helpers.planning import resolve_virtual_model_selection
+from sqlbuild.virtual.planner._helpers.planning import resolve_virtual_model_selection
 from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_python_identities
 from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
 from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
@@ -60,12 +60,10 @@ def run_virtual_plan_pipeline(
         cli_vars=resolved.cli_vars,
         external_sql_reference_resolver=resolved.external_sql_reference_resolver,
     )
-    connection: Any = open_planning_connection(
+    connection: Any = open_connection_with_hooks(
         adapter=adapter,
         connection_config=connection_config,
-        on_connection_start=resolved_hooks.on_connection_start,
-        on_connection_complete=resolved_hooks.on_connection_complete,
-        on_connection_error=resolved_hooks.on_connection_error,
+        hooks=resolved_hooks,
     )
     try:
         bound: VirtualBoundState = read_virtual_bound_state(

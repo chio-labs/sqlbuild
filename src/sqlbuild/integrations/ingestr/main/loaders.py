@@ -10,12 +10,13 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.models import LoaderContext
+from sqlbuild.integrations.ingestr._helpers.command import build_ingestr_command
+from sqlbuild.integrations.ingestr._helpers.output import record_ingestr_output
+from sqlbuild.integrations.ingestr._helpers.runner import run_ingestr_command
+from sqlbuild.integrations.ingestr.constants import INGESTR_INTEGRATION_KIND
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
-from sqlbuild.integrations.ingestr.helpers.command import build_ingestr_command
-from sqlbuild.integrations.ingestr.helpers.output import record_ingestr_output
-from sqlbuild.integrations.ingestr.helpers.runner import run_ingestr_command
 from sqlbuild.integrations.ingestr.models import IngestrCommandResult
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_ingestr_loader_functions(
@@ -30,7 +31,7 @@ def build_ingestr_loader_functions(
         for source_entry in source_file.source_entries:
             if (
                 source_entry.integration_loader is None
-                or source_entry.integration_loader.kind != "ingestr"
+                or source_entry.integration_loader.kind != INGESTR_INTEGRATION_KIND
             ):
                 continue
             loader_name: str = f"ingestr__{source_entry.name}"

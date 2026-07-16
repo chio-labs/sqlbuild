@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.assets import asset, get_asset_definition
 from sqlbuild.checks import check, get_check_definition
 from sqlbuild.factories import factory, get_factory_definition
-from sqlbuild.shared.models import (
+from sqlbuild.python_nodes.models import (
     AssetDefinition,
     CheckDefinition,
     ColumnLineageRef,
@@ -17,7 +17,7 @@ from sqlbuild.shared.models import (
     RetryPolicy,
     TaskDefinition,
 )
-from sqlbuild.shared.types import PythonCheckSeverity
+from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.tasks import get_task_definition, task
 from tests.unit.src.sqlbuild.python_nodes.decorators._test_types import (
     AssetDecoratorMetadataTestCase,

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.main.read import read_node_results
 from sqlbuild.executor.node_results.main.write import write_node_result_record
 from sqlbuild.executor.node_results.models import (
@@ -15,7 +16,6 @@ from sqlbuild.executor.node_results.models import (
 )
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 
 
 class StandardNodeResultStore:
@@ -39,7 +39,7 @@ class StandardNodeResultStore:
         if self.schema is None:
             return
         self.adapter.ensure_schema(
-            self.connection,
+            connection=self.connection,
             database=self.database,
             schema=self.schema,
             statement_recorder=StatementRecorder(),

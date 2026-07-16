@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
@@ -82,7 +82,7 @@ def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ct
     test_case: SqlTestComparisonSqlTestCase,
 ) -> None:
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_sql_test_plan_entry(
+        test_entry=build_sql_test_plan_entry(
             name="test_model",
             chain_steps=test_case.chain_steps,
         )

@@ -64,3 +64,5 @@ sqlbuild_local.toml
 
 # Claude Code
 .claude/
+
+.strata/cache/

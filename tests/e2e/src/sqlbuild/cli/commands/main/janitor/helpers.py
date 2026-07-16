@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
@@ -28,12 +28,12 @@ def prepare_janitor_project(
 
     normalized_settings_config: str = dedent(settings_config).strip()
     normalized_janitor_config: str = dedent(janitor_config).strip()
-    settings_block: str = (
-        f"\n[settings]\n{normalized_settings_config}\n" if normalized_settings_config else ""
-    )
-    janitor_block: str = (
-        f"\n[janitor]\n{normalized_janitor_config}\n" if normalized_janitor_config else ""
-    )
+    settings_block: str = {False: "", True: f"\n[settings]\n{normalized_settings_config}\n"}[
+        bool(normalized_settings_config)
+    ]
+    janitor_block: str = {False: "", True: f"\n[janitor]\n{normalized_janitor_config}\n"}[
+        bool(normalized_janitor_config)
+    ]
     project_config: str = (
         f'name = "{project_name}"\n'
         'adapter = "duckdb"\n\n'
@@ -73,7 +73,7 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
         connection.execute("CREATE TABLE partition_state AS SELECT 1 AS id")
         write_fingerprint(
             connection=connection,
-            execute=lambda active_connection, sql: active_connection.execute(sql),
+            execute=lambda *, connection, sql: connection.execute(sql),
             database=None,
             schema="main",
             fingerprint=Fingerprint(
@@ -127,7 +127,7 @@ def create_direct_state_history(*, db_path: Path) -> None:
         ):
             write_fingerprint(
                 connection=connection,
-                execute=lambda active_connection, sql: active_connection.execute(sql),
+                execute=lambda *, connection, sql: connection.execute(sql),
                 database=None,
                 schema="main",
                 fingerprint=Fingerprint(
@@ -148,7 +148,7 @@ def create_direct_state_history(*, db_path: Path) -> None:
             )
             write_source_freshness_records(
                 connection=connection,
-                execute=lambda active_connection, sql: active_connection.execute(sql),
+                execute=lambda *, connection, sql: connection.execute(sql),
                 database=None,
                 schema="main",
                 records=(

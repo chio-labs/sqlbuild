@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.virtual.planner.helpers.output import (
+from sqlbuild.virtual.planner._helpers.output import (
     rewrite_virtual_plan_entries,
     with_virtual_metadata,
 )

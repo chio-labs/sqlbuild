@@ -6,23 +6,29 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.helpers.deferred_locations import (
+from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
+    build_lineage_downstream_deps,
+)
+from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
+    build_lineage_upstream_deps,
+)
+from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
     gather_deferred_relations,
     resolve_deferred_target_config,
 )
-from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
-from sqlbuild.compiler.pipeline.helpers.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline.helpers.python_plan_entries import build_python_run_plan_outputs
+from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
+from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
+from sqlbuild.compiler.pipeline._helpers.python_plan_entries import build_python_run_plan_outputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.prepare_versions import (
     load_custom_prepare_version_functions,
@@ -33,7 +39,13 @@ from sqlbuild.compiler.pipeline.models import (
     ProjectGraph,
     PythonRunPlanOutputs,
 )
-from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.selection.build_model_path_index import (
+    build_model_path_index,
+)
+from sqlbuild.compiler.planner.main.selection.build_model_tag_index import (
+    build_model_tag_index,
+)
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,
@@ -46,16 +58,9 @@ from sqlbuild.compiler.python_nodes.main.run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
-from sqlbuild.compiler.shared.helpers.lineage_graph import (
-    build_lineage_downstream_deps,
-    build_lineage_upstream_deps,
-)
-from sqlbuild.compiler.shared.helpers.selector_indexes import (
-    build_model_path_index,
-    build_model_tag_index,
-)
-from sqlbuild.shared.models import ConnectionHooks
-from sqlbuild.spec.models.project import TargetConfig
+from sqlbuild.runtime.contracts.main.open_connection import open_connection_with_hooks
+from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.spec.contracts.models import TargetConfig
 
 
 def run_compile_pipeline(
@@ -95,17 +100,11 @@ def run_compile_pipeline(
     )
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")
-    if resolved_hooks.on_connection_start is not None:
-        resolved_hooks.on_connection_start(1)
-    start: float = time.monotonic()
-    try:
-        connection: Any = adapter.connect(effective_config)
-    except Exception:
-        if resolved_hooks.on_connection_error is not None:
-            resolved_hooks.on_connection_error(1, time.monotonic() - start)
-        raise
-    if resolved_hooks.on_connection_complete is not None:
-        resolved_hooks.on_connection_complete(1, time.monotonic() - start)
+    connection: Any = open_connection_with_hooks(
+        adapter=adapter,
+        connection_config=effective_config,
+        hooks=resolved_hooks,
+    )
     try:
         return _build_result(
             discovered_inputs=discovered_inputs,

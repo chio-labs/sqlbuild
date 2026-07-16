@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.shared.models import CursorValue, RowDiffTolerances
+from sqlbuild.adapter.contract.models import CursorValue, RowDiffTolerances
 
 
 @dataclass(frozen=True)

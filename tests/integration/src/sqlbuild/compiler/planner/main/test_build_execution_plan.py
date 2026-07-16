@@ -4,16 +4,16 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.types import TablePromotionMode
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.cli.commands.helpers.plan.formatter import format_plan
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.output.main.plan import format_plan
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.identity.standard import (
+from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner._helpers.identity.standard import (
     build_standard_model_version_identities,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     ModelPlanEntry,
@@ -836,7 +836,7 @@ def test_given_real_plan_when_formatting_then_contains_expected_fragments(
         full_refresh=test_case.full_refresh,
     )
 
-    result: str = format_plan(plan, full_refresh=test_case.full_refresh)
+    result: str = format_plan(plan=plan, full_refresh=test_case.full_refresh)
 
     fragment: str
     for fragment in test_case.expected_format_fragments:

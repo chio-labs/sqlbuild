@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.strict.strict_adapter import StrictAdapter
-from sqlbuild.compiler.source_freshness.helpers.observation import (
+from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.compiler.source_freshness._helpers.observation import (
     observe_adapter_sources_freshness as _observe_adapter_sources_freshness,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def observe_adapter_sources_freshness(

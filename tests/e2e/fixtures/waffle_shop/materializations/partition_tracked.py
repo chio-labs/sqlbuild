@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationContext, MaterializationResult
 
@@ -53,7 +53,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 
     all_audit_results: list[AuditExecutionResult] = []
     target_exists: bool = ctx.adapter.relation_exists(
-        ctx.connection,
+        connection=ctx.connection,
         database=ctx.destination_database,
         schema=ctx.destination_schema,
         name=ctx.destination_name,
@@ -71,13 +71,13 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
         ctx.log(f"building partition {partition_value}")
 
         ctx.adapter.drop(
-            ctx.connection,
+            connection=ctx.connection,
             destination=staging,
             if_exists=True,
             statement_recorder=ctx.statement_recorder,
         )
         ctx.adapter.create_table_as(
-            ctx.connection,
+            connection=ctx.connection,
             destination=staging,
             sql=partition_sql,
             statement_recorder=ctx.statement_recorder,
@@ -97,7 +97,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
         if not target_exists:
             ctx.log("promoting first partition into target")
             ctx.adapter.rename(
-                ctx.connection,
+                connection=ctx.connection,
                 origin=staging,
                 destination=ctx.destination,
                 statement_recorder=ctx.statement_recorder,
@@ -113,7 +113,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
             ctx.execute_sql(f"INSERT INTO {ctx.destination} SELECT * FROM {staging}")
 
         ctx.adapter.merge(
-            ctx.connection,
+            connection=ctx.connection,
             destination=tracking_table,
             sql=(
                 f"SELECT '{partition_value}' AS partition_value, "
@@ -124,7 +124,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
         )
 
     ctx.adapter.drop(
-        ctx.connection,
+        connection=ctx.connection,
         destination=staging,
         if_exists=True,
         statement_recorder=ctx.statement_recorder,

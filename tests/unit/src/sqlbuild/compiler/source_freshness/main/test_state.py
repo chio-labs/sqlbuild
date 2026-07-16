@@ -10,7 +10,7 @@ from sqlbuild.compiler.source_freshness.main.data_version_hash import (
 from sqlbuild.compiler.source_freshness.main.normalization import (
     normalize_source_freshness_data_version,
 )
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
     SharedSourceFreshnessHashTestCase,
 )

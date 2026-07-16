@@ -6,9 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.shared.types import FrameworkType
+from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
 @dataclass(frozen=True)

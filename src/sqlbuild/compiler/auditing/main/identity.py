@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.auditing.helpers.identity import (
+from sqlbuild.compiler.auditing._helpers.identity import (
     audit_identity,
     binding_payload,
     execution_payload,

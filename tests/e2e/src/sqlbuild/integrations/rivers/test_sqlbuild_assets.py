@@ -11,12 +11,14 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
-from sqlbuild.cli.commands.main.commands.playground import run_playground
+from sqlbuild.cli.commands.main.workspace.playground import run_playground
+from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
-from sqlbuild.integrations.rivers.helpers.assets import build_asset_defs
-from sqlbuild.integrations.rivers.helpers.dag import load_sqlbuild_dag
-from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
+from sqlbuild.integrations.rivers._helpers.assets import build_asset_defs
+from sqlbuild.integrations.rivers._helpers.dag import load_sqlbuild_dag
+from sqlbuild.integrations.rivers.classes.sqlbuild_rivers_translator import (
+    SqlBuildRiversTranslator,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     REPO_ROOT,
     prepare_waffle_shop,
@@ -78,8 +80,12 @@ def test_given_python_nodes_project_when_loading_rivers_assets_then_maps_real_ar
         translator=SqlBuildRiversTranslator(),
     )
     repo: Any = rs.CodeRepository(assets=[sqlbuild_python_nodes])
-    task_def: Any = next(asset for asset in output_defs if asset.name == "task__prepare_orders")
-    asset_def: Any = next(asset for asset in output_defs if asset.name == "asset__orders_export")
+    output_defs_by_name: dict[str, tuple[Any, ...]] = {
+        asset.name: (asset,) for asset in output_defs
+    }
+    assert len(output_defs_by_name) == len(output_defs)
+    task_def: Any = next(iter(output_defs_by_name.get("task__prepare_orders", ())))
+    asset_def: Any = next(iter(output_defs_by_name.get("asset__orders_export", ())))
 
     assert sqlbuild_project.dag_path.exists()
     assert test_case.expected_asset_names <= set(repo.assets)

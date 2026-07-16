@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state.helpers.runtime import build_state_runtime
+from sqlbuild.virtual.state._helpers.state_runtime.runtime import build_state_runtime
 
 
 def delete_virtual_environment(
@@ -24,7 +24,7 @@ def delete_virtual_environment(
     connection: Any = backend.connect(config.connection)
     try:
         backend.delete_virtual_environment(
-            connection,
+            connection=connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
         )

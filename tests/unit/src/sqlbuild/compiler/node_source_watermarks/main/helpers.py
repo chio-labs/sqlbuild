@@ -1,7 +1,9 @@
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from types import MappingProxyType
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.node_source_watermarks.main.record_successful import (
     record_successful_node_source_watermark,
@@ -174,10 +176,16 @@ def record_upstream_context_if_required(
     test_case: NodeSourceWatermarkExecutionContextTestCase,
     upstream_identity: NodeSourceWatermarkIdentity,
 ) -> None:
-    if upstream_identity not in test_case.upstream_node_identities_by_node.get(
+    should_record: bool = upstream_identity in test_case.upstream_node_identities_by_node.get(
         test_case.node_identity, ()
-    ):
-        return
+    )
+    _UPSTREAM_RECORDERS[should_record](context, upstream_identity)
+
+
+def _record_upstream_context(
+    context: NodeSourceWatermarkExecutionContext,
+    upstream_identity: NodeSourceWatermarkIdentity,
+) -> None:
     record_successful_node_source_watermark(
         context=context,
         node_identity=upstream_identity,
@@ -188,22 +196,34 @@ def record_upstream_context_if_required(
     )
 
 
+def _skip_upstream_context(
+    context: NodeSourceWatermarkExecutionContext,
+    upstream_identity: NodeSourceWatermarkIdentity,
+) -> None:
+    del context, upstream_identity
+
+
+_UPSTREAM_RECORDERS: MappingProxyType[
+    bool,
+    Callable[[NodeSourceWatermarkExecutionContext, NodeSourceWatermarkIdentity], None],
+] = MappingProxyType({False: _skip_upstream_context, True: _record_upstream_context})
+
+
 def complete_for_result(result: NodeSourceWatermarkRecord | None) -> bool | None:
-    if result is None:
-        return None
-    return result.payload.complete
+    return getattr(getattr(result, "payload", None), "complete", None)
 
 
 def source_hashes_for_result(result: NodeSourceWatermarkRecord | None) -> tuple[str, ...]:
-    if result is None:
-        return ()
-    return tuple(entry.data_version_hash for entry in result.payload.sources)
+    return tuple(
+        entry.data_version_hash
+        for entry in getattr(getattr(result, "payload", None), "sources", ())
+    )
 
 
 def unknown_reasons_for_result(result: NodeSourceWatermarkRecord | None) -> tuple[str, ...]:
-    if result is None:
-        return ()
-    return tuple(entry.reason for entry in result.payload.unknown_sources)
+    return tuple(
+        entry.reason for entry in getattr(getattr(result, "payload", None), "unknown_sources", ())
+    )
 
 
 def expected_buffered_record_count(
@@ -211,11 +231,7 @@ def expected_buffered_record_count(
     test_case: NodeSourceWatermarkExecutionContextTestCase,
     upstream_identity: NodeSourceWatermarkIdentity,
 ) -> int:
-    count: int = 0
-    if upstream_identity in test_case.upstream_node_identities_by_node.get(
+    upstream_recorded: bool = upstream_identity in test_case.upstream_node_identities_by_node.get(
         test_case.node_identity, ()
-    ):
-        count += 1
-    if test_case.expected_record_written:
-        count += 1
-    return count
+    )
+    return int(upstream_recorded) + int(test_case.expected_record_written)

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, StatementRecorder
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
 )
@@ -25,7 +27,8 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     ScenarioArtifactKind,
 )
-from sqlbuild.spec.models.schema import SeedCsvSettings, default_seed_csv_settings
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
+from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 class ScenarioFixtureTestAdapter(BaseAdapter):
@@ -42,8 +45,9 @@ class ScenarioFixtureTestAdapter(BaseAdapter):
     def execute(self, connection: object, sql: str) -> object:
         del connection
         self.executed_sql.append(sql)
-        if self.fail_on_target is not None and self.fail_on_target in sql:
-            raise RuntimeError(f"failed target {self.fail_on_target}")
+        _SCENARIO_EXECUTE_STRATEGIES[
+            self.fail_on_target is not None and self.fail_on_target in sql
+        ](target=self.fail_on_target)
         return object()
 
     def close(self, connection: object) -> None:
@@ -88,8 +92,9 @@ class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
     ) -> None:
         del connection, sql, config
         self.events.append(f"create:{destination}")
-        if self.fail_on_create_target is not None and self.fail_on_create_target in destination:
-            raise RuntimeError("fixture create failed")
+        _CAPTURE_CREATE_STRATEGIES[
+            self.fail_on_create_target is not None and self.fail_on_create_target in destination
+        ]()
         statement_recorder.record(f"CREATE TABLE {destination}")
 
     def drop(
@@ -111,45 +116,38 @@ class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
-        csv_settings: SeedCsvSettings = default_seed_csv_settings,
+        csv_settings: SeedCsvSettings = DEFAULT_SEED_CSV_SETTINGS,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,
     ) -> None:
         del connection, file_path, columns, csv_settings, replace, infer_types
         self.events.append(f"seed:{destination}")
-        if self.fail_on_seed:
-            raise RuntimeError("seed load failed")
+        _CAPTURE_SEED_STRATEGIES[self.fail_on_seed]()
         statement_recorder.record(f"LOAD SEED {destination}")
 
     def query(self, connection: Any, sql: str, *, limit: int | None) -> QueryResult:
         del connection, limit
         self.events.append(f"query:{sql}")
-        if self.fail_on_query_target is not None and self.fail_on_query_target in sql:
-            raise RuntimeError("warehouse read failed")
-        if "COUNT(*)" in sql and "__sqb_51b385aebe20__source__raw__orders" in sql:
-            return QueryResult(columns=("count",), rows=((1,),))
-        if "COUNT(*)" in sql and "__sqb_51b385aebe20__ref__stg_customers" in sql:
-            return QueryResult(columns=("count",), rows=((1,),))
-        if "COUNT(*)" in sql and "__sqb_51b385aebe20__seed__country_codes" in sql:
-            return QueryResult(columns=("count",), rows=((1,),))
-        if "__sqb_51b385aebe20__source__raw__orders" in sql:
-            return QueryResult(columns=("order_id",), rows=((1,),))
-        if "__sqb_51b385aebe20__ref__stg_customers" in sql:
-            return QueryResult(columns=("customer_id",), rows=((10,),))
-        if "__sqb_51b385aebe20__seed__country_codes" in sql:
-            return QueryResult(columns=("country_code",), rows=(("US",),))
-        raise RuntimeError(f"unexpected query: {sql}")
+        _CAPTURE_QUERY_FAILURE_STRATEGIES[
+            self.fail_on_query_target is not None and self.fail_on_query_target in sql
+        ]()
+        query_key: tuple[bool, bool, bool, bool] = (
+            "COUNT(*)" in sql,
+            "__sqb_51b385aebe20__source__raw__orders" in sql,
+            "__sqb_51b385aebe20__ref__stg_customers" in sql,
+            "__sqb_51b385aebe20__seed__country_codes" in sql,
+        )
+        return _CAPTURE_QUERY_RESULTS.get(query_key, _unexpected_query)(sql)
 
     def describe_relation(self, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         del connection
-        if "__sqb_51b385aebe20__source__raw__orders" in relation:
-            return (ColumnInfo(name="order_id", type="INTEGER"),)
-        if "__sqb_51b385aebe20__ref__stg_customers" in relation:
-            return (ColumnInfo(name="customer_id", type="INTEGER"),)
-        if "__sqb_51b385aebe20__seed__country_codes" in relation:
-            return (ColumnInfo(name="country_code", type="VARCHAR"),)
-        raise RuntimeError(f"unexpected describe: {relation}")
+        relation_key: tuple[bool, bool, bool] = (
+            "__sqb_51b385aebe20__source__raw__orders" in relation,
+            "__sqb_51b385aebe20__ref__stg_customers" in relation,
+            "__sqb_51b385aebe20__seed__country_codes" in relation,
+        )
+        return _CAPTURE_RELATION_COLUMNS.get(relation_key, _unexpected_describe)(relation)
 
 
 def build_scenario_fixture_plan(
@@ -173,11 +171,17 @@ def build_scenario_fixture_plan(
 
 
 def executed_create_table_sql(adapter: ScenarioFixtureTestAdapter) -> tuple[str, ...]:
-    return tuple(sql for sql in adapter.executed_sql if "CREATE OR REPLACE TABLE" in sql)
+    statements: dict[bool, list[str]] = {True: [], False: []}
+    for sql in adapter.executed_sql:
+        statements["CREATE OR REPLACE TABLE" in sql].append(sql)
+    return tuple(statements[True])
 
 
 def executed_drop_sql(adapter: ScenarioFixtureTestAdapter) -> tuple[str, ...]:
-    return tuple(sql for sql in adapter.executed_sql if sql.startswith("DROP "))
+    statements: dict[bool, list[str]] = {True: [], False: []}
+    for sql in adapter.executed_sql:
+        statements[sql.startswith("DROP ")].append(sql)
+    return tuple(statements[True])
 
 
 def build_scenario_cleanup_test_plan(
@@ -275,7 +279,7 @@ def build_scenario_cleanup_test_plan_with_project_seed() -> ScenarioExecutionPla
                 destination=seed_target,
                 file_path=Path("seeds/country_codes.csv"),
                 columns=(),
-                csv_settings=default_seed_csv_settings,
+                csv_settings=DEFAULT_SEED_CSV_SETTINGS,
             ),
         ),
     )
@@ -355,3 +359,92 @@ def build_scenario_model_entry(
         resolved_sql=resolved_sql,
         logical_ddl="",
     )
+
+
+def _no_op_strategy(*args: object, **kwargs: object) -> None:
+    del args, kwargs
+
+
+def _raise_scenario_execute_error(*, target: str | None) -> None:
+    raise RuntimeError(f"failed target {target}")
+
+
+def _raise_capture_create_error() -> None:
+    raise RuntimeError("fixture create failed")
+
+
+def _raise_capture_seed_error() -> None:
+    raise RuntimeError("seed load failed")
+
+
+def _raise_capture_query_error() -> None:
+    raise RuntimeError("warehouse read failed")
+
+
+def _constant_query_result(result: QueryResult) -> Callable[[str], QueryResult]:
+    def resolve(_sql: str) -> QueryResult:
+        return result
+
+    return resolve
+
+
+def _unexpected_query(sql: str) -> QueryResult:
+    raise RuntimeError(f"unexpected query: {sql}")
+
+
+def _constant_columns(
+    columns: tuple[ColumnInfo, ...],
+) -> Callable[[str], tuple[ColumnInfo, ...]]:
+    def resolve(_relation: str) -> tuple[ColumnInfo, ...]:
+        return columns
+
+    return resolve
+
+
+def _unexpected_describe(relation: str) -> tuple[ColumnInfo, ...]:
+    raise RuntimeError(f"unexpected describe: {relation}")
+
+
+_SCENARIO_EXECUTE_STRATEGIES: dict[bool, Callable[..., None]] = {
+    True: _raise_scenario_execute_error,
+    False: _no_op_strategy,
+}
+_CAPTURE_CREATE_STRATEGIES: dict[bool, Callable[..., None]] = {
+    True: _raise_capture_create_error,
+    False: _no_op_strategy,
+}
+_CAPTURE_SEED_STRATEGIES: dict[bool, Callable[..., None]] = {
+    True: _raise_capture_seed_error,
+    False: _no_op_strategy,
+}
+_CAPTURE_QUERY_FAILURE_STRATEGIES: dict[bool, Callable[..., None]] = {
+    True: _raise_capture_query_error,
+    False: _no_op_strategy,
+}
+_CAPTURE_QUERY_RESULTS: dict[tuple[bool, bool, bool, bool], Callable[[str], QueryResult]] = {
+    (True, True, False, False): _constant_query_result(
+        QueryResult(columns=("count",), rows=((1,),))
+    ),
+    (True, False, True, False): _constant_query_result(
+        QueryResult(columns=("count",), rows=((1,),))
+    ),
+    (True, False, False, True): _constant_query_result(
+        QueryResult(columns=("count",), rows=((1,),))
+    ),
+    (False, True, False, False): _constant_query_result(
+        QueryResult(columns=("order_id",), rows=((1,),))
+    ),
+    (False, False, True, False): _constant_query_result(
+        QueryResult(columns=("customer_id",), rows=((10,),))
+    ),
+    (False, False, False, True): _constant_query_result(
+        QueryResult(columns=("country_code",), rows=(("US",),))
+    ),
+}
+_CAPTURE_RELATION_COLUMNS: dict[
+    tuple[bool, bool, bool], Callable[[str], tuple[ColumnInfo, ...]]
+] = {
+    (True, False, False): _constant_columns((ColumnInfo(name="order_id", type="INTEGER"),)),
+    (False, True, False): _constant_columns((ColumnInfo(name="customer_id", type="INTEGER"),)),
+    (False, False, True): _constant_columns((ColumnInfo(name="country_code", type="VARCHAR"),)),
+}

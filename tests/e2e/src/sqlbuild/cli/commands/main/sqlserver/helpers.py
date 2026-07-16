@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerDependencyBaselineE2ETestCase,
 )
@@ -171,10 +171,9 @@ def build_sqlserver_virtual_project_toml(
     config: dict[str, object],
     unsuffixed_virtual_env: str | None = None,
 ) -> str:
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         f'name = "{project_name}"\n'
@@ -246,7 +245,9 @@ def ensure_sqlserver_schema_ready(*, schema_name: str, config: dict[str, object]
     adapter: SqlServerAdapter = SqlServerAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, f"CREATE SCHEMA {adapter.render_identifier(schema_name)}")
+        adapter.execute(
+            connection=connection, sql=f"CREATE SCHEMA {adapter.render_identifier(schema_name)}"
+        )
     finally:
         adapter.close(connection)
 
@@ -255,7 +256,7 @@ def execute_sqlserver_sql(*, sql: str, config: dict[str, object]) -> None:
     adapter: SqlServerAdapter = SqlServerAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 
@@ -266,8 +267,8 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
     escaped_schema_name: str = schema_name.replace("'", "''")
     try:
         adapter.execute(
-            connection,
-            "DECLARE @sql NVARCHAR(MAX) = N''; "
+            connection=connection,
+            sql="DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP FUNCTION ' + QUOTENAME(s.name) "
             "+ N'.' + QUOTENAME(o.name) + N';' "
             "FROM sys.objects o JOIN sys.schemas s ON o.schema_id = s.schema_id "
@@ -275,24 +276,24 @@ def cleanup_sqlserver_schema(*, schema_name: str, config: dict[str, object]) -> 
             "EXEC sp_executesql @sql;",
         )
         adapter.execute(
-            connection,
-            "DECLARE @sql NVARCHAR(MAX) = N''; "
+            connection=connection,
+            sql="DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP VIEW ' + QUOTENAME(s.name) + N'.' + QUOTENAME(v.name) + N';' "
             "FROM sys.views v JOIN sys.schemas s ON v.schema_id = s.schema_id "
             f"WHERE s.name = '{escaped_schema_name}'; "
             "EXEC sp_executesql @sql;",
         )
         adapter.execute(
-            connection,
-            "DECLARE @sql NVARCHAR(MAX) = N''; "
+            connection=connection,
+            sql="DECLARE @sql NVARCHAR(MAX) = N''; "
             "SELECT @sql += N'DROP TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N';' "
             "FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id "
             f"WHERE s.name = '{escaped_schema_name}'; "
             "EXEC sp_executesql @sql;",
         )
         adapter.execute(
-            connection,
-            f"IF SCHEMA_ID(N'{escaped_schema_name}') IS NOT NULL "
+            connection=connection,
+            sql=f"IF SCHEMA_ID(N'{escaped_schema_name}') IS NOT NULL "
             f"DROP SCHEMA {adapter.render_identifier(schema_name)}",
         )
     finally:
@@ -303,7 +304,7 @@ def fetch_sqlserver_rows(*, sql: str, config: dict[str, object]) -> tuple[tuple[
     adapter: SqlServerAdapter = SqlServerAdapter()
     connection: Any = adapter.connect(config)
     try:
-        cursor: Any = adapter.execute(connection, sql)
+        cursor: Any = adapter.execute(connection=connection, sql=sql)
         return tuple(tuple(row) for row in cursor.fetchall())
     finally:
         adapter.close(connection)

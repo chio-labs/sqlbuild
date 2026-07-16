@@ -5,17 +5,20 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.planner.models import DependencyBaselinePlanEntry
-from sqlbuild.executor.run.helpers.reuse.core import (
+from sqlbuild.executor.run._helpers.reuse.core import (
     create_relation_from_reuse_origin,
     create_relation_from_reuse_plan,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.shared.types import ExecutionResourceKind
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
 
 
 def execute_dependency_baseline_entries(
@@ -23,7 +26,7 @@ def execute_dependency_baseline_entries(
     entries: tuple[DependencyBaselinePlanEntry, ...],
     adapter: BaseAdapter,
     connection: Any,
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None,
+    on_node_start: NodeStartCallback | None = None,
     on_node_complete: Callable[[object], None] | None = None,
 ) -> tuple[ModelExecutionResult, ...]:
     """Copy/clone dependency baseline relations without writing model fingerprints."""
@@ -32,7 +35,7 @@ def execute_dependency_baseline_entries(
     entry: DependencyBaselinePlanEntry
     for entry in entries:
         if on_node_start is not None:
-            on_node_start(entry.name, ExecutionResourceKind.TABLE)
+            on_node_start(name=entry.name, resource_kind=ExecutionResourceKind.TABLE)
         result: ModelExecutionResult = _execute_dependency_baseline_entry(
             entry=entry,
             adapter=adapter,
@@ -63,13 +66,13 @@ def _execute_dependency_baseline_entry(
         )
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=entry.destination.database,
             schema=entry.destination.schema,
             statement_recorder=statement_recorder,
         )
         adapter.drop(
-            connection,
+            connection=connection,
             destination=destination,
             if_exists=True,
             statement_recorder=statement_recorder,

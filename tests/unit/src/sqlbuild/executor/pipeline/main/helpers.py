@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
@@ -14,9 +15,9 @@ from sqlbuild.compiler.planner.models import (
     SourceLoadPlanEntry,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
-from sqlbuild.shared.types import ExecutionResourceKind
-from sqlbuild.spec.models.schema import default_seed_csv_settings
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class BuildSchemaPreflightAdapter(BaseAdapter):
@@ -73,7 +74,7 @@ def build_schema_preflight_plan() -> PlanOutput:
                 destination=_location(schema="dev", name="statuses"),
                 file_path=Path("seeds/statuses.csv"),
                 columns=(ColumnInfo(name="id", type="INTEGER"),),
-                csv_settings=default_seed_csv_settings,
+                csv_settings=DEFAULT_SEED_CSV_SETTINGS,
             ),
         ),
         source_load_entries=(

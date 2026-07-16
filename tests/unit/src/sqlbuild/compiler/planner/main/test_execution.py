@@ -7,19 +7,19 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.fingerprints.helpers.sql import (
+from sqlbuild.compiler.fingerprints._helpers.sql import (
     build_create_table_sql,
     build_insert_sql,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.identity.standard import (
+from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner._helpers.identity.standard import (
     build_standard_model_version_identities,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     DependencyBaselinePlanEntry,
     ModelPlanEntry,
@@ -32,8 +32,8 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
     StandardScopePruning,
 )
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, TargetConfig
-from tests.unit.src.sqlbuild.compiler.planner.helpers.helpers import (
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
+from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_standard_reuse_from_target_project,
     build_standard_reuse_from_target_scope,
 )
@@ -533,11 +533,11 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
         scope=build_standard_reuse_from_target_scope(),
     )
     try:
-        adapter.execute(connection, "CREATE SCHEMA dev_schema")
-        adapter.execute(connection, "CREATE SCHEMA prod_schema")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev_schema")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod_schema")
         adapter.execute(
-            connection,
-            build_create_table_sql(
+            connection=connection,
+            sql=build_create_table_sql(
                 database=None,
                 schema="prod_schema",
                 render_qualified_name=adapter.render_qualified_name,
@@ -545,8 +545,8 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
             ),
         )
         adapter.execute(
-            connection,
-            build_insert_sql(
+            connection=connection,
+            sql=build_insert_sql(
                 database=None,
                 schema="prod_schema",
                 fingerprint=Fingerprint(
@@ -567,8 +567,8 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
             ),
         )
         adapter.execute(
-            connection,
-            build_insert_sql(
+            connection=connection,
+            sql=build_insert_sql(
                 database=None,
                 schema="prod_schema",
                 fingerprint=Fingerprint(
@@ -589,8 +589,8 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
             ),
         )
         adapter.execute(
-            connection,
-            build_insert_sql(
+            connection=connection,
+            sql=build_insert_sql(
                 database=None,
                 schema="prod_schema",
                 fingerprint=Fingerprint(
@@ -610,11 +610,15 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
                 render_qualified_name=adapter.render_qualified_name,
             ),
         )
-        adapter.execute(connection, "CREATE TABLE prod_schema.orders AS SELECT 1 AS id")
-        adapter.execute(connection, "CREATE TABLE prod_schema.line_items AS SELECT 1 AS id")
         adapter.execute(
-            connection,
-            "CREATE TABLE prod_schema.account_snapshot AS "
+            connection=connection, sql="CREATE TABLE prod_schema.orders AS SELECT 1 AS id"
+        )
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE prod_schema.line_items AS SELECT 1 AS id"
+        )
+        adapter.execute(
+            connection=connection,
+            sql="CREATE TABLE prod_schema.account_snapshot AS "
             "SELECT 1 AS account_id, TIMESTAMP '2026-01-01 00:00:00' AS updated_at, "
             "TIMESTAMP '2026-01-01 00:00:00' AS valid_from, NULL::TIMESTAMP AS valid_to",
         )
@@ -651,43 +655,37 @@ def test_given_reuse_from_target_when_building_execution_plan_then_plan_carries_
     typed_decisions_metadata: dict[str, object] = cast(dict[str, object], decisions_metadata)
     decision_models_metadata: object = typed_decisions_metadata["models"]
     assert isinstance(decision_models_metadata, dict)
+    typed_decision_models_metadata: dict[str, object] = cast(
+        dict[str, object], decision_models_metadata
+    )
+    assert all(
+        isinstance(model_metadata, dict)
+        for model_metadata in typed_decision_models_metadata.values()
+    )
     assert {
         model_name: cast(dict[str, object], model_metadata).get("decision")
-        for model_name, model_metadata in decision_models_metadata.items()
-        if isinstance(model_metadata, dict)
+        for model_name, model_metadata in typed_decision_models_metadata.items()
     } == test_case.expected_decisions
-    assert (
-        tuple(
-            sorted(
-                model_name
-                for model_name, model_metadata in decision_models_metadata.items()
-                if isinstance(model_metadata, dict)
-                and cast(dict[str, object], model_metadata).get("decision") == "reuse_eligible"
-            )
-        )
-        == test_case.expected_reuse_eligible_names
-    )
+    for model_name in test_case.expected_reuse_eligible_names:
+        assert cast(dict[str, object], typed_decision_models_metadata[model_name]).get(
+            "decision"
+        ) == ("reuse_eligible")
     assert {entry.name: entry.action.value for entry in plan_output.model_entries} == (
         test_case.expected_actions
     )
-    reuse_entry: ModelPlanEntry | None = next(
-        (entry for entry in plan_output.model_entries if entry.name == "orders"), None
-    )
-    assert reuse_entry is not None
+    entries_by_name: dict[str, tuple[ModelPlanEntry, ...]] = {
+        entry.name: (entry,) for entry in plan_output.model_entries
+    }
+    assert len(entries_by_name) == len(plan_output.model_entries)
+    reuse_entry: ModelPlanEntry = next(iter(entries_by_name.get("orders", ())))
     assert reuse_entry.relation_reuse is not None
     assert reuse_entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
     assert reuse_entry.relation_reuse.origin.qualified_name == "prod_schema.orders"
-    seed_entry: ModelPlanEntry | None = next(
-        (entry for entry in plan_output.model_entries if entry.name == "line_items"), None
-    )
-    assert seed_entry is not None
+    seed_entry: ModelPlanEntry = next(iter(entries_by_name.get("line_items", ())))
     assert seed_entry.relation_reuse is not None
     assert seed_entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
     assert seed_entry.relation_reuse.origin.qualified_name == "prod_schema.line_items"
-    snapshot_entry: ModelPlanEntry | None = next(
-        (entry for entry in plan_output.model_entries if entry.name == "account_snapshot"), None
-    )
-    assert snapshot_entry is not None
+    snapshot_entry: ModelPlanEntry = next(iter(entries_by_name.get("account_snapshot", ())))
     assert snapshot_entry.relation_reuse is not None
     assert snapshot_entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
     assert snapshot_entry.relation_reuse.origin.qualified_name == "prod_schema.account_snapshot"
@@ -729,10 +727,10 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
         ),
     )
     try:
-        adapter.execute(connection, "CREATE SCHEMA prod_schema")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod_schema")
         adapter.execute(
-            connection,
-            build_create_table_sql(
+            connection=connection,
+            sql=build_create_table_sql(
                 database=None,
                 schema="prod_schema",
                 render_qualified_name=adapter.render_qualified_name,
@@ -740,8 +738,8 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
             ),
         )
         adapter.execute(
-            connection,
-            build_insert_sql(
+            connection=connection,
+            sql=build_insert_sql(
                 database=None,
                 schema="prod_schema",
                 fingerprint=Fingerprint(
@@ -761,7 +759,9 @@ def test_given_plain_downstream_selection_when_upstream_missing_then_plans_depen
                 render_qualified_name=adapter.render_qualified_name,
             ),
         )
-        adapter.execute(connection, "CREATE TABLE prod_schema.upstream AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE prod_schema.upstream AS SELECT 1 AS id"
+        )
 
         plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=project,
@@ -832,10 +832,10 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
         ),
     )
     try:
-        adapter.execute(connection, "CREATE SCHEMA prod_schema")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA prod_schema")
         adapter.execute(
-            connection,
-            build_create_table_sql(
+            connection=connection,
+            sql=build_create_table_sql(
                 database=None,
                 schema="prod_schema",
                 render_qualified_name=adapter.render_qualified_name,
@@ -845,8 +845,8 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
         model_name: str
         for model_name in test_case.origin_model_names:
             adapter.execute(
-                connection,
-                build_insert_sql(
+                connection=connection,
+                sql=build_insert_sql(
                     database=None,
                     schema="prod_schema",
                     fingerprint=Fingerprint(
@@ -867,8 +867,8 @@ def test_given_leaf_selection_when_planning_baseline_then_only_direct_input_is_c
                 ),
             )
             adapter.execute(
-                connection,
-                f"CREATE TABLE prod_schema.{model_name} AS SELECT 1 AS id",
+                connection=connection,
+                sql=f"CREATE TABLE prod_schema.{model_name} AS SELECT 1 AS id",
             )
 
         plan_output: PlanOutput = build_execution_plan_from_kwargs(
@@ -965,7 +965,7 @@ def test_given_full_refresh_with_reuse_from_when_planning_then_reuse_state_is_sk
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, "CREATE SCHEMA dev_schema")
+        adapter.execute(connection=connection, sql="CREATE SCHEMA dev_schema")
         plan_output: PlanOutput = build_execution_plan_from_kwargs(
             project=build_standard_reuse_from_target_project(),
             adapter=adapter,

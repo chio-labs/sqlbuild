@@ -6,13 +6,13 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import SnapshotChangeTarget
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapter.contract.models import SnapshotChangeTarget
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     SnapshotAdapterMethodsTestCase,
     SnapshotTransactionRollbackTestCase,
 )
-from tests.integration.src.sqlbuild.adapters.duckdb.snapshot_helpers import (
+from tests.integration.src.sqlbuild.adapters.duckdb.helpers import (
     InsertFaultDuckDbAdapter,
 )
 

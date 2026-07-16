@@ -65,7 +65,7 @@ class DiffSelectorIntegrationTestCase:
 @dataclass(frozen=True)
 class AppendCursorPipelineIntegrationTestCase:
     description: str
-    append_cursor_inclusive: bool
+    model_header_cursor_config: str
     expected_resolved_sql_fragment: str
 
 

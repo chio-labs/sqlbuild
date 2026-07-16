@@ -8,23 +8,29 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.compiler.python_nodes.types import (
     PythonNodeFanInAction,
     PythonNodeKind,
     PythonNodeStatus,
     SkipMode,
 )
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
-from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
+from sqlbuild.executor.python_nodes.constants import (
+    MISSING_DEFAULT,
+    PYTHON_NODE_RELATION_QUALIFIER_SEPARATOR,
+)
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import ExecutionResourceKind, PythonCheckSeverity
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import PythonCheckSeverity
+from sqlbuild.runtime.contracts.types import NodeStartCallback
 
 
 @dataclass(frozen=True)
@@ -103,6 +109,16 @@ class PythonNodeFanInDecision:
     skip_mode: SkipMode | None = None
 
 
+@dataclass(frozen=True)
+class CursorWindow:
+    """Resolved cursor bounds for one Python execution run."""
+
+    start_cursor_ts: datetime | None = None
+    end_cursor_ts: datetime | None = None
+    start_cursor_int: int | None = None
+    end_cursor_int: int | None = None
+
+
 from sqlbuild.executor.python_nodes.classes.run_state import PythonNodeRunState  # noqa: E402
 
 
@@ -157,7 +173,7 @@ class IngressCallbacks:
     """Progress callbacks and display flags for Python ingress execution."""
 
     use_color: bool = False
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None
+    on_node_start: NodeStartCallback | None = None
     on_node_complete: Callable[[object], None] | None = None
     identity_recorder: PythonIdentityRecorder | None = None
 
@@ -190,11 +206,11 @@ class BasePythonNodeContext:
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
@@ -202,14 +218,14 @@ class BasePythonNodeContext:
 
     def qualify_name(
         self,
-        name: str,
         *,
+        name: str,
         database: str | None = None,
         schema: str | None = None,
     ) -> str:
         """Return a qualified relation name, preserving already-qualified input."""
 
-        if "." in name:
+        if PYTHON_NODE_RELATION_QUALIFIER_SEPARATOR in name:
             return name
         return resolve_qualified_name_parts(
             adapter=self.adapter,
@@ -232,8 +248,8 @@ class BasePythonNodeContext:
 
     def skip(
         self,
-        reason: str,
         *,
+        reason: str,
         mode: SkipMode | str = SkipMode.SOFT,
         metadata: dict[str, object] | None = None,
     ) -> PythonNodeSkipResult:
@@ -247,8 +263,8 @@ class BasePythonNodeContext:
 
     def result_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         run_id: str | None = None,
         default: object = MISSING_DEFAULT,
     ) -> NodeResultEnvelope | object:
@@ -268,8 +284,8 @@ class BasePythonNodeContext:
 
     def results_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         limit: int,
     ) -> tuple[NodeResultEnvelope, ...]:
         """Return persisted successful upstream result history, newest first."""
@@ -308,8 +324,8 @@ class TaskContext(BasePythonNodeContext):
 
     def result(
         self,
-        payload: object | None = None,
         *,
+        payload: object | None = None,
         metadata: dict[str, object] | None = None,
     ) -> PythonNodeResult:
         """Return a successful task result."""
@@ -326,8 +342,8 @@ class AssetContext(BasePythonNodeContext):
 
     def result(
         self,
-        payload: object | None = None,
         *,
+        payload: object | None = None,
         metadata: dict[str, object] | None = None,
         materialized: bool | None = None,
     ) -> PythonNodeResult:
@@ -346,8 +362,8 @@ class CheckContext(BasePythonNodeContext):
 
     def pass_(
         self,
-        message: str | None = None,
         *,
+        message: str | None = None,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a passing check result."""
@@ -360,8 +376,8 @@ class CheckContext(BasePythonNodeContext):
 
     def fail(
         self,
-        message: str,
         *,
+        message: str,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a failing check result using the check's configured severity."""
@@ -374,8 +390,8 @@ class CheckContext(BasePythonNodeContext):
 
     def warn(
         self,
-        message: str,
         *,
+        message: str,
         metadata: dict[str, object] | None = None,
     ) -> PythonCheckResult:
         """Return a warning check result regardless of decorator severity."""

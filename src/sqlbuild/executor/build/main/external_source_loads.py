@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.executor.build.helpers.external_source_loads import (
+from sqlbuild.executor.build._helpers.external_source_loads import (
     run_external_source_loads_before_connections as _run_external_source_loads_before_connections,
 )
 from sqlbuild.executor.build.models import (

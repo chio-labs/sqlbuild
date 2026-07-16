@@ -8,16 +8,16 @@ from decimal import Decimal
 import duckdb
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.executor.load.helpers.rows import (
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.load._helpers.rows import (
     build_rows_sql,
     iter_loader_row_batches,
     normalize_loader_rows,
     update_loader_rows_schema,
 )
 from sqlbuild.executor.load.models import LoaderRowsSchema
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     LoaderRowsBatchTestCase,
     LoaderRowsErrorTestCase,
@@ -230,7 +230,7 @@ def test_given_loader_return_value_when_batching_then_yields_expected_batches(
     test_case: LoaderRowsBatchTestCase,
 ) -> None:
     assert (
-        tuple(iter_loader_row_batches(test_case.value, batch_size=test_case.batch_size))
+        tuple(iter_loader_row_batches(value=test_case.value, batch_size=test_case.batch_size))
         == test_case.expected_batches
     )
 

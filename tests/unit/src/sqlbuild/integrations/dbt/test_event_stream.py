@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.runtime.event_stream import (
+from sqlbuild.integrations.dbt._helpers.runtime.event_stream import (
     execute_dbt_json_event_stream,
     parse_dbt_json_event,
     parse_dbt_node_message,
@@ -369,7 +369,7 @@ def test_given_dbt_json_stream_when_running_then_invokes_node_result_callback(
     captured_results: list[DbtNodeExecutionResult] = []
 
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
 
@@ -461,15 +461,15 @@ def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_upd
             return 0
 
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.TransientStatusReporter",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.TransientStatusReporter",
         CapturingStatusReporter,
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream._DBT_STATUS_REFRESH_SECONDS",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream._DBT_STATUS_REFRESH_SECONDS",
         test_case.refresh_seconds,
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
 

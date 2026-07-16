@@ -5,16 +5,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import RelationInfo
-from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
-from sqlbuild.executor.janitor.helpers.classification import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.executor.janitor._helpers.classification import (
     classify_janitor_relations,
     collect_direct_state_prune_candidates,
     gather_janitor_warehouse_facts,
 )
-from sqlbuild.executor.janitor.helpers.plan import collect_target_schemas
+from sqlbuild.executor.janitor._helpers.plan import collect_target_schemas
+from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
     JanitorDirectStatePruneCandidate,

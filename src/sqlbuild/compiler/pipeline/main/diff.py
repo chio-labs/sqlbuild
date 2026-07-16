@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.helpers.diff import (
+from sqlbuild.compiler.pipeline._helpers.diff import (
     compile_project_for_diff_environment,
     resolve_diff_model_names,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
 def run_diff_pipeline(

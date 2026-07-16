@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.virtual.state._helpers.state_runtime.backend import build_state_backend
+from sqlbuild.virtual.state._helpers.state_runtime.config import resolve_state_backend_config
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.helpers.backend import build_state_backend
-from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.models import (
     StateBackendConfig,
     VirtualEnvironmentCheckpointModelRefRecord,
@@ -31,7 +31,7 @@ def get_virtual_environment_checkpoint_model_refs(
     connection: Any = backend.connect(config.connection)
     try:
         return backend.get_virtual_environment_checkpoint_model_refs(
-            connection,
+            connection=connection,
             schema=config.schema,
             checkpoint_id=checkpoint_id,
         )

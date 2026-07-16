@@ -5,7 +5,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCaptureResult,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

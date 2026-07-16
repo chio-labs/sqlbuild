@@ -67,7 +67,7 @@ def test_given_python_pre_hook_returns_skip_when_building_then_model_and_downstr
 
                 @hook
                 def skip_model(ctx):
-                    return ctx.skip("source disabled")
+                    return ctx.skip(reason="source disabled")
                 """
             ).strip()
             + "\n",
@@ -151,7 +151,7 @@ def test_given_python_post_hook_skip_when_building_then_keeps_relation_and_skips
 
                 @hook
                 def skip_downstream(ctx):
-                    return ctx.skip("publish disabled")
+                    return ctx.skip(reason="publish disabled")
                 """
             ).strip()
             + "\n",

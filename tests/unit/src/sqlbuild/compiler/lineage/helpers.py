@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -13,8 +13,7 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
-from sqlbuild.spec.models.project import SettingsConfig
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaSeedEntry
+from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SettingsConfig
 
 
 def make_compiled_project(
@@ -53,9 +52,10 @@ def make_compiled_model(
             name=name,
             qualified_name=name,
         ),
-        inferred_columns=None
-        if inferred_columns is None
-        else tuple(InferredColumn(column_name) for column_name in inferred_columns),
+        inferred_columns=(
+            None,
+            tuple(InferredColumn(column_name) for column_name in (inferred_columns or ())),
+        )[inferred_columns is not None],
     )
 
 

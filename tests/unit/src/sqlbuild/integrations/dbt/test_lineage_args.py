@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.integrations.dbt._helpers.lineage.args import parse_dbt_lineage_args
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.lineage.args import parse_dbt_lineage_args
 from sqlbuild.integrations.dbt.models import DbtLineageArgs
 from sqlbuild.integrations.dbt.types import DbtLineageDirection, DbtLineageOutputFormat
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
@@ -12,24 +13,24 @@ from _pytest.capture import CaptureFixture, CaptureResult
 from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.cli.commands.helpers.audit.models import AuditCommandRequest
-from sqlbuild.cli.commands.helpers.build.models import BuildCommandRequest
-from sqlbuild.cli.commands.helpers.load.models import LoadCommandRequest
-from sqlbuild.cli.commands.helpers.load.selection import select_load_entries
-from sqlbuild.cli.commands.helpers.plan.models import PlanCommandRequest
-from sqlbuild.cli.commands.helpers.scenario.models import ScenarioTestCommandRequest
-from sqlbuild.cli.commands.helpers.test.models import TestCommandRequest
-from sqlbuild.cli.commands.main.commands.audit import run_audit
-from sqlbuild.cli.commands.main.commands.build import run_build
-from sqlbuild.cli.commands.main.commands.load import run_load
-from sqlbuild.cli.commands.main.commands.plan import run_plan
-from sqlbuild.cli.commands.main.commands.scenario import run_scenario
-from sqlbuild.cli.commands.main.commands.test import run_test
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.output.execution_json import (
-    format_load_execution_json,
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.commands._helpers.load.selection import select_load_entries
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.main.execution.audit import run_audit
+from sqlbuild.cli.commands.main.execution.build import run_build
+from sqlbuild.cli.commands.main.execution.load import run_load
+from sqlbuild.cli.commands.main.execution.scenario import run_scenario
+from sqlbuild.cli.commands.main.execution.test import run_test
+from sqlbuild.cli.commands.main.project.plan import run_plan
+from sqlbuild.cli.commands.models import (
+    AuditCommandRequest,
+    BuildCommandRequest,
+    LoadCommandRequest,
+    PlanCommandRequest,
+    ScenarioTestCommandRequest,
+    TestCommandRequest,
 )
+from sqlbuild.cli.output.main.load_execution_json import format_load_execution_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -40,7 +41,7 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BuildRunAutoLoadFailureTestCase,
     BuildRunAutoLoadFlagTestCase,
@@ -967,6 +968,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             select=("stg_orders",),
             result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
             expected_rows=((12, "unmanaged"),),
+            command_options={"select": ("stg_orders",)},
         ),
         SourceDeferralNoErrorTestCase(
             description="unselected managed source read does not require source deferral config",
@@ -979,6 +981,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             select=("fact_orders",),
             result_sql="SELECT order_id, status FROM dev.fact_orders ORDER BY order_id",
             expected_rows=((13, "prebuilt"),),
+            command_options={"select": ("fact_orders",)},
         ),
         SourceDeferralNoErrorTestCase(
             description="no-load still reads managed source from deferred target",
@@ -992,6 +995,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
             expected_rows=((14, "prod-no-load"),),
             load_sources=False,
+            command_options={"select": ("stg_orders",), "load_sources": False},
         ),
         SourceDeferralNoErrorTestCase(
             description="auto load disabled still reads managed source from deferred target",
@@ -1004,6 +1008,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             select=("stg_orders",),
             result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
             expected_rows=((15, "prod-auto-disabled"),),
+            command_options={"select": ("stg_orders",)},
         ),
         SourceDeferralNoErrorTestCase(
             description="explicit source schema is preserved instead of deferred target schema",
@@ -1020,6 +1025,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
             expected_rows=((16, "external-explicit"),),
             load_sources=False,
+            command_options={"select": ("stg_orders",), "load_sources": False},
         ),
         SourceDeferralNoErrorTestCase(
             description="templated source deferral target schema resolves project vars",
@@ -1033,6 +1039,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
             expected_rows=((17, "templated-prod"),),
             load_sources=False,
+            command_options={"select": ("stg_orders",), "load_sources": False},
         ),
         SourceDeferralNoErrorTestCase(
             description="audit reads managed source from deferred target",
@@ -1049,6 +1056,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             result_sql="SELECT 1",
             expected_rows=((1,),),
             command="audit",
+            command_options={"select": ()},
         ),
         SourceDeferralNoErrorTestCase(
             description="sql test with source mock does not require source deferral",
@@ -1058,6 +1066,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             result_sql="SELECT 1",
             expected_rows=((1,),),
             command="test",
+            command_options={"select": ("stg_orders",)},
         ),
         SourceDeferralNoErrorTestCase(
             description="scenario with source mock does not require source deferral",
@@ -1067,6 +1076,7 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             result_sql="SELECT 1",
             expected_rows=((1,),),
             command="scenario",
+            command_options={"selectors": ("source_mock_pass",)},
         ),
     ],
     ids=lambda case: case.description,
@@ -1094,19 +1104,7 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
     exit_code: int = command_runners[test_case.command](
         project_dir=tmp_path,
         no_color=True,
-        **(
-            {"selectors": test_case.select}
-            if test_case.command == "scenario"
-            else {"select": test_case.select}
-        ),
-        **(
-            {
-                "defer_sources_to": test_case.defer_sources_to,
-                "load_sources": test_case.load_sources,
-            }
-            if test_case.command == "build"
-            else {}
-        ),
+        **test_case.command_options,
     )
 
     assert exit_code == test_case.expected_exit_code
@@ -1278,6 +1276,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
             ),
             expected_rows=((7, "existing"),),
             expected_stdout_absent_fragments=("source", "rows=1"),
+            load_sources=False,
         ),
         BuildRunAutoLoadFlagTestCase(
             description="build load forces loader when auto load is disabled",
@@ -1287,6 +1286,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
             setup_sql=(),
             expected_rows=((7, "loaded"),),
             expected_stdout_fragments=("1/2  source", "rows=1"),
+            load_sources=True,
         ),
         BuildRunAutoLoadFlagTestCase(
             description="build auto load disabled skips loader by default",
@@ -1299,6 +1299,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
             ),
             expected_rows=((7, "existing"),),
             expected_stdout_absent_fragments=("source", "rows=1"),
+            load_sources=None,
         ),
         BuildRunAutoLoadFlagTestCase(
             description="build reload and full refresh reloads loaders and models",
@@ -1308,6 +1309,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
             setup_sql=(),
             expected_rows=((7, "reload"),),
             expected_stdout_fragments=("Sources to reload (1)", "1/2  source", "2/2  table"),
+            load_sources=None,
         ),
         BuildRunAutoLoadFlagTestCase(
             description="build reload reloads loaders without full refreshing models",
@@ -1322,6 +1324,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
                 "2/2  table",
             ),
             expected_stdout_absent_fragments=("Full refresh",),
+            load_sources=None,
         ),
         BuildRunAutoLoadFlagTestCase(
             description="build reload reloads loaders without full refreshing models",
@@ -1336,6 +1339,7 @@ def test_given_source_deferral_when_writing_artifacts_then_sql_uses_deferred_rel
                 "2/2  table",
             ),
             expected_stdout_absent_fragments=("Full refresh",),
+            load_sources=None,
         ),
     ],
     ids=lambda case: case.description,
@@ -1360,13 +1364,7 @@ def test_given_build_or_run_load_flags_when_running_then_applies_loader_control(
             project_dir=tmp_path,
             no_color=True,
             select=(test_case.args[test_case.args.index("--select") + 1],),
-            load_sources=(
-                True
-                if "--load" in test_case.args
-                else False
-                if "--no-load" in test_case.args
-                else None
-            ),
+            load_sources=test_case.load_sources,
             reload_sources="--reload" in test_case.args,
             full_refresh="--full-refresh" in test_case.args,
         )
@@ -1551,9 +1549,10 @@ def test_given_build_auto_loads_source_when_json_output_then_includes_source_ass
     )
 
     payload: dict[str, Any] = json.loads(json_output_path.read_text(encoding="utf-8"))
-    source_assets: list[dict[str, object]] = [
-        asset for asset in payload["assets"] if asset["kind"] == "source"
-    ]
+    assets_by_kind: defaultdict[str, list[dict[str, object]]] = defaultdict(list)
+    for asset in payload["assets"]:
+        assets_by_kind[asset["kind"]].append(asset)
+    source_assets: list[dict[str, object]] = assets_by_kind["source"]
     assert exit_code == test_case.expected_exit_code
     assert len(source_assets) == 1
     expected_key: str
@@ -2147,13 +2146,17 @@ def test_given_source_loader_when_running_pipeline_then_uses_staging_relation(
         ),
     )
 
-    lifecycle_sql: tuple[str, ...] = tuple(
-        event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
-    )
-    assert all(
-        any(fragment in sql for sql in lifecycle_sql)
-        for fragment in test_case.expected_lifecycle_sql_fragments
-    )
+    lifecycle_content_by_kind: defaultdict[str, list[str]] = defaultdict(list)
+    for event in results[0].lifecycle_events:
+        lifecycle_content_by_kind[event.kind.value].append(event.content)
+    lifecycle_sql: tuple[str, ...] = tuple(lifecycle_content_by_kind["sql"])
+    fragments_found: list[bool] = []
+    for fragment in test_case.expected_lifecycle_sql_fragments:
+        fragment_found: bool = False
+        for sql in lifecycle_sql:
+            fragment_found = fragment_found or fragment in sql
+        fragments_found.append(fragment_found)
+    assert all(fragments_found)
 
 
 @pytest.mark.parametrize(
@@ -2195,18 +2198,18 @@ def test_given_source_loader_when_running_pipeline_then_drops_stale_staging_firs
         ),
     )
 
-    lifecycle_sql: tuple[str, ...] = tuple(
-        event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
-    )
+    lifecycle_content_by_kind: defaultdict[str, list[str]] = defaultdict(list)
+    for event in results[0].lifecycle_events:
+        lifecycle_content_by_kind[event.kind.value].append(event.content)
+    lifecycle_sql: tuple[str, ...] = tuple(lifecycle_content_by_kind["sql"])
     match_positions: list[int] = []
     start_index: int = 0
     expected_fragment: str
     for expected_fragment in test_case.expected_lifecycle_sql_order:
-        position: int = next(
-            index
-            for index, sql in enumerate(lifecycle_sql[start_index:], start=start_index)
-            if expected_fragment in sql
-        )
+        indexes_by_match_status: defaultdict[bool, list[int]] = defaultdict(list)
+        for index, sql in enumerate(lifecycle_sql[start_index:], start=start_index):
+            indexes_by_match_status[expected_fragment in sql].append(index)
+        position: int = next(iter(indexes_by_match_status[True]))
         match_positions.append(position)
         start_index = position + 1
     assert match_positions == sorted(match_positions)
@@ -2965,24 +2968,26 @@ def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expe
         ),
     )
 
-    first_lifecycle_sql: tuple[str, ...] = tuple(
-        event.content for event in first_results[0].lifecycle_events if event.kind.value == "sql"
-    )
-    second_lifecycle_sql: tuple[str, ...] = tuple(
-        event.content for event in second_results[0].lifecycle_events if event.kind.value == "sql"
-    )
-    assert all(
-        any(fragment in sql for sql in first_lifecycle_sql)
-        for fragment in test_case.expected_first_run_fragments
-    )
-    assert all(
-        any(fragment in sql for sql in second_lifecycle_sql)
-        for fragment in test_case.expected_second_run_fragments
-    )
-    assert all(
-        all(fragment not in sql for sql in second_lifecycle_sql)
-        for fragment in test_case.absent_second_run_fragments
-    )
+    first_content_by_kind: defaultdict[str, list[str]] = defaultdict(list)
+    for event in first_results[0].lifecycle_events:
+        first_content_by_kind[event.kind.value].append(event.content)
+    first_lifecycle_sql: tuple[str, ...] = tuple(first_content_by_kind["sql"])
+    second_content_by_kind: defaultdict[str, list[str]] = defaultdict(list)
+    for event in second_results[0].lifecycle_events:
+        second_content_by_kind[event.kind.value].append(event.content)
+    second_lifecycle_sql: tuple[str, ...] = tuple(second_content_by_kind["sql"])
+    first_fragments_found: list[bool] = []
+    for fragment in test_case.expected_first_run_fragments:
+        first_fragments_found.append(any(fragment in sql for sql in first_lifecycle_sql))
+    assert all(first_fragments_found)
+    second_fragments_found: list[bool] = []
+    for fragment in test_case.expected_second_run_fragments:
+        second_fragments_found.append(any(fragment in sql for sql in second_lifecycle_sql))
+    assert all(second_fragments_found)
+    second_fragments_absent: list[bool] = []
+    for fragment in test_case.absent_second_run_fragments:
+        second_fragments_absent.append(all(fragment not in sql for sql in second_lifecycle_sql))
+    assert all(second_fragments_absent)
 
 
 @pytest.mark.parametrize(
@@ -3257,18 +3262,19 @@ def test_given_loader_cursor_configuration_when_running_pipeline_then_records_ex
                 is_reload=False,
             ),
         )
-        all_lifecycle_sql.extend(
-            event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
-        )
+        lifecycle_content_by_kind: defaultdict[str, list[str]] = defaultdict(list)
+        for event in results[0].lifecycle_events:
+            lifecycle_content_by_kind[event.kind.value].append(event.content)
+        all_lifecycle_sql.extend(lifecycle_content_by_kind["sql"])
 
-    assert all(
-        any(fragment in sql for sql in all_lifecycle_sql)
-        for fragment in test_case.expected_lifecycle_sql_fragments
-    )
-    assert all(
-        all(fragment not in sql for sql in all_lifecycle_sql)
-        for fragment in test_case.absent_lifecycle_sql_fragments
-    )
+    fragments_found: list[bool] = []
+    for fragment in test_case.expected_lifecycle_sql_fragments:
+        fragments_found.append(any(fragment in sql for sql in all_lifecycle_sql))
+    assert all(fragments_found)
+    fragments_absent: list[bool] = []
+    for fragment in test_case.absent_lifecycle_sql_fragments:
+        fragments_absent.append(all(fragment not in sql for sql in all_lifecycle_sql))
+    assert all(fragments_absent)
 
 
 @pytest.mark.parametrize(
@@ -3832,18 +3838,19 @@ def test_given_generator_loader_uses_batch_size_when_running_pipeline_then_appen
         ).fetchall()
     finally:
         connection.close()
-    lifecycle_sql: tuple[str, ...] = tuple(
-        event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
-    )
+    lifecycle_content_by_kind: defaultdict[str, list[str]] = defaultdict(list)
+    for event in results[0].lifecycle_events:
+        lifecycle_content_by_kind[event.kind.value].append(event.content)
+    lifecycle_sql: tuple[str, ...] = tuple(lifecycle_content_by_kind["sql"])
     assert tuple(rows) == test_case.expected_rows
     column_types: dict[str, str] = dict(column_rows)
     expected_column: str
     for expected_column, expected_type in test_case.expected_column_types.items():
         assert column_types[expected_column] == expected_type
-    assert all(
-        any(fragment in sql for sql in lifecycle_sql)
-        for fragment in test_case.expected_lifecycle_sql_fragments
-    )
+    fragments_found: list[bool] = []
+    for fragment in test_case.expected_lifecycle_sql_fragments:
+        fragments_found.append(any(fragment in sql for sql in lifecycle_sql))
+    assert all(fragments_found)
 
 
 @pytest.mark.parametrize(
@@ -4041,23 +4048,24 @@ def test_given_batched_loader_variants_when_running_pipeline_then_writes_expecte
         ).fetchall()
     finally:
         connection.close()
-    lifecycle_sql: tuple[str, ...] = tuple(
-        event.content for event in results[0].lifecycle_events if event.kind.value == "sql"
-    )
+    lifecycle_content_by_kind: defaultdict[str, list[str]] = defaultdict(list)
+    for event in results[0].lifecycle_events:
+        lifecycle_content_by_kind[event.kind.value].append(event.content)
+    lifecycle_sql: tuple[str, ...] = tuple(lifecycle_content_by_kind["sql"])
     assert results[0].rows_loaded == test_case.expected_rows_loaded
     assert tuple(rows) == test_case.expected_rows
     column_types: dict[str, str] = dict(column_rows)
     expected_column: str
     for expected_column, expected_type in test_case.expected_column_types.items():
         assert column_types[expected_column] == expected_type
-    assert all(
-        any(fragment in sql for sql in lifecycle_sql)
-        for fragment in test_case.expected_lifecycle_sql_fragments
-    )
-    assert all(
-        all(fragment not in sql for sql in lifecycle_sql)
-        for fragment in test_case.absent_lifecycle_sql_fragments
-    )
+    fragments_found: list[bool] = []
+    for fragment in test_case.expected_lifecycle_sql_fragments:
+        fragments_found.append(any(fragment in sql for sql in lifecycle_sql))
+    assert all(fragments_found)
+    fragments_absent: list[bool] = []
+    for fragment in test_case.absent_lifecycle_sql_fragments:
+        fragments_absent.append(all(fragment not in sql for sql in lifecycle_sql))
+    assert all(fragments_absent)
 
 
 @pytest.mark.parametrize(
@@ -4379,6 +4387,7 @@ def raw_batched_non_dict(ctx):
             },
             staging_table_name="raw_batched_non_dict__staging",
             expected_staging_exists=False,
+            target_select_sql="SELECT NULL WHERE FALSE",
         ),
         LoadCommandFailureCleanupTestCase(
             description="leaves append target unchanged when a later loader batch fails",
@@ -4524,11 +4533,9 @@ def test_given_later_loader_batch_fails_when_running_load_then_drops_staging(
             "SELECT COUNT(*) FROM information_schema.tables "
             f"WHERE table_name = '{test_case.staging_table_name}'"
         ).fetchone()
-        target_rows: list[tuple[object, ...]] = (
-            []
-            if test_case.target_select_sql is None
-            else connection.execute(test_case.target_select_sql).fetchall()
-        )
+        target_rows: list[tuple[object, ...]] = connection.execute(
+            test_case.target_select_sql
+        ).fetchall()
     finally:
         connection.close()
     assert staging_count_row is not None

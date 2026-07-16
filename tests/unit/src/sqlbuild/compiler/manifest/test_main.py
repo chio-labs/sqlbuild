@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -13,11 +13,10 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSource,
     LoadedMacro,
 )
+from sqlbuild.compiler.manifest._helpers.shared import build_fqn
 from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
-from sqlbuild.compiler.manifest.helpers.shared import build_fqn
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
-from sqlbuild.spec.models.schema import SchemaColumn
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,
     ManifestAuditNodeTestCase,
@@ -205,8 +204,10 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
         ManifestModelNodeTestCase(
             description="produces correct model node with plan entry compiled code",
             model=_MODEL_ORDERS,
-            plan_entry=build_test_plan_entry(
-                name="orders", resolved_sql="SELECT * FROM staging.raw_orders"
+            plan_entries=(
+                build_test_plan_entry(
+                    name="orders", resolved_sql="SELECT * FROM staging.raw_orders"
+                ),
             ),
             project_name=_PROJECT,
             expected_unique_id=f"model.{_PROJECT}.orders",
@@ -225,7 +226,7 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
         ManifestModelNodeTestCase(
             description="uses raw_code as compiled_code when no plan entry exists",
             model=_MODEL_ORPHAN,
-            plan_entry=None,
+            plan_entries=(),
             project_name=_PROJECT,
             expected_unique_id=f"model.{_PROJECT}.orphan",
             expected_resource_type="model",
@@ -243,7 +244,7 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
         ManifestModelNodeTestCase(
             description="model columns appear in manifest node",
             model=_MODEL_WITH_COLUMNS,
-            plan_entry=None,
+            plan_entries=(),
             project_name=_PROJECT,
             expected_unique_id=f"model.{_PROJECT}.typed_model",
             expected_resource_type="model",
@@ -263,7 +264,7 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
         ManifestModelNodeTestCase(
             description="depends_on includes upstream model and source ids",
             model=_MODEL_WITH_DEPS,
-            plan_entry=None,
+            plan_entries=(),
             project_name=_PROJECT,
             expected_unique_id=f"model.{_PROJECT}.joined",
             expected_resource_type="model",
@@ -285,7 +286,7 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
         ManifestModelNodeTestCase(
             description="model with explicit alias database and tags",
             model=_MODEL_WITH_ALIAS,
-            plan_entry=None,
+            plan_entries=(),
             project_name=_PROJECT,
             expected_unique_id=f"model.{_PROJECT}.orders_aliased",
             expected_resource_type="model",
@@ -307,9 +308,8 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
 def test_given_model_when_building_manifest_then_produces_correct_node(
     test_case: ManifestModelNodeTestCase,
 ) -> None:
-    plan_entries: tuple = (test_case.plan_entry,) if test_case.plan_entry is not None else ()
     project: CompiledProject = build_test_project(models=(test_case.model,))
-    plan_output: PlanOutput = build_test_plan_output(model_entries=plan_entries)
+    plan_output: PlanOutput = build_test_plan_output(model_entries=test_case.plan_entries)
 
     result: dict[str, Any] = run_manifest(
         project=project,

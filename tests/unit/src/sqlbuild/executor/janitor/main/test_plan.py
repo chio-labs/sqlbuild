@@ -194,6 +194,13 @@ NEW_TIME: datetime = datetime.now(UTC) - timedelta(days=1)
             description="virtual state pruning candidates are preserved",
             relation_infos=(),
             expected_virtual_state_table_names=(PYTHON_NODE_VERSION_TABLE,),
+            virtual_state_prune_candidates=(
+                JanitorVirtualStatePruneCandidate(
+                    schema="sqlbuild_state",
+                    table_name=PYTHON_NODE_VERSION_TABLE,
+                    reason="1 unreferenced Python identity version(s)",
+                ),
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -218,15 +225,7 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
             protected_relation_keys=test_case.protected_relation_keys,
         ),
         state_candidates=JanitorStateCandidates(
-            virtual_state_prune_candidates=(
-                JanitorVirtualStatePruneCandidate(
-                    schema="sqlbuild_state",
-                    table_name=PYTHON_NODE_VERSION_TABLE,
-                    reason="1 unreferenced Python identity version(s)",
-                ),
-            )
-            if test_case.expected_virtual_state_table_names
-            else (),
+            virtual_state_prune_candidates=test_case.virtual_state_prune_candidates,
         ),
         direct_state_history_versions=test_case.direct_state_history_versions,
     )
@@ -243,14 +242,11 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
     assert tuple(candidate.table_name for candidate in plan.virtual_state_prune_candidates) == (
         test_case.expected_virtual_state_table_names
     )
-    assert (
-        tuple(
-            source_name
-            for skipped_schema in plan.skipped_schemas
-            for source_name in skipped_schema.source_names
-        )
-        == test_case.expected_skipped_schema_sources
-    )
+    skipped_schema_sources: list[str] = []
+    for skipped_schema in plan.skipped_schemas:
+        for source_name in skipped_schema.source_names:
+            skipped_schema_sources.append(source_name)
+    assert tuple(skipped_schema_sources) == test_case.expected_skipped_schema_sources
 
 
 @pytest.mark.parametrize(
@@ -272,6 +268,13 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
             relation_infos=(),
             expected_dropped_targets=(),
             expected_pruned_virtual_table_names=(PYTHON_NODE_VERSION_TABLE,),
+            virtual_state_prune_candidates=(
+                JanitorVirtualStatePruneCandidate(
+                    schema="sqlbuild_state",
+                    table_name=PYTHON_NODE_VERSION_TABLE,
+                    reason="1 unreferenced Python identity version(s)",
+                ),
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -287,15 +290,7 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
         retention_days=7,
         delete_tracked_only=False,
         state_candidates=JanitorStateCandidates(
-            virtual_state_prune_candidates=(
-                JanitorVirtualStatePruneCandidate(
-                    schema="sqlbuild_state",
-                    table_name=PYTHON_NODE_VERSION_TABLE,
-                    reason="1 unreferenced Python identity version(s)",
-                ),
-            )
-            if test_case.expected_pruned_virtual_table_names
-            else (),
+            virtual_state_prune_candidates=test_case.virtual_state_prune_candidates,
         ),
     )
     pruned_virtual_table_names: list[str] = []

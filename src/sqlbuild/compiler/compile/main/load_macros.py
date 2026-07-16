@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.helpers.render.macros import load_project_macros
-from sqlbuild.compiler.compile.models.core import LoadedMacro
+from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 
 

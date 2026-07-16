@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -1164,7 +1165,7 @@ def test_given_shared_downstream_failure_when_building_then_blocks_all_source_ap
                     "from sqlbuild.tasks import task\n\n"
                     "@task\n"
                     "def prepare_orders(ctx):\n"
-                    "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+                    "    return ctx.skip(reason='no input', mode=SkipMode.HARD)\n"
                 ),
                 "loaders/raw.py": (
                     "from tasks.prepare import prepare_orders\n"
@@ -1310,7 +1311,7 @@ def test_given_shared_downstream_failure_when_building_then_blocks_all_source_ap
                     "from sqlbuild.tasks import task\n\n"
                     "@task(depends_on=model('fact_orders'))\n"
                     "def skip_after_fact(ctx):\n"
-                    "    return ctx.skip('no profile needed', mode=SkipMode.HARD)\n"
+                    "    return ctx.skip(reason='no profile needed', mode=SkipMode.HARD)\n"
                 ),
             },
             expected_exit_code=0,
@@ -1350,7 +1351,7 @@ def test_given_shared_downstream_failure_when_building_then_blocks_all_source_ap
                     "from sqlbuild.tasks import task\n\n"
                     "@task(depends_on=model('fact_orders'))\n"
                     "def soft_skip_after_fact(ctx):\n"
-                    "    return ctx.skip('optional profile skipped', mode=SkipMode.SOFT)\n"
+                    "    return ctx.skip(reason='optional profile skipped', mode=SkipMode.SOFT)\n"
                 ),
             },
             expected_exit_code=0,
@@ -1821,7 +1822,7 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=prepare_orders)\n"
                 "def publish_prepared_orders(ctx):\n"
-                "    payload = ctx.result_of(prepare_orders).payload\n"
+                "    payload = ctx.result_of(node_function=prepare_orders).payload\n"
                 "    marker = Path(__file__).parents[1].joinpath('prepared_order_id.txt')\n"
                 "    marker.write_text(str(payload['order_id']))\n"
                 "    return ctx.result(payload=payload, materialized=True)\n"
@@ -1861,7 +1862,7 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=profile_fact_orders)\n"
                 "def export_fact_orders(ctx):\n"
-                "    payload = ctx.result_of(profile_fact_orders).payload\n"
+                "    payload = ctx.result_of(node_function=profile_fact_orders).payload\n"
                 "    return ctx.result(payload=payload, metadata={'exported': True})\n"
             ),
             "tasks/notify.py": (
@@ -1870,7 +1871,7 @@ def test_given_python_sql_python_spine_when_building_then_orders_python_around_s
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=export_fact_orders)\n"
                 "def notify_fact_orders(ctx):\n"
-                "    payload = ctx.result_of(export_fact_orders).payload\n"
+                "    payload = ctx.result_of(node_function=export_fact_orders).payload\n"
                 "    output = Path(__file__).parents[1].joinpath('notify.txt')\n"
                 "    output.write_text(str(payload['order_id']))\n"
                 "    return ctx.result(metadata={'notified': True})\n"
@@ -2012,10 +2013,10 @@ def test_given_prior_python_task_result_when_later_task_reads_result_then_uses_p
             "from sqlbuild.tasks import task\n\n"
             "@task\n"
             "def consume_result(ctx):\n"
-            "    latest = ctx.result_of(produce_result)\n"
-            f"    first = ctx.result_of(produce_result, run_id='{first_run_id}')\n"
-            f"    failed = ctx.result_of(produce_result, run_id='{failed_run_id}')\n"
-            "    history = ctx.results_of(produce_result, limit=2)\n"
+            "    latest = ctx.result_of(node_function=produce_result)\n"
+            f"    first = ctx.result_of(node_function=produce_result, run_id='{first_run_id}')\n"
+            f"    failed = ctx.result_of(node_function=produce_result, run_id='{failed_run_id}')\n"
+            "    history = ctx.results_of(node_function=produce_result, limit=2)\n"
             "    values = ','.join(str(item.payload['value']) for item in history)\n"
             "    output = Path(__file__).parents[1].joinpath('consumed.txt')\n"
             "    output.write_text(\n"
@@ -2056,16 +2057,17 @@ def test_given_prior_python_task_result_when_later_task_reads_result_then_uses_p
     )
     assert len(result_rows) == 3
     assert result_rows[0][1] == test_case.expected_failed_status
+    rows_by_status: defaultdict[str, list[tuple[Any, ...]]] = defaultdict(list)
+    for row in result_rows:
+        rows_by_status[str(row[1])].append(row)
     successful_values: tuple[int, ...] = tuple(
         int(json.loads(base64.b64decode(row[2]).decode("utf-8"))["value"])
-        for row in result_rows
-        if row[1] == "success"
+        for row in rows_by_status["success"]
     )
     assert successful_values == test_case.expected_success_values
     successful_metadata: tuple[object, ...] = tuple(
         json.loads(base64.b64decode(row[3]).decode("utf-8"))["source"]
-        for row in result_rows
-        if row[1] == "success"
+        for row in rows_by_status["success"]
     )
     assert successful_metadata == ("second", "first")
 
@@ -2119,7 +2121,7 @@ def test_given_prior_loader_result_when_later_task_reads_result_then_uses_loader
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def consume_loader_result(ctx):\n"
-                "    result = ctx.result_of(raw_events)\n"
+                "    result = ctx.result_of(node_function=raw_events)\n"
                 "    output = Path(__file__).parents[1].joinpath('loader_result.txt')\n"
                 "    output.write_text(\n"
                 "        f\"{result.metadata['loader_name']}:{result.metadata['source_name']}:\"\n"
@@ -2202,7 +2204,7 @@ def test_given_prior_loader_result_when_later_task_reads_result_then_uses_loader
                     "from sqlbuild.tasks import task\n\n"
                     "@task\n"
                     "def prepare_events(ctx):\n"
-                    "    return ctx.skip('no input', mode=SkipMode.HARD)\n"
+                    "    return ctx.skip(reason='no input', mode=SkipMode.HARD)\n"
                 ),
                 "loaders/events.py": (
                     "from tasks.prepare import prepare_events\n"
@@ -2309,7 +2311,7 @@ def test_given_same_node_results_in_multiple_targets_when_reading_then_uses_acti
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def consume_result(ctx):\n"
-                "    result = ctx.result_of(produce_result)\n"
+                "    result = ctx.result_of(node_function=produce_result)\n"
                 "    output = Path(__file__).parents[1].joinpath('target_result.txt')\n"
                 "    output.write_text(str(result.payload['target']))\n"
                 "    return ctx.result()\n"

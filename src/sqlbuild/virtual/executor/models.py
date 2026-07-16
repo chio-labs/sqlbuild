@@ -6,20 +6,32 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.shared.models import RelationLookup
-from sqlbuild.shared.types import ExecutionResourceKind, ExternalSqlReferenceResolver
-from sqlbuild.spec.models.project import SnapshotsConfig
+from sqlbuild.runtime.contracts.types import (
+    ConnectionElapsedCallback,
+    NodeStartCallback,
+)
+from sqlbuild.spec.contracts.models import SnapshotsConfig
+from sqlbuild.virtual.executor.constants import (
+    VIRTUAL_CLONE_FOUND_ACTIONS,
+    VIRTUAL_CLONE_HYDRATED_ACTION,
+    VIRTUAL_CLONE_MISSING_ACTION,
+    VIRTUAL_CLONE_REUSED_ACTION,
+    VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION,
+)
+from sqlbuild.virtual.executor.types import VirtualPlanReadyCallback
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
@@ -47,7 +59,7 @@ from sqlbuild.virtual.state.types import (
 class VirtualBuildExecutionHooks:
     """Callbacks to use once a virtual build plan is ready."""
 
-    on_node_start: Callable[[str, ExecutionResourceKind], None] | None = None
+    on_node_start: NodeStartCallback | None = None
     on_node_complete: Callable[[object], None] | None = None
     on_sub_progress: Callable[[str], None] | None = None
 
@@ -89,16 +101,11 @@ class VirtualBuildOptions:
 class VirtualBuildHooks:
     """Plan-ready, progress, and connection callbacks for one virtual build run."""
 
-    on_plan_ready: (
-        Callable[
-            [CompiledProject, PlanOutput, tuple[PythonPlanEntry, ...]], VirtualBuildExecutionHooks
-        ]
-        | None
-    ) = None
+    on_plan_ready: VirtualPlanReadyCallback | None = None
     on_progress: Callable[[str], None] | None = None
     on_connection_start: Callable[[int], None] | None = None
-    on_connection_complete: Callable[[int, float], None] | None = None
-    on_connection_error: Callable[[int, float], None] | None = None
+    on_connection_complete: ConnectionElapsedCallback | None = None
+    on_connection_error: ConnectionElapsedCallback | None = None
 
 
 @dataclass(frozen=True)
@@ -190,23 +197,25 @@ class VirtualCloneResult:
 
     @property
     def found_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action in {"hydrated", "reused"})
+        return sum(1 for item in self.item_results if item.action in VIRTUAL_CLONE_FOUND_ACTIONS)
 
     @property
     def hydrated_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action == "hydrated")
+        return sum(1 for item in self.item_results if item.action == VIRTUAL_CLONE_HYDRATED_ACTION)
 
     @property
     def reused_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action == "reused")
+        return sum(1 for item in self.item_results if item.action == VIRTUAL_CLONE_REUSED_ACTION)
 
     @property
     def missing_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action == "missing")
+        return sum(1 for item in self.item_results if item.action == VIRTUAL_CLONE_MISSING_ACTION)
 
     @property
     def skipped_locked_count(self) -> int:
-        return sum(1 for item in self.item_results if item.action == "skipped_locked")
+        return sum(
+            1 for item in self.item_results if item.action == VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION
+        )
 
 
 @dataclass(frozen=True)

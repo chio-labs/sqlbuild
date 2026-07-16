@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapter.shared.types import TypeDialect
-from sqlbuild.compiler.contracts.main.validate import validate_model_contracts
+from sqlbuild.adapter.contract.types import TypeDialect
+from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.models.schema import SourceLocation
+from sqlbuild.spec.contracts.models import SourceLocation
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import (
     ContractLocationTestCase,
     ContractMissingDeclarationsTestCase,
@@ -182,8 +182,8 @@ from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_contract_pro
 def test_given_compiled_project_when_validating_contracts_then_returns_expected_diagnostics(
     test_case: ContractValidationTestCase,
 ) -> None:
-    result: ContractValidationResult = validate_model_contracts(
-        make_contract_project(
+    result: ContractValidationResult = evaluate_model_contracts(
+        project=make_contract_project(
             declared_columns=test_case.declared_columns,
             inferred_columns=test_case.inferred_columns,
             type_enforcement=test_case.type_enforcement,
@@ -230,8 +230,8 @@ def test_given_column_location_when_validating_contracts_then_diagnostic_uses_lo
         line=test_case.line,
         column=test_case.column,
     )
-    result: ContractValidationResult = validate_model_contracts(
-        make_contract_project(
+    result: ContractValidationResult = evaluate_model_contracts(
+        project=make_contract_project(
             declared_columns=((test_case.column_name, None),),
             inferred_columns=(("order_id", None),),
             type_enforcement=None,
@@ -268,8 +268,8 @@ def test_given_column_location_when_validating_contracts_then_diagnostic_uses_lo
 def test_given_contract_without_declared_columns_when_validating_then_returns_expected_diagnostics(
     test_case: ContractMissingDeclarationsTestCase,
 ) -> None:
-    result: ContractValidationResult = validate_model_contracts(
-        make_contract_project(
+    result: ContractValidationResult = evaluate_model_contracts(
+        project=make_contract_project(
             declared_columns=(),
             inferred_columns=(("order_id", None),),
             type_enforcement=None,

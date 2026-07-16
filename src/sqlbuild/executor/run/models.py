@@ -6,18 +6,20 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import LifeCycleEvent, QueryResult, StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorInputRelation, ModelPlanEntry
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.types import AuditGateReuseReason, HookPhase
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
+from sqlbuild.executor.run.types import AuditGateReuseReason, ExecutionPhase, HookPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -55,17 +57,17 @@ class HookContext:
 
     def execute_sql(self, sql: str) -> None:
         self.statement_recorder.record(sql)
-        self.adapter.execute(self.connection, sql)
+        self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> list[tuple[object, ...]]:
         self.statement_recorder.record(sql)
-        result: QueryResult = self.adapter.query(self.connection, sql, limit=None)
+        result: QueryResult = self.adapter.query(connection=self.connection, sql=sql, limit=None)
         return list(result.rows)
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
 
-    def skip(self, reason: str, *, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
+    def skip(self, *, reason: str, mode: SkipMode | str = SkipMode.SOFT) -> HookSkipResult:
         """Return a skip signal for the current hook."""
 
         return HookSkipResult(reason=reason, mode=SkipMode(mode))
@@ -180,6 +182,80 @@ class PostHookPhaseOutcome:
     """Post-hook phase result: a skip request or an early failure result."""
 
     skipped: bool = False
+    failure: ModelExecutionResult | None = None
+
+
+@dataclass(frozen=True)
+class CustomLifecycleState:
+    """In-flight accumulators for one custom materialization lifecycle."""
+
+    warnings: list[str]
+    audit_results: list[AuditExecutionResult]
+    hook_results: list[HookExecutionResult]
+    statement_recorder: StatementRecorder
+
+
+@dataclass(frozen=True)
+class CustomMaterializationSetup:
+    """Configuration values resolved after custom pre-hooks complete."""
+
+    destination_qualified: str
+    config: dict[str, Any]
+    placeholders: dict[str, str]
+
+
+@dataclass(frozen=True)
+class CustomMaterializationPhaseOutcome:
+    """Custom materialization result or its early execution failure."""
+
+    result: MaterializationResult | None = None
+    failure: ModelExecutionResult | None = None
+
+
+@dataclass(frozen=True)
+class CustomLifecyclePhaseOutcome:
+    """Updated custom lifecycle state and any early phase failure."""
+
+    state: CustomLifecycleState
+    failure: ModelExecutionResult | None = None
+
+
+@dataclass(frozen=True)
+class MicrobatchTargets:
+    """Resolved target and delta relation identifiers for one microbatch run."""
+
+    target_database: str | None
+    target_schema: str | None
+    target_table: str
+    target_qualified: str
+    delta_table: str
+    delta_qualified: str
+
+
+@dataclass(frozen=True)
+class MicrobatchLifecycleState:
+    """In-flight accumulators for one microbatch lifecycle."""
+
+    warnings: list[str]
+    audit_results: list[AuditExecutionResult]
+    hook_results: list[HookExecutionResult]
+    statement_recorder: StatementRecorder
+
+
+@dataclass(frozen=True)
+class MicrobatchSchemaPhaseOutcome:
+    """Schema-check state and any early failure from the first eligible batch."""
+
+    state: MicrobatchLifecycleState
+    schema_checked: bool
+    failure: ModelExecutionResult | None = None
+
+
+@dataclass(frozen=True)
+class MicrobatchPhaseOutcome:
+    """Updated microbatch lifecycle state and any early phase failure."""
+
+    state: MicrobatchLifecycleState
     failure: ModelExecutionResult | None = None
 
 

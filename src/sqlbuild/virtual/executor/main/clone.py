@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
-from sqlbuild.virtual.executor.helpers.clone import (
+from sqlbuild.virtual.executor._helpers.clone import (
     attach_origin_database_for_clone,
     build_clone_origin_lookup,
     build_clone_project_context,
@@ -62,8 +62,8 @@ def run_virtual_clone(
     state_connection: Any = backend.connect(config.connection)
     try:
         versions: CloneVersions = resolve_clone_versions(
-            backend,
-            state_connection,
+            backend=backend,
+            state_connection=state_connection,
             schema=config.schema,
             clone_pipeline=clone_pipeline,
             context=context,
@@ -92,7 +92,7 @@ def run_virtual_clone(
     )
     try:
         model_items: tuple[VirtualCloneItemResult, ...] = hydrate_clone_model_relations(
-            backend,
+            backend=backend,
             adapter=adapter,
             destination_connection=destination_connection,
             config_schema=config.schema,
@@ -103,7 +103,7 @@ def run_virtual_clone(
             skip_locked=resolved_options.skip_locked,
         )
         seed_items: tuple[VirtualCloneItemResult, ...] = hydrate_clone_seed_relations(
-            backend,
+            backend=backend,
             adapter=adapter,
             destination_connection=destination_connection,
             config_schema=config.schema,

@@ -5,9 +5,10 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo, QueryResult, StatementRecorder
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
-from sqlbuild.executor.run.helpers.reuse.core import create_relation_from_reuse_origin
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.executor.run._helpers.reuse.core import create_relation_from_reuse_origin
 from tests.integration.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerBuildFlowTestCase,
     SqlServerMergeTestCase,
@@ -47,9 +48,11 @@ def test_given_table_when_describing_then_sqlserver_returns_columns_in_order(
     sqlserver_schema: str,
 ) -> None:
     target: str = qualified_name(schema=sqlserver_schema, name=test_case.table_name)
-    adapter.execute(connection, test_case.ddl.format(target=target))
+    adapter.execute(connection=connection, sql=test_case.ddl.format(target=target))
 
-    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, target)
+    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
+        connection=connection, relation=target
+    )
 
     assert columns == test_case.expected_columns
 
@@ -70,7 +73,7 @@ def test_given_sql_when_querying_then_sqlserver_returns_named_rows(
     adapter: SqlServerAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=None)
+    result: QueryResult = adapter.query(connection=connection, sql=test_case.sql, limit=None)
 
     assert result == test_case.expected_result
 
@@ -98,12 +101,18 @@ def test_given_model_sql_when_building_then_sqlserver_creates_and_promotes_table
     staging: str = qualified_name(schema=sqlserver_schema, name=f"{test_case.table_name}__staging")
 
     adapter.create_table_as(
-        connection, destination=staging, sql=test_case.source_sql, statement_recorder=recorder
+        connection=connection,
+        destination=staging,
+        sql=test_case.source_sql,
+        statement_recorder=recorder,
     )
     adapter.create_table_as(
-        connection, destination=target, sql=f"SELECT * FROM {staging}", statement_recorder=recorder
+        connection=connection,
+        destination=target,
+        sql=f"SELECT * FROM {staging}",
+        statement_recorder=recorder,
     )
-    adapter.swap(connection, left=target, right=staging, statement_recorder=recorder)
+    adapter.swap(connection=connection, left=target, right=staging, statement_recorder=recorder)
 
     rows: tuple[tuple[object, ...], ...] = fetch_rows(
         adapter=adapter, connection=connection, sql=f"SELECT COUNT(*) FROM {target}"
@@ -132,8 +141,8 @@ def test_given_reuse_origin_when_creating_hard_copy_then_sqlserver_copies_rows(
     destination: str = qualified_name(schema=sqlserver_schema, name="orders_hard_reuse")
     recorder: StatementRecorder = build_statement_recorder()
     adapter.execute(
-        connection,
-        f"SELECT * INTO {origin} FROM "
+        connection=connection,
+        sql=f"SELECT * INTO {origin} FROM "
         "(SELECT 1 AS id, 'alice' AS name UNION ALL SELECT 2, 'bob') AS origin_rows",
     )
 
@@ -179,11 +188,13 @@ def test_given_merge_sql_when_merging_then_sqlserver_upserts_without_constraint(
 ) -> None:
     recorder: StatementRecorder = build_statement_recorder()
     target: str = qualified_name(schema=sqlserver_schema, name=test_case.table_name)
-    adapter.execute(connection, f"CREATE TABLE {target} (id INT, name NVARCHAR(100))")
-    adapter.execute(connection, f"INSERT INTO {target} {test_case.initial_sql}")
+    adapter.execute(
+        connection=connection, sql=f"CREATE TABLE {target} (id INT, name NVARCHAR(100))"
+    )
+    adapter.execute(connection=connection, sql=f"INSERT INTO {target} {test_case.initial_sql}")
 
     adapter.merge(
-        connection,
+        connection=connection,
         destination=target,
         sql=test_case.merge_sql,
         unique_key=test_case.unique_key,
@@ -218,7 +229,7 @@ def test_given_seed_csv_when_loading_then_sqlserver_inserts_all_rows(
     target: str = qualified_name(schema=sqlserver_schema, name="waffle_types")
 
     adapter.load_seed(
-        connection,
+        connection=connection,
         destination=target,
         file_path=seed_file,
         columns=(ColumnInfo(name="id", type="INT"), ColumnInfo(name="name", type="NVARCHAR(100)")),

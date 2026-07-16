@@ -6,7 +6,7 @@ from pathlib import Path
 from shutil import copytree
 from typing import Any
 
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     WAFFLE_SHOP_DIR,
     prepare_source_loader_strategies,
@@ -84,10 +84,9 @@ def build_bigquery_virtual_seed_project_toml(
 ) -> str:
     project_id: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
     location: str = str(build_bigquery_connection_config(schema=dataset_name)["location"])
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         f'name = "{project_name}"\n'
@@ -358,7 +357,7 @@ def execute_bigquery_sql(*, dataset_name: str, sql: str) -> None:
     connection: Any = adapter.connect(config)
     try:
         ensure_bigquery_dataset_ready(dataset_name=dataset_name)
-        adapter.execute(connection, sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 

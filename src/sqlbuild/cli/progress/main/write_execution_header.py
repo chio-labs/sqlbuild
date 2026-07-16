@@ -1,0 +1,23 @@
+"""Generic CLI execution header output."""
+
+from __future__ import annotations
+
+from typing import TextIO
+
+from sqlbuild.cli.progress.main.execution_header import format_execution_header
+from sqlbuild.presentation.classes.cli_style import CliStyle
+
+
+def write_execution_header(
+    *, stream: TextIO, command: str, target: str | None, concurrency: int, use_color: bool
+) -> None:
+    """Write an execution header for command progress output."""
+
+    style: CliStyle = CliStyle(use_color=use_color)
+    header: str = format_execution_header(
+        command=command,
+        target=target,
+        concurrency=concurrency,
+    )
+    stream.write(f"{style.object_name('Execution')}  {style.muted(header)}\n\n")
+    stream.flush()

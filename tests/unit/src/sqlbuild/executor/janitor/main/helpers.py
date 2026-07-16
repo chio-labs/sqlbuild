@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
     RelationInfo,
     RowDiffResult,
     RowDiffTolerances,
     SchemaDiffResult,
-    StatementRecorder,
 )
-from sqlbuild.adapter.shared.types import TablePromotionMode
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -29,8 +30,8 @@ from sqlbuild.compiler.compile.models.core import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.spec.models.schema import SchemaSeedEntry, SeedCsvSettings, default_seed_csv_settings
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
+from sqlbuild.spec.contracts.models import SchemaSeedEntry, SeedCsvSettings, SourceEntry
 
 
 class FakeJanitorAdapter(BaseAdapter):
@@ -46,6 +47,54 @@ class FakeJanitorAdapter(BaseAdapter):
         self.dropped_targets: list[str] = []
         self.executed_sql: list[str] = []
         self.tracked_relations: tuple[tuple[str | None, str | None, str], ...] = tracked_relations
+        self._tracked_rows: tuple[tuple[Any, ...], ...] = tuple(
+            (
+                "model",
+                tracked_relation[2],
+                tracked_relation[0],
+                tracked_relation[1],
+                tracked_relation[2],
+                "run_001",
+                "definition_hash",
+                "version_hash",
+                "schema_hash",
+                base64.b64encode(b"SELECT 1").decode("ascii"),
+                base64.b64encode(b"{}").decode("ascii"),
+                "2026-01-15T12:00:00",
+            )
+            for tracked_relation in tracked_relations
+        )
+        tracked_locations: set[tuple[str | None, str | None]] = {
+            (tracked[0], tracked[1]) for tracked in tracked_relations
+        }
+        self._available_relations: tuple[RelationInfo, ...] = (
+            *relation_infos,
+            *tuple(
+                RelationInfo(
+                    database=database,
+                    schema=schema,
+                    name=FINGERPRINT_TABLE_NAME,
+                    relation_type="base table",
+                )
+                for database, schema in tracked_locations
+            ),
+        )
+        relation_keys: set[tuple[str | None, str | None, str]] = {
+            (relation.database, relation.schema, relation.name)
+            for relation in self._available_relations
+        }
+        fingerprint_relation_keys: set[tuple[str | None, str | None, str]] = {
+            (relation.database, relation.schema, FINGERPRINT_TABLE_NAME)
+            for relation in self._available_relations
+        }
+        freshness_relation_keys: set[tuple[str | None, str | None, str]] = {
+            (relation.database, relation.schema, SOURCE_FRESHNESS_TABLE_NAME)
+            for relation in self._available_relations
+        }
+        state_relation_keys: set[tuple[str | None, str | None, str]] = (
+            fingerprint_relation_keys | freshness_relation_keys
+        )
+        self._existing_relation_keys = relation_keys & state_relation_keys
 
     def supports_relation_age_metadata(self) -> bool:
         return self.age_metadata_supported
@@ -71,28 +120,11 @@ class FakeJanitorAdapter(BaseAdapter):
     def execute(self, connection: Any, sql: str) -> Any:
         del connection
         self.executed_sql.append(sql)
-        if "LIMIT 0" in sql:
-            return _FakeResult(rows=())
-        rows: list[tuple[Any, ...]] = []
-        tracked_relation: tuple[str | None, str | None, str]
-        for tracked_relation in self.tracked_relations:
-            rows.append(
-                (
-                    "model",
-                    tracked_relation[2],
-                    tracked_relation[0],
-                    tracked_relation[1],
-                    tracked_relation[2],
-                    "run_001",
-                    "definition_hash",
-                    "version_hash",
-                    "schema_hash",
-                    base64.b64encode(b"SELECT 1").decode("ascii"),
-                    base64.b64encode(b"{}").decode("ascii"),
-                    "2026-01-15T12:00:00",
-                )
-            )
-        return _FakeResult(rows=tuple(rows))
+        rows_by_query_kind: dict[bool, tuple[tuple[Any, ...], ...]] = {
+            True: (),
+            False: self._tracked_rows,
+        }
+        return _FakeResult(rows=rows_by_query_kind["LIMIT 0" in sql])
 
     def list_relations(
         self,
@@ -102,24 +134,20 @@ class FakeJanitorAdapter(BaseAdapter):
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
-        tracked_fingerprint_tables: tuple[RelationInfo, ...] = tuple(
-            RelationInfo(
-                database=tracked_database,
-                schema=tracked_schema,
-                name=FINGERPRINT_TABLE_NAME,
-                relation_type="base table",
-            )
-            for tracked_database, tracked_schema in {
-                (tracked[0], tracked[1]) for tracked in self.tracked_relations
-            }
+        selected: list[RelationInfo] = []
+        available_schemas: tuple[str, ...] = schemas or tuple(
+            relation.schema or "" for relation in self._available_relations
         )
-        return tuple(
-            relation
-            for relation in (*self.relation_infos, *tracked_fingerprint_tables)
-            if relation.database == database
-            and (schemas is None or relation.schema in schemas)
-            and (not names or relation.name in names)
+        available_names: tuple[str, ...] = names or tuple(
+            relation.name for relation in self._available_relations
         )
+        for relation in self._available_relations:
+            _APPEND_RELATION_BY_SELECTED[
+                relation.database == database
+                and (relation.schema or "") in available_schemas
+                and relation.name in available_names
+            ](selected, relation)
+        return tuple(selected)
 
     def get_columns(
         self,
@@ -150,13 +178,7 @@ class FakeJanitorAdapter(BaseAdapter):
         name: str,
     ) -> bool:
         del connection
-        if name == FINGERPRINT_TABLE_NAME and self.tracked_relations:
-            return True
-        return any(
-            relation.database == database and relation.schema == schema and relation.name == name
-            for relation in self.relation_infos
-            if name in {FINGERPRINT_TABLE_NAME, SOURCE_FRESHNESS_TABLE_NAME}
-        )
+        return (database, schema, name) in self._existing_relation_keys
 
     def render_prune_fingerprint_history_sql(
         self,
@@ -265,7 +287,7 @@ class FakeJanitorAdapter(BaseAdapter):
         destination: str,
         file_path: Path,
         columns: tuple[ColumnInfo, ...],
-        csv_settings: SeedCsvSettings = default_seed_csv_settings,
+        csv_settings: SeedCsvSettings = DEFAULT_SEED_CSV_SETTINGS,
         replace: bool = True,
         infer_types: bool = False,
         statement_recorder: StatementRecorder,
@@ -421,20 +443,17 @@ class _FakeResult:
 
 
 def build_project(*, source_schema: str | None = None) -> CompiledProject:
-    sources: tuple[CompiledSource, ...] = ()
-    if source_schema is not None:
-        sources = (
-            CompiledSource(
-                key=CompiledObjectKey(
-                    resource_type=CompiledResourceType.SOURCE,
-                    name="raw_orders",
-                ),
-                deps=(),
-                name="raw_orders",
-                source_entry=SourceEntry(name="raw_orders", schema=source_schema, table="orders"),
-                source_file=cast(Any, object()),
-            ),
-        )
+    source: CompiledSource = CompiledSource(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SOURCE,
+            name="raw_orders",
+        ),
+        deps=(),
+        name="raw_orders",
+        source_entry=SourceEntry(name="raw_orders", schema=source_schema or "", table="orders"),
+        source_file=cast(Any, object()),
+    )
+    sources: tuple[CompiledSource, ...] = {True: (), False: (source,)}[source_schema is None]
     return CompiledProject(
         run_id="run-1",
         effective_target_name="dev",
@@ -485,3 +504,17 @@ def relation_info_for_test(*, schema: str, name: str) -> RelationInfo:
         created_at=None,
         last_altered_at=None,
     )
+
+
+def _append_relation(selected: list[RelationInfo], relation: RelationInfo) -> None:
+    selected.append(relation)
+
+
+def _ignore_relation(selected: list[RelationInfo], relation: RelationInfo) -> None:
+    del selected, relation
+
+
+_APPEND_RELATION_BY_SELECTED: dict[bool, Callable[[list[RelationInfo], RelationInfo], None]] = {
+    True: _append_relation,
+    False: _ignore_relation,
+}

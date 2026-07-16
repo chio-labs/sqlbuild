@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -180,9 +181,12 @@ def test_given_virtual_project_when_running_seed_then_persists_seed_state(
     assert json_seed_result.returncode == 0, json_seed_result.stderr
     json_payload: dict[str, object] = json.loads(json_seed_result.stdout)
     assert json_payload["command"] == test_case.expected_json_command
-    seed_assets: list[dict[str, object]] = [
-        dict(asset) for asset in json_payload["assets"] if dict(asset).get("kind") == "seed"
-    ]
+    assets_by_kind: defaultdict[object, list[dict[str, object]]] = defaultdict(list)
+    for asset in json_payload["assets"]:
+        typed_asset: dict[str, object] = dict(asset)
+        assets_by_kind[typed_asset.get("kind")].append(typed_asset)
+    seed_assets: list[dict[str, object]] = assets_by_kind["seed"]
+    assert len(seed_assets) == 1
     assert seed_assets[0]["name"] == "order_amounts"
     assert seed_assets[0]["reason"] == test_case.expected_json_reason
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any
 
-from sqlbuild.compiler.fingerprints.helpers.sql import build_read_latest_sql
+from sqlbuild.compiler.fingerprints._helpers.sql import build_read_latest_sql
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 
@@ -16,19 +18,25 @@ class FakeFingerprintResult:
 
 
 class FakeFingerprintExecute:
-    def __init__(
-        self, *, rows: list[tuple[object, ...]], read_error: Exception | None = None
-    ) -> None:
+    def __init__(self, *, rows: list[tuple[object, ...]]) -> None:
         self._rows: list[tuple[object, ...]] = rows
-        self._read_error: Exception | None = read_error
         self.executed_sql: list[str] = []
 
     def __call__(self, connection: Any, sql: str) -> FakeFingerprintResult:
         del connection
         self.executed_sql.append(sql)
-        if self._read_error is not None:
-            raise self._read_error
         return FakeFingerprintResult(self._rows)
+
+
+class FailingFingerprintExecute(FakeFingerprintExecute):
+    def __init__(self, *, read_error: Exception) -> None:
+        super().__init__(rows=[])
+        self._read_error = read_error
+
+    def __call__(self, connection: Any, sql: str) -> FakeFingerprintResult:
+        del connection
+        self.executed_sql.append(sql)
+        raise self._read_error
 
 
 class FakeFingerprintWriteExecute:
@@ -50,10 +58,32 @@ class FlakyFingerprintWriteExecute:
     def __call__(self, connection: Any, sql: str) -> None:
         del connection
         self.executed_sql.append(sql)
-        if sql.startswith("CREATE TABLE"):
-            self.create_attempts += 1
-            if self.create_attempts <= self._failing_create_attempts:
-                raise RuntimeError(self._error_message)
+        _WRITE_ACTIONS[sql.startswith("CREATE TABLE")](self)
+
+
+def _ignore_write(execute: FlakyFingerprintWriteExecute) -> None:
+    del execute
+
+
+def _record_create(execute: FlakyFingerprintWriteExecute) -> None:
+    execute.create_attempts += 1
+    _CREATE_ACTIONS[execute.create_attempts <= execute._failing_create_attempts](execute)
+
+
+def _accept_create(execute: FlakyFingerprintWriteExecute) -> None:
+    del execute
+
+
+def _fail_create(execute: FlakyFingerprintWriteExecute) -> None:
+    raise RuntimeError(execute._error_message)
+
+
+_WRITE_ACTIONS: MappingProxyType[bool, Callable[[FlakyFingerprintWriteExecute], None]] = (
+    MappingProxyType({False: _ignore_write, True: _record_create})
+)
+_CREATE_ACTIONS: MappingProxyType[bool, Callable[[FlakyFingerprintWriteExecute], None]] = (
+    MappingProxyType({False: _accept_create, True: _fail_create})
+)
 
 
 class RecordingSleeper:
@@ -82,11 +112,12 @@ def build_write_test_fingerprint(*, node_name: str = "orders") -> Fingerprint:
 
 
 def render_qualified_name(*, database: str | None, schema: str | None, name: str) -> str | None:
-    if schema is None:
-        return None
-    if database is None:
-        return f"{schema}.{name}"
-    return f"{database}.{schema}.{name}"
+    return {
+        (True, False): None,
+        (True, True): None,
+        (False, True): f"{database}.{schema}.{name}",
+        (False, False): f"{schema}.{name}",
+    }[(schema is None, database is not None)]
 
 
 def render_read_latest_sql(*, database: str | None, schema: str) -> str:

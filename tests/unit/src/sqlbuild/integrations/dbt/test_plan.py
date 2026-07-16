@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from typing import cast
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.planning.plan import (
+from sqlbuild.integrations.dbt._helpers.planning.plan import (
     build_dbt_interop_plan,
     format_dbt_interop_plan,
     format_dbt_interop_plan_json,
@@ -24,7 +25,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.shared.helpers.output.display import DisplayOptions
+from sqlbuild.presentation.models import DisplayOptions
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtPlanHumanFormatterTestCase,
     DbtPlanTestCase,
@@ -250,7 +251,7 @@ def test_given_dbt_interop_plan_inputs_when_building_plan_then_formats_expected_
         selection=selection,
         warnings=test_case.warnings,
     )
-    human_output: str = format_dbt_interop_plan(plan, use_color=False)
+    human_output: str = format_dbt_interop_plan(plan=plan, use_color=False)
     json_output: str = format_dbt_interop_plan_json(plan)
     json_data: dict[str, object] = json.loads(json_output)
     dbt_data: dict[str, object] = cast(dict[str, object], json_data["dbt"])
@@ -328,7 +329,7 @@ def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_prec
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=False,
         display_options=DisplayOptions(max_entries_per_section=None),
     )
@@ -365,6 +366,9 @@ def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_prec
             ),
             expected_human_regex_fragments=(),
             expected_absent_fragments=("analytics.model_2", "local_three          model"),
+            sqlbuild_command_argvs=(
+                ("sqb", "plan", "--select", "local_one", "local_two", "local_three"),
+            ),
         ),
         DbtPlanHumanFormatterTestCase(
             description="groups dbt resources with SQLBuild section styling and dbt names orange",
@@ -415,6 +419,8 @@ def test_given_dbt_anchors_when_formatting_human_output_then_anchor_section_prec
             ),
             expected_human_regex_fragments=(),
             expected_absent_fragments=(),
+            sqlbuild_command_argvs=(("sqb", "plan", "--select", "downstream_orders"),),
+            sqlbuild_plan_output=build_sqlbuild_plan_output(("downstream_orders",)),
         ),
     ],
     ids=lambda case: case.description,
@@ -429,19 +435,13 @@ def test_given_dbt_interop_plan_when_formatting_human_output_then_uses_expected_
         command="plan",
         dbt_command_argv=("dbt", "ls", "--select", "tag:nightly"),
         dbt_ls_nodes=test_case.dbt_ls_nodes,
-        sqlbuild_command_argvs=(("sqb", "plan", "--select", *test_case.sqlbuild_model_names),)
-        if test_case.sqlbuild_model_names
-        else (),
+        sqlbuild_command_argvs=test_case.sqlbuild_command_argvs,
         selection=selection,
-        sqlbuild_plan_output=(
-            build_sqlbuild_plan_output(test_case.sqlbuild_plan_model_names)
-            if test_case.sqlbuild_plan_model_names
-            else None
-        ),
+        sqlbuild_plan_output=test_case.sqlbuild_plan_output,
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -502,6 +502,9 @@ def test_given_dbt_interop_plan_when_formatting_human_output_then_uses_expected_
 def test_given_current_dbt_models_when_formatting_then_shows_pruned_non_model_work(
     test_case: DbtPlanHumanFormatterTestCase,
 ) -> None:
+    unique_ids_by_resource_type: defaultdict[str | None, list[str]] = defaultdict(list)
+    for node in test_case.dbt_ls_nodes:
+        unique_ids_by_resource_type[node.resource_type].append(node.unique_id)
     plan: DbtInteropPlan = DbtInteropPlan(
         command=DbtInteropCommand.BUILD,
         dbt_command_argv=("dbt", "build"),
@@ -522,16 +525,12 @@ def test_given_current_dbt_models_when_formatting_then_shows_pruned_non_model_wo
             )
         ),
         dbt_skip_reason=DbtInteropSkipReason.DBT_MODELS_CURRENT,
-        dbt_pruned_seed_unique_ids=tuple(
-            node.unique_id for node in test_case.dbt_ls_nodes if node.resource_type == "seed"
-        ),
-        dbt_pruned_test_unique_ids=tuple(
-            node.unique_id for node in test_case.dbt_ls_nodes if node.resource_type == "test"
-        ),
+        dbt_pruned_seed_unique_ids=tuple(unique_ids_by_resource_type["seed"]),
+        dbt_pruned_test_unique_ids=tuple(unique_ids_by_resource_type["test"]),
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -610,7 +609,7 @@ def test_given_runnable_dbt_model_when_formatting_verbose_then_shows_non_model_w
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -662,7 +661,7 @@ def test_given_large_dbt_command_when_formatting_then_caps_displayed_select_term
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -739,7 +738,7 @@ def test_given_bare_selection_when_formatting_then_hides_passive_upstream_models
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )
@@ -828,7 +827,7 @@ def test_given_dbt_model_plan_when_formatting_then_shows_reasons_and_dependency_
     )
 
     human_output: str = format_dbt_interop_plan(
-        plan,
+        plan=plan,
         use_color=test_case.use_color,
         display_options=DisplayOptions(max_entries_per_section=test_case.display_limit),
     )

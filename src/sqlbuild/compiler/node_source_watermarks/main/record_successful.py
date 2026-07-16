@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.compiler.node_source_watermarks.helpers.context import (
+from sqlbuild.compiler.node_source_watermarks._helpers.context import (
     record_successful_node_source_watermark as _record_successful_node_source_watermark,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

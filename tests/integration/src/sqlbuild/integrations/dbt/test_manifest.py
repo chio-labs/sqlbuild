@@ -6,13 +6,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models.core import CompileProjectInputs
+from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
+from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtManifestIndex
 from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtManifestCompileTestCase,
     RealDbtSeedContentIdentityTestCase,
@@ -71,7 +70,7 @@ def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_preserves_dbt_ref(
         project_dir=sqlbuild_project_dir
     )
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         external_sql_reference_resolver=build_external_sql_reference_resolver(
             manifest_source=manifest_source
         ),

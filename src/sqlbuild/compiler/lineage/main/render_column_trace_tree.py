@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.compiler.lineage.helpers.tree_render import (
+from sqlbuild.compiler.lineage._helpers.tree_render import (
     render_column_trace_branch,
     render_column_trace_limit_note,
 )
@@ -26,8 +26,8 @@ def render_column_trace_tree[Column, Edge](
     """Render the box-drawing column-trace tree lines plus any truncation note."""
 
     lines: list[str] = render_column_trace_branch(
-        target,
-        deps,
+        column=target,
+        deps=deps,
         prefix="",
         seen={column_id(target)},
         column_id=column_id,

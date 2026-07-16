@@ -6,8 +6,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.adapters.postgres.client import PostgresAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 
 
 def build_unique_schema_name(*, prefix: str) -> str:
@@ -27,13 +27,13 @@ def execute_statements(
     *, adapter: PostgresAdapter, connection: Any, statements: tuple[str, ...]
 ) -> None:
     for statement in statements:
-        adapter.execute(connection, statement)
+        adapter.execute(connection=connection, sql=statement)
 
 
 def fetch_rows(
     *, adapter: PostgresAdapter, connection: Any, sql: str
 ) -> tuple[tuple[object, ...], ...]:
-    cursor: Any = adapter.execute(connection, sql)
+    cursor: Any = adapter.execute(connection=connection, sql=sql)
     return tuple(tuple(row) for row in cursor.fetchall())
 
 

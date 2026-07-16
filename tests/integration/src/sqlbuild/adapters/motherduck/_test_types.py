@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.adapter.shared.models import QueryResult
+from sqlbuild.adapter.contract.models import QueryResult
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.executor.shared.types import ExecutionPhase
+from sqlbuild.executor.run.types import ExecutionPhase
 
 
 @dataclass(frozen=True)

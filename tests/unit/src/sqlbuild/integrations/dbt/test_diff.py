@@ -5,15 +5,15 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
-from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropConfigError
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.integrations.dbt.pipeline.helpers.diff import (
+from sqlbuild.integrations.dbt._helpers.pipeline.diff import (
     DbtDiffOptions,
     execute_dbt_diff,
     parse_dbt_diff_options,
 )
+from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError, DbtInteropConfigError
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtDiffBoundedCursorErrorTestCase,
     DbtDiffBoundedCursorTestCase,

@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.types import FrameworkType
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
@@ -108,7 +108,7 @@ def test_given_source_freshness_records_when_writing_and_reading_then_returns_ex
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
@@ -150,7 +150,7 @@ def test_given_no_table_when_reading_source_freshness_then_returns_empty_set(
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
@@ -321,7 +321,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
@@ -485,7 +485,7 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
@@ -623,7 +623,7 @@ def test_given_same_source_name_with_different_targets_when_reading_then_keeps_i
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,
@@ -711,7 +711,7 @@ def test_given_source_freshness_edge_values_when_writing_and_reading_then_round_
         connection=connection,
         execute=execute,
         table_exists=RELATION_EXISTS(
-            connection,
+            connection=connection,
             database=test_case.database,
             schema=test_case.schema,
             name=SOURCE_FRESHNESS_TABLE_NAME,

@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.shared.models import QueryResult
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapter.contract.models import QueryResult
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 
 
 class NoConnectDuckDbAdapter(DuckDbAdapter):
@@ -157,7 +157,7 @@ def prepare_python_dag_project(root: Path) -> Path:
                 "",
                 "@check(depends_on=warehouse_export, tags=['loader'])",
                 "def check_loader_export(ctx):",
-                "    return ctx.pass_('loader rows available')",
+                "    return ctx.pass_(message='loader rows available')",
             )
         )
         + "\n",

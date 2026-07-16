@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.virtual.executor.helpers.rewrite import build_virtual_destination
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.virtual.executor._helpers.rewrite import build_virtual_destination
 
 
 def build_virtual_logical_destination(
