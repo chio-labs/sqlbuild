@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.executor.python_nodes.helpers.execution import execute_ready_python_node
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.executor.python_nodes._helpers.execution import execute_ready_python_node
 from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeRunState,

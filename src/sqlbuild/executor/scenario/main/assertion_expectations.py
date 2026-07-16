@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioAssertionExpectationPlan
-from sqlbuild.executor.scenario.models import ScenarioAssertionExpectationExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.constants import (
+from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_ASSERTION_ERRORED,
     SCENARIO_EXEC_ASSERTION_FAILED,
 )
+from sqlbuild.executor.scenario.models import ScenarioAssertionExpectationExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_scenario_assertion_expectation(
@@ -26,16 +26,16 @@ def execute_scenario_assertion_expectation(
 
     try:
         count_cursor: Any = adapter.execute(
-            connection,
-            f"SELECT COUNT(*) FROM ({expectation.sql}) AS __scenario_assertion_failures",
+            connection=connection,
+            sql=f"SELECT COUNT(*) FROM ({expectation.sql}) AS __scenario_assertion_failures",
         )
         count_row: Any | None = count_cursor.fetchone()
         failing_count: int = int(count_row[0]) if count_row is not None else 0
         sample_rows: tuple[tuple[object, ...], ...] = ()
         if failing_count > 0 and sample_limit > 0:
             sample_cursor: Any = adapter.execute(
-                connection,
-                f"SELECT * FROM ({expectation.sql}) AS __scenario_assertion_failures "
+                connection=connection,
+                sql=f"SELECT * FROM ({expectation.sql}) AS __scenario_assertion_failures "
                 f"LIMIT {sample_limit}",
             )
             sample_rows = tuple(tuple(row) for row in sample_cursor.fetchall())

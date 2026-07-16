@@ -6,23 +6,29 @@ import time
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.executor.load.helpers.cursors import (
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.load._helpers.cursors import (
     exclusive_cursor_end,
     format_cursor_bound,
     load_staging_cursor_bounds,
 )
-from sqlbuild.executor.load.helpers.external import execute_external_source_load
-from sqlbuild.executor.load.helpers.loader_invocation import (
+from sqlbuild.executor.load._helpers.execution import load_resource_kind
+from sqlbuild.executor.load._helpers.external import execute_external_source_load
+from sqlbuild.executor.load._helpers.loader_invocation import (
     build_loader_context,
     interpret_loader_return,
     validate_source_write_strategy,
 )
-from sqlbuild.executor.load.helpers.schema import validate_and_evolve_existing_target
-from sqlbuild.executor.load.helpers.staging import write_loader_rows_to_staging
+from sqlbuild.executor.load._helpers.schema import validate_and_evolve_existing_target
+from sqlbuild.executor.load._helpers.staging import write_loader_rows_to_staging
 from sqlbuild.executor.load.models import (
     LoaderContext,
     LoaderDestination,
@@ -30,14 +36,11 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.helpers.load_execution import load_resource_kind
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import invoke_with_providers
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
-from sqlbuild.spec.models.types import SourceWriteStrategy
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
 
 def execute_source_load(
@@ -91,7 +94,7 @@ def execute_source_load(
             )
         validate_source_write_strategy(source_entry)
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=source_entry.database,
             schema=source_entry.schema,
             statement_recorder=statement_recorder,
@@ -135,7 +138,7 @@ def execute_source_load(
             staging=staging,
             statement_recorder=statement_recorder,
         )
-        _ = _apply_source_write_strategy(
+        adapter = _apply_source_write_strategy(
             adapter=adapter,
             connection=connection,
             source_entry=source_entry,
@@ -145,7 +148,7 @@ def execute_source_load(
             statement_recorder=statement_recorder,
         )
         adapter.drop(
-            connection,
+            connection=connection,
             destination=staging,
             if_exists=True,
             statement_recorder=statement_recorder,
@@ -153,7 +156,7 @@ def execute_source_load(
     except Exception as error:
         try:
             adapter.drop(
-                connection,
+                connection=connection,
                 destination=staging,
                 if_exists=True,
                 statement_recorder=statement_recorder,
@@ -193,14 +196,16 @@ def _apply_source_write_strategy(
     target_name: str,
     staging: str,
     statement_recorder: StatementRecorder,
-) -> None:
+) -> BaseAdapter:
     target_exists: bool = adapter.relation_exists(
-        connection,
+        connection=connection,
         database=source_entry.database,
         schema=source_entry.schema,
         name=target_name,
     )
-    staging_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, staging)
+    staging_columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
+        connection=connection, relation=staging
+    )
     if target_exists:
         validate_and_evolve_existing_target(
             adapter=adapter,
@@ -212,39 +217,39 @@ def _apply_source_write_strategy(
         )
     if source_entry.write_strategy == SourceWriteStrategy.TABLE:
         adapter.replace_table_from_relation(
-            connection,
+            connection=connection,
             destination=target,
             origin=staging,
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     if not target_exists:
         adapter.replace_table_from_relation(
-            connection,
+            connection=connection,
             destination=target,
             origin=staging,
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     staging_sql: str = f"SELECT * FROM {staging}"
     if source_entry.write_strategy == SourceWriteStrategy.APPEND:
         adapter.append(
-            connection,
+            connection=connection,
             destination=target,
             sql=staging_sql,
             columns=tuple(column.name for column in staging_columns),
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     if source_entry.write_strategy == SourceWriteStrategy.MERGE:
         adapter.merge(
-            connection,
+            connection=connection,
             destination=target,
             sql=staging_sql,
             unique_key=source_entry.unique_key,
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     if source_entry.write_strategy == SourceWriteStrategy.DELETE_INSERT:
         if source_entry.cursor_column is None:
             raise ExecutorInputError(
@@ -259,9 +264,9 @@ def _apply_source_write_strategy(
         )
         cursor_start, cursor_max = cursor_bounds
         if cursor_start is None or cursor_max is None:
-            return
+            return adapter
         adapter.delete_insert_cursor(
-            connection,
+            connection=connection,
             destination=target,
             sql=staging_sql,
             cursor_column=source_entry.cursor_column,
@@ -269,5 +274,5 @@ def _apply_source_write_strategy(
             cursor_end=format_cursor_bound(exclusive_cursor_end(cursor_max)),
             statement_recorder=statement_recorder,
         )
-        return
+        return adapter
     raise ExecutorInputError(f"unsupported source write_strategy: {source_entry.write_strategy}")

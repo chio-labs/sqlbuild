@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.helpers.runtime import (
+from sqlbuild.virtual.state._helpers.state_runtime.runtime import (
     build_state_runtime as _build_state_runtime,
 )
+from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import StateBackendConfig
 
 

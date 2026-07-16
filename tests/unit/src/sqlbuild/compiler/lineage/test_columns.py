@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
 )
@@ -164,15 +164,15 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
         ),
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project)
+    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
-    column_lineage: ColumnLineage = next(
-        column
-        for column in model_lineage.columns
-        if column.output_column == test_case.expected_column
-    )
+    columns_by_output: dict[str, tuple[ColumnLineage, ...]] = {
+        column.output_column: (column,) for column in model_lineage.columns
+    }
+    assert len(columns_by_output) == len(model_lineage.columns)
+    column_lineage: ColumnLineage = next(iter(columns_by_output.get(test_case.expected_column, ())))
     upstream_columns: tuple[str, ...] = tuple(
         sorted(
             f"{CompiledResourceType(source.resource_type).value}:{source.resource_name}.{source.column_name}"
@@ -299,17 +299,17 @@ def test_given_compiled_project_when_building_fast_column_lineage_then_infers_ex
     )
 
     result: ProjectColumnLineage | None = build_project_column_lineage(
-        project,
+        project=project,
         mode=ColumnLineageMode.FAST,
     )
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
-    column_lineage: ColumnLineage = next(
-        column
-        for column in model_lineage.columns
-        if column.output_column == test_case.expected_column
-    )
+    columns_by_output: dict[str, tuple[ColumnLineage, ...]] = {
+        column.output_column: (column,) for column in model_lineage.columns
+    }
+    assert len(columns_by_output) == len(model_lineage.columns)
+    column_lineage: ColumnLineage = next(iter(columns_by_output.get(test_case.expected_column, ())))
     upstream_columns: tuple[str, ...] = tuple(
         sorted(
             f"{CompiledResourceType(source.resource_type).value}:{source.resource_name}.{source.column_name}"
@@ -355,13 +355,15 @@ def test_given_select_star_when_building_column_lineage_then_expands_known_schem
         )
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project)
+    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
-    order_id_lineage: ColumnLineage = next(
-        column for column in model_lineage.columns if column.output_column == "order_id"
-    )
+    columns_by_output: dict[str, tuple[ColumnLineage, ...]] = {
+        column.output_column: (column,) for column in model_lineage.columns
+    }
+    assert len(columns_by_output) == len(model_lineage.columns)
+    order_id_lineage: ColumnLineage = next(iter(columns_by_output.get("order_id", ())))
     assert model_lineage.has_star
     assert order_id_lineage.transform_kind == test_case.expected_transform_kind
     assert order_id_lineage.confidence == ColumnLineageConfidence.MEDIUM
@@ -394,7 +396,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
         )
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project)
+    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert result is not None
     trace: tuple[str, ...] = tuple(
@@ -404,7 +406,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.trace_column("c", "id")
+        for edge in result.trace_column(model_name="c", column_name="id")
     )
     consumers: tuple[str, ...] = tuple(
         edge_label(
@@ -413,7 +415,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.column_consumers("a", "id")
+        for edge in result.column_consumers(resource_name="a", column_name="id")
     )
     downstream_trace: tuple[str, ...] = tuple(
         edge_label(
@@ -422,7 +424,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
             edge.target.resource_name,
             edge.target.column_name,
         )
-        for edge in result.trace_column_downstream("a", "id")
+        for edge in result.trace_column_downstream(resource_name="a", column_name="id")
     )
     assert trace == test_case.expected_trace
     assert consumers == test_case.expected_consumers
@@ -505,17 +507,17 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
     )
 
     result: ProjectColumnLineage | None = build_project_column_lineage(
-        project,
+        project=project,
         mode=ColumnLineageMode.RICH,
     )
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
-    column_lineage: ColumnLineage = next(
-        column
-        for column in model_lineage.columns
-        if column.output_column == test_case.expected_column
-    )
+    columns_by_output: dict[str, tuple[ColumnLineage, ...]] = {
+        column.output_column: (column,) for column in model_lineage.columns
+    }
+    assert len(columns_by_output) == len(model_lineage.columns)
+    column_lineage: ColumnLineage = next(iter(columns_by_output.get(test_case.expected_column, ())))
     upstream_columns: tuple[str, ...] = tuple(
         sorted(
             f"{CompiledResourceType(source.resource_type).value}:{source.resource_name}.{source.column_name}"
@@ -564,18 +566,18 @@ def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_poly
     project: CompiledProject = make_compiled_project(models=upstream_models + (target_model,))
 
     result: ProjectColumnLineage | None = build_project_column_lineage(
-        project,
+        project=project,
         dialect="postgres",
         mode=ColumnLineageMode.RICH,
     )
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
-    column_lineage: ColumnLineage = next(
-        column
-        for column in model_lineage.columns
-        if column.output_column == test_case.expected_column
-    )
+    columns_by_output: dict[str, tuple[ColumnLineage, ...]] = {
+        column.output_column: (column,) for column in model_lineage.columns
+    }
+    assert len(columns_by_output) == len(model_lineage.columns)
+    column_lineage: ColumnLineage = next(iter(columns_by_output.get(test_case.expected_column, ())))
     upstream_columns: tuple[str, ...] = tuple(
         sorted(
             f"{CompiledResourceType(source.resource_type).value}:{source.resource_name}.{source.column_name}"
@@ -611,6 +613,6 @@ def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_n
         sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project)
+    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert (result is None) is test_case.expected_result_is_none

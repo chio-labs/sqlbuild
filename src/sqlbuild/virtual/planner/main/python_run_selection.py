@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import PlanOutput
@@ -16,7 +16,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunSelection,
     PythonSqlSelection,
 )
-from sqlbuild.virtual.planner.helpers.python_node_closure import (
+from sqlbuild.virtual.planner._helpers.python_node_closure import (
     planned_source_loader_python_names,
     python_upstream_closure,
     sql_attached_python_names,

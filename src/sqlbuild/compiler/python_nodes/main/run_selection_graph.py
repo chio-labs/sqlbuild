@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.python_nodes.helpers.run_selectors import resolve_python_sql_run_selectors
+from sqlbuild.compiler.python_nodes._helpers.run_selectors import resolve_python_sql_run_selectors
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunSelection
 
 

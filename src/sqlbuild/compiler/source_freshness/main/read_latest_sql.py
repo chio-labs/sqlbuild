@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.compiler.source_freshness.helpers.sql import (
+from sqlbuild.compiler.source_freshness._helpers.sql import (
     build_read_latest_sql as _build_read_latest_sql,
 )
 

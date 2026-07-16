@@ -79,6 +79,9 @@ class SourceOnlyComplexIngressE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_return_code: int
+    dependency_dir: str = ""
+    decorator_import: str = ""
+    decorator_name: str = ""
     expected_error_fragment: str | None = None
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     setup_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)

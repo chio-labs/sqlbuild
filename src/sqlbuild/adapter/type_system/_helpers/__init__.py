@@ -1,0 +1,1 @@
+"""Adapter type-system implementations."""

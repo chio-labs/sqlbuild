@@ -7,8 +7,8 @@ import time
 from dataclasses import replace
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main.execute import execute_build_plan
 from sqlbuild.executor.build.main.external_source_loads import (
@@ -22,31 +22,30 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
     ExternalSourceLoadResults,
 )
-from sqlbuild.executor.pipeline.helpers.auditing import (
+from sqlbuild.executor.pipeline._helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.scenario import (
+from sqlbuild.executor.pipeline._helpers.scenario import (
     run_scenario_capture_pipeline as run_scenario_capture_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.scenario import (
+from sqlbuild.executor.pipeline._helpers.scenario import (
     run_scenario_local_test_pipeline as run_scenario_local_test_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.scenario import (
+from sqlbuild.executor.pipeline._helpers.scenario import (
     run_scenario_test_pipeline as run_scenario_test_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.scenario import (
+from sqlbuild.executor.pipeline._helpers.scenario import (
     select_scenario_snapshot_capture_candidates as select_scenario_snapshot_capture_candidates,
 )
-from sqlbuild.executor.pipeline.helpers.seeding import (
+from sqlbuild.executor.pipeline._helpers.seeding import (
     run_seed_pipeline as run_seed_pipeline,
 )
-from sqlbuild.executor.pipeline.helpers.settings import resolve_build_inputs
-from sqlbuild.executor.pipeline.helpers.testing import (
+from sqlbuild.executor.pipeline._helpers.settings import resolve_build_inputs
+from sqlbuild.executor.pipeline._helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
 from sqlbuild.executor.pipeline.models import ResolvedBuildInputs
-from sqlbuild.spec.models.project import SettingsConfig
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SettingsConfig, SourceEntry
 
 
 def run_build_pipeline(
@@ -113,7 +112,9 @@ def run_build_pipeline(
             worker_connections.append(adapter.connect(connection_config))
     except Exception:
         if inputs.callbacks.on_connection_error is not None:
-            inputs.callbacks.on_connection_error(effective_concurrency, time.monotonic() - start)
+            inputs.callbacks.on_connection_error(
+                effective_concurrency, elapsed_seconds=time.monotonic() - start
+            )
         conn: Any
         for _i, conn in enumerate(worker_connections):
             logger.debug("close worker connection index=%s", _i)
@@ -123,7 +124,9 @@ def run_build_pipeline(
             adapter.close(scheduler_connection)
         raise
     if inputs.callbacks.on_connection_complete is not None:
-        inputs.callbacks.on_connection_complete(effective_concurrency, time.monotonic() - start)
+        inputs.callbacks.on_connection_complete(
+            effective_concurrency, elapsed_seconds=time.monotonic() - start
+        )
     try:
         return execute_build_plan(
             plan=plan,
@@ -168,7 +171,7 @@ def _prepare_build_schemas(
     try:
         for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=database,
                 schema=schema,
                 statement_recorder=recorder,

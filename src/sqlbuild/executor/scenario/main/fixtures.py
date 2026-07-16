@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_FIXTURE_FAILED
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.constants import SCENARIO_EXEC_FIXTURE_FAILED
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_scenario_fixture(
@@ -31,7 +33,7 @@ def execute_scenario_fixture(
 
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=fixture_plan.destination.database,
             schema=fixture_plan.destination.schema,
             statement_recorder=statement_recorder,
@@ -44,7 +46,7 @@ def execute_scenario_fixture(
             sqlbuild_fixture_name=fixture_plan.logical_name,
         ):
             adapter.create_table_as(
-                connection,
+                connection=connection,
                 destination=target_relation,
                 sql=fixture_plan.sql,
                 config=None,

@@ -9,19 +9,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, LifeCycleEvent, StatementRecorder
-from sqlbuild.adapter.shared.types import LoaderLogicalType
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo, LifeCycleEvent
+from sqlbuild.adapter.contract.types import LoaderLogicalType
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, SkipMode
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.load.constants import LOADER_RELATION_QUALIFIER_SEPARATOR
+from sqlbuild.executor.load.types import LoadProgressCallback
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.types import ExecutionResourceKind
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, ExecutionResourceKind
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)
@@ -55,7 +60,7 @@ class LoaderRelationRef:
 
     def max(self, column: str) -> object | None:
         if not self.adapter.relation_exists(
-            self.connection,
+            connection=self.connection,
             database=self.database,
             schema=self.schema,
             name=self.table_name,
@@ -63,7 +68,7 @@ class LoaderRelationRef:
             return None
         sql: str = f"SELECT MAX({column}) FROM {self.destination}"
         self.statement_recorder.record(sql)
-        cursor: Any = self.adapter.execute(self.connection, sql)
+        cursor: Any = self.adapter.execute(connection=self.connection, sql=sql)
         row: object | None = cursor.fetchone()
         if row is None:
             return None
@@ -119,11 +124,11 @@ class LoaderContext:
 
     def execute_sql(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return self.adapter.execute(connection=self.connection, sql=sql)
 
     def log(self, message: str) -> None:
         self.statement_recorder.log(message)
@@ -132,7 +137,7 @@ class LoaderContext:
         if self.on_progress is not None:
             self.on_progress(message)
 
-    def skip(self, reason: str, *, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
+    def skip(self, *, reason: str, mode: SkipMode = SkipMode.SOFT) -> LoaderSkipResult:
         """Return a skip signal for the current source loader."""
 
         return LoaderSkipResult(reason=reason, mode=mode)
@@ -154,8 +159,8 @@ class LoaderContext:
 
     def result_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         run_id: str | None = None,
         default: object = MISSING_DEFAULT,
     ) -> NodeResultEnvelope | object:
@@ -175,8 +180,8 @@ class LoaderContext:
 
     def results_of(
         self,
-        node_function: Callable[..., object],
         *,
+        node_function: Callable[..., object],
         limit: int,
     ) -> tuple[NodeResultEnvelope, ...]:
         """Return persisted successful upstream result history, newest first."""
@@ -192,14 +197,14 @@ class LoaderContext:
 
     def qualify_name(
         self,
-        name: str,
         *,
+        name: str,
         database: str | None = None,
         schema: str | None = None,
     ) -> str:
         """Return a fully-qualified relation name, preserving already-qualified input."""
 
-        if "." in name:
+        if LOADER_RELATION_QUALIFIER_SEPARATOR in name:
             return name
         return resolve_qualified_name_parts(
             adapter=self.adapter,
@@ -211,7 +216,7 @@ class LoaderContext:
     def qualify_in_destination_schema(self, name: str) -> str:
         """Return a relation name qualified into the destination database/schema."""
 
-        return self.qualify_name(name)
+        return self.qualify_name(name=name)
 
     def loader(self, loader_fn: Callable[..., object]) -> LoaderRelationRef:
         """Return a relation reference for an upstream loader function."""
@@ -332,11 +337,11 @@ class LoadCallbacks:
     """Progress callbacks for one load pipeline run."""
 
     on_load_start: Callable[[SourceEntry], None] | None = None
-    on_load_progress: Callable[[SourceEntry, str], None] | None = None
+    on_load_progress: LoadProgressCallback | None = None
     on_load_complete: Callable[[LoadExecutionResult], None] | None = None
     on_connection_start: Callable[[int], None] | None = None
-    on_connection_complete: Callable[[int, float], None] | None = None
-    on_connection_error: Callable[[int, float], None] | None = None
+    on_connection_complete: ConnectionElapsedCallback | None = None
+    on_connection_error: ConnectionElapsedCallback | None = None
 
 
 @dataclass(frozen=True)

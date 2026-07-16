@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from tests.unit.src.sqlbuild.diagnostics._test_types import (
     DiagnosticsContextualSqlTestCase,
     DiagnosticsLogTestCase,
@@ -44,7 +44,7 @@ def test_given_diagnostics_without_debug_when_logging_then_writes_file_only(
     logger.debug(test_case.message)
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: object = adapter.connect({"database": ":memory:"})
-    adapter.execute(connection, "SELECT 1")
+    adapter.execute(connection=connection, sql="SELECT 1")
     adapter.close(connection)
 
     log_text: str = (target_dir / "sqlbuild.log").read_text(encoding="utf-8")
@@ -121,7 +121,9 @@ def test_given_multiline_sql_when_debug_logging_then_formats_readable_outputs(
     configure_diagnostics(target_dir=target_dir, debug=test_case.debug)
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: object = adapter.connect({"database": ":memory:"})
-    adapter.execute(connection, "CREATE OR REPLACE VIEW main.debug_view AS SELECT\n  1 AS id")
+    adapter.execute(
+        connection=connection, sql="CREATE OR REPLACE VIEW main.debug_view AS SELECT\n  1 AS id"
+    )
     adapter.close(connection)
 
     log_text: str = (target_dir / "sqlbuild.log").read_text(encoding="utf-8")
@@ -170,7 +172,7 @@ def test_given_contextual_transaction_sql_when_debug_logging_then_console_render
     connection: object = adapter.connect({"database": ":memory:"})
 
     with diagnostics_context(**test_case.context):
-        adapter.execute(connection, test_case.sql)
+        adapter.execute(connection=connection, sql=test_case.sql)
 
     adapter.close(connection)
 

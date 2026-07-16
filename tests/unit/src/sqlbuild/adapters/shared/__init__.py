@@ -1,1 +1,0 @@
-"""Shared adapter tests."""

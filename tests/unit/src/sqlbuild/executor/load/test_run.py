@@ -16,8 +16,8 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.load._test_types import (
     ExternalLoadPipelineTestCase,
     LoadPipelineSkipFanInTestCase,
@@ -93,7 +93,7 @@ def test_given_external_loader_when_running_load_pipeline_then_does_not_open_con
     (
         LoadPipelineSkipFanInTestCase(
             description="runs downstream when soft-skipped loader branch has successful sibling",
-            hard_skip=False,
+            skip_mode=SkipMode.SOFT,
             expected_statuses=(
                 ExecutionStatus.SKIPPED,
                 ExecutionStatus.SUCCESS,
@@ -110,7 +110,7 @@ def test_given_external_loader_when_running_load_pipeline_then_does_not_open_con
         ),
         LoadPipelineSkipFanInTestCase(
             description="skips downstream when hard-skipped loader branch has successful sibling",
-            hard_skip=True,
+            skip_mode=SkipMode.HARD,
             expected_statuses=(
                 ExecutionStatus.SKIPPED,
                 ExecutionStatus.SUCCESS,
@@ -134,8 +134,7 @@ def test_given_mixed_loader_skips_when_running_pipeline_then_fan_in_matches_mode
     adapter: CountingLoaderContextTestAdapter = CountingLoaderContextTestAdapter()
 
     def a_loader(ctx: LoaderContext) -> object:
-        mode: SkipMode = SkipMode.HARD if test_case.hard_skip else SkipMode.SOFT
-        return ctx.skip("no new orders", mode=mode)
+        return ctx.skip(reason="no new orders", mode=test_case.skip_mode)
 
     def x_loader(_ctx: LoaderContext) -> None:
         return None
@@ -194,7 +193,7 @@ def test_given_mixed_loader_skips_when_running_pipeline_then_fan_in_matches_mode
     assert tuple(result.source_name for result in results) == ("a", "x", "b", "c")
     assert tuple(result.status for result in results) == test_case.expected_statuses
     assert (
-        tuple(None if result.skip_mode is None else result.skip_mode.value for result in results)
+        tuple(getattr(result.skip_mode, "value", None) for result in results)
         == test_case.expected_skip_modes
     )
     assert tuple(result.skip_reason for result in results) == test_case.expected_skip_reasons

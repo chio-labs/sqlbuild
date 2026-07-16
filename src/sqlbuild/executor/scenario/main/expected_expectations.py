@@ -4,19 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.planner.models import ScenarioExpectedExpectationPlan
-from sqlbuild.executor.scenario.main.expected_comparison_sql import (
-    build_scenario_expected_comparison_sql,
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
 )
-from sqlbuild.executor.scenario.models import ScenarioExpectedExpectationExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.constants import (
+from sqlbuild.compiler.planner.models import ScenarioExpectedExpectationPlan
+from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_EXPECTED_ERRORED,
     SCENARIO_EXEC_EXPECTED_FAILED,
     SCENARIO_EXEC_EXPECTED_INTERNAL,
 )
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
+from sqlbuild.executor.scenario.main.expected_comparison_sql import (
+    build_scenario_expected_comparison_sql,
+)
+from sqlbuild.executor.scenario.models import ScenarioExpectedExpectationExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_scenario_expected_expectation(
@@ -37,7 +39,7 @@ def execute_scenario_expected_expectation(
         set_difference_operator=adapter.render_set_difference_operator(),
     )
     try:
-        cursor: Any = adapter.execute(connection, comparison_sql)
+        cursor: Any = adapter.execute(connection=connection, sql=comparison_sql)
         row: Any | None = cursor.fetchone()
     except Exception as exc:
         error_message: str = (

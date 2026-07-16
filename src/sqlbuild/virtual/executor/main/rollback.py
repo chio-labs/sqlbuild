@@ -7,19 +7,19 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.shared.models import ConnectionHooks
-from sqlbuild.virtual.executor.helpers.environment_views import write_virtual_environment_views
-from sqlbuild.virtual.executor.helpers.project_context import resolve_virtual_project_context
-from sqlbuild.virtual.executor.helpers.rollback import (
+from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.virtual.executor._helpers.environment_views import write_virtual_environment_views
+from sqlbuild.virtual.executor._helpers.project_context import resolve_virtual_project_context
+from sqlbuild.virtual.executor._helpers.rollback import (
     build_rollback_ref_update,
     read_rollback_checkpoint_state,
     read_rollback_physical_relations,
     resolve_rollback_final_refs,
     validate_physical_relations_exist,
 )
-from sqlbuild.virtual.executor.helpers.state_operations import (
+from sqlbuild.virtual.executor._helpers.state_operations import (
     acquire_virtual_environment_lease_or_raise,
 )
 from sqlbuild.virtual.executor.models import (
@@ -68,23 +68,23 @@ def run_virtual_rollback(
         if on_progress is not None:
             on_progress("Inspecting virtual state...")
         lease = acquire_virtual_environment_lease_or_raise(
-            backend,
-            state_connection,
+            backend=backend,
+            state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
             owner_prefix="rollback",
             locked_error_code="S019",
         )
         checkpoint_state: RollbackCheckpointState = read_rollback_checkpoint_state(
-            backend,
-            state_connection,
+            backend=backend,
+            state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
             checkpoint_id=options.checkpoint_id,
         )
         resolution: RollbackResolution = resolve_rollback_final_refs(
-            backend,
-            state_connection,
+            backend=backend,
+            state_connection=state_connection,
             schema=config.schema,
             graph=context.graph,
             virtual_environment_name=virtual_environment_name,
@@ -95,8 +95,8 @@ def run_virtual_rollback(
             allow_partial_rollback=options.allow_partial_rollback,
         )
         relations: VirtualEnvironmentPhysicalRelations = read_rollback_physical_relations(
-            backend,
-            state_connection,
+            backend=backend,
+            state_connection=state_connection,
             schema=config.schema,
             checkpoint_id=checkpoint_state.target_checkpoint.checkpoint_id,
             resolution=resolution,
@@ -108,15 +108,15 @@ def run_virtual_rollback(
             physical_relations=relations.model_relations,
         )
         update: RollbackRefUpdate = build_rollback_ref_update(
-            backend,
-            state_connection,
+            backend=backend,
+            state_connection=state_connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
             resolution=resolution,
             checkpoint_function_refs=checkpoint_state.checkpoint_function_refs,
         )
         backend.upsert_virtual_environment_and_replace_node_ref_groups(
-            state_connection,
+            connection=state_connection,
             schema=config.schema,
             record=update.virtual_environment_record,
             refs_by_node_type=update.refs_by_node_type,
@@ -126,8 +126,8 @@ def run_virtual_rollback(
     finally:
         if lease is not None:
             _ = release_state_lease(
-                backend,
-                state_connection,
+                backend=backend,
+                connection=state_connection,
                 schema=config.schema,
                 lease=lease,
             )

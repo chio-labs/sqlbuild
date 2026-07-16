@@ -19,8 +19,8 @@ def prepare_project_with_local_adapter(*, tmp_path: Path) -> Path:
                 'database = "local.duckdb"\n'
             ),
             "adapters/warehouse/duckdb_plus.py": (
-                "from sqlbuild.adapter.shared.models import QueryResult\n"
-                "from sqlbuild.adapters.duckdb.client import DuckDbAdapter\n\n\n"
+                "from sqlbuild.adapter.contract.models import QueryResult\n"
+                "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n\n"
                 "class DuckDbPlusAdapter(DuckDbAdapter):\n"
                 "    adapter_name = 'duckdb_plus'\n\n"
                 "    def query(self, connection, sql, *, limit):\n"

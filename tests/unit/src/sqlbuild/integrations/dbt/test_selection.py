@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtInteropSelectionResult,
+    DbtManifestIndex,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtSelectionErrorTestCase,

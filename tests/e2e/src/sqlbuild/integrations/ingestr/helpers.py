@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from sqlbuild.adapters.postgres.client import PostgresAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[6]
 
@@ -78,7 +78,7 @@ def execute_postgres_sql(*, config: Mapping[str, object], sql: str) -> None:
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(dict(config))
     try:
-        adapter.execute(connection, sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 
@@ -89,7 +89,7 @@ def fetch_postgres_rows(
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(dict(config))
     try:
-        cursor: Any = adapter.execute(connection, sql)
+        cursor: Any = adapter.execute(connection=connection, sql=sql)
         return tuple(cursor.fetchall())
     finally:
         adapter.close(connection)

@@ -6,11 +6,11 @@ import json
 import sqlite3
 import subprocess
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import cast
+from typing import ClassVar, cast
 
 from tests.e2e.src.sqlbuild.cli.commands.main.load._test_types import (
     SourceOnlyIngressDependencyE2ETestCase,
@@ -60,12 +60,14 @@ def assert_source_only_ingress_dependency_case(
             ),
         },
     )
-    if test_case.setup_command is not None:
-        setup_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=test_case.setup_command,
-            project_dir=project_dir,
-        )
-        assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+    setup_strategy: Callable[..., None] = {
+        False: _skip_source_only_setup,
+        True: _run_source_only_setup,
+    }[test_case.setup_command is not None]
+    setup_strategy(
+        project_dir=project_dir,
+        setup_command=test_case.setup_command,
+    )
     db_path: Path = project_dir / "source_loader_schema_behavior.duckdb"
 
     result: subprocess.CompletedProcess[str] = run_sqb(
@@ -75,13 +77,60 @@ def assert_source_only_ingress_dependency_case(
 
     assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
     combined_output: str = result.stdout + result.stderr
-    if test_case.expected_error_fragment is not None:
-        assert test_case.expected_error_fragment in combined_output
+    error_strategy: Callable[..., None] = {
+        False: _skip_expected_error_assertion,
+        True: _assert_expected_error,
+    }[test_case.expected_error_fragment is not None]
+    error_strategy(
+        combined_output=combined_output,
+        expected_error_fragment=test_case.expected_error_fragment,
+    )
     fragment: str
     for fragment in test_case.expected_stdout_fragments:
         assert fragment in result.stdout
-    if test_case.expected_return_code != 0:
-        return
+    result_strategy: Callable[..., None] = {
+        False: _assert_successful_source_only_result,
+        True: _skip_successful_source_only_assertions,
+    }[test_case.expected_return_code != 0]
+    result_strategy(
+        project_dir=project_dir,
+        db_path=db_path,
+        result=result,
+        test_case=test_case,
+    )
+
+
+def _skip_source_only_setup(**_kwargs: object) -> None:
+    return
+
+
+def _run_source_only_setup(*, project_dir: Path, setup_command: tuple[str, ...] | None) -> None:
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=cast(tuple[str, ...], setup_command),
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
+
+
+def _skip_expected_error_assertion(**_kwargs: object) -> None:
+    return
+
+
+def _assert_expected_error(*, combined_output: str, expected_error_fragment: str | None) -> None:
+    assert cast(str, expected_error_fragment) in combined_output
+
+
+def _skip_successful_source_only_assertions(**_kwargs: object) -> None:
+    return
+
+
+def _assert_successful_source_only_result(
+    *,
+    project_dir: Path,
+    db_path: Path,
+    result: subprocess.CompletedProcess[str],
+    test_case: SourceOnlyIngressDependencyE2ETestCase,
+) -> None:
     assert ("loader    fetch_events" in result.stdout) is (
         "loader    fetch_events" in test_case.expected_stdout_fragments
     )
@@ -121,31 +170,44 @@ def write_sqlite_orders_source_database(db_path: Path) -> None:
         connection.close()
 
 
+_ORDERS_PAYLOAD: bytes = json.dumps(
+    [
+        {"order_id": 1, "amount": 10},
+        {"order_id": 2, "amount": 20},
+        {"order_id": 3, "amount": 30},
+    ]
+).encode("utf-8")
+
+
+class _OrdersHandler(BaseHTTPRequestHandler):
+    responses: ClassVar[dict[str, tuple[int, tuple[tuple[str, str], ...], bytes]]] = {
+        "/orders": (
+            200,
+            (
+                ("Content-Type", "application/json"),
+                ("Content-Length", str(len(_ORDERS_PAYLOAD))),
+            ),
+            _ORDERS_PAYLOAD,
+        )
+    }
+    not_found_response: ClassVar[tuple[int, tuple[tuple[str, str], ...], bytes]] = (404, (), b"")
+
+    def do_GET(self) -> None:
+        status, headers, payload = self.responses.get(self.path, self.not_found_response)
+        self.send_response(status)
+        for name, value in headers:
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format: str, *args: object) -> None:
+        return None
+
+
 @contextmanager
 def serve_orders_api() -> Iterator[str]:
-    class OrdersHandler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            if self.path != "/orders":
-                self.send_response(404)
-                self.end_headers()
-                return
-            payload: bytes = json.dumps(
-                [
-                    {"order_id": 1, "amount": 10},
-                    {"order_id": 2, "amount": 20},
-                    {"order_id": 3, "amount": 30},
-                ]
-            ).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
 
-        def log_message(self, format: str, *args: object) -> None:
-            return None
-
-    server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", 0), OrdersHandler)
+    server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", 0), _OrdersHandler)
     thread: threading.Thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

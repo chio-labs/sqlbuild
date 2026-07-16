@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.executor.testing.helpers import comparison_sql as comparison_sql_helpers
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.executor.testing._helpers import comparison_sql as comparison_sql_helpers
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.executor.testing.main._test_types import (
     BuildComparisonSqlTestCase,
@@ -56,7 +56,7 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_comparison_test_entry(),
+        test_entry=build_comparison_test_entry(),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
@@ -93,7 +93,7 @@ def test_given_formatting_disabled_when_building_comparison_sql_then_it_does_not
     )
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_comparison_test_entry(sql_analysis_enabled=test_case.sql_analysis_enabled),
+        test_entry=build_comparison_test_entry(sql_analysis_enabled=test_case.sql_analysis_enabled),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
@@ -125,7 +125,7 @@ def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failin
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_assertion_test_entry(),
+        test_entry=build_assertion_test_entry(),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
@@ -156,7 +156,7 @@ def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_once
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_comparison_test_entry_with_helper_ctes(),
+        test_entry=build_comparison_test_entry_with_helper_ctes(),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
@@ -184,7 +184,7 @@ def test_given_databricks_table_fn_when_building_comparison_sql_then_preserves_c
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_table_function_test_entry(),
+        test_entry=build_table_function_test_entry(),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
@@ -213,7 +213,7 @@ def test_given_bigquery_table_fn_when_building_comparison_sql_then_preserves_bac
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        build_table_function_test_entry(
+        test_entry=build_table_function_test_entry(
             resolved_sql=("SELECT * FROM `project-d5f92072-d107-4987-9ef.test.customer_orders`(1)")
         ),
         set_difference_operator=adapter.render_set_difference_operator(),

@@ -6,7 +6,7 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneStatus
-from tests.unit.src.sqlbuild.executor.clone.helpers.helpers import (
+from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
     FakeCloneAdapter,
     build_clone_model_entry,
 )
@@ -47,7 +47,7 @@ def test_given_clone_entries_when_executing_then_streams_each_item(
     )
     streamed: list[tuple[int, int, str | None, str]] = []
 
-    def _on_item(index: int, total: int, item: CloneItemResult) -> None:
+    def _on_item(index: int, *, total: int, item: CloneItemResult) -> None:
         streamed.append((index, total, item.destination_relation, item.status.value))
 
     result: CloneExecutionResult = execute_clone(

@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.assemble_project import assemble_project
 from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileProjectInputs,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.helpers.target_defaults import apply_target_defaults
-from sqlbuild.compiler.pipeline.helpers.target_validation import validate_project_targets
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.models.project import resolve_effective_adapter_name
+from sqlbuild.compiler.pipeline._helpers.target_defaults import apply_target_defaults
+from sqlbuild.compiler.pipeline._helpers.target_validation import validate_project_targets
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 
 def build_compiled_project(
@@ -32,7 +34,7 @@ def build_compiled_project(
     """Build one compiled project with adapter defaults and target validation applied."""
 
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=True,
@@ -44,8 +46,8 @@ def build_compiled_project(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     project: CompiledProject = apply_target_defaults(
-        assemble_project(
-            compile_inputs,
+        project=assemble_project(
+            inputs=compile_inputs,
             inference_profile=adapter.expression_inference_profile(),
             skip_column_inference=skip_column_inference,
             column_lineage_mode=column_lineage_mode,

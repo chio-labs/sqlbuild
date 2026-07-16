@@ -68,6 +68,12 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres.helpers impor
     quote_identifier,
 )
 
+EXPECTED_STATE_INDEX_NAMES: list[str] = []
+for state_indexes in STATE_TABLE_INDEXES.values():
+    for state_index_name in state_indexes:
+        EXPECTED_STATE_INDEX_NAMES.append(state_index_name)
+EXPECTED_STATE_INDEX_NAMES.sort()
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -96,7 +102,7 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -105,13 +111,13 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
         "SELECT schema_version FROM "
         f"{qualified_name(schema=postgres_state_schema, table='state_versions')}",
     ) == [(test_case.expected_schema_version,)]
-    assert postgres_state_backend.validate_schema(
-        postgres_state_connection,
+    assert postgres_state_backend.inspect_schema(
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     ).valid
 
     backup_id: str = postgres_state_backend.create_backup(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
     backup_schema: str = f"{postgres_state_schema}__backup_{backup_id}"
@@ -141,7 +147,7 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
     )
 
     rolled_back_backup_id: str = postgres_state_backend.rollback(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
     assert rolled_back_backup_id == backup_id
@@ -152,9 +158,9 @@ def test_given_postgres_state_backend_when_running_lifecycle_then_state_tables_a
         "ORDER BY created_at",
     ) == [(action,) for action in test_case.expected_actions_after_rollback]
 
-    postgres_state_backend.reset(postgres_state_connection, schema=postgres_state_schema)
-    validation_after_reset: StateSchemaValidationResult = postgres_state_backend.validate_schema(
-        postgres_state_connection,
+    postgres_state_backend.reset(connection=postgres_state_connection, schema=postgres_state_schema)
+    validation_after_reset: StateSchemaValidationResult = postgres_state_backend.inspect_schema(
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
     assert not validation_after_reset.valid
@@ -183,8 +189,8 @@ def test_given_broken_postgres_state_tables_when_validating_then_reports_schema_
             "schema_version TEXT, updated_at TIMESTAMP)"
         )
 
-    result: StateSchemaValidationResult = postgres_state_backend.validate_schema(
-        postgres_state_connection,
+    result: StateSchemaValidationResult = postgres_state_backend.inspect_schema(
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
 
@@ -210,13 +216,15 @@ def test_given_postgres_state_without_backup_when_rolling_back_then_blocks_clean
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version="0.0.test",
     )
 
     with pytest.raises(test_case.expected_error_type) as exc_info:
-        postgres_state_backend.rollback(postgres_state_connection, schema=postgres_state_schema)
+        postgres_state_backend.rollback(
+            connection=postgres_state_connection, schema=postgres_state_schema
+        )
 
     assert test_case.expected_message_fragment in str(exc_info.value)
 
@@ -247,7 +255,7 @@ def test_given_invalid_postgres_state_schema_when_creating_backup_then_blocks_cl
 
     with pytest.raises(test_case.expected_error_type) as exc_info:
         postgres_state_backend.create_backup(
-            postgres_state_connection, schema=postgres_state_schema
+            connection=postgres_state_connection, schema=postgres_state_schema
         )
 
     assert test_case.expected_message_fragment in str(exc_info.value)
@@ -260,11 +268,7 @@ def test_given_invalid_postgres_state_schema_when_creating_backup_then_blocks_cl
             description="rolls back to explicitly selected backup",
             sqlbuild_version="0.0.test",
             expected_restored_schema_version=1,
-            expected_index_names=tuple(
-                sorted(
-                    index_name for indexes in STATE_TABLE_INDEXES.values() for index_name in indexes
-                )
-            ),
+            expected_index_names=tuple(EXPECTED_STATE_INDEX_NAMES),
         )
     ],
     ids=lambda case: case.description,
@@ -276,12 +280,12 @@ def test_given_postgres_state_backups_when_rolling_back_explicit_id_then_restore
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
     first_backup_id: str = postgres_state_backend.create_backup(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
     with postgres_state_connection.cursor() as cursor:
@@ -290,14 +294,16 @@ def test_given_postgres_state_backups_when_rolling_back_explicit_id_then_restore
             f"{qualified_name(schema=postgres_state_schema, table='state_versions')} "
             "SET schema_version = 2"
         )
-    postgres_state_backend.create_backup(postgres_state_connection, schema=postgres_state_schema)
+    postgres_state_backend.create_backup(
+        connection=postgres_state_connection, schema=postgres_state_schema
+    )
     with postgres_state_connection.cursor() as cursor:
         cursor.execute(
             f"DELETE FROM {qualified_name(schema=postgres_state_schema, table='state_versions')}"
         )
 
     postgres_state_backend.rollback(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         backup_id=first_backup_id,
     )
@@ -327,11 +333,7 @@ def test_given_postgres_state_backups_when_rolling_back_explicit_id_then_restore
             description="initializes all phase two state tables",
             sqlbuild_version="0.0.test",
             expected_table_names=tuple(sorted(STATE_TABLES)),
-            expected_index_names=tuple(
-                sorted(
-                    index_name for indexes in STATE_TABLE_INDEXES.values() for index_name in indexes
-                )
-            ),
+            expected_index_names=tuple(EXPECTED_STATE_INDEX_NAMES),
         )
     ],
     ids=lambda case: case.description,
@@ -343,7 +345,7 @@ def test_given_postgres_state_backend_when_initializing_then_creates_all_state_t
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -382,7 +384,7 @@ def test_given_postgres_state_backend_when_required_index_is_missing_then_valida
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -393,8 +395,8 @@ def test_given_postgres_state_backend_when_required_index_is_missing_then_valida
             f"{qualified_name(schema=postgres_state_schema, table=test_case.dropped_index_name)}"
         )
 
-    validation_result: StateSchemaValidationResult = postgres_state_backend.validate_schema(
-        postgres_state_connection,
+    validation_result: StateSchemaValidationResult = postgres_state_backend.inspect_schema(
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
 
@@ -423,7 +425,7 @@ def test_given_postgres_state_backend_when_node_results_column_missing_then_vali
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -435,8 +437,8 @@ def test_given_postgres_state_backend_when_node_results_column_missing_then_vali
             f"DROP COLUMN {quote_identifier(test_case.dropped_column_name)}"
         )
 
-    validation_result: StateSchemaValidationResult = postgres_state_backend.validate_schema(
-        postgres_state_connection,
+    validation_result: StateSchemaValidationResult = postgres_state_backend.inspect_schema(
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
 
@@ -469,13 +471,13 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
     assert (
         postgres_state_backend.get_model_version(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
@@ -484,7 +486,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     )
     assert (
         postgres_state_backend.get_physical_relation(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
@@ -493,7 +495,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     )
     assert (
         postgres_state_backend.get_virtual_environment(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
         )
@@ -510,7 +512,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         compiled_sql_b64="U0VMRUNUIDEgQVMgaWQ=",
     )
     postgres_state_backend.upsert_model_version(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=model_record,
     )
@@ -524,7 +526,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         relation_type="table",
     )
     postgres_state_backend.upsert_physical_relation(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=relation_record,
     )
@@ -538,7 +540,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         relation_type="table",
     )
     postgres_state_backend.upsert_physical_relation(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=replaced_relation_record,
     )
@@ -550,7 +552,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         seed_strategy="copy",
     )
     postgres_state_backend.upsert_physical_relation_ancestry(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=ancestry_record,
     )
@@ -560,12 +562,12 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         baseline_virtual_environment_name=None,
     )
     postgres_state_backend.upsert_virtual_environment(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=virtual_environment_record,
     )
     postgres_state_backend.replace_virtual_environment_model_refs(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.expected_virtual_environment_name,
         refs=(
@@ -579,7 +581,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
 
     assert (
         postgres_state_backend.get_model_version(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
@@ -588,7 +590,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     )
     assert (
         postgres_state_backend.get_physical_relation(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
@@ -597,7 +599,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     )
     assert (
         postgres_state_backend.get_physical_relation_ancestry(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
@@ -606,7 +608,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     )
     assert (
         postgres_state_backend.get_virtual_environment(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
         )
@@ -614,7 +616,7 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     )
     refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         postgres_state_backend.get_virtual_environment_model_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
         )
@@ -623,14 +625,14 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
     assert refs[0].model_name == test_case.expected_model_name
     assert refs[0].version_hash == test_case.expected_version_hash
     postgres_state_backend.replace_virtual_environment_model_refs(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.expected_virtual_environment_name,
         refs=(),
     )
     replaced_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         postgres_state_backend.get_virtual_environment_model_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
         )
@@ -658,12 +660,12 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
     postgres_state_backend.upsert_virtual_environment(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=VirtualEnvironmentRecord(
             virtual_environment_name=test_case.virtual_environment_name,
@@ -673,7 +675,7 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
     first_observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0)
     second_observed_at: datetime = datetime(2026, 1, 2, 12, 0, 0)
     postgres_state_backend.replace_virtual_environment_source_freshness(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         records=(
@@ -700,7 +702,7 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
 
     records: tuple[SourceFreshnessRecord, ...] = (
         postgres_state_backend.get_virtual_environment_source_freshness(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
         )
@@ -708,7 +710,7 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
     assert tuple(record.source_name for record in records) == test_case.expected_source_names
 
     postgres_state_backend.replace_virtual_environment_source_freshness(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         records=(
@@ -726,7 +728,7 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
 
     replaced_records: tuple[SourceFreshnessRecord, ...] = (
         postgres_state_backend.get_virtual_environment_source_freshness(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
         )
@@ -739,13 +741,13 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
     assert replaced_records[0].observed_at == second_observed_at
 
     postgres_state_backend.delete_virtual_environment(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
     )
     assert (
         postgres_state_backend.get_virtual_environment_source_freshness(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
         )
@@ -776,7 +778,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -788,12 +790,12 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
         status=ModelVersionStatus.READY,
     )
     postgres_state_backend.upsert_seed_version(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=seed_version,
     )
     postgres_state_backend.replace_virtual_environment_seed_refs(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         refs=(
@@ -807,7 +809,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
 
     assert (
         postgres_state_backend.get_seed_version(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             seed_name=test_case.seed_name,
             version_hash=test_case.version_hash,
@@ -816,7 +818,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
     )
     refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
         postgres_state_backend.get_virtual_environment_seed_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
         )
@@ -830,7 +832,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
     )
 
     postgres_state_backend.replace_virtual_environment_seed_refs(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         refs=(),
@@ -838,7 +840,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
     assert (
         len(
             postgres_state_backend.get_virtual_environment_seed_refs(
-                postgres_state_connection,
+                connection=postgres_state_connection,
                 schema=postgres_state_schema,
                 virtual_environment_name=test_case.virtual_environment_name,
             )
@@ -846,7 +848,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
         == test_case.expected_ref_count_after_replace
     )
     postgres_state_backend.replace_virtual_environment_seed_refs(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         refs=(
@@ -858,13 +860,13 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
         ),
     )
     postgres_state_backend.delete_virtual_environment(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
     )
     assert (
         postgres_state_backend.get_virtual_environment_seed_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
         )
@@ -876,7 +878,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
         virtual_environment_name=test_case.virtual_environment_name,
     )
     postgres_state_backend.create_virtual_environment_checkpoint(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         checkpoint=checkpoint,
         refs=(),
@@ -890,7 +892,7 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
     )
     checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (
         postgres_state_backend.get_virtual_environment_checkpoint_seed_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             checkpoint_id=checkpoint.checkpoint_id,
         )
@@ -903,13 +905,13 @@ def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_record
         ),
     )
     postgres_state_backend.delete_virtual_environment_checkpoint(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         checkpoint_id=checkpoint.checkpoint_id,
     )
     assert (
         postgres_state_backend.get_virtual_environment_checkpoint_seed_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             checkpoint_id=checkpoint.checkpoint_id,
         )
@@ -943,7 +945,7 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -979,22 +981,22 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
     )
 
     postgres_state_backend.upsert_python_node_version(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=first_record,
     )
     postgres_state_backend.upsert_python_node_version(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=second_record,
     )
     postgres_state_backend.upsert_python_node_version(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=orphan_record,
     )
     postgres_state_backend.upsert_virtual_environment_python_node_ref(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         ref=VirtualEnvironmentPythonNodeRefRecord(
             virtual_environment_name=test_case.first_virtual_environment_name,
@@ -1004,7 +1006,7 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
         ),
     )
     postgres_state_backend.upsert_virtual_environment_python_node_ref(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         ref=VirtualEnvironmentPythonNodeRefRecord(
             virtual_environment_name=test_case.second_virtual_environment_name,
@@ -1016,14 +1018,14 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
 
     first_refs: tuple[VirtualEnvironmentPythonNodeRefRecord, ...] = (
         postgres_state_backend.get_virtual_environment_python_node_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.first_virtual_environment_name,
         )
     )
     second_refs: tuple[VirtualEnvironmentPythonNodeRefRecord, ...] = (
         postgres_state_backend.get_virtual_environment_python_node_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.second_virtual_environment_name,
         )
@@ -1031,7 +1033,7 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
 
     assert (
         postgres_state_backend.get_python_node_version(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             node_type=test_case.node_type,
             node_name=test_case.node_name,
@@ -1044,19 +1046,19 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
     )
     assert (
         postgres_state_backend.count_unreferenced_python_node_versions(
-            postgres_state_connection, schema=postgres_state_schema
+            connection=postgres_state_connection, schema=postgres_state_schema
         )
         == test_case.expected_pruned_count
     )
     assert (
         postgres_state_backend.prune_unreferenced_python_node_versions(
-            postgres_state_connection, schema=postgres_state_schema
+            connection=postgres_state_connection, schema=postgres_state_schema
         )
         == test_case.expected_pruned_count
     )
     assert (
         postgres_state_backend.get_python_node_version(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             node_type=test_case.node_type,
             node_name=test_case.node_name,
@@ -1066,7 +1068,7 @@ def test_given_postgres_state_backend_when_upserting_python_node_identity_then_r
     )
     assert (
         postgres_state_backend.get_python_node_version(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             node_type=test_case.node_type,
             node_name=test_case.node_name,
@@ -1100,7 +1102,7 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -1119,13 +1121,13 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
         ts=datetime(2026, 1, 1, 12, 0, 0),
     )
     postgres_state_backend.insert_node_result(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         record=first_record,
     )
     postgres_state_backend.insert_node_result(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         record=NodeResultRecord(
@@ -1144,7 +1146,7 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
         ),
     )
     postgres_state_backend.insert_node_result(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         record=NodeResultRecord(
@@ -1163,13 +1165,13 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
         ),
     )
     postgres_state_backend.insert_node_result(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.isolated_virtual_environment_name,
         record=first_record,
     )
     postgres_state_backend.insert_node_result(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         record=NodeResultRecord(
@@ -1188,7 +1190,7 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
         ),
     )
     backup_id: str = postgres_state_backend.create_backup(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
     with postgres_state_connection.cursor() as cursor:
@@ -1196,13 +1198,13 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
             f"DELETE FROM {qualified_name(schema=postgres_state_schema, table='node_results')}"
         )
     postgres_state_backend.rollback(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         backup_id=backup_id,
     )
 
     latest_success: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         query=NodeResultQuery(
@@ -1217,7 +1219,7 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
         ),
     )
     explicit_failed: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         query=NodeResultQuery(
@@ -1232,7 +1234,7 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
         ),
     )
     isolated_results: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.isolated_virtual_environment_name,
         query=NodeResultQuery(
@@ -1247,7 +1249,7 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
         ),
     )
     history_results: tuple[NodeResultEnvelope, ...] = postgres_state_backend.read_node_results(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         query=NodeResultQuery(
@@ -1263,7 +1265,7 @@ def test_given_postgres_node_results_when_reading_then_scopes_by_environment_and
     )
     target_isolated_results: tuple[NodeResultEnvelope, ...] = (
         postgres_state_backend.read_node_results(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
             query=NodeResultQuery(
@@ -1310,7 +1312,7 @@ def test_given_mismatched_postgres_source_freshness_record_when_replacing_then_b
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version="0.0.test",
     )
@@ -1325,7 +1327,7 @@ def test_given_mismatched_postgres_source_freshness_record_when_replacing_then_b
     )
     with pytest.raises(test_case.expected_error_type) as exc_info:
         postgres_state_backend.replace_virtual_environment_source_freshness(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name="dev",
             records=(record,),
@@ -1352,7 +1354,7 @@ def test_given_duplicate_postgres_source_freshness_records_when_replacing_then_b
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version="0.0.test",
     )
@@ -1378,7 +1380,7 @@ def test_given_duplicate_postgres_source_freshness_records_when_replacing_then_b
     )
     with pytest.raises(test_case.expected_error_type) as exc_info:
         postgres_state_backend.replace_virtual_environment_source_freshness(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name="dev",
             records=records,
@@ -1408,7 +1410,7 @@ def test_given_postgres_state_backend_when_managing_locks_then_enforces_active_o
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -1416,60 +1418,60 @@ def test_given_postgres_state_backend_when_managing_locks_then_enforces_active_o
     expired_at: datetime = datetime.now() - timedelta(hours=1)
 
     assert postgres_state_backend.acquire_lock(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         lock_key=test_case.lock_key,
         owner_id=test_case.first_owner,
         expires_at=future_expiry,
     )
     assert not postgres_state_backend.acquire_lock(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         lock_key=test_case.lock_key,
         owner_id=test_case.second_owner,
         expires_at=future_expiry,
     )
     active_locks: tuple[StateLockRecord, ...] = postgres_state_backend.list_active_locks(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
     assert len(active_locks) == test_case.expected_active_lock_count
     assert active_locks[0].owner_id == test_case.first_owner
     assert not postgres_state_backend.release_lock(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         lock_key=test_case.lock_key,
         owner_id=test_case.second_owner,
     )
     assert postgres_state_backend.release_lock(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         lock_key=test_case.lock_key,
         owner_id=test_case.first_owner,
     )
     assert (
         postgres_state_backend.list_active_locks(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
         )
         == ()
     )
     assert postgres_state_backend.acquire_lock(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         lock_key=test_case.lock_key,
         owner_id=test_case.first_owner,
         expires_at=expired_at,
     )
     assert postgres_state_backend.acquire_lock(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         lock_key=test_case.lock_key,
         owner_id=test_case.second_owner,
         expires_at=future_expiry,
     )
     replacement_locks: tuple[StateLockRecord, ...] = postgres_state_backend.list_active_locks(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
     )
     assert len(replacement_locks) == test_case.expected_active_lock_count
@@ -1498,12 +1500,12 @@ def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_ro
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
     postgres_state_backend.replace_virtual_environment_model_refs(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         virtual_environment_name=test_case.virtual_environment_name,
         refs=(
@@ -1517,7 +1519,7 @@ def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_ro
 
     with pytest.raises(StateBackendConfigError):
         postgres_state_backend.replace_virtual_environment_model_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
             refs=(
@@ -1536,7 +1538,7 @@ def test_given_postgres_state_backend_when_ref_replace_fails_then_transaction_ro
 
     refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
         postgres_state_backend.get_virtual_environment_model_refs(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
         )
@@ -1569,7 +1571,7 @@ def test_given_postgres_state_backend_when_upserting_same_identity_then_created_
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -1581,7 +1583,7 @@ def test_given_postgres_state_backend_when_upserting_same_identity_then_created_
         status=ModelVersionStatus.READY,
     )
     postgres_state_backend.upsert_model_version(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=model_record,
     )
@@ -1594,7 +1596,7 @@ def test_given_postgres_state_backend_when_upserting_same_identity_then_created_
     )[0][0]
 
     postgres_state_backend.upsert_model_version(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=model_record,
     )
@@ -1608,7 +1610,7 @@ def test_given_postgres_state_backend_when_upserting_same_identity_then_created_
     )[0][0]
     assert (
         postgres_state_backend.get_model_version(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
@@ -1642,7 +1644,7 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
@@ -1656,7 +1658,7 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         relation_type="table",
     )
     postgres_state_backend.upsert_physical_relation(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=relation_record,
     )
@@ -1669,7 +1671,7 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         f"AND version_hash = '{test_case.expected_version_hash}'",
     )[0][0]
     postgres_state_backend.upsert_physical_relation(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=relation_record,
     )
@@ -1688,7 +1690,7 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         baseline_virtual_environment_name=None,
     )
     postgres_state_backend.upsert_virtual_environment(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=virtual_environment_record,
     )
@@ -1699,7 +1701,7 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
         f"WHERE virtual_environment_name = '{test_case.expected_virtual_environment_name}'",
     )[0][0]
     postgres_state_backend.upsert_virtual_environment(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=virtual_environment_record,
     )
@@ -1712,7 +1714,7 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
 
     assert (
         postgres_state_backend.get_physical_relation(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             model_name=test_case.expected_model_name,
             version_hash=test_case.expected_version_hash,
@@ -1721,7 +1723,7 @@ def test_given_postgres_state_backend_when_replacing_rows_then_preserves_created
     )
     assert (
         postgres_state_backend.get_virtual_environment(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
         )
@@ -1750,12 +1752,12 @@ def test_given_postgres_state_backend_when_recording_operation_events_then_they_
     postgres_state_schema: str,
 ) -> None:
     postgres_state_backend.initialize(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         sqlbuild_version=test_case.sqlbuild_version,
     )
     postgres_state_backend.upsert_state_operation(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=StateOperationRecord(
             operation_id=test_case.expected_operation_id,
@@ -1765,7 +1767,7 @@ def test_given_postgres_state_backend_when_recording_operation_events_then_they_
         ),
     )
     postgres_state_backend.create_state_operation_event(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=StateOperationEventRecord(
             event_id="event-1",
@@ -1776,7 +1778,7 @@ def test_given_postgres_state_backend_when_recording_operation_events_then_they_
         ),
     )
     postgres_state_backend.create_reconcile_event(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         record=ReconcileEventRecord(
             event_id="event-2",
@@ -1787,7 +1789,7 @@ def test_given_postgres_state_backend_when_recording_operation_events_then_they_
     )
 
     assert postgres_state_backend.get_state_operation(
-        postgres_state_connection,
+        connection=postgres_state_connection,
         schema=postgres_state_schema,
         operation_id=test_case.expected_operation_id,
     ) == StateOperationRecord(
@@ -1835,7 +1837,7 @@ def test_given_postgres_state_backend_when_two_connections_acquire_same_lock_the
     second_connection: Any = postgres_state_backend.connect(postgres_state_config)
     try:
         postgres_state_backend.initialize(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
             sqlbuild_version=test_case.sqlbuild_version,
         )
@@ -1845,7 +1847,7 @@ def test_given_postgres_state_backend_when_two_connections_acquire_same_lock_the
             futures: list[Future[bool]] = [
                 executor.submit(
                     postgres_state_backend.acquire_lock,
-                    postgres_state_connection,
+                    connection=postgres_state_connection,
                     schema=postgres_state_schema,
                     lock_key=test_case.lock_key,
                     owner_id=test_case.first_owner,
@@ -1853,7 +1855,7 @@ def test_given_postgres_state_backend_when_two_connections_acquire_same_lock_the
                 ),
                 executor.submit(
                     postgres_state_backend.acquire_lock,
-                    second_connection,
+                    connection=second_connection,
                     schema=postgres_state_schema,
                     lock_key=test_case.lock_key,
                     owner_id=test_case.second_owner,
@@ -1862,9 +1864,9 @@ def test_given_postgres_state_backend_when_two_connections_acquire_same_lock_the
             ]
         results: list[bool] = [future.result() for future in futures]
 
-        assert sum(1 for result in results if result) == test_case.expected_success_count
+        assert sum(results) == test_case.expected_success_count
         active_locks: tuple[StateLockRecord, ...] = postgres_state_backend.list_active_locks(
-            postgres_state_connection,
+            connection=postgres_state_connection,
             schema=postgres_state_schema,
         )
         assert len(active_locks) == test_case.expected_active_lock_count

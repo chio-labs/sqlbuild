@@ -7,9 +7,10 @@ from typing import Any
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredSourceFile
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.executor.load.models import LoaderContext
-from sqlbuild.integrations.dlt.helpers.runner import run_dlt_source
+from sqlbuild.integrations.dlt._helpers.runner import run_dlt_source
+from sqlbuild.integrations.dlt.constants import DLT_INTEGRATION_KIND
 from sqlbuild.integrations.dlt.models import DltSourceConfig
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_dlt_loader_functions(
@@ -24,7 +25,7 @@ def build_dlt_loader_functions(
         for source_entry in source_file.source_entries:
             if (
                 source_entry.integration_loader is None
-                or source_entry.integration_loader.kind != "dlt"
+                or source_entry.integration_loader.kind != DLT_INTEGRATION_KIND
             ):
                 continue
             loader_name: str = source_entry.name

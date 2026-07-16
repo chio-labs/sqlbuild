@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections import defaultdict
 from pathlib import Path
+from typing import cast
 
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run_sqb
 
@@ -102,10 +104,11 @@ def build_capture_safety_project_files(*, use_project_row_limit: bool) -> dict[s
     """Build scenario e2e files with optional project snapshot limit config."""
 
     repo_files: dict[str, str] = build_scenario_project_files()
-    if use_project_row_limit:
-        repo_files["sqlbuild_project.toml"] += (
-            "\n[scenario.snapshot_limits]\nmax_rows_per_relation = 1\n"
-        )
+    snapshot_limit_blocks: dict[bool, str] = {
+        False: "",
+        True: "\n[scenario.snapshot_limits]\nmax_rows_per_relation = 1\n",
+    }
+    repo_files["sqlbuild_project.toml"] += snapshot_limit_blocks[use_project_row_limit]
     return repo_files
 
 
@@ -184,11 +187,10 @@ def list_scenario_relation_names(*, db_path: Path) -> tuple[str, ...]:
 def scenario_relation_name_by_suffix(*, db_path: Path, suffix: str) -> str:
     """Return one retained scenario relation name ending with the requested suffix."""
 
-    matches: tuple[str, ...] = tuple(
-        relation_name
-        for relation_name in list_scenario_relation_names(db_path=db_path)
-        if relation_name.endswith(suffix)
-    )
+    names_by_suffix_match: defaultdict[bool, list[str]] = defaultdict(list)
+    for relation_name in list_scenario_relation_names(db_path=db_path):
+        names_by_suffix_match[relation_name.endswith(suffix)].append(relation_name)
+    matches: tuple[str, ...] = tuple(names_by_suffix_match[True])
     assert len(matches) == 1
     return matches[0]
 
@@ -241,18 +243,16 @@ def assert_scenario_snapshot(
     columns: object = manifest_data["relations"][0]["columns"]
     assert isinstance(columns, list)
     assert columns
-    column_names: set[str] = {str(column["name"]) for column in columns}
+    assert all(isinstance(column, dict) for column in columns)
+    typed_columns: list[dict[str, object]] = cast(list[dict[str, object]], columns)
+    column_names: set[str] = {str(column["name"]) for column in typed_columns}
     assert {"id", "amount"}.issubset(column_names)
     local_types_by_name: dict[str, str] = {
-        str(column["name"]): str(column["local_type"])
-        for column in columns
-        if isinstance(column, dict)
+        str(column["name"]): str(column["local_type"]) for column in typed_columns
     }
-    if expected_local_types is not None:
-        assert local_types_by_name | expected_local_types == local_types_by_name
-    column: object
-    for column in columns:
-        assert isinstance(column, dict)
+    assert local_types_by_name | (expected_local_types or {}) == local_types_by_name
+    column: dict[str, object]
+    for column in typed_columns:
         assert column["warehouse_type"]
         assert column["local_type"]
 
@@ -265,17 +265,16 @@ def maybe_corrupt_scenario_snapshot_jsonl(
 ) -> None:
     """Optionally replace one captured source JSONL file with malformed content."""
 
-    if not enabled:
-        return
-    jsonl_path: Path = (
-        project_dir
-        / "tests"
-        / "_scenario_snapshots"
-        / scenario_name
-        / "sources"
-        / "raw_orders.jsonl"
-    )
-    jsonl_path.write_text('{"id": 1, "amount": 10}\nnot-json\n', encoding="utf-8")
+    for _ in range(int(enabled)):
+        jsonl_path: Path = (
+            project_dir
+            / "tests"
+            / "_scenario_snapshots"
+            / scenario_name
+            / "sources"
+            / "raw_orders.jsonl"
+        )
+        jsonl_path.write_text('{"id": 1, "amount": 10}\nnot-json\n', encoding="utf-8")
 
 
 def maybe_corrupt_scenario_snapshot_dialect(
@@ -283,15 +282,14 @@ def maybe_corrupt_scenario_snapshot_dialect(
 ) -> None:
     """Optionally replace the captured dialect with an unsupported dialect name."""
 
-    if not enabled:
-        return
-    manifest_path: Path = (
-        project_dir / "tests" / "_scenario_snapshots" / scenario_name / "scenario.json"
-    )
-    manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert isinstance(manifest_data, dict)
-    manifest_data["capture_dialect"] = "not_a_sql_analysis_dialect"
-    manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+    for _ in range(int(enabled)):
+        manifest_path: Path = (
+            project_dir / "tests" / "_scenario_snapshots" / scenario_name / "scenario.json"
+        )
+        manifest_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert isinstance(manifest_data, dict)
+        manifest_data["capture_dialect"] = "not_a_sql_analysis_dialect"
+        manifest_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
 
 
 def maybe_capture_scenario_snapshot(
@@ -299,13 +297,12 @@ def maybe_capture_scenario_snapshot(
 ) -> None:
     """Optionally capture a scenario snapshot for an e2e project."""
 
-    if not enabled:
-        return
-    capture_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "scenario", "capture", scenario_name),
-        project_dir=project_dir,
-    )
-    assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
+    for _ in range(int(enabled)):
+        capture_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "scenario", "capture", scenario_name),
+            project_dir=project_dir,
+        )
+        assert capture_result.returncode == 0, capture_result.stdout + capture_result.stderr
 
 
 def write_committed_order_totals_pass_snapshot(*, project_dir: Path) -> None:
@@ -388,9 +385,8 @@ def write_stale_order_totals_scenario(*, project_dir: Path) -> None:
 def maybe_write_stale_order_totals_scenario(*, project_dir: Path, enabled: bool) -> None:
     """Optionally change a scenario so a prior snapshot becomes stale."""
 
-    if not enabled:
-        return
-    write_stale_order_totals_scenario(project_dir=project_dir)
+    for _ in range(int(enabled)):
+        write_stale_order_totals_scenario(project_dir=project_dir)
 
 
 def assert_local_duckdb_state(
@@ -407,14 +403,14 @@ def assert_local_duckdb_state(
     """Assert retained local DuckDB state for a local scenario run."""
 
     assert db_path.exists() is expected_exists
-    if not query_when_exists:
-        return
-    assert f"Retained local DuckDB: {db_path.as_posix()}" in stdout
-    rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=count_sql)
-    assert rows == [(expected_count,)]
-    if rows_sql is not None:
-        value_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
-        assert tuple(value_rows) == expected_rows
+    for _ in range(int(query_when_exists)):
+        assert f"Retained local DuckDB: {db_path.as_posix()}" in stdout
+        rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=count_sql)
+        assert rows == [(expected_count,)]
+        for value_rows_sql in (rows_sql,) * int(rows_sql is not None):
+            assert value_rows_sql is not None
+            value_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=value_rows_sql)
+            assert tuple(value_rows) == expected_rows
 
 
 def assert_optional_local_replay_rows(
@@ -426,10 +422,9 @@ def assert_optional_local_replay_rows(
 ) -> None:
     """Assert local replay rows when a test case expects inspectable local output."""
 
-    if not local_rows_sql:
-        return
-    rows: list[tuple[object, ...]] = query_duckdb(
-        db_path=project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb",
-        sql=local_rows_sql,
-    )
-    assert tuple(rows) == expected_local_rows
+    for query_sql in (local_rows_sql,) * int(bool(local_rows_sql)):
+        rows: list[tuple[object, ...]] = query_duckdb(
+            db_path=project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb",
+            sql=query_sql,
+        )
+        assert tuple(rows) == expected_local_rows

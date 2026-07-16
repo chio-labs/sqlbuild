@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 
@@ -82,4 +82,4 @@ def run_concurrent_fingerprint_write_round(
         "SELECT COUNT(DISTINCT node_name) FROM main._sqlbuild_fingerprints"
     ).fetchone()
     check_connection.close()
-    return int(row[0]) if row is not None else 0
+    return int(getattr(row, "__getitem__", lambda _index: 0)(0))

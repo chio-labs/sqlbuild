@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 class LoaderContextTestCursor:
@@ -42,9 +42,10 @@ class LoaderContextTestAdapter(BaseAdapter):
     def execute(self, connection: Any, sql: str) -> object:
         del connection
         self.executed_sql.append(sql)
-        if sql.startswith("SELECT MAX"):
-            return LoaderContextTestCursor(("max-value",))
-        return f"result:{sql}"
+        return {
+            True: LoaderContextTestCursor(("max-value",)),
+            False: f"result:{sql}",
+        }[sql.startswith("SELECT MAX")]
 
 
 class CountingLoaderContextTestAdapter(LoaderContextTestAdapter):

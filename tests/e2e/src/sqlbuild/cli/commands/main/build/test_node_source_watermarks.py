@@ -169,18 +169,41 @@ def test_given_table_reads_view_over_table_when_source_advances_then_inherits_ta
             project_name="node_watermark_merged_current",
             expected_source_versions_by_node={"a": ("2",)},
             expected_source_kinds_by_node={"a": ("inherited",)},
+            frontier_actions=(
+                (
+                    (2,),
+                    (
+                        ("--no-color", "build", "--select", "b"),
+                        ("--no-color", "build", "--select", "c"),
+                    ),
+                ),
+            ),
         ),
         NodeSourceWatermarkBuildE2ETestCase(
             description="both upstream frontier tables stale",
             project_name="node_watermark_merged_stale",
             expected_source_versions_by_node={"a": ("1",)},
             expected_source_kinds_by_node={"a": ("inherited",)},
+            frontier_actions=(
+                (
+                    (1,),
+                    (
+                        ("--no-color", "build", "--select", "b"),
+                        ("--no-color", "build", "--select", "c"),
+                    ),
+                ),
+                ((2,), ()),
+            ),
         ),
         NodeSourceWatermarkBuildE2ETestCase(
             description="one upstream frontier table stale and one current",
             project_name="node_watermark_merged_mixed",
             expected_source_versions_by_node={"a": ("1",)},
             expected_source_kinds_by_node={"a": ("inherited",)},
+            frontier_actions=(
+                ((1,), (("--no-color", "build", "--select", "b"),)),
+                ((2,), (("--no-color", "build", "--select", "c"),)),
+            ),
         ),
     ],
     ids=lambda case: case.description,

@@ -1,8 +1,8 @@
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestAssertionStep, SqlTestPlanEntry
 
@@ -95,10 +95,9 @@ def build_assertion_test_entry(*, sql_analysis_enabled: bool = True) -> SqlTestP
 def build_comparison_test_adapter(
     adapter_name: str,
 ) -> DuckDbAdapter | SnowflakeAdapter | BigQueryAdapter | DatabricksAdapter:
-    if adapter_name == "bigquery":
-        return BigQueryAdapter()
-    if adapter_name == "databricks":
-        return DatabricksAdapter()
-    if adapter_name == "snowflake":
-        return SnowflakeAdapter()
-    return DuckDbAdapter()
+    return {
+        "bigquery": BigQueryAdapter,
+        "databricks": DatabricksAdapter,
+        "snowflake": SnowflakeAdapter,
+        "duckdb": DuckDbAdapter,
+    }[adapter_name]()

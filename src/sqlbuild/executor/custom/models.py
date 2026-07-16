@@ -7,12 +7,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, RelationInfo, StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.custom.main.execute_sql import execute_sql_with_recording
+from sqlbuild.executor.custom.main.qualify_relation import qualify_custom_relation
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
 
 
 @dataclass(frozen=True)
@@ -46,8 +48,12 @@ class MaterializationContext:
 
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
-        self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return execute_sql_with_recording(
+            adapter=self.adapter,
+            connection=self.connection,
+            sql=sql,
+            statement_recorder=self.statement_recorder,
+        )
 
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""
@@ -55,26 +61,26 @@ class MaterializationContext:
 
     def qualify_name(
         self,
-        name: str,
         *,
+        name: str,
         database: str | None = None,
         schema: str | None = None,
     ) -> str:
         """Return a fully-qualified relation name, preserving already-qualified input."""
 
-        if "." in name:
-            return name
-        return resolve_qualified_name_parts(
+        return qualify_custom_relation(
             adapter=self.adapter,
-            database=self.destination_database if database is None else database,
-            schema=self.destination_schema if schema is None else schema,
             name=name,
+            destination_database=self.destination_database,
+            destination_schema=self.destination_schema,
+            database=database,
+            schema=schema,
         )
 
     def qualify_in_destination_schema(self, name: str) -> str:
         """Return a relation name qualified into the destination database/schema."""
 
-        return self.qualify_name(name)
+        return self.qualify_name(name=name)
 
 
 @dataclass(frozen=True)
@@ -99,8 +105,12 @@ class PrepareVersionContext:
 
     def execute_sql(self, sql: str) -> Any:
         """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
-        self.statement_recorder.record(sql)
-        return self.adapter.execute(self.connection, sql)
+        return execute_sql_with_recording(
+            adapter=self.adapter,
+            connection=self.connection,
+            sql=sql,
+            statement_recorder=self.statement_recorder,
+        )
 
     def log(self, message: str) -> None:
         """Record a log message for verbose output."""
@@ -108,26 +118,26 @@ class PrepareVersionContext:
 
     def qualify_name(
         self,
-        name: str,
         *,
+        name: str,
         database: str | None = None,
         schema: str | None = None,
     ) -> str:
         """Return a fully-qualified relation name, preserving already-qualified input."""
 
-        if "." in name:
-            return name
-        return resolve_qualified_name_parts(
+        return qualify_custom_relation(
             adapter=self.adapter,
-            database=self.destination_database if database is None else database,
-            schema=self.destination_schema if schema is None else schema,
             name=name,
+            destination_database=self.destination_database,
+            destination_schema=self.destination_schema,
+            database=database,
+            schema=schema,
         )
 
     def qualify_in_destination_schema(self, name: str) -> str:
         """Return a relation name qualified into the destination database/schema."""
 
-        return self.qualify_name(name)
+        return self.qualify_name(name=name)
 
 
 @dataclass(frozen=True)

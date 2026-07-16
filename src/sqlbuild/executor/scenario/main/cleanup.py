@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.executor.scenario.helpers.lifecycle.cleanup import collect_scenario_cleanup_targets
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.executor.scenario._helpers.lifecycle.cleanup import collect_scenario_cleanup_targets
+from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
 from sqlbuild.executor.scenario.models import (
     ScenarioCleanupExecutionResult,
     ScenarioCleanupTarget,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.constants import SCENARIO_EXEC_CLEANUP_FAILED
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_scenario_cleanup(
@@ -44,14 +44,14 @@ def execute_scenario_cleanup(
             ):
                 if cleanup_target.materialization_type == MaterializationType.VIEW:
                     adapter.drop_view(
-                        connection,
+                        connection=connection,
                         destination=cleanup_target.target_relation,
                         if_exists=True,
                         statement_recorder=statement_recorder,
                     )
                 else:
                     adapter.drop(
-                        connection,
+                        connection=connection,
                         destination=cleanup_target.target_relation,
                         if_exists=True,
                         statement_recorder=statement_recorder,

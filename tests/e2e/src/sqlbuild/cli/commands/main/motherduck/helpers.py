@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
+from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
 from tests.integration.src.sqlbuild.adapters.motherduck.helpers import (
     build_motherduck_connection_config,
     build_unique_schema_name,
@@ -61,7 +61,7 @@ def cleanup_motherduck_schema(*, schema_name: str) -> None:
     config: dict[str, object] = build_motherduck_connection_config()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+        adapter.execute(connection=connection, sql=f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
     finally:
         adapter.close(connection)
 

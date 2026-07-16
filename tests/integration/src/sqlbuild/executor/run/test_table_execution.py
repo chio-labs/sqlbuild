@@ -9,15 +9,15 @@ from typing import Any, ClassVar
 
 import pytest
 
-from sqlbuild.adapter.shared.types import TablePromotionMode
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.run.main.execute import execute_table_entry
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.run._test_types import (
     TableFailureTestCase,
     TableReuseAuditProofExecutionTestCase,

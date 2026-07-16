@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.virtual.state._helpers.state_runtime.backend import build_state_backend
+from sqlbuild.virtual.state._helpers.state_runtime.config import resolve_state_backend_config
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.helpers.backend import build_state_backend
-from sqlbuild.virtual.state.helpers.config import resolve_state_backend_config
 from sqlbuild.virtual.state.models import StateBackendConfig, VirtualEnvironmentCheckpointRecord
 
 
@@ -28,7 +28,7 @@ def list_virtual_environment_checkpoints(
     connection: Any = backend.connect(config.connection)
     try:
         return backend.list_virtual_environment_checkpoints(
-            connection,
+            connection=connection,
             schema=config.schema,
             virtual_environment_name=virtual_environment_name,
         )

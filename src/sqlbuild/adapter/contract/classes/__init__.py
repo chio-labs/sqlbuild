@@ -1,0 +1,1 @@
+"""Adapter role classes."""

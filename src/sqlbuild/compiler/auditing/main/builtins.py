@@ -9,8 +9,8 @@ from sqlbuild.compiler.auditing.constants import (
     BUILT_IN_AUDIT_NAMES,
     BUILT_IN_AUDIT_SHADOW_CODE,
 )
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
-from sqlbuild.compiler.diagnostics.types import DiagnosticPhase, DiagnosticSeverity
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock, DiscoveredAuditFile
 
 

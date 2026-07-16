@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.models.project import TargetConfig
-from sqlbuild.spec.models.targets import (
-    resolve_target_config,
-    resolve_target_name,
-)
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.models import TargetConfig
 
 
 def build_effective_target_config(

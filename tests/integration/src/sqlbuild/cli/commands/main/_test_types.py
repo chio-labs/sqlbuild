@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.compiler.planner.models import CursorOverrides
 
@@ -179,7 +179,7 @@ class LoadCommandFailureCleanupTestCase:
     staging_table_name: str
     expected_staging_exists: bool
     setup_sql: tuple[str, ...] = ()
-    target_select_sql: str | None = None
+    target_select_sql: str = "SELECT NULL WHERE FALSE"
     expected_target_rows: tuple[tuple[object, ...], ...] = ()
 
 
@@ -224,6 +224,7 @@ class SourceDeferralNoErrorTestCase:
     defer_sources_to: str | None = None
     command: str = "build"
     load_sources: bool | None = None
+    command_options: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -250,6 +251,7 @@ class BuildRunAutoLoadFlagTestCase:
     expected_rows: tuple[tuple[object, ...], ...]
     expected_stdout_fragments: tuple[str, ...] = ()
     expected_stdout_absent_fragments: tuple[str, ...] = ()
+    load_sources: bool | None = None
 
 
 @dataclass(frozen=True)

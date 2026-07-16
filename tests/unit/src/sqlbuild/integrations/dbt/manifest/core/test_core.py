@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestModel
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
 from tests.unit.src.sqlbuild.integrations.dbt.manifest.core._test_types import (
     DbtConfigStripTestCase,
 )

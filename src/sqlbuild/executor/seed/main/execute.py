@@ -5,14 +5,16 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
 from sqlbuild.compiler.planner.models import SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.executor.seed._helpers.fingerprinting import try_write_seed_fingerprint
 from sqlbuild.executor.seed.constants import SEED_LOAD_FAILED_CODE
-from sqlbuild.executor.seed.helpers.fingerprinting import try_write_seed_fingerprint
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
 
 
 def execute_seed(
@@ -32,13 +34,13 @@ def execute_seed(
     )
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=seed_entry.destination.database,
             schema=seed_entry.destination.schema,
             statement_recorder=statement_recorder,
         )
         adapter.load_seed(
-            connection,
+            connection=connection,
             destination=target_qualified,
             file_path=seed_entry.file_path,
             columns=seed_entry.columns,

@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.helpers.playground import (
+from sqlbuild.cli.commands._helpers.playground import (
     completion_output as playground_completion_output,
 )
-from sqlbuild.cli.commands.helpers.playground.copy import create_playground_project
-from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
-from sqlbuild.cli.commands.main.commands.playground import run_playground
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
+from sqlbuild.cli.commands._helpers.playground.copy import create_playground_project
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.main.workspace.playground import run_playground
+from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,
     RunPlaygroundTestCase,
@@ -44,6 +44,12 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("sqlbuild_local.toml"),
                 Path("waffle_shop_control.duckdb"),
                 Path("macros/__pycache__"),
+            ),
+            expected_file_fragments=(
+                (
+                    Path("materializations/partition_tracked.py"),
+                    ("from sqlbuild.adapter.contract.types import FrameworkType",),
+                ),
             ),
         ),
         CreatePlaygroundProjectTestCase(
@@ -222,7 +228,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 ),
                 (
                     Path("checks/orders_export.py"),
-                    ("@check(depends_on=orders_export", "ctx.result_of(orders_export)"),
+                    (
+                        "@check(depends_on=orders_export",
+                        "ctx.result_of(node_function=orders_export)",
+                    ),
                 ),
             ),
         ),

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.virtual.planner.helpers.targets import build_destination_from_physical_relation
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.virtual.planner._helpers.targets import build_destination_from_physical_relation
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
 

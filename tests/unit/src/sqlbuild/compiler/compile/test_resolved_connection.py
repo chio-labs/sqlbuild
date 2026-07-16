@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models.core import CompileProjectInputs
+from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
@@ -54,7 +54,7 @@ def test_given_resolved_connection_when_building_compile_inputs_then_uses_expect
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs,
+        discovered_inputs=discovered_inputs,
         resolved_connection=test_case.resolved_connection,
     )
 

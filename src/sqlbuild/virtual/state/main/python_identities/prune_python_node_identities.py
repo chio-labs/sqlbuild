@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state.helpers.runtime import build_state_runtime
+from sqlbuild.virtual.state._helpers.state_runtime.runtime import build_state_runtime
 
 
 def prune_unreferenced_python_node_versions(
@@ -23,7 +23,7 @@ def prune_unreferenced_python_node_versions(
     connection: Any = backend.connect(config.connection)
     try:
         return backend.prune_unreferenced_python_node_versions(
-            connection,
+            connection=connection,
             schema=config.schema,
         )
     finally:

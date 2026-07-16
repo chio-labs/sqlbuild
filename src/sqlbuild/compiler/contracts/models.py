@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.diagnostics.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
 
 
 @dataclass(frozen=True)

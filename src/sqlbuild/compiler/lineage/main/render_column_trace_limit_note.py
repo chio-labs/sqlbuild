@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlbuild.compiler.lineage.helpers.tree_render import (
+from sqlbuild.compiler.lineage._helpers.tree_render import (
     render_column_trace_limit_note as _render_column_trace_limit_note,
 )
 

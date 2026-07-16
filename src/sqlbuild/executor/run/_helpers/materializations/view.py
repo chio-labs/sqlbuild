@@ -1,0 +1,232 @@
+"""View materialization lifecycle."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
+from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.executor.auditing.main.execute import execute_audit
+from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run._helpers.execution.results import (
+    build_failed_result,
+    build_skipped_result,
+)
+from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
+from sqlbuild.executor.run.models import (
+    HookExecutionResult,
+    HookRunContext,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
+from sqlbuild.executor.run.types import ExecutionPhase, HookPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.provider.main.runtime import ProviderContainer
+from sqlbuild.spec.contracts.models import SourceEntry
+
+
+def execute_view_entry(
+    *,
+    context: ModelMaterializationContext,
+) -> ModelExecutionResult:
+    """Execute one view model through its full materialization lifecycle."""
+
+    entry: ModelPlanEntry = context.entry
+    adapter: BaseAdapter = context.adapter
+    connection: Any = context.connection
+    model_locations: dict[str, CompiledRelationLocation] = context.model_locations
+    seed_locations: dict[str, CompiledRelationLocation] = context.seed_locations
+    source_map: dict[str, SourceEntry] = context.source_map
+    model_audits: tuple[AuditPlanEntry, ...] = context.model_audits
+    run_id: str = context.run_id
+    query_change_tracking: bool = context.query_change_tracking
+    hook_functions: tuple[DiscoveredHookFunction, ...] = context.hook_functions
+    effective_target_name: str | None = context.effective_target_name
+    effective_vars: Mapping[str, object] | None = context.effective_vars
+    providers: ProviderContainer | None = context.providers
+    python_identity_recorder: PythonIdentityRecorder | None = context.python_identity_recorder
+    target_database: str | None = entry.destination.database
+    target_schema: str | None = entry.destination.schema
+    target_qualified: str = resolve_relation_location_qualified_name(
+        adapter=adapter, location=entry.destination
+    )
+    warnings: list[str] = []
+    audit_results: list[AuditExecutionResult] = []
+    hook_results: list[HookExecutionResult] = []
+    statement_recorder: StatementRecorder = StatementRecorder()
+
+    try:
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
+        )
+        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
+            pre_hook_skipped: bool = execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.pre_hooks,
+                phase=HookPhase.PRE_HOOKS,
+                hook_functions=hook_functions,
+                hook_results=hook_results,
+                hook_run=HookRunContext(
+                    model_name=entry.name,
+                    destination=entry.destination,
+                    run_id=run_id,
+                    target=effective_target_name,
+                    effective_vars=effective_vars,
+                    statement_recorder=statement_recorder,
+                    providers=providers,
+                    python_identity_recorder=python_identity_recorder,
+                ),
+            )
+        if pre_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.PRE_HOOK,
+            error=str(exc),
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+            hook_results=hook_results,
+        )
+
+    try:
+        adapter.ensure_schema(
+            connection=connection,
+            database=target_database,
+            schema=target_schema,
+            statement_recorder=statement_recorder,
+        )
+        with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_view"):
+            adapter.create_view_as(
+                connection=connection,
+                destination=target_qualified,
+                sql=entry.resolved_sql,
+                statement_recorder=statement_recorder,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.STAGING,
+            error=str(exc),
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+            hook_results=hook_results,
+        )
+
+    audit_error: bool = False
+    audit: AuditPlanEntry
+    for audit in model_audits:
+        result: AuditExecutionResult = execute_audit(
+            audit=audit,
+            adapter=adapter,
+            connection=connection,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
+            source_map=source_map,
+            relation_overrides=None,
+            run_scope_phase=AuditRunScope.FINAL,
+        )
+        audit_results.append(result)
+        if result.outcome == AuditOutcome.ERROR:
+            audit_error = True
+
+    if audit_error:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.AUDIT,
+            error=(
+                f"final audit for '{entry.name}' failed after view creation "
+                "with severity level: error"
+            ),
+            promoted_relation=target_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+            hook_results=hook_results,
+        )
+
+    try:
+        statement_recorder.record_many(
+            render_hooks(hooks=entry.post_hooks, phase=HookPhase.POST_HOOKS)
+        )
+        with diagnostics_context(sqlbuild_phase="post_hook", sqlbuild_action_name="run"):
+            post_hook_skipped: bool = execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=entry.post_hooks,
+                phase=HookPhase.POST_HOOKS,
+                hook_functions=hook_functions,
+                hook_results=hook_results,
+                hook_run=HookRunContext(
+                    model_name=entry.name,
+                    destination=entry.destination,
+                    run_id=run_id,
+                    target=effective_target_name,
+                    effective_vars=effective_vars,
+                    statement_recorder=statement_recorder,
+                    providers=providers,
+                    python_identity_recorder=python_identity_recorder,
+                ),
+            )
+        if post_hook_skipped:
+            return build_skipped_result(
+                entry=entry,
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+                hook_results=hook_results,
+                promoted_relation=target_qualified,
+            )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.POST_HOOK,
+            error=str(exc),
+            promoted_relation=target_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+            hook_results=hook_results,
+        )
+
+    warnings.extend(
+        try_write_fingerprint(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            query_change_tracking=query_change_tracking,
+            model_audits=model_audits,
+            audit_results=tuple(audit_results),
+        )
+    )
+
+    return ModelExecutionResult(
+        model_name=entry.name,
+        status=ExecutionStatus.SUCCESS,
+        promoted_relation=target_qualified,
+        audit_results=tuple(audit_results),
+        warning_messages=tuple(warnings),
+        lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
+    )

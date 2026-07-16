@@ -4,8 +4,9 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import QueryResult, StatementRecorder
-from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import QueryResult
+from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
 from tests.integration.src.sqlbuild.adapters.motherduck._test_types import (
     MotherDuckBuildFlowTestCase,
     MotherDuckQueryTestCase,
@@ -32,7 +33,7 @@ def test_given_sql_when_querying_then_motherduck_returns_named_rows(
     adapter: MotherDuckAdapter,
     connection: Any,
 ) -> None:
-    result: QueryResult = adapter.query(connection, test_case.sql, limit=None)
+    result: QueryResult = adapter.query(connection=connection, sql=test_case.sql, limit=None)
 
     assert result == test_case.expected_result
 
@@ -58,7 +59,7 @@ def test_given_model_sql_when_building_then_motherduck_creates_table(
     target: str = qualified_name(schema=motherduck_schema, name=test_case.table_name)
 
     adapter.create_table_as(
-        connection,
+        connection=connection,
         destination=target,
         sql=test_case.source_sql,
         statement_recorder=StatementRecorder(),

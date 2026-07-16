@@ -8,8 +8,8 @@ from sqlbuild.compiler.lineage.models import QualifiedLineageColumn
 
 
 def serialize_column(
-    column: QualifiedLineageColumn,
     *,
+    column: QualifiedLineageColumn,
     render_resource_type: Callable[[QualifiedLineageColumn], str],
 ) -> dict[str, object]:
     """Serialize a qualified lineage column using a caller-provided resource renderer."""

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.main.build_compile_reference_resolver import (
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.integrations.dbt.main.manifest.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
 
 
 def build_sqlbuild_project_with_manifest(
@@ -49,7 +50,7 @@ def build_sqlbuild_project_with_dbt_config(
     dbt_project_dir: Path,
     dbt_profiles_dir: Path,
     dbt_target_path: Path,
-    model_sql_by_relative_path: dict[str, str],
+    model_contents_by_relative_path: dict[str, str],
 ) -> Path:
     """Create a tiny SQLBuild project configured for real dbt interop planning."""
 
@@ -73,11 +74,10 @@ def build_sqlbuild_project_with_dbt_config(
         encoding="utf-8",
     )
     relative_path: str
-    sql: str
-    for relative_path, sql in model_sql_by_relative_path.items():
+    contents: str
+    for relative_path, contents in model_contents_by_relative_path.items():
         model_path: Path = project_dir / "models" / relative_path
         model_path.parent.mkdir(parents=True, exist_ok=True)
-        contents: str = sql if sql.lstrip().startswith("MODEL ") else f"MODEL ();\n\n{sql}\n"
         model_path.write_text(contents, encoding="utf-8")
     return project_dir
 
@@ -91,17 +91,19 @@ def resolve_expected_dbt_argvs(
 ) -> tuple[tuple[str, ...], ...]:
     """Replace path placeholders in expected dbt argv tuples."""
 
-    return tuple(
-        tuple(
-            value.format(
-                dbt_project_dir=dbt_project_dir,
-                dbt_profiles_dir=dbt_profiles_dir,
-                dbt_target_path=dbt_target_path,
+    resolved_argvs: list[tuple[str, ...]] = []
+    for argv in argvs:
+        resolved_argv: list[str] = []
+        for value in argv:
+            resolved_argv.append(
+                value.format(
+                    dbt_project_dir=dbt_project_dir,
+                    dbt_profiles_dir=dbt_profiles_dir,
+                    dbt_target_path=dbt_target_path,
+                )
             )
-            for value in argv
-        )
-        for argv in argvs
-    )
+        resolved_argvs.append(tuple(resolved_argv))
+    return tuple(resolved_argvs)
 
 
 def run_git_command(*, repo_dir: Path, args: tuple[str, ...]) -> None:
@@ -114,18 +116,42 @@ def run_git_command(*, repo_dir: Path, args: tuple[str, ...]) -> None:
         check=False,
         text=True,
     )
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr or result.stdout)
+    _GIT_COMMAND_RESULT_HANDLERS[result.returncode == 0](result=result)
 
 
 def count_available_reuse_refs(*, help_text: str) -> int:
     """Count refs in a dbt reuse invalid-ref help message."""
 
     marker: str = "Available local branches/tags include: "
-    if marker not in help_text:
-        return 0
+    return _AVAILABLE_REF_COUNTERS[marker in help_text](help_text=help_text, marker=marker)
+
+
+def _accept_git_command_result(*, result: subprocess.CompletedProcess[str]) -> None:
+    del result
+
+
+def _raise_git_command_result(*, result: subprocess.CompletedProcess[str]) -> None:
+    raise RuntimeError(result.stderr or result.stdout)
+
+
+def _count_available_refs(*, help_text: str, marker: str) -> int:
     available_refs: str = help_text.split(marker, 1)[1]
     return len(available_refs.removesuffix(".").split(", "))
+
+
+def _count_no_available_refs(*, help_text: str, marker: str) -> int:
+    del help_text, marker
+    return 0
+
+
+_GIT_COMMAND_RESULT_HANDLERS: dict[bool, Callable[..., None]] = {
+    True: _accept_git_command_result,
+    False: _raise_git_command_result,
+}
+_AVAILABLE_REF_COUNTERS: dict[bool, Callable[..., int]] = {
+    True: _count_available_refs,
+    False: _count_no_available_refs,
+}
 
 
 def set_git_identity(*, repo_dir: Path) -> None:

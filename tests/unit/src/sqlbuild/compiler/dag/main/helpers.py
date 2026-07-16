@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledModel,
@@ -12,10 +12,10 @@ from sqlbuild.compiler.compile.models.core import (
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
+    CompiledSqlTest,
     CompileModelConfig,
     FunctionArgument,
 )
-from sqlbuild.compiler.compile.models.sql_tests import CompiledSqlTest
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
@@ -33,8 +33,13 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.spec.models.schema import SchemaColumn, SchemaModelEntry, SchemaSeedEntry
-from sqlbuild.spec.models.source import SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.models import (
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SourceColumnEntry,
+    SourceEntry,
+)
 
 
 def build_dag_artifact_test_graph() -> ProjectGraph:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Hashable
 
-from sqlbuild.compiler.lineage.helpers.tree_render import (
+from sqlbuild.compiler.lineage._helpers.tree_render import (
     SupportsSortKey,
     render_dependency_branch,
 )
@@ -23,8 +23,8 @@ def render_dependency_tree[Node: Hashable](
     """Render the box-drawing dependency tree lines for one focus node."""
 
     return render_dependency_branch(
-        focus,
-        deps,
+        node=focus,
+        deps=deps,
         prefix="",
         seen=seen,
         format_node=format_node,

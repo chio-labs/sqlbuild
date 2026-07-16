@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ExpressionInferenceProfile
-from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.adapter.contract.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
-from tests.unit.src.sqlbuild.adapter.base.helpers import RecordingConnection
+from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter.helpers import (
+    RecordingConnection,
+)
 from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
     DuckDbExpressionInferenceProfileTestCase,
     DuckDbMetadataSqlTestCase,
@@ -98,7 +100,9 @@ def test_given_cursor_bounds_when_rendering_then_duckdb_returns_expected_literal
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
 
-    result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
+    result: str = adapter.render_cursor_bound_literal(
+        value=test_case.value, cursor_type=test_case.cursor_type
+    )
 
     assert result == test_case.expected_literal
 
@@ -120,17 +124,19 @@ def test_given_duckdb_relation_when_getting_max_cursor_then_returns_relation_max
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: object = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, 'CREATE TABLE events ("event""time" INTEGER)')
-        adapter.execute(connection, "INSERT INTO events VALUES (1), (7), (3)")
-        adapter.execute(connection, 'CREATE TABLE empty_events ("event""time" INTEGER)')
+        adapter.execute(connection=connection, sql='CREATE TABLE events ("event""time" INTEGER)')
+        adapter.execute(connection=connection, sql="INSERT INTO events VALUES (1), (7), (3)")
+        adapter.execute(
+            connection=connection, sql='CREATE TABLE empty_events ("event""time" INTEGER)'
+        )
 
         populated_value: object | None = adapter.get_relation_max_cursor(
-            connection,
+            connection=connection,
             relation="events",
             cursor_column='event"time',
         )
         empty_value: object | None = adapter.get_relation_max_cursor(
-            connection,
+            connection=connection,
             relation="empty_events",
             cursor_column='event"time',
         )
@@ -281,33 +287,35 @@ def test_given_metadata_names_with_quotes_when_querying_then_duckdb_escapes_lite
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: RecordingConnection = RecordingConnection()
 
-    adapter.schema_exists(connection, database=test_case.database, schema=test_case.schema)
+    adapter.schema_exists(
+        connection=connection, database=test_case.database, schema=test_case.schema
+    )
     adapter.relation_exists(
-        connection,
+        connection=connection,
         database=test_case.database,
         schema=test_case.schema,
         name=test_case.name,
     )
     adapter.list_relations(
-        connection,
+        connection=connection,
         database=test_case.database,
         schemas=(test_case.schema,),
         names=(test_case.name,),
     )
     adapter.list_functions(
-        connection,
+        connection=connection,
         database=test_case.database,
         schemas=(test_case.schema,),
         names=(test_case.name,),
     )
     adapter.get_columns(
-        connection,
+        connection=connection,
         database=test_case.database,
         schema=test_case.schema,
         name=test_case.name,
     )
     adapter.get_all_columns(
-        connection,
+        connection=connection,
         database=test_case.database,
         schemas=(test_case.schema,),
         names=(test_case.name,),

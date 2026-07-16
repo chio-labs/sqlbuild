@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.source_freshness.helpers.state import (
+from sqlbuild.compiler.source_freshness._helpers.state import (
     normalize_source_freshness_data_version as _normalize_source_freshness_data_version,
 )
-from sqlbuild.spec.models.types import SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 
 
 def normalize_source_freshness_data_version(

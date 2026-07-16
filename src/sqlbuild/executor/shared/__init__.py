@@ -1,1 +1,0 @@
-"""Executor shared package."""

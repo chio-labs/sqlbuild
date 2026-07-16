@@ -4,14 +4,14 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.types import FunctionNullabilityRule, LoaderLogicalType
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapter.contract.types import FunctionNullabilityRule, LoaderLogicalType
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
+from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
 )
@@ -31,6 +31,7 @@ from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksTableFreshnessFallbackTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.databricks.helpers import (
+    FailingDatabricksMetadataCursor,
     FakeDatabricksMetadataConnection,
     FakeDatabricksMetadataCursor,
 )
@@ -219,7 +220,7 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_databricks_u
     connection: FakeDatabricksMetadataConnection = FakeDatabricksMetadataConnection((cursor,))
 
     metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
-        adapter.get_tables_freshness_metadata(connection, requests=requests)
+        adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
     )
 
     assert (
@@ -259,7 +260,7 @@ def test_given_delta_history_unavailable_when_getting_metadata_then_databricks_u
         TableFreshnessRequest(database="hive_metastore", schema="raw", name="orders"),
         TableFreshnessRequest(database="hive_metastore", schema="raw", name="customers"),
     )
-    history_cursor: FakeDatabricksMetadataCursor = FakeDatabricksMetadataCursor(
+    history_cursor: FakeDatabricksMetadataCursor = FailingDatabricksMetadataCursor(
         execute_error=RuntimeError("system catalog unavailable")
     )
     uc_cursor: FakeDatabricksMetadataCursor = FakeDatabricksMetadataCursor(
@@ -273,7 +274,7 @@ def test_given_delta_history_unavailable_when_getting_metadata_then_databricks_u
     )
 
     metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
-        adapter.get_tables_freshness_metadata(connection, requests=requests)
+        adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
     )
 
     assert (

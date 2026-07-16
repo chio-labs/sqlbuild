@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
+
 
 @dataclass(frozen=True)
 class SourceFreshnessObservationTestCase:
@@ -22,7 +24,7 @@ class SourceFreshnessObservationErrorTestCase:
     source_name: str
     table: str | None
     strategy: str
-    value_kind: str | None
+    value_kind: SourceFreshnessValueKind | None
     expected_error_fragment: str
     column: str | None = None
     query: str | None = None

@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from sqlbuild.virtual.state.types import StateColumnType
 
+DUCKDB_MEMORY_DATABASE: str = ":memory:"
+STATE_BOOLEAN_TRUE: str = "true"
+DUCKDB_INTEGER_TYPE_TOKEN: str = "int"
+DUCKDB_TIMESTAMP_TYPE_TOKEN: str = "timestamp"
+DUCKDB_DATETIME_TYPE_TOKEN: str = "datetime"
+POSTGRES_INTEGER_TYPES: tuple[str, ...] = ("integer", "bigint", "smallint")
+POSTGRES_TEXT_TYPES: tuple[str, ...] = ("text", "character varying", "character")
+
 CURRENT_STATE_SCHEMA_VERSION: int = 1
 
 STATE_VERSION_TABLE: str = "state_versions"

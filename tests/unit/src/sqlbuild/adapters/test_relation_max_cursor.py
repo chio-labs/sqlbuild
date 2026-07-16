@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapters.bigquery.client import BigQueryAdapter
-from sqlbuild.adapters.databricks.client import DatabricksAdapter
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.adapters.motherduck.client import MotherDuckAdapter
-from sqlbuild.adapters.postgres.client import PostgresAdapter
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from tests.unit.src.sqlbuild.adapters._test_types import (
     AdapterRelationMaxCursorTestCase,
     AdapterSeedSelectAfterCursorTestCase,
@@ -101,7 +101,7 @@ def test_given_first_class_adapter_when_getting_relation_max_cursor_then_uses_ad
     test_case: AdapterRelationMaxCursorTestCase,
 ) -> None:
     result: object | None = test_case.adapter.get_relation_max_cursor(
-        test_case.connection,
+        connection=test_case.connection,
         relation=test_case.relation,
         cursor_column=test_case.cursor_column,
     )

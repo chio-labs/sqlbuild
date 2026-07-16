@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 
@@ -36,7 +36,7 @@ def recreate_view_by_names(
     start: float = time.monotonic()
     try:
         adapter.create_view_as(
-            connection,
+            connection=connection,
             destination=destination_relation,
             sql=view_sql,
             statement_recorder=recorder,

@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
+
 
 @dataclass(frozen=True)
 class ReadLatestSourceFreshnessTestCase:
@@ -88,6 +90,7 @@ class StandardSourceFreshnessAgePolicyTestCase:
     current_query: str
     warn_after: str | None
     error_after: str | None
+    value_kind: SourceFreshnessValueKind
     expected_age_status: str
     observed_at: datetime = datetime(2026, 1, 15, 12, 0, 0)
 

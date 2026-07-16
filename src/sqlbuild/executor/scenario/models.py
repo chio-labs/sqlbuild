@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.adapter.shared.models import LifeCycleEvent
+from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.compiler.planner.models import (
     CompiledRelationLocation,
     ScenarioExecutionPlan,
@@ -15,7 +15,7 @@ from sqlbuild.compiler.planner.types import MaterializationType, ScenarioArtifac
 from sqlbuild.executor.build.models import FunctionExecutionResult, SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 @dataclass(frozen=True)

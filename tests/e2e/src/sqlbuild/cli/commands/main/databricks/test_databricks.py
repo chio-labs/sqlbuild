@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -232,7 +233,7 @@ def test_given_python_result_when_running_check_on_databricks_then_persists_node
                 "from tasks.results import produce_result\n\n"
                 "@check(depends_on=produce_result)\n"
                 "def check_produce_result(ctx):\n"
-                "    return ctx.result_of(produce_result).payload['value'] == 42\n"
+                "    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
             ),
         },
     )
@@ -1351,14 +1352,15 @@ def test_given_databricks_scenario_when_running_remotely_then_cleans_up_and_reta
             schema_name=schema_name
         )
         assert len(retained_names) == sum(test_case.expected_retained_suffix_counts.values())
+        retained_names_by_suffix: defaultdict[str, list[str]] = defaultdict(list)
+        for relation in retained_names:
+            retained_names_by_suffix[relation[relation.index("__", 2) :]].append(relation)
         suffix: str
         for suffix, expected_count in test_case.expected_retained_suffix_counts.items():
-            matches: tuple[str, ...] = tuple(
-                relation for relation in retained_names if relation.endswith(suffix)
-            )
+            matches: tuple[str, ...] = tuple(retained_names_by_suffix[suffix])
             assert len(matches) == expected_count
         for suffix, expected_count in test_case.expected_row_counts_by_suffix.items():
-            matches = tuple(relation for relation in retained_names if relation.endswith(suffix))
+            matches = tuple(retained_names_by_suffix[suffix])
             assert len(matches) == 1
             assert (
                 databricks_relation_row_count(schema_name=schema_name, relation=matches[0])

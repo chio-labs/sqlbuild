@@ -7,7 +7,7 @@ from sqlbuild.compiler.planner.models import PlanOutput
 
 
 def plan_has_executable_work(
-    plan: PlanOutput, *, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+    *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
 ) -> bool:
     """Return whether a planned build has runtime work to execute."""
 

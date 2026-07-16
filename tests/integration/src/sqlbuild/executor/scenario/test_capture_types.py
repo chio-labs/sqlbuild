@@ -9,10 +9,10 @@ from uuid import UUID
 import duckdb
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.executor.scenario.helpers.snapshots.core import read_scenario_snapshot_manifest
+from sqlbuild.executor.scenario._helpers.snapshots.core import read_scenario_snapshot_manifest
 from sqlbuild.executor.scenario.main.capture import execute_scenario_snapshot_capture
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCapturePlan,
@@ -21,7 +21,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.integration.src.sqlbuild.executor.scenario._test_types import (
     ScenarioSnapshotCaptureTypesIntegrationTestCase,
 )
@@ -60,8 +60,8 @@ def test_given_typed_duckdb_relation_when_capturing_then_jsonl_reloads_with_mani
     tmp_path: Path,
 ) -> None:
     adapter.execute(
-        connection,
-        """
+        connection=connection,
+        sql="""
         CREATE TABLE typed_capture_source AS
         SELECT
           TRUE AS bool_col,

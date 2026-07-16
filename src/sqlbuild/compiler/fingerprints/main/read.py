@@ -8,18 +8,19 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
-from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
-from sqlbuild.compiler.fingerprints.helpers.sql import (
+from sqlbuild.adapter.contract.types import AdapterExecute
+from sqlbuild.compiler.fingerprints._helpers.sql import (
     build_qualified_table_name,
 )
+from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
+from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 
 
 def read_latest_fingerprints(
     *,
     connection: Any,
-    execute: Any,
+    execute: AdapterExecute[Any, Any],
     table_exists: bool,
     database: str | None,
     schema: str,
@@ -44,7 +45,7 @@ def read_latest_fingerprints(
         schema=schema,
     )
     try:
-        result: Any = execute(connection, read_sql)
+        result: Any = execute(connection=connection, sql=read_sql)
     except Exception as error:
         raise FingerprintInputError(
             f"Unable to read fingerprints from {qualified_name}. This can happen after "
@@ -56,7 +57,7 @@ def read_latest_fingerprints(
     fingerprints_by_identity: dict[tuple[str, str], Fingerprint] = {}
     row: tuple[Any, ...]
     for row in rows:
-        fingerprint: Fingerprint = _row_to_fingerprint(row, qualified_name=qualified_name)
+        fingerprint: Fingerprint = _row_to_fingerprint(row=row, qualified_name=qualified_name)
         fingerprints_by_identity[(fingerprint.node_type, fingerprint.node_name)] = fingerprint
         if fingerprint.node_type == NODE_TYPE_MODEL or fingerprint.node_name not in fingerprints:
             fingerprints[fingerprint.node_name] = fingerprint
@@ -67,7 +68,7 @@ def read_latest_fingerprints(
     )
 
 
-def _row_to_fingerprint(row: tuple[Any, ...], *, qualified_name: str) -> Fingerprint:
+def _row_to_fingerprint(*, row: tuple[Any, ...], qualified_name: str) -> Fingerprint:
     raw_ts: Any = row[11]
     ts: datetime = raw_ts if isinstance(raw_ts, datetime) else datetime.fromisoformat(str(raw_ts))
     node_type: str = str(row[0])

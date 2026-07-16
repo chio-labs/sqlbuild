@@ -4,7 +4,10 @@ from pathlib import Path
 
 
 def existing_file_paths(*, project_dir: Path, relative_paths: tuple[Path, ...]) -> tuple[Path, ...]:
-    return tuple(path for path in relative_paths if (project_dir / path).is_file())
+    existing_paths: list[Path] = []
+    for path in relative_paths:
+        existing_paths.extend((path,) * int((project_dir / path).is_file()))
+    return tuple(existing_paths)
 
 
 def write_existing_skill_file(*, project_dir: Path, relative_path: Path, contents: str) -> None:

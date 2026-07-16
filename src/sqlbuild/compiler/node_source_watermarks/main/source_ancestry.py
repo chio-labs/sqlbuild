@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.node_source_watermarks.helpers.source_ancestry import (
+from sqlbuild.compiler.node_source_watermarks._helpers.source_ancestry import (
     build_watermark_source_ancestry as _build_watermark_source_ancestry,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

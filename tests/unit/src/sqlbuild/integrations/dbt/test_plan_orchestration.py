@@ -4,19 +4,20 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
+from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.planning.orchestration import plan_dbt_interop_command
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner, build_dbt_ls_argv
-from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.planning.orchestration import plan_dbt_interop_command
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
     DbtCommandResult,
     DbtInteropCommandArgs,
     DbtInteropPlan,
+    DbtManifestIndex,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtPlanOrchestrationErrorTestCase,

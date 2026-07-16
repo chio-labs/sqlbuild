@@ -2,41 +2,44 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from functools import partial
 from typing import cast
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo
-from sqlbuild.compiler.compile.models.core import CompiledProject
-from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.helpers.graph.core import (
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.integrations.dbt._helpers.graph.core import (
     build_dbt_combined_graph,
     dbt_source_graph_key,
 )
-from sqlbuild.integrations.dbt.helpers.lineage.columns import (
+from sqlbuild.integrations.dbt._helpers.lineage.columns import (
     inspect_dbt_source_schemas,
     select_dbt_column_lineage_target,
 )
-from sqlbuild.integrations.dbt.helpers.lineage.output import (
+from sqlbuild.integrations.dbt._helpers.lineage.output import (
     format_dbt_column_lineage_json,
     format_dbt_column_lineage_list,
     format_dbt_column_lineage_tree,
 )
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.models import (
     DbtColumnLineageTrace,
     DbtCombinedGraph,
+    DbtManifestIndex,
     DbtSourceSchemaInspectionResult,
 )
 from sqlbuild.integrations.dbt.types import DbtLineageDirection, DbtLineageOutputFormat
-from sqlbuild.spec.models.source import SourceColumnEntry
+from sqlbuild.spec.contracts.models import SourceColumnEntry
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtColumnLineageErrorTestCase,
     DbtColumnLineageOutputTestCase,
     DbtColumnLineageSelectionTestCase,
+    DbtSourceSchemaInspectionTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
+    EmptyLineageSourceSchemaAdapter,
     FakeLineageSourceSchemaAdapter,
     build_column_lineage_ambiguous_table_manifest_data,
     build_column_lineage_join_manifest_data,
@@ -421,8 +424,8 @@ def test_given_column_lineage_trace_when_formatting_human_output_then_includes_e
 
     assert trace is not None
     outputs: dict[DbtLineageOutputFormat, str] = {
-        DbtLineageOutputFormat.LIST: format_dbt_column_lineage_list(trace, use_color=False),
-        DbtLineageOutputFormat.TREE: format_dbt_column_lineage_tree(trace, use_color=False),
+        DbtLineageOutputFormat.LIST: format_dbt_column_lineage_list(trace=trace, use_color=False),
+        DbtLineageOutputFormat.TREE: format_dbt_column_lineage_tree(trace=trace, use_color=False),
     }
     output: str = outputs[test_case.output_format]
     expected_fragment: str
@@ -462,7 +465,7 @@ def test_given_no_edge_column_trace_when_formatting_tree_then_explains_no_depend
     )
 
     assert trace is not None
-    output: str = format_dbt_column_lineage_tree(trace, use_color=False)
+    output: str = format_dbt_column_lineage_tree(trace=trace, use_color=False)
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in output
@@ -493,7 +496,7 @@ def test_given_star_dbt_sql_when_selecting_column_lineage_then_uses_only_inspect
     test_case: DbtColumnLineageSelectionTestCase,
 ) -> None:
     manifest: DbtManifestIndex = build_dbt_manifest_index(
-        raw_data=build_column_lineage_star_manifest_data(include_source_schema=True)
+        raw_data=build_column_lineage_star_manifest_data()
     )
     project: CompiledProject = build_compiled_project_with_models({})
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
@@ -679,18 +682,24 @@ def test_given_ambiguous_table_only_relation_when_selecting_column_lineage_then_
 @pytest.mark.parametrize(
     "test_case",
     (
-        DbtColumnLineageSelectionTestCase(
+        DbtSourceSchemaInspectionTestCase(
             description="inspects source schema with fallback relation name",
-            target="source.analytics.raw.orders:amount",
-            direction=DbtLineageDirection.UPSTREAM,
-            expected_edges=(),
+            adapter_factory=partial(
+                FakeLineageSourceSchemaAdapter,
+                {
+                    "orders": (
+                        ColumnInfo(name="order_id", type="INTEGER"),
+                        ColumnInfo(name="amount", type="INTEGER"),
+                    )
+                },
+            ),
+            expected_columns=("order_id", "amount"),
             expected_warnings=(),
         ),
-        DbtColumnLineageSelectionTestCase(
+        DbtSourceSchemaInspectionTestCase(
             description="warns when source schema cannot be inspected",
-            target="source.analytics.raw.orders:amount",
-            direction=DbtLineageDirection.UPSTREAM,
-            expected_edges=(),
+            adapter_factory=EmptyLineageSourceSchemaAdapter,
+            expected_columns=(),
             expected_warnings=(
                 "Could not inspect source source.analytics.raw.orders; "
                 "SELECT * lineage from this relation may be incomplete: "
@@ -701,29 +710,17 @@ def test_given_ambiguous_table_only_relation_when_selecting_column_lineage_then_
     ids=lambda case: case.description,
 )
 def test_given_source_schema_inspection_when_describing_sources_then_returns_columns_or_warnings(
-    test_case: DbtColumnLineageSelectionTestCase,
+    test_case: DbtSourceSchemaInspectionTestCase,
 ) -> None:
     manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=build_column_lineage_manifest_data()
     )
-    adapter_by_description: dict[str, FakeLineageSourceSchemaAdapter] = {
-        "inspects source schema with fallback relation name": FakeLineageSourceSchemaAdapter(
-            {
-                "orders": (
-                    ColumnInfo(name="order_id", type="INTEGER"),
-                    ColumnInfo(name="amount", type="INTEGER"),
-                )
-            }
-        ),
-        "warns when source schema cannot be inspected": FakeLineageSourceSchemaAdapter({}),
-    }
-    expected_columns_by_description: dict[str, tuple[str, ...]] = {
-        "inspects source schema with fallback relation name": ("order_id", "amount"),
-        "warns when source schema cannot be inspected": (),
-    }
+    adapter: FakeLineageSourceSchemaAdapter = cast(
+        FakeLineageSourceSchemaAdapter, test_case.adapter_factory()
+    )
 
     result: DbtSourceSchemaInspectionResult = inspect_dbt_source_schemas(
-        adapter=adapter_by_description[test_case.description],
+        adapter=adapter,
         connection_config={},
         manifest=manifest,
         selected_keys=frozenset({dbt_source_graph_key("source.analytics.raw.orders")}),
@@ -735,11 +732,9 @@ def test_given_source_schema_inspection_when_describing_sources_then_returns_col
             column.name
             for column in result.columns_by_unique_id.get("source.analytics.raw.orders", ())
         )
-        == expected_columns_by_description[test_case.description]
+        == test_case.expected_columns
     )
-    assert adapter_by_description[test_case.description].get_all_columns_calls == [
-        ("db", ("raw",), ("orders",))
-    ]
+    assert adapter.get_all_columns_calls == [("db", ("raw",), ("orders",))]
 
 
 @pytest.mark.parametrize(
@@ -760,7 +755,7 @@ def test_given_no_column_lineage_keys_when_inspecting_source_schemas_then_skips_
     manifest: DbtManifestIndex = build_dbt_manifest_index(
         raw_data=build_column_lineage_manifest_data()
     )
-    adapter: FakeLineageSourceSchemaAdapter = FakeLineageSourceSchemaAdapter({})
+    adapter: EmptyLineageSourceSchemaAdapter = EmptyLineageSourceSchemaAdapter()
 
     result: DbtSourceSchemaInspectionResult = inspect_dbt_source_schemas(
         adapter=adapter,

@@ -6,18 +6,18 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.adapter.shared.exceptions import AdapterUserError
-from sqlbuild.adapter.shared.models import (
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
     SchemaDiffResult,
-    StatementRecorder,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.adapter.shared.types import CursorKind, FunctionNullabilityRule
-from sqlbuild.adapters.snowflake.client import SnowflakeAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapter.contract.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
 )
@@ -46,6 +46,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeDescribeCursor,
     FakeSnowflakeMetadataConnection,
     FakeSnowflakeMetadataCursor,
+    describe_equivalent_numeric_relation,
     install_fake_snowflake_connector,
 )
 
@@ -182,7 +183,7 @@ def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bi
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     relations: tuple[Any, ...] = adapter.list_relations(
-        cast(Any, connection),
+        connection=cast(Any, connection),
         database=test_case.database,
         schemas=test_case.schemas,
         names=test_case.names,
@@ -218,7 +219,7 @@ def test_given_lowercase_schema_when_checking_relation_exists_then_uses_sargable
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     exists: bool = adapter.relation_exists(
-        cast(Any, connection),
+        connection=cast(Any, connection),
         database=test_case.database,
         schema=test_case.schemas[0],
         name=test_case.names[0],
@@ -253,7 +254,7 @@ def test_given_lowercase_schema_when_getting_all_columns_then_uppercases_filter_
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-        cast(Any, connection),
+        connection=cast(Any, connection),
         database=test_case.database,
         schemas=test_case.schemas,
         names=test_case.names,
@@ -360,7 +361,9 @@ def test_given_cursor_bounds_when_rendering_then_snowflake_returns_expected_lite
 ) -> None:
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
-    result: str = adapter.render_cursor_bound_literal(test_case.value, test_case.cursor_type)
+    result: str = adapter.render_cursor_bound_literal(
+        value=test_case.value, cursor_type=test_case.cursor_type
+    )
 
     assert result == test_case.expected_literal
 
@@ -442,7 +445,7 @@ def test_given_cross_schema_table_move_when_moving_then_snowflake_uses_native_re
     statement_recorder: StatementRecorder = StatementRecorder()
 
     adapter.move_or_copy_relation(
-        connection,
+        connection=connection,
         origin=test_case.source,
         destination=test_case.target,
         remove_origin=True,
@@ -503,7 +506,7 @@ def test_given_physical_table_when_getting_freshness_metadata_then_returns_last_
     connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
 
     metadata: TableFreshnessMetadata = adapter.get_table_freshness_metadata(
-        connection,
+        connection=connection,
         database="ANALYTICS",
         schema="RAW",
         name="ORDERS",
@@ -557,7 +560,7 @@ def test_given_physical_tables_when_getting_freshness_metadata_then_batches_last
     connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
 
     metadata_by_request: dict[TableFreshnessRequest, TableFreshnessMetadata] = (
-        adapter.get_tables_freshness_metadata(connection, requests=requests)
+        adapter.get_tables_freshness_metadata(connection=connection, requests=requests)
     )
 
     assert (
@@ -604,7 +607,7 @@ def test_given_unsupported_relation_when_getting_freshness_metadata_then_raises_
 
     with pytest.raises(AdapterUserError, match=test_case.expected_error_fragment):
         adapter.get_table_freshness_metadata(
-            connection,
+            connection=connection,
             database="ANALYTICS",
             schema="RAW",
             name="ORDERS",
@@ -703,11 +706,7 @@ def test_given_equivalent_types_when_diffing_schema_then_snowflake_ignores_alias
     monkeypatch.setattr(
         adapter,
         "describe_relation",
-        lambda connection, relation: (
-            (ColumnInfo(name="id", type="NUMBER(38,0)"),)
-            if relation == "left_relation"
-            else (ColumnInfo(name="id", type="DECIMAL(38,0)"),)
-        ),
+        describe_equivalent_numeric_relation,
     )
 
     result: SchemaDiffResult = adapter.diff_schema(
@@ -770,7 +769,7 @@ def test_given_default_seed_csv_settings_when_loading_seed_then_uses_python_csv_
     seed_file.write_text(test_case.csv_text, encoding="utf-8")
 
     adapter.load_seed(
-        connection,
+        connection=connection,
         destination="dev.waffle_types",
         file_path=seed_file,
         columns=(

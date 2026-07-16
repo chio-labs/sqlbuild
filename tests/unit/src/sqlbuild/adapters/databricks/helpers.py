@@ -6,27 +6,29 @@ from typing import Any
 
 
 class FakeDatabricksMetadataCursor:
-    def __init__(
-        self,
-        *,
-        rows: list[tuple[object, ...]] | None = None,
-        execute_error: Exception | None = None,
-    ) -> None:
+    def __init__(self, *, rows: list[tuple[object, ...]] | None = None) -> None:
         self.rows: list[tuple[object, ...]] = rows or []
-        self.execute_error: Exception | None = execute_error
         self.executed_sql: str | None = None
         self.closed: bool = False
 
     def execute(self, sql: str) -> None:
         self.executed_sql = sql
-        if self.execute_error is not None:
-            raise self.execute_error
 
     def fetchall(self) -> list[tuple[object, ...]]:
         return self.rows
 
     def close(self) -> None:
         self.closed = True
+
+
+class FailingDatabricksMetadataCursor(FakeDatabricksMetadataCursor):
+    def __init__(self, *, execute_error: Exception) -> None:
+        super().__init__()
+        self.execute_error = execute_error
+
+    def execute(self, sql: str) -> None:
+        self.executed_sql = sql
+        raise self.execute_error
 
 
 class FakeDatabricksMetadataConnection:

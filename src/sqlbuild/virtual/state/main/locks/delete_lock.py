@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.virtual.state.helpers.runtime import build_state_runtime
+from sqlbuild.virtual.state._helpers.state_runtime.runtime import build_state_runtime
 
 
 def delete_lock(
@@ -23,6 +23,6 @@ def delete_lock(
     )
     connection: Any = backend.connect(config.connection)
     try:
-        backend.delete_lock(connection, schema=config.schema, lock_key=lock_key)
+        backend.delete_lock(connection=connection, schema=config.schema, lock_key=lock_key)
     finally:
         backend.close(connection)

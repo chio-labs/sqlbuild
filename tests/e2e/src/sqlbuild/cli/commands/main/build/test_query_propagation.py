@@ -398,16 +398,18 @@ def test_given_changed_upstream_when_planning_then_downstream_reason_matches_pol
             plan_result.stdout + plan_result.stderr
         )
         payload: dict[str, object] = json.loads(plan_result.stdout)
+        entries_by_name: dict[str, dict[str, object]] = {
+            str(entry["name"]): entry for entry in payload["models"]
+        }
+        assert len(entries_by_name) == len(payload["models"])
         reasons_by_name: dict[str, str] = {
-            str(entry["name"]): str(entry["reason"])
-            for entry in payload["models"]
-            if str(entry["name"]) in test_case.expected_reasons
+            model_name: str(entries_by_name[model_name]["reason"])
+            for model_name in test_case.expected_reasons
         }
         assert reasons_by_name == test_case.expected_reasons
         actions_by_name: dict[str, str] = {
-            str(entry["name"]): str(entry["action"])
-            for entry in payload["models"]
-            if str(entry["name"]) in test_case.expected_actions
+            model_name: str(entries_by_name[model_name]["action"])
+            for model_name in test_case.expected_actions
         }
         assert actions_by_name == test_case.expected_actions
     finally:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 
@@ -37,13 +37,13 @@ def clone_relation_by_names(
     start: float = time.monotonic()
     try:
         adapter.drop(
-            connection,
+            connection=connection,
             destination=destination_relation,
             if_exists=True,
             statement_recorder=recorder,
         )
         adapter.clone(
-            connection,
+            connection=connection,
             origin=origin_relation,
             destination=destination_relation,
             hard_copy=hard_copy,

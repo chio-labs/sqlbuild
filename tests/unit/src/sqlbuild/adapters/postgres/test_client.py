@@ -4,9 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.adapter.shared.models import ColumnInfo, SchemaDiffResult, StatementRecorder
-from sqlbuild.adapters.postgres.client import PostgresAdapter
-from sqlbuild.compiler.compile.models.core import FunctionArgument
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo, SchemaDiffResult
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.compiler.compile.models import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
     PostgresAdapterDefaultsTestCase,
     PostgresDescribeRelationTestCase,
@@ -26,6 +27,7 @@ from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
 from tests.unit.src.sqlbuild.adapters.postgres.helpers import (
     FakePostgresConnection,
     FakePostgresCursor,
+    describe_equivalent_numeric_relation,
 )
 
 
@@ -384,7 +386,7 @@ def test_given_cross_schema_table_move_when_moving_then_postgres_uses_native_mov
     statement_recorder: StatementRecorder = StatementRecorder()
 
     adapter.move_or_copy_relation(
-        connection,
+        connection=connection,
         origin=test_case.source,
         destination=test_case.target,
         remove_origin=True,
@@ -453,7 +455,9 @@ def test_given_relation_when_describing_then_postgres_queries_information_schema
     cursor: FakePostgresCursor = FakePostgresCursor(rows=test_case.cursor_rows)
     connection: FakePostgresConnection = FakePostgresConnection(cursor)
 
-    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(connection, test_case.relation)
+    columns: tuple[ColumnInfo, ...] = adapter.describe_relation(
+        connection=connection, relation=test_case.relation
+    )
 
     assert columns == test_case.expected_columns
     assert len(connection.executed_sql) == 1
@@ -537,7 +541,7 @@ def test_given_seed_csv_when_loading_then_postgres_uses_executemany(
     seed_file.write_text(test_case.csv_text, encoding="utf-8")
 
     adapter.load_seed(
-        connection,
+        connection=connection,
         destination="public.waffle_types",
         file_path=seed_file,
         columns=(
@@ -571,11 +575,7 @@ def test_given_equivalent_types_when_diffing_schema_then_postgres_ignores_alias_
     monkeypatch.setattr(
         adapter,
         "describe_relation",
-        lambda connection, relation: (
-            (ColumnInfo(name="total", type="NUMERIC(10,2)"),)
-            if relation == "left_relation"
-            else (ColumnInfo(name="total", type="numeric(10,2)"),)
-        ),
+        describe_equivalent_numeric_relation,
     )
 
     result: SchemaDiffResult = adapter.diff_schema(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -1560,14 +1561,15 @@ def test_given_multiple_selected_scenarios_when_running_with_retain_then_materia
         db_path=project_dir / "scenario_demo.duckdb"
     )
     assert len(retained_names) == test_case.expected_retained_prefix_count
-    retained_source_names: tuple[str, ...] = tuple(
-        name for name in retained_names if name.endswith("__source__raw_orders")
-    )
+    retained_names_by_suffix: defaultdict[str, list[str]] = defaultdict(list)
+    for name in retained_names:
+        retained_names_by_suffix[name[name.index("__", 2) :]].append(name)
+    retained_source_names: tuple[str, ...] = tuple(retained_names_by_suffix["__source__raw_orders"])
     retained_orders_model_names: tuple[str, ...] = tuple(
-        name for name in retained_names if name.endswith("__model__orders")
+        retained_names_by_suffix["__model__orders"]
     )
     retained_order_totals_names: tuple[str, ...] = tuple(
-        name for name in retained_names if name.endswith("__model__order_totals")
+        retained_names_by_suffix["__model__order_totals"]
     )
 
     assert len(retained_source_names) == 2
@@ -1606,6 +1608,7 @@ def test_given_multiple_selected_scenarios_when_running_with_retain_then_materia
             expected_stderr_fragments=(
                 "error[C453]: Unknown scenario selector 'missing_scenario'",
             ),
+            disabled_setting="sql_analysis",
         )
     ],
     ids=lambda case: case.description,
@@ -1649,6 +1652,7 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
                 "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
                 "scenario replay, snapshot sync, or snapshot refresh.",
             ),
+            disabled_setting="sql_analysis",
         ),
         ScenarioCliE2ETestCase(
             description="local snapshot sync rejects disabled SQL validation",
@@ -1666,6 +1670,7 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
                 "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
                 "scenario replay, snapshot sync, or snapshot refresh.",
             ),
+            disabled_setting="sql_validation",
         ),
     ),
     ids=lambda case: case.description,
@@ -1675,9 +1680,8 @@ def test_given_local_scenario_command_when_sql_validation_disabled_then_fails_cl
     tmp_path: Path,
 ) -> None:
     repo_files: dict[str, str] = build_scenario_project_files()
-    disabled_setting: str = (
-        "sql_analysis" if "sql_analysis" in test_case.description else "sql_validation"
-    )
+    disabled_setting: str | None = test_case.disabled_setting
+    assert disabled_setting is not None
     repo_files["sqlbuild_project.toml"] += f"\n[settings]\n{disabled_setting} = false\n"
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,

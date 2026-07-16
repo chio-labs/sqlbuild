@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import dagster as dg
 import pytest
@@ -19,8 +20,8 @@ from dagster import (
     materialize,
 )
 
-from sqlbuild.cli.commands.helpers.playground.models import PlaygroundCommandRequest
-from sqlbuild.cli.commands.main.commands.playground import run_playground
+from sqlbuild.cli.commands.main.workspace.playground import run_playground
+from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from sqlbuild.integrations.dagster import (
     SqlBuildCliResource,
     SqlBuildProject,
@@ -96,16 +97,12 @@ def test_given_python_nodes_project_when_loading_dagster_assets_then_maps_real_a
         yield
 
     asset_keys: set[tuple[str, ...]] = {tuple(key.path) for key in sqlbuild_python_nodes.keys}
-    task_spec: object = next(
-        spec
-        for spec in sqlbuild_python_nodes.specs
-        if tuple(spec.key.path) == ("task", "prepare_orders")
-    )
-    asset_spec: object = next(
-        spec
-        for spec in sqlbuild_python_nodes.specs
-        if tuple(spec.key.path) == ("asset", "orders_export")
-    )
+    specs_by_key: dict[tuple[str, ...], tuple[Any, ...]] = {
+        tuple(spec.key.path): (spec,) for spec in sqlbuild_python_nodes.specs
+    }
+    assert len(specs_by_key) == len(sqlbuild_python_nodes.specs)
+    task_spec: object = next(iter(specs_by_key.get(("task", "prepare_orders"), ())))
+    asset_spec: object = next(iter(specs_by_key.get(("asset", "orders_export"), ())))
 
     assert sqlbuild_project.dag_path.exists()
     assert set(test_case.expected_asset_keys) <= asset_keys
@@ -695,7 +692,7 @@ def test_given_failing_sqlbuild_audits_when_executing_dagster_then_links_checks_
         project_dir=project_dir,
         sqb_command=[str(sqb_executable)],
     )
-    build_resource.cli(["build"]).wait()
+    build_resource.cli(args=["build"]).wait()
     add_failing_daily_revenue_audits(project_dir=project_dir)
     monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
     sqlbuild_project.prepare_if_dev()

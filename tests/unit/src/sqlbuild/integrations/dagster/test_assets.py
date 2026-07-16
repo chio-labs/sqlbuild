@@ -11,13 +11,13 @@ from sqlbuild.integrations.dagster import (
     sqlbuild_assets,
     sqlbuild_scenario_checks,
 )
-from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
-from sqlbuild.integrations.dagster.helpers.assets import (
+from sqlbuild.integrations.dagster._helpers.assets import (
     build_asset_specs,
     build_check_specs,
     build_scenario_check_specs,
 )
-from sqlbuild.integrations.dagster.project import SqlBuildProject
+from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
+from sqlbuild.integrations.dagster.models import SqlBuildProject
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetCheckFilterTestCase,
     DagsterAssetSpecTestCase,
@@ -79,9 +79,11 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
     asset_specs: tuple[Any, ...] = build_asset_specs(dag=dag, translator=translator)
     check_specs: tuple[Any, ...] = build_check_specs(dag=dag, translator=translator)
     asset_keys: tuple[tuple[str, ...], ...] = tuple(tuple(spec.key.path) for spec in asset_specs)
-    model_spec: Any = next(
-        spec for spec in asset_specs if tuple(spec.key.path) == ("analytics", "orders")
-    )
+    specs_by_key: dict[tuple[str, ...], tuple[Any, ...]] = {
+        tuple(spec.key.path): (spec,) for spec in asset_specs
+    }
+    assert len(specs_by_key) == len(asset_specs)
+    model_spec: Any = next(iter(specs_by_key.get(("analytics", "orders"), ())))
 
     assert asset_keys == test_case.expected_asset_keys
     assert tuple(tuple(dep.asset_key.path) for dep in model_spec.deps) == (
@@ -146,12 +148,12 @@ def test_given_python_augmented_dag_when_building_specs_then_maps_python_nodes(
 
     asset_specs: tuple[Any, ...] = build_asset_specs(dag=dag, translator=translator)
     check_specs: tuple[Any, ...] = build_check_specs(dag=dag, translator=translator)
-    task_spec: Any = next(
-        spec for spec in asset_specs if tuple(spec.key.path) == ("task", "prepare_orders")
-    )
-    python_asset_spec: Any = next(
-        spec for spec in asset_specs if tuple(spec.key.path) == ("asset", "orders_export")
-    )
+    specs_by_key: dict[tuple[str, ...], tuple[Any, ...]] = {
+        tuple(spec.key.path): (spec,) for spec in asset_specs
+    }
+    assert len(specs_by_key) == len(asset_specs)
+    task_spec: Any = next(iter(specs_by_key.get(("task", "prepare_orders"), ())))
+    python_asset_spec: Any = next(iter(specs_by_key.get(("asset", "orders_export"), ())))
 
     assert tuple(tuple(spec.key.path) for spec in asset_specs) == test_case.expected_asset_keys
     assert tuple(spec.name for spec in check_specs) == test_case.expected_check_names

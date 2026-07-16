@@ -4,9 +4,9 @@ from decimal import Decimal
 
 import pytest
 
-from sqlbuild.adapter.shared.models import RowDiffTolerance, RowDiffTolerances
-from sqlbuild.executor.diff.helpers.config import parse_row_diff_tolerances
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.adapter.contract.models import RowDiffTolerance, RowDiffTolerances
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.diff._helpers.config import parse_row_diff_tolerances
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     ParseRowDiffTolerancesErrorTestCase,
     ParseRowDiffTolerancesTestCase,
@@ -56,7 +56,7 @@ from tests.unit.src.sqlbuild.executor.diff._test_types import (
 def test_given_raw_row_diff_tolerances_when_parsing_then_returns_typed_tolerances(
     test_case: ParseRowDiffTolerancesTestCase,
 ) -> None:
-    result: RowDiffTolerances = parse_row_diff_tolerances(test_case.raw)
+    result: RowDiffTolerances = parse_row_diff_tolerances(raw=test_case.raw)
 
     assert result == test_case.expected_result
 
@@ -95,6 +95,6 @@ def test_given_invalid_row_diff_tolerances_when_parsing_then_raises_clear_error(
     test_case: ParseRowDiffTolerancesErrorTestCase,
 ) -> None:
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment) as error_info:
-        parse_row_diff_tolerances(test_case.raw)
+        parse_row_diff_tolerances(raw=test_case.raw)
 
     assert error_info.value.code == test_case.expected_code

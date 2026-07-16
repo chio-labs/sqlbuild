@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.auditing.main.render import render_audit_sql
-from sqlbuild.compiler.compile.models.core import CompiledRelationLocation
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     RenderAuditSqlTestCase,
 )
@@ -129,7 +129,7 @@ def test_given_unresolved_sql_when_rendering_then_returns_expected(
         seed_locations=seed_locations,
         source_map=source_map,
         adapter=build_render_adapter(test_case.adapter_name),
-        relation_overrides=test_case.relation_overrides if test_case.relation_overrides else None,
+        relation_overrides=test_case.relation_overrides,
     )
 
     assert test_case.expected_sql_fragment in result

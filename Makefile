@@ -76,7 +76,7 @@ test-virtual:
 skills:
 	uv run python scripts/generate_docs_skill.py
 	uv run sqb skills update --global --target opencode
-	uv run python -m scripts.skills.update_structure_skill
+	uv run strata skills
 
 
 DBT_EXECUTABLE ?= dbt
@@ -246,8 +246,8 @@ check-test-conventions:
 	uv run check-test-conventions tests
 
 
-check-structure-conventions:
-	uv run check-structure-conventions src/sqlbuild scripts
+check-strata:
+	uv run strata check
 
 
 check-type-annotation-conventions:
@@ -258,9 +258,9 @@ check:
 	uv run ruff format .
 	uv run ruff check --fix .
 	uv run ty check src tests
-	uv run pytest tests/unit/src/sqlbuild/adapter/strict/test_strict_adapter.py -q
+	uv run pytest tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py -q
 	uv run check-test-conventions tests
-	uv run check-structure-conventions src/sqlbuild scripts
+	uv run strata check
 	uv run check-type-annotation-conventions src tests
 
 
@@ -287,7 +287,7 @@ verify-pg:
 		run_verify_step "tests" env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration tests/e2e -m "((not real_warehouse and not dbt) or (dbt and not real_warehouse) or (real_warehouse and postgres)) and not performance" -vv --color=yes -n auto --dist loadfile; \
 		run_verify_step "performance tests" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
 		run_verify_step "test conventions" uv run check-test-conventions tests; \
-		run_verify_step "structure conventions" uv run check-structure-conventions src/sqlbuild scripts; \
+		run_verify_step "strata" uv run strata check; \
 		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
@@ -331,7 +331,7 @@ verify:
 		run_verify_step "tests" env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration tests/e2e -m "((not real_warehouse and not dbt) or (dbt and not real_warehouse)) and not performance" -vv --color=yes -n auto --dist loadfile; \
 		run_verify_step "performance tests" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
 		run_verify_step "test conventions" uv run check-test-conventions tests; \
-		run_verify_step "structure conventions" uv run check-structure-conventions src/sqlbuild scripts; \
+		run_verify_step "strata" uv run strata check; \
 		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
@@ -362,7 +362,7 @@ verify-quick:
 		run_verify_step "type check" uv run ty check src tests; \
 		run_verify_step "tests" env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration -m "((not real_warehouse and not dbt) or (dbt and not real_warehouse)) and not performance" -vv --color=yes -n auto --dist loadfile; \
 		run_verify_step "test conventions" uv run check-test-conventions tests; \
-		run_verify_step "structure conventions" uv run check-structure-conventions src/sqlbuild scripts; \
+		run_verify_step "strata" uv run strata check; \
 		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
@@ -375,9 +375,9 @@ check-ci:
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
-	uv run pytest tests/unit/src/sqlbuild/adapter/strict/test_strict_adapter.py -q
+	uv run pytest tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py -q
 	uv run check-test-conventions tests
-	uv run check-structure-conventions src/sqlbuild scripts
+	uv run strata check
 	uv run check-type-annotation-conventions src tests
 
 
@@ -389,5 +389,5 @@ verify-ci:
 	uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv -n auto --dist loadfile
 	uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv
 	uv run check-test-conventions tests
-	uv run check-structure-conventions src/sqlbuild scripts
+	uv run strata check
 	uv run check-type-annotation-conventions src tests

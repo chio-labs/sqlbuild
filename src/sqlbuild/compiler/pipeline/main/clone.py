@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.helpers.clone import prepare_clone_pipeline
+from sqlbuild.compiler.pipeline._helpers.clone import prepare_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
 def run_clone_pipeline(

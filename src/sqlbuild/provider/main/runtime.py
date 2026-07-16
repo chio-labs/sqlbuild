@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild.provider._helpers.injection import call_with_provider_injection
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
-from sqlbuild.provider.helpers.injection import call_with_provider_injection
 
 
 def invoke_with_providers(

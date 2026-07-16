@@ -5,25 +5,29 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.helpers.graph import build_static_all_keys
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.shared.helpers.lineage_graph import (
+from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
+)
+from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.shared.helpers.selector_indexes import (
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
+from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.main.selection.build_model_path_index import (
     build_model_path_index,
+)
+from sqlbuild.compiler.planner.main.selection.build_model_tag_index import (
     build_model_tag_index,
 )
-from sqlbuild.shared.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
 def build_project_graph(

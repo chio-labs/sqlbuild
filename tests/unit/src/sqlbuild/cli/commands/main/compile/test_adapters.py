@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.shared.exceptions import CliUserError
-from sqlbuild.cli.commands.shared.helpers.config.adapters import resolve_adapter
-from sqlbuild.spec.models.project import LocalConfig, ProjectConfig, resolve_effective_adapter_name
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     ResolveAdapterErrorTestCase,
     ResolveAdapterTestCase,
@@ -37,7 +40,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
 def test_given_adapter_name_when_resolving_adapter_then_returns_expected_adapter(
     test_case: ResolveAdapterTestCase,
 ) -> None:
-    adapter: BaseAdapter = resolve_adapter(test_case.adapter_name)
+    adapter: BaseAdapter = resolve_adapter(adapter_name=test_case.adapter_name)
 
     assert adapter.__class__.__name__ == test_case.expected_adapter_class_name
 
@@ -57,7 +60,7 @@ def test_given_unknown_adapter_when_resolving_adapter_then_raises_cli_user_error
     test_case: ResolveAdapterErrorTestCase,
 ) -> None:
     with pytest.raises(CliUserError) as error_info:
-        resolve_adapter(test_case.adapter_name)
+        resolve_adapter(adapter_name=test_case.adapter_name)
 
     assert error_info.value.code == "C601"
     assert test_case.expected_error_fragment in str(error_info.value)

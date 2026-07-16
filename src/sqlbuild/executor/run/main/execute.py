@@ -4,49 +4,52 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import ColumnInfo, StatementRecorder
-from sqlbuild.adapter.shared.types import TablePromotionMode
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import RelationReuseKind
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.helpers.execution.final_audits import run_final_model_audits
-from sqlbuild.executor.run.helpers.execution.hook_phases import run_post_hook_phase
-from sqlbuild.executor.run.helpers.execution.hooks import execute_hooks, render_hooks
-from sqlbuild.executor.run.helpers.execution.promotion import promote_relation_to_destination
-from sqlbuild.executor.run.helpers.execution.results import (
+from sqlbuild.executor.run._helpers.execution.final_audits import run_final_model_audits
+from sqlbuild.executor.run._helpers.execution.hook_phases import run_post_hook_phase
+from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run._helpers.execution.promotion import promote_relation_to_destination
+from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
-from sqlbuild.executor.run.helpers.execution.staging import create_staging_relation
-from sqlbuild.executor.run.helpers.execution.table_targets import resolve_table_targets
-from sqlbuild.executor.run.helpers.materializations.custom import (
+from sqlbuild.executor.run._helpers.execution.staging import create_staging_relation
+from sqlbuild.executor.run._helpers.execution.table_targets import resolve_table_targets
+from sqlbuild.executor.run._helpers.materializations.custom import (
     execute_custom_entry as execute_custom_entry,
 )
-from sqlbuild.executor.run.helpers.materializations.incremental import (
+from sqlbuild.executor.run._helpers.materializations.incremental import (
     execute_incremental_entry as execute_incremental_entry,
 )
-from sqlbuild.executor.run.helpers.materializations.microbatch import (
+from sqlbuild.executor.run._helpers.materializations.microbatch import (
     execute_microbatch_entry as execute_microbatch_entry,
 )
-from sqlbuild.executor.run.helpers.materializations.snapshot import (
+from sqlbuild.executor.run._helpers.materializations.snapshot import (
     execute_snapshot_entry as execute_snapshot_entry,
 )
-from sqlbuild.executor.run.helpers.materializations.view import (
+from sqlbuild.executor.run._helpers.materializations.view import (
     execute_view_entry as execute_view_entry,
 )
-from sqlbuild.executor.run.helpers.reuse.core import (
+from sqlbuild.executor.run._helpers.reuse.core import (
     create_relation_from_reuse_plan,
 )
-from sqlbuild.executor.run.helpers.reuse.fingerprinting import try_write_fingerprint
-from sqlbuild.executor.run.helpers.validation.contracts import validate_runtime_contract
-from sqlbuild.executor.run.helpers.validation.cursor_bounds import (
+from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
+from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
+from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     has_model_backed_cursor_inputs,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
 )
-from sqlbuild.executor.run.helpers.validation.type_enforcement import enforce_types_staged
+from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import (
     FinalAuditRun,
     HookExecutionResult,
@@ -58,10 +61,8 @@ from sqlbuild.executor.run.models import (
     TableLifecycleState,
     TableTargets,
 )
-from sqlbuild.executor.run.types import HookPhase
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
-from sqlbuild.executor.shared.types import ExecutionPhase, ExecutionStatus
-from sqlbuild.shared.helpers.diagnostics.logging import diagnostics_context
+from sqlbuild.executor.run.types import ExecutionPhase, HookPhase
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_table_entry(
@@ -133,7 +134,7 @@ def execute_table_entry(
 
     try:
         adapter.ensure_schema(
-            connection,
+            connection=connection,
             database=targets.target_database,
             schema=targets.target_schema,
             statement_recorder=statement_recorder,
@@ -289,7 +290,7 @@ def _staged_lifecycle(
             sqlbuild_phase="contract", sqlbuild_action_name="validate_staging"
         ):
             staging_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                connection,
+                connection=connection,
                 database=targets.target_database,
                 schema=targets.target_schema,
                 name=targets.staging_table,
@@ -441,7 +442,7 @@ def _direct_lifecycle(
                 and entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
             ):
                 adapter.drop(
-                    connection,
+                    connection=connection,
                     destination=target_qualified,
                     if_exists=True,
                     statement_recorder=statement_recorder,
@@ -457,7 +458,7 @@ def _direct_lifecycle(
                 )
             else:
                 adapter.create_table_as(
-                    connection,
+                    connection=connection,
                     destination=target_qualified,
                     sql=state.resolved_sql,
                     statement_recorder=statement_recorder,

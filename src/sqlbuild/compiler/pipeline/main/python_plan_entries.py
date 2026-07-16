@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.pipeline.helpers.python_plan_entries import (
+from sqlbuild.compiler.pipeline._helpers.python_plan_entries import (
     build_python_plan_entries as _build_python_plan_entries,
 )
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry

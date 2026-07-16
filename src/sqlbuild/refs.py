@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from sqlbuild.shared.models import SqlResourceRef
-from sqlbuild.shared.types import SqlResourceRefKind
+from sqlbuild.python_nodes.main.build_model_ref import build_model_ref
+from sqlbuild.python_nodes.main.build_source_ref import build_source_ref
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind as SqlResourceRefKind
 
 
 def model(name: str) -> SqlResourceRef:
     """Return a typed dependency reference to a SQLBuild model."""
 
-    return SqlResourceRef(kind=SqlResourceRefKind.MODEL, name=name)
+    return build_model_ref(name)
 
 
 def source(name: str) -> SqlResourceRef:
     """Return a typed dependency reference to a SQLBuild source."""
 
-    return SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=name)
+    return build_source_ref(name)

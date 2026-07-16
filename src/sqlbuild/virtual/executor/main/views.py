@@ -6,11 +6,14 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.compiler.compile.models.core import CompiledProject, CompiledRelationLocation
-from sqlbuild.shared.helpers.identity.naming import resolve_relation_location_qualified_name
-from sqlbuild.virtual.executor.helpers.rewrite import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
+    resolve_relation_location_qualified_name,
+)
+from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
+from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
+from sqlbuild.virtual.executor._helpers.rewrite import (
     build_destination_from_physical_relation,
     build_virtual_destination,
 )
@@ -28,8 +31,8 @@ def refresh_logical_vde_views(
     physical_relations: dict[str, PhysicalRelationRecord],
     seed_physical_relations: dict[str, PhysicalRelationRecord] | None = None,
     on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: Callable[[int, float], None] | None = None,
-    on_connection_error: Callable[[int, float], None] | None = None,
+    on_connection_complete: ConnectionElapsedCallback | None = None,
+    on_connection_error: ConnectionElapsedCallback | None = None,
 ) -> None:
     """Create or replace logical VDE views from tracked physical relations."""
 
@@ -41,10 +44,10 @@ def refresh_logical_vde_views(
         connection = adapter.connect(connection_config)
     except Exception:
         if on_connection_error is not None:
-            on_connection_error(1, time.perf_counter() - started_at)
+            on_connection_error(1, elapsed_seconds=time.perf_counter() - started_at)
         raise
     if on_connection_complete is not None:
-        on_connection_complete(1, time.perf_counter() - started_at)
+        on_connection_complete(1, elapsed_seconds=time.perf_counter() - started_at)
     recorder: StatementRecorder = StatementRecorder()
     try:
         seed_relation_map: dict[str, PhysicalRelationRecord] = seed_physical_relations or {}
@@ -66,13 +69,13 @@ def refresh_logical_vde_views(
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=virtual_target.database,
                 schema=virtual_target.schema,
                 statement_recorder=recorder,
             )
             adapter.create_view_as(
-                connection,
+                connection=connection,
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),
@@ -100,13 +103,13 @@ def refresh_logical_vde_views(
                 unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
             )
             adapter.ensure_schema(
-                connection,
+                connection=connection,
                 database=virtual_target.database,
                 schema=virtual_target.schema,
                 statement_recorder=recorder,
             )
             adapter.create_view_as(
-                connection,
+                connection=connection,
                 destination=resolve_relation_location_qualified_name(
                     adapter=adapter, location=virtual_target
                 ),

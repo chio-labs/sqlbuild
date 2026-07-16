@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.adapters.sqlserver.client import SqlServerAdapter
-from sqlbuild.compiler.compile.models.core import FunctionArgument
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.compiler.compile.models import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerAdapterDefaultsTestCase,
     SqlServerIndexSqlTestCase,
@@ -546,7 +546,7 @@ def test_given_cross_schema_table_move_when_moving_then_sqlserver_uses_native_tr
     statement_recorder: StatementRecorder = StatementRecorder()
 
     adapter.move_or_copy_relation(
-        connection,
+        connection=connection,
         origin=test_case.source,
         destination=test_case.target,
         remove_origin=True,

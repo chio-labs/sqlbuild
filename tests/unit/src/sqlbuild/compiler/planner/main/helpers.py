@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import (
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -15,13 +15,14 @@ from sqlbuild.compiler.compile.models.core import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.helpers.graph.scope import build_planner_scope
-from sqlbuild.compiler.planner.helpers.identity.standard import (
+from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
+from sqlbuild.compiler.planner._helpers.identity.standard import (
     build_standard_model_version_identities,
 )
-from sqlbuild.compiler.planner.main.planning.execution import build_execution_plan
+from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,
@@ -30,7 +31,6 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     StandardModelVersionIdentities,
 )
-from sqlbuild.shared.helpers.identity.hashing import compute_query_hash
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
 
 
@@ -61,7 +61,7 @@ def build_standard_pruning_project(
 def write_standard_model_state(
     *, adapter: DuckDbAdapter, connection: object, project: CompiledProject
 ) -> StandardModelVersionIdentities:
-    adapter.execute(connection, "CREATE SCHEMA IF NOT EXISTS staging")
+    adapter.execute(connection=connection, sql="CREATE SCHEMA IF NOT EXISTS staging")
     identities: StandardModelVersionIdentities = build_standard_model_version_identities(
         functions=project.functions,
         seeds=project.seeds,
@@ -75,8 +75,8 @@ def write_standard_model_state(
     model: CompiledModel
     for model in project.models:
         adapter.execute(
-            connection,
-            f"CREATE OR REPLACE TABLE staging.{model.name} AS SELECT 1 AS id",
+            connection=connection,
+            sql=f"CREATE OR REPLACE TABLE staging.{model.name} AS SELECT 1 AS id",
         )
         write_fingerprint(
             connection=connection,
@@ -104,7 +104,8 @@ def write_standard_model_state(
 
 
 def model_definition_hash(project: CompiledProject, name: str) -> str:
-    model: CompiledModel = next(model for model in project.models if model.name == name)
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    model: CompiledModel = models_by_name[name]
     return compute_query_hash(model.query_sql)
 
 
@@ -158,7 +159,7 @@ def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
 
     def grouped(model: type) -> dict[str, Any]:
         names: frozenset[str] = frozenset(field.name for field in fields(model))
-        return {name: kwargs.pop(name) for name in list(kwargs) if name in names}
+        return {name: kwargs.pop(name) for name in names & kwargs.keys()}
 
     selection: PlannerSelection = PlannerSelection(**grouped(PlannerSelection))
     overrides: PlannerOverrides = PlannerOverrides(**grouped(PlannerOverrides))

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.virtual.shared.helpers.encoding import decode_state_text
+from sqlbuild.virtual.state.main.encoding.decode_state_text import decode_state_text
 from sqlbuild.virtual.state.models import (
     PythonNodeVersionRecord,
     VirtualEnvironmentPythonNodeRefRecord,
@@ -25,7 +25,7 @@ def read_virtual_python_identity_fingerprints(
     result: dict[tuple[str, str], Fingerprint] = {}
     refs: tuple[VirtualEnvironmentPythonNodeRefRecord, ...] = (
         backend.get_virtual_environment_python_node_refs(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             virtual_environment_name=virtual_environment_name,
         )
@@ -33,7 +33,7 @@ def read_virtual_python_identity_fingerprints(
     ref: VirtualEnvironmentPythonNodeRefRecord
     for ref in refs:
         record: PythonNodeVersionRecord | None = backend.get_python_node_version(
-            state_connection,
+            connection=state_connection,
             schema=schema,
             node_type=ref.node_type,
             node_name=ref.node_name,

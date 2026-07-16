@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.executor.load.helpers.scheduling import (
+from sqlbuild.executor.load._helpers.execution import build_load_execution_indexes
+from sqlbuild.executor.load._helpers.scheduling import (
     open_load_connections,
     run_external_source_loads,
     run_load_dag,
@@ -19,8 +20,7 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
-from sqlbuild.executor.shared.helpers.load_execution import build_load_execution_indexes
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def run_load_pipeline(

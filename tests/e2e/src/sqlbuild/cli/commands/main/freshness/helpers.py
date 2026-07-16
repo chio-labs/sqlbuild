@@ -33,13 +33,19 @@ def prepare_freshness_project(
             'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
         ),
     }
-    if include_managed_source:
-        repo_files["loaders/raw.py"] = (
-            "from sqlbuild.loaders import loader\n\n"
-            "@loader\n"
-            "def raw_managed(ctx):\n"
-            "    return [{'event_id': 5}]\n"
-        )
+    repo_files.update(
+        {
+            False: {},
+            True: {
+                "loaders/raw.py": (
+                    "from sqlbuild.loaders import loader\n\n"
+                    "@loader\n"
+                    "def raw_managed(ctx):\n"
+                    "    return [{'event_id': 5}]\n"
+                )
+            },
+        }[include_managed_source]
+    )
     return prepare_inline_project(
         tmp_path=tmp_path,
         project_name="freshness_command",
@@ -126,27 +132,29 @@ def freshness_sources_yml(
         "      type: integer\n"
         f"      query: {raw_orders_query}\n"
     )
-    error_source: str = (
-        "  - name: raw_error\n"
-        "    expression: SELECT 3 AS order_id\n"
-        "    freshness:\n"
-        "      strategy: sql\n"
-        "      type: integer\n"
-        "      query: SELECT missing_column AS data_version\n"
-        if include_error_source
-        else ""
-    )
-    managed_source: str = (
-        "  - name: raw_managed\n"
-        "    managed: true\n"
-        "    expression: SELECT 5 AS event_id\n"
-        "    freshness:\n"
-        "      strategy: sql\n"
-        "      type: integer\n"
-        "      query: SELECT 5 AS data_version\n"
-        if include_managed_source
-        else ""
-    )
+    error_source: str = {
+        False: "",
+        True: (
+            "  - name: raw_error\n"
+            "    expression: SELECT 3 AS order_id\n"
+            "    freshness:\n"
+            "      strategy: sql\n"
+            "      type: integer\n"
+            "      query: SELECT missing_column AS data_version\n"
+        ),
+    }[include_error_source]
+    managed_source: str = {
+        False: "",
+        True: (
+            "  - name: raw_managed\n"
+            "    managed: true\n"
+            "    expression: SELECT 5 AS event_id\n"
+            "    freshness:\n"
+            "      strategy: sql\n"
+            "      type: integer\n"
+            "      query: SELECT 5 AS data_version\n"
+        ),
+    }[include_managed_source]
     return (
         "sources:\n"
         "  - name: raw_orders\n"

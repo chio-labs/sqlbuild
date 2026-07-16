@@ -1,7 +1,58 @@
 """Public decorator API for SQLBuild assets."""
 
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.python_nodes.models import AssetContext
-from sqlbuild.python_nodes.decorators.helpers.assets import asset, get_asset_definition
+from sqlbuild.python_nodes.main.apply_asset import apply_asset
+from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
+from sqlbuild.python_nodes.models import (
+    AssetDefinition,
+    ColumnLineageRef,
+    RetryPolicy,
+    SqlResourceRef,
+)
+from sqlbuild.python_nodes.types import ColumnLineageRefSpec, PythonNodeColumnSpec
+from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 __all__ = ("AssetContext", "SkipMode", "asset", "get_asset_definition")
+
+
+def asset(
+    function: Callable[..., object] | None = None,
+    *,
+    name: str | None = None,
+    depends_on: Callable[..., object]
+    | SqlResourceRef
+    | tuple[Callable[..., object] | SqlResourceRef, ...]
+    | list[Callable[..., object] | SqlResourceRef] = (),
+    tags: Sequence[str] = (),
+    group: str | None = None,
+    description: str | None = None,
+    meta: dict[str, object] | None = None,
+    columns: Sequence[PythonNodeColumnSpec | SourceColumnEntry] = (),
+    column_lineage: Mapping[str, Sequence[ColumnLineageRefSpec | ColumnLineageRef]] | None = None,
+    retry: RetryPolicy | None = None,
+) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
+    """Mark a Python function as a SQLBuild asset."""
+
+    return apply_asset(
+        function=function,
+        name=name,
+        depends_on=depends_on,
+        tags=tags,
+        group=group,
+        description=description,
+        meta=meta,
+        columns=columns,
+        column_lineage=column_lineage,
+        retry=retry,
+    )
+
+
+def get_asset_definition(function: Callable[..., object]) -> AssetDefinition | None:
+    """Return SQLBuild asset metadata from a decorated function, if present."""
+
+    return read_asset_definition(function)

@@ -49,6 +49,3 @@ class DltProgressEvent:
     inc_total: int | None
     message: str | None
     label: str | None
-
-
-from sqlbuild.integrations.dlt.helpers.progress_counter import DltProgressCounter  # noqa: E402,F401

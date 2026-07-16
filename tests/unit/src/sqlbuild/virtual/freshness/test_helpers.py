@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import TableFreshnessMetadata
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapter.contract.models import TableFreshnessMetadata
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.main.normalization import (
@@ -17,10 +17,10 @@ from sqlbuild.compiler.source_freshness.main.observation import (
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
-from sqlbuild.virtual.freshness.helpers.state import (
+from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.virtual.freshness._helpers.state import (
     source_freshness_record_from_observation,
 )
 from sqlbuild.virtual.freshness.main.runtime_observation import (
@@ -95,7 +95,7 @@ class UnsupportedFreshnessMetadataDuckDbAdapter(DuckDbAdapter):
             table="raw_orders",
             strategy="column",
             column="updated_at",
-            value_kind="integer",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_data_version=3,
         ),
         SourceFreshnessObservationTestCase(
@@ -120,7 +120,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
     try:
         statement: str
         for statement in test_case.setup_sql:
-            adapter.execute(connection, statement)
+            adapter.execute(connection=connection, sql=statement)
         observation: SourceFreshnessObservation = observe_configured_source_freshness(
             adapter=adapter,
             connection=connection,
@@ -155,7 +155,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
             table=None,
             strategy="sql",
             query="SELECT 1 AS left_value, 2 AS right_value",
-            value_kind="integer",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_error_fragment="must return exactly one column",
         ),
         SourceFreshnessObservationErrorTestCase(
@@ -165,7 +165,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
             table=None,
             strategy="sql",
             query="SELECT 1 AS data_version WHERE FALSE",
-            value_kind="integer",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_error_fragment="must return exactly one row",
         ),
         SourceFreshnessObservationErrorTestCase(
@@ -175,7 +175,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
             table=None,
             strategy="sql",
             query="SELECT NULL AS data_version",
-            value_kind="integer",
+            value_kind=SourceFreshnessValueKind.INTEGER,
             expected_error_fragment="data_version cannot be null",
         ),
         SourceFreshnessObservationErrorTestCase(
@@ -198,17 +198,13 @@ def test_given_invalid_source_freshness_result_when_observing_then_raises_clear_
     try:
         statement: str
         for statement in test_case.setup_sql:
-            adapter.execute(connection, statement)
+            adapter.execute(connection=connection, sql=statement)
         source: SourceEntry = SourceEntry(
             name=test_case.source_name,
             table=test_case.table,
             freshness=SourceFreshnessConfig(
                 strategy=SourceFreshnessStrategy(test_case.strategy),
-                value_kind=(
-                    None
-                    if test_case.value_kind is None
-                    else SourceFreshnessValueKind(test_case.value_kind)
-                ),
+                value_kind=test_case.value_kind,
                 column=test_case.column,
                 query=test_case.query,
             ),
@@ -317,11 +313,11 @@ def test_given_source_freshness_observation_when_building_state_record_then_hash
     )
 
     record: SourceFreshnessRecord = source_freshness_record_from_observation(
-        observation,
+        observation=observation,
         virtual_environment_name="dev",
     )
     record_with_later_observed_at: SourceFreshnessRecord = source_freshness_record_from_observation(
-        SourceFreshnessObservation(
+        observation=SourceFreshnessObservation(
             source_name=test_case.source_name,
             strategy=SourceFreshnessStrategy(test_case.strategy),
             data_version=test_case.data_version,
@@ -399,8 +395,8 @@ def test_given_unmanaged_sources_when_observing_runtime_freshness_then_applies_p
     adapter: FreshnessMetadataDuckDbAdapter = FreshnessMetadataDuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        adapter.execute(connection, "CREATE TABLE raw_orders (batch_id INTEGER)")
-        adapter.execute(connection, "INSERT INTO raw_orders VALUES (7)")
+        adapter.execute(connection=connection, sql="CREATE TABLE raw_orders (batch_id INTEGER)")
+        adapter.execute(connection=connection, sql="INSERT INTO raw_orders VALUES (7)")
 
         result: SourceFreshnessRuntimeResult = observe_virtual_environment_source_freshness(
             adapter=adapter,

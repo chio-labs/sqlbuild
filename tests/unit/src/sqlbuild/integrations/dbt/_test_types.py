@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
     DbtInteropParsedArgs,
     DbtLsNode,
+    DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtLineageDirection,
@@ -16,7 +21,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanAction,
     DbtModelPlanReason,
 )
-from sqlbuild.spec.models.project import DbtConfig, LocalDbtConfig
+from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
 
 @dataclass(frozen=True)
@@ -416,7 +421,7 @@ class DbtLineageArgsErrorTestCase:
 @dataclass(frozen=True)
 class DbtLineageOutputTestCase:
     description: str
-    output_format: DbtLineageOutputFormat
+    formatter: Callable[..., str]
     expected_fragments: tuple[str, ...]
 
 
@@ -440,6 +445,14 @@ class DbtColumnLineageSelectionTestCase:
     expected_transforms: tuple[str, ...] = ()
     expected_confidences: tuple[str, ...] = ()
     expected_is_column_target: bool = True
+
+
+@dataclass(frozen=True)
+class DbtSourceSchemaInspectionTestCase:
+    description: str
+    adapter_factory: Callable[[], BaseAdapter]
+    expected_columns: tuple[str, ...]
+    expected_warnings: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -558,6 +571,8 @@ class DbtPlanHumanFormatterTestCase:
     expected_human_fragments: tuple[str, ...]
     expected_human_regex_fragments: tuple[str, ...]
     expected_absent_fragments: tuple[str, ...]
+    sqlbuild_command_argvs: tuple[tuple[str, ...], ...] = ()
+    sqlbuild_plan_output: PlanOutput | None = None
 
 
 @dataclass(frozen=True)
@@ -732,9 +747,9 @@ class DbtSqlTestTargetTestCase:
     expected_target_names: tuple[str, ...]
     expected_model_names: tuple[str, ...]
     expected_query_fragments: tuple[str, ...]
+    manifest_factory: Callable[[], DbtManifestIndex]
     expected_adapted_model_names: tuple[str, ...] | None = None
     expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
-    manifest_kind: str = "default"
     sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
     mock_model_names: tuple[str, ...] = field(default_factory=tuple)
 
@@ -754,21 +769,21 @@ class DbtSqlTestMultipleBoundaryTestCase:
 @dataclass(frozen=True)
 class DbtSqlTestTargetErrorTestCase:
     description: str
-    manifest_kind: str
+    manifest_factory: Callable[[], DbtManifestIndex]
+    project_factory: Callable[[], CompiledProject]
     expected_model_names: tuple[str, ...]
     target_names: tuple[str, ...]
     expected_error_fragment: str
-    project_kind: str = "default"
 
 
 @dataclass(frozen=True)
 class DbtSqlTestFixtureNameTestCase:
     description: str
-    fixture_kind: str
+    manifest_factory: Callable[[], DbtManifestIndex]
+    fixture_resolver: Callable[[DbtManifestIndex, set[str]], set[str]]
     known_names: set[str]
     expected_names: set[str]
     expected_error_fragment: str | None = None
-    manifest_kind: str = "source_dependency"
 
 
 @dataclass(frozen=True)

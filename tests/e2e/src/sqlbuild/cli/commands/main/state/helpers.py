@@ -24,7 +24,7 @@ def build_postgres_state_project_toml(
     state_config: dict[str, object] | None = None,
 ) -> str:
     allow_reset_value: str = str(allow_reset).lower()
-    effective_state_config: dict[str, object] = config if state_config is None else state_config
+    effective_state_config: dict[str, object] = state_config or config
     return (
         f'name = "{project_name}"\n'
         'adapter = "postgres"\n'

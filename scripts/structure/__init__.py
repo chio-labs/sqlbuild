@@ -1,1 +1,0 @@
-"""Structure script package."""

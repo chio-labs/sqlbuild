@@ -2,25 +2,41 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.helpers.builtins import builtin_adapter_classes
+from collections.abc import Callable
+from types import MappingProxyType
+from typing import cast
+
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.spec.models.source import SourceEntry
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_render_adapter(adapter_name: str | None) -> BaseAdapter | None:
     """Build an optional adapter for audit render tests."""
 
-    if adapter_name is None:
-        return None
-    return builtin_adapter_classes()[adapter_name]()
+    return _RENDER_ADAPTER_BUILDERS[adapter_name is None](adapter_name)
+
+
+def _build_named_render_adapter(adapter_name: str | None) -> BaseAdapter | None:
+    return builtin_adapter_classes()[cast(str, adapter_name)]()
+
+
+def _build_no_render_adapter(adapter_name: str | None) -> BaseAdapter | None:
+    del adapter_name
+    return None
+
+
+_RENDER_ADAPTER_BUILDERS: MappingProxyType[bool, Callable[[str | None], BaseAdapter | None]] = (
+    MappingProxyType({False: _build_named_render_adapter, True: _build_no_render_adapter})
+)
 
 
 def build_render_model_locations(

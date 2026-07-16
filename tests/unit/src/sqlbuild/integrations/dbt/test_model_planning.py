@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from collections import defaultdict
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledProject
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_DBT
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
@@ -18,14 +19,20 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
 )
-from sqlbuild.integrations.dbt.helpers.cli.runner import DbtRunner
-from sqlbuild.integrations.dbt.helpers.graph.core import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.helpers.manifest.fingerprinting import try_write_dbt_node_fingerprint
-from sqlbuild.integrations.dbt.helpers.planning.model_planning import (
+from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
+from sqlbuild.integrations.dbt._helpers.manifest.fingerprinting import (
+    try_write_dbt_node_fingerprint,
+)
+from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
+    build_dbt_execution_outcome,
+    build_merged_dbt_execution_argv,
+    execute_dbt_commands,
+)
+from sqlbuild.integrations.dbt._helpers.planning.model_planning import (
     build_dbt_model_planning_result,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex, DbtManifestSeed
+from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
@@ -36,14 +43,11 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsNode,
+    DbtManifestIndex,
+    DbtManifestSeed,
     DbtModelPlanEntry,
     DbtModelPlanningResult,
     DbtNodeExecutionResult,
-)
-from sqlbuild.integrations.dbt.pipeline.helpers.execute import (
-    build_dbt_execution_outcome,
-    build_merged_dbt_execution_argv,
-    execute_dbt_commands,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
@@ -232,8 +236,12 @@ def test_given_dbt_model_closure_when_planning_then_prefetches_relation_existenc
     )
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
     try:
-        adapter.execute(connection, "CREATE TABLE main.base_orders AS SELECT 1 AS id")
-        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.base_orders AS SELECT 1 AS id"
+        )
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id"
+        )
         for unique_id in test_case.expected_reasons_by_unique_id:
             write_dbt_test_fingerprint(
                 adapter=adapter,
@@ -325,9 +333,13 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
     )
     seed_name: str
     try:
-        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id"
+        )
         for seed_name in test_case.existing_seed_names:
-            adapter.execute(connection, f"CREATE TABLE main.{seed_name} AS SELECT 1 AS id")
+            adapter.execute(
+                connection=connection, sql=f"CREATE TABLE main.{seed_name} AS SELECT 1 AS id"
+            )
         for seed_name in test_case.seed_names:
             seed: DbtManifestSeed = manifest.seeds_by_unique_id[f"seed.analytics.{seed_name}"]
             assert seed.identity_hash is not None
@@ -352,13 +364,20 @@ def test_given_dbt_seeds_when_planning_then_resolves_existence_without_per_seed_
         adapter.close(connection)
 
     seed_relation_names: frozenset[str] = frozenset(test_case.seed_names)
+    existence_calls_by_seed_status: defaultdict[bool, list[tuple[str | None, str | None, str]]] = (
+        defaultdict(list)
+    )
+    for call in adapter.relation_exists_calls:
+        existence_calls_by_seed_status[call[2] in seed_relation_names].append(call)
     seed_existence_calls: tuple[tuple[str | None, str | None, str], ...] = tuple(
-        call for call in adapter.relation_exists_calls if call[2] in seed_relation_names
+        existence_calls_by_seed_status[True]
     )
     assert len(seed_existence_calls) == test_case.expected_seed_relation_exists_call_count
-    listed_names: frozenset[str] = frozenset(
-        name for call in adapter.list_relation_calls for name in (call[2] or ())
-    )
+    listed_name_set: set[str] = set()
+    for call in adapter.list_relation_calls:
+        for name in call[2] or ():
+            listed_name_set.add(name)
+    listed_names: frozenset[str] = frozenset(listed_name_set)
     assert not listed_names
     warnings_text: str = "\n".join(result.stale_out_of_selection_warning_messages)
     for seed_name in test_case.expected_changed_seed_names:
@@ -417,7 +436,7 @@ def test_given_successful_dbt_model_when_writing_fingerprint_then_definition_is_
             connection=connection,
             execute=adapter.execute,
             table_exists=adapter.relation_exists(
-                connection,
+                connection=connection,
                 database=None,
                 schema="main",
                 name=FINGERPRINT_TABLE_NAME,
@@ -1079,7 +1098,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_model_then_outcome
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
     project: CompiledProject = build_compiled_project_with_models(
@@ -1187,7 +1206,7 @@ def test_given_dbt_run_results_when_event_stream_omits_failed_test_then_renders_
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
     stdout_stream: io.StringIO = io.StringIO()
@@ -1242,7 +1261,7 @@ def test_given_dbt_execution_when_ls_counts_final_selection_then_streams_consist
             return 0
 
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt.helpers.runtime.event_stream.subprocess.Popen",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
         lambda *args, **kwargs: StubProcess(),
     )
     runner: DbtRunner = DbtRunner(
@@ -1349,11 +1368,14 @@ def test_given_dbt_source_age_error_when_planning_then_blocks_downstream_models(
     graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
     try:
         adapter.execute(
-            connection,
-            "CREATE TABLE main.raw_orders AS SELECT TIMESTAMP '2000-01-01 00:00:00' AS loaded_at",
+            connection=connection,
+            sql="CREATE TABLE main.raw_orders AS "
+            "SELECT TIMESTAMP '2000-01-01 00:00:00' AS loaded_at",
         )
-        adapter.execute(connection, "CREATE TABLE main.stg_orders AS SELECT 1 AS id")
-        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(connection=connection, sql="CREATE TABLE main.stg_orders AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id"
+        )
         write_dbt_test_fingerprint(
             adapter=adapter,
             connection=connection,
@@ -1568,11 +1590,14 @@ def test_given_dbt_source_data_version_changed_when_planning_then_runs_downstrea
             ),
         )
         adapter.execute(
-            connection,
-            "CREATE TABLE main.raw_orders AS SELECT TIMESTAMP '2026-01-02 00:00:00' AS loaded_at",
+            connection=connection,
+            sql="CREATE TABLE main.raw_orders AS "
+            "SELECT TIMESTAMP '2026-01-02 00:00:00' AS loaded_at",
         )
-        adapter.execute(connection, "CREATE TABLE main.stg_orders AS SELECT 1 AS id")
-        adapter.execute(connection, "CREATE TABLE main.fact_orders AS SELECT 1 AS id")
+        adapter.execute(connection=connection, sql="CREATE TABLE main.stg_orders AS SELECT 1 AS id")
+        adapter.execute(
+            connection=connection, sql="CREATE TABLE main.fact_orders AS SELECT 1 AS id"
+        )
         write_dbt_test_fingerprint(
             adapter=adapter,
             connection=connection,

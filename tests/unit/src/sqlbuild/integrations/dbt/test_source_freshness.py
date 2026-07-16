@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.helpers.manifest.core import build_dbt_manifest_index
-from sqlbuild.integrations.dbt.main.source_freshness import (
+from sqlbuild.integrations.dbt.main.runtime.source_freshness import (
     translate_dbt_manifest_sources_to_sqlbuild_sources,
 )
-from sqlbuild.integrations.dbt.manifest.models import DbtManifestIndex
-from sqlbuild.spec.models.source import SourceEntry, SourceFreshnessConfig
+from sqlbuild.integrations.dbt.models import DbtManifestIndex
+from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtSourceFreshnessTranslationErrorTestCase,
     DbtSourceFreshnessTranslationTestCase,

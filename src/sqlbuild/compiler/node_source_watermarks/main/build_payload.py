@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-from sqlbuild.compiler.node_source_watermarks.helpers.context import (
+from sqlbuild.compiler.node_source_watermarks._helpers.context import (
     build_node_source_watermark_payload as _build_node_source_watermark_payload,
 )
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkPayload

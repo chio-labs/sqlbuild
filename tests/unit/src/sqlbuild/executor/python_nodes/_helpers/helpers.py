@@ -1,0 +1,586 @@
+"""Helpers for Python-node scheduler tests."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
+from itertools import chain, repeat
+from pathlib import Path
+from typing import Any, ClassVar, cast
+
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.assets import AssetContext, asset
+from sqlbuild.checks import CheckContext
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredAssetFunction,
+    DiscoveredCheckFunction,
+    DiscoveredLoaderFunction,
+    DiscoveredProjectInputs,
+    DiscoveredTaskFunction,
+)
+from sqlbuild.compiler.python_nodes._helpers.inventory import build_python_node_graph
+from sqlbuild.compiler.python_nodes._helpers.run_lifecycle import (
+    build_python_sql_run_lifecycle_plan,
+)
+from sqlbuild.compiler.python_nodes.models import (
+    DiscoveredPythonNode,
+    PythonNodeGraph,
+    PythonSqlRunLifecyclePlan,
+    PythonSqlRunSelection,
+)
+from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
+from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
+from sqlbuild.executor.scheduling.main.unlock_downstream import unlock_downstream_python_nodes
+from sqlbuild.executor.scheduling.models import LifecycleExecutionNode
+from sqlbuild.providers import Provider
+from sqlbuild.python_nodes.types import PythonCheckSeverity
+from sqlbuild.refs import model
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry
+from sqlbuild.tasks import TaskContext, task
+from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
+    build_intermediate_loader_asset_dependency_python_node_graph,
+    build_orders_python_node_graph,
+)
+
+
+class ExecutionSlackProvider(Provider):
+    provider_name: ClassVar[str] = "slack_provider"
+    label: str = "slack"
+
+
+def apply_completion_order(
+    *,
+    completion_order: tuple[str, ...],
+    in_degree: dict[str, int],
+    ready: list[str],
+    downstream_names: dict[str, tuple[str, ...]],
+) -> tuple[dict[str, int], list[str]]:
+    updated_in_degree: dict[str, int] = dict(in_degree)
+    updated_ready: list[str] = list(ready)
+    completed_node_name: str
+    for completed_node_name in completion_order:
+        newly_ready: tuple[str, ...]
+        updated_in_degree, newly_ready = unlock_downstream_python_nodes(
+            completed_node_name=completed_node_name,
+            in_degree=updated_in_degree,
+            downstream_names=downstream_names,
+        )
+        updated_ready.extend(newly_ready)
+    return updated_in_degree, updated_ready
+
+
+class PythonNodeContextTestAdapter(BaseAdapter):
+    """Adapter that records SQL and returns deterministic values."""
+
+    def __init__(self) -> None:
+        self.executed_sql: list[str] = []
+
+    def connect(self, config: dict[str, object]) -> object:
+        del config
+        return object()
+
+    def close(self, connection: object) -> None:
+        del connection
+
+    def execute(self, connection: Any, sql: str) -> object:
+        del connection
+        self.executed_sql.append(sql)
+        return f"result:{sql}"
+
+
+class PythonNodeContextTestResultStore:
+    """In-memory stand-in for persisted node result reads."""
+
+    def __init__(self, results: dict[tuple[str, str], tuple[NodeResultEnvelope, ...]]) -> None:
+        self._results: dict[tuple[str, str], tuple[NodeResultEnvelope, ...]] = results
+        self.written_records: list[NodeResultRecord] = []
+        self.database: str | None = None
+        self.schema: str | None = "default_schema"
+
+    def write(self, record: NodeResultRecord) -> None:
+        self.written_records.append(record)
+
+    def result_of(
+        self,
+        *,
+        node_type: str,
+        node_name: str,
+        run_id: str | None = None,
+        default: object,
+    ) -> NodeResultEnvelope | object:
+        del run_id
+        results: tuple[NodeResultEnvelope, ...] = self._results.get((node_type, node_name), ())
+        strategy: Callable[..., object] = _RESULT_READ_STRATEGIES[
+            (bool(results), default is MISSING_DEFAULT)
+        ]
+        return strategy(results=results, default=default, node_name=node_name)
+
+    def results_of(
+        self,
+        *,
+        node_type: str,
+        node_name: str,
+        limit: int,
+    ) -> tuple[NodeResultEnvelope, ...]:
+        return self._results.get((node_type, node_name), ())[:limit]
+
+
+def provider_task(ctx: TaskContext, slack_provider: ExecutionSlackProvider) -> dict[str, object]:
+    return {"target": ctx.target, "provider": slack_provider.label}
+
+
+def provider_asset(ctx: AssetContext, slack_provider: ExecutionSlackProvider) -> dict[str, object]:
+    return {"target": ctx.target, "provider": slack_provider.label}
+
+
+def provider_check(ctx: CheckContext, slack_provider: ExecutionSlackProvider) -> bool:
+    return ctx.target == "dev" and slack_provider.label == "slack"
+
+
+def context_provider_task(ctx: TaskContext) -> dict[str, object]:
+    return {
+        "attr": cast(ExecutionSlackProvider, ctx.providers.slack_provider).label,
+        "item": cast(ExecutionSlackProvider, ctx.providers["slack_provider"]).label,
+    }
+
+
+def context_provider_asset(ctx: AssetContext) -> dict[str, object]:
+    return {
+        "attr": cast(ExecutionSlackProvider, ctx.providers.slack_provider).label,
+        "item": cast(ExecutionSlackProvider, ctx.providers["slack_provider"]).label,
+    }
+
+
+def context_provider_check(ctx: CheckContext) -> bool:
+    return (
+        cast(ExecutionSlackProvider, ctx.providers.slack_provider).label == "slack"
+        and cast(ExecutionSlackProvider, ctx.providers["slack_provider"]).label == "slack"
+    )
+
+
+def missing_context_provider_task(ctx: TaskContext) -> object:
+    return ctx.providers["slack_provider"]
+
+
+def build_task_context(
+    *,
+    adapter: PythonNodeContextTestAdapter,
+    statement_recorder: StatementRecorder,
+    logger_name: str,
+    run_state: PythonNodeRunState | None = None,
+    result_store: object | None = None,
+) -> TaskContext:
+    return TaskContext(
+        adapter=adapter,
+        connection_config={"warehouse": "dev"},
+        connection=object(),
+        run_id="test_run",
+        target="dev",
+        vars={"batch": "hourly"},
+        is_reload=False,
+        logger=logging.getLogger(logger_name),
+        statement_recorder=statement_recorder,
+        run_state=run_state,
+        result_store=result_store,
+        default_database="default_db",
+        default_schema="default_schema",
+    )
+
+
+def build_asset_context(
+    *,
+    adapter: PythonNodeContextTestAdapter,
+    statement_recorder: StatementRecorder,
+    logger_name: str,
+    run_state: PythonNodeRunState | None = None,
+    result_store: object | None = None,
+) -> AssetContext:
+    return AssetContext(
+        adapter=adapter,
+        connection_config={"warehouse": "dev"},
+        connection=object(),
+        run_id="test_run",
+        target="dev",
+        vars={"batch": "hourly"},
+        is_reload=False,
+        logger=logging.getLogger(logger_name),
+        statement_recorder=statement_recorder,
+        run_state=run_state,
+        result_store=result_store,
+        default_database="default_db",
+        default_schema="default_schema",
+    )
+
+
+def build_check_context(
+    *,
+    adapter: PythonNodeContextTestAdapter,
+    statement_recorder: StatementRecorder,
+    logger_name: str,
+    run_state: PythonNodeRunState | None = None,
+    result_store: object | None = None,
+) -> CheckContext:
+    return CheckContext(
+        adapter=adapter,
+        connection_config={"warehouse": "dev"},
+        connection=object(),
+        run_id="test_run",
+        target="dev",
+        vars={"batch": "hourly"},
+        is_reload=False,
+        logger=logging.getLogger(logger_name),
+        statement_recorder=statement_recorder,
+        run_state=run_state,
+        result_store=result_store,
+        default_database="default_db",
+        default_schema="default_schema",
+    )
+
+
+@task
+def upstream_task(_ctx: object) -> object:
+    return None
+
+
+@task
+def skipped_upstream_task(_ctx: object) -> object:
+    return None
+
+
+@task
+def fetch_orders(ctx: TaskContext) -> object:
+    return ctx.result(
+        payload={"file": "orders.json"},
+        metadata={"row_count": 3},
+    )
+
+
+@asset(depends_on=(fetch_orders,))
+def export_orders(ctx: AssetContext) -> object:
+    upstream_result: NodeResultEnvelope = cast(
+        NodeResultEnvelope, ctx.result_of(node_function=fetch_orders)
+    )
+    payload_dict: dict[str, object] = cast(dict[str, object], upstream_result.payload)
+    metadata_dict: dict[str, object] = upstream_result.metadata
+    file_name: str = cast(str, payload_dict["file"])
+    return ctx.result(
+        payload={"uri": f"s3://exports/{file_name}"},
+        metadata=metadata_dict,
+        materialized=True,
+    )
+
+
+def skip_empty_orders(ctx: TaskContext) -> object:
+    return ctx.skip(reason="No new orders")
+
+
+def hard_skip_empty_orders(ctx: TaskContext) -> object:
+    return ctx.skip(reason="No new orders", mode=SkipMode.HARD)
+
+
+def export_after_skip(ctx: AssetContext) -> object:
+    return ctx.result(payload={"uri": "should-not-run"}, materialized=True)
+
+
+def successful_sibling(ctx: TaskContext) -> object:
+    return ctx.result(payload={"status": "ready"})
+
+
+def export_after_mixed_skip(ctx: AssetContext) -> object:
+    return ctx.result(payload={"uri": "s3://exports/orders.json"}, materialized=True)
+
+
+def fail_orders(_ctx: TaskContext) -> object:
+    raise RuntimeError("API unavailable")
+
+
+def cursor_window(ctx: TaskContext) -> object:
+    return ctx.result(
+        payload={
+            "start_cursor_ts": ctx.start_cursor_ts,
+            "end_cursor_ts": ctx.end_cursor_ts,
+            "start_cursor_int": ctx.start_cursor_int,
+            "end_cursor_int": ctx.end_cursor_int,
+        }
+    )
+
+
+def export_after_failure(ctx: AssetContext) -> object:
+    return ctx.result(payload={"uri": "should-not-run"}, materialized=True)
+
+
+EXPECTED_START_CURSOR_TS: datetime = datetime(2026, 1, 1, tzinfo=UTC)
+EXPECTED_END_CURSOR_TS: datetime = datetime(2026, 1, 2, tzinfo=UTC)
+
+
+class FlakyTask:
+    def __init__(self, failures_before_success: int, exception_type: type[Exception]) -> None:
+        self.failures_before_success: int = failures_before_success
+        self.exception_type: type[Exception] = exception_type
+        self.attempts: int = 0
+        failures: Iterator[Callable[[TaskContext], object]] = (
+            self._raise_transient_failure for _attempt in range(self.failures_before_success)
+        )
+        self._strategies = iter(chain(failures, repeat(self._return_success)))
+
+    def __call__(self, ctx: TaskContext) -> object:
+        self.attempts += 1
+        return next(self._strategies)(ctx)
+
+    def _raise_transient_failure(self, ctx: TaskContext) -> object:
+        del ctx
+        raise self.exception_type("transient failure")
+
+    def _return_success(self, ctx: TaskContext) -> object:
+        return ctx.result(payload={"attempts": self.attempts})
+
+
+def loader_only_attribute_names() -> tuple[str, ...]:
+    return (
+        "destination",
+        "destination_database",
+        "destination_schema",
+        "destination_name",
+        "current_cursor_value",
+        "loader",
+        "source",
+        "qualify_in_destination_schema",
+    )
+
+
+def assert_base_context_fields(context: BasePythonNodeContext) -> None:
+    assert context.run_id == "test_run"
+    assert context.target == "dev"
+    assert context.vars == {"batch": "hourly"}
+    assert context.is_reload is False
+    assert context.connection_config == {"warehouse": "dev"}
+
+
+def build_lifecycle_plan_for_selected_python_names(
+    *, graph: PythonNodeGraph, selected_names: frozenset[str]
+) -> PythonSqlRunLifecyclePlan:
+    return build_python_sql_run_lifecycle_plan(
+        selection=PythonSqlRunSelection(sql_keys=frozenset(), python_node_names=selected_names),
+        python_graph=graph,
+    )
+
+
+def lifecycle_node_payload_name(node: LifecycleExecutionNode) -> str:
+    payload: object | None = node.payload
+    assert isinstance(payload, DiscoveredPythonNode)
+    return payload.name
+
+
+def python_graph_for_lifecycle_case(case_name: str) -> PythonNodeGraph:
+    return {
+        "orders": build_orders_python_node_graph,
+        "intermediate_loader_asset_dependency": (
+            build_intermediate_loader_asset_dependency_python_node_graph
+        ),
+    }[case_name]()
+
+
+INGRESS_CALLS: list[str] = []
+
+
+def reset_ingress_calls() -> None:
+    INGRESS_CALLS.clear()
+
+
+def ingress_calls() -> tuple[str, ...]:
+    return tuple(INGRESS_CALLS)
+
+
+@task
+def prepare_ingress_orders(ctx: TaskContext) -> object:
+    INGRESS_CALLS.append("prepare_ingress_orders")
+    return ctx.result(payload={"prepared": True})
+
+
+def load_ingress_orders(_ctx: object) -> object:
+    INGRESS_CALLS.append("load_ingress_orders")
+    return None
+
+
+def build_ingress_task_loader_graph() -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            loader_functions=(ingress_loader_function(),),
+            task_functions=(ingress_task_function(),),
+        )
+    )
+
+
+def ingress_task_function() -> DiscoveredTaskFunction:
+    return DiscoveredTaskFunction(
+        file_path=Path("/project/tasks/orders.py"),
+        relative_path=Path("tasks/orders.py"),
+        name="prepare_ingress_orders",
+        function=prepare_ingress_orders,
+    )
+
+
+def ingress_loader_function() -> DiscoveredLoaderFunction:
+    return DiscoveredLoaderFunction(
+        file_path=Path("/project/loaders/orders.py"),
+        relative_path=Path("loaders/orders.py"),
+        name="load_ingress_orders",
+        function=load_ingress_orders,
+        depends_on=(prepare_ingress_orders,),
+    )
+
+
+def ingress_source_map() -> dict[str, SourceEntry]:
+    return {
+        "raw_orders": SourceEntry(
+            name="raw_orders",
+            loader="load_ingress_orders",
+        )
+    }
+
+
+READ_SIDE_CALLS: list[str] = []
+
+
+def reset_read_side_calls() -> None:
+    READ_SIDE_CALLS.clear()
+
+
+def read_side_calls() -> tuple[str, ...]:
+    return tuple(READ_SIDE_CALLS)
+
+
+@task(depends_on=(model("stg_orders"),))
+def profile_stg_orders(ctx: TaskContext) -> object:
+    READ_SIDE_CALLS.append("profile_stg_orders")
+    return ctx.result(payload={"profiled": True})
+
+
+@asset(depends_on=(profile_stg_orders,))
+def export_stg_profile(ctx: AssetContext) -> object:
+    READ_SIDE_CALLS.append("export_stg_profile")
+    return ctx.result(
+        payload=cast(NodeResultEnvelope, ctx.result_of(node_function=profile_stg_orders)).payload,
+        materialized=False,
+    )
+
+
+def build_read_side_sql_task_asset_graph() -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            task_functions=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/orders.py"),
+                    relative_path=Path("tasks/orders.py"),
+                    name="profile_stg_orders",
+                    function=profile_stg_orders,
+                    depends_on=(model("stg_orders"),),
+                ),
+            ),
+            asset_functions=(
+                DiscoveredAssetFunction(
+                    file_path=Path("/project/assets/orders.py"),
+                    relative_path=Path("assets/orders.py"),
+                    name="export_stg_profile",
+                    function=export_stg_profile,
+                    depends_on=(profile_stg_orders,),
+                ),
+            ),
+        )
+    )
+
+
+@task(name="upstream_task")
+def check_upstream_task(_ctx: object) -> object:
+    return {"rows": 3}
+
+
+def passing_python_check(ctx: CheckContext) -> object:
+    metadata: dict[str, object] = cast(
+        NodeResultEnvelope, ctx.result_of(node_function=check_upstream_task)
+    ).metadata
+    return ctx.pass_(message="passed", metadata={"rows": metadata["rows"]})
+
+
+def warning_python_check(ctx: CheckContext) -> object:
+    return ctx.warn(message="warned")
+
+
+def false_python_check(_ctx: CheckContext) -> object:
+    return False
+
+
+def exception_python_check(_ctx: CheckContext) -> object:
+    raise RuntimeError("check exploded")
+
+
+def python_check_function_for_case(description: str) -> DiscoveredCheckFunction:
+    function: Callable[..., object] = {
+        "preserves explicit warning result": warning_python_check,
+        "normalizes false result as error failure": false_python_check,
+        "normalizes check exception as error failure": exception_python_check,
+    }.get(description, passing_python_check)
+    return DiscoveredCheckFunction(
+        file_path=Path("/project/checks/orders.py"),
+        relative_path=Path("checks/orders.py"),
+        name="check_upstream_task",
+        function=function,
+        depends_on=(check_upstream_task,),
+        severity=PythonCheckSeverity.ERROR,
+    )
+
+
+def build_python_check_graph(*, check_function: DiscoveredCheckFunction) -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            task_functions=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/orders.py"),
+                    relative_path=Path("tasks/orders.py"),
+                    name="upstream_task",
+                    function=check_upstream_task,
+                ),
+            ),
+            check_functions=(check_function,),
+        )
+    )
+
+
+def _read_existing_result(
+    *, results: tuple[NodeResultEnvelope, ...], default: object, node_name: str
+) -> NodeResultEnvelope:
+    del default, node_name
+    return results[0]
+
+
+def _read_default_result(
+    *, results: tuple[NodeResultEnvelope, ...], default: object, node_name: str
+) -> object:
+    del results, node_name
+    return default
+
+
+def _raise_missing_result(
+    *, results: tuple[NodeResultEnvelope, ...], default: object, node_name: str
+) -> object:
+    del results, default
+    raise ExecutorInputError(f"No persisted result found for Python node '{node_name}'")
+
+
+_RESULT_READ_STRATEGIES: dict[tuple[bool, bool], Callable[..., object]] = {
+    (True, True): _read_existing_result,
+    (True, False): _read_existing_result,
+    (False, False): _read_default_result,
+    (False, True): _raise_missing_result,
+}

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build.helpers.output import aggregate_build_result
-from sqlbuild.executor.build.helpers.scheduler import BuildScheduler
+from sqlbuild.executor.build._helpers.node_source_watermarks import (
+    build_native_node_source_watermark_context,
+    write_native_node_source_watermark_records,
+)
+from sqlbuild.executor.build._helpers.output import aggregate_build_result
+from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,
@@ -19,15 +23,11 @@ from sqlbuild.executor.build.models import (
     FunctionExecutionResult,
     SeedExecutionResult,
 )
-from sqlbuild.executor.build.shared.helpers.node_source_watermarks import (
-    build_native_node_source_watermark_context,
-    write_native_node_source_watermark_records,
-)
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.main.dependency_baseline import execute_dependency_baseline_entries
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 
 

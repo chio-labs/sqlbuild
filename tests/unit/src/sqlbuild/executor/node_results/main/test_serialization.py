@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.node_results.helpers.serialization import encode_json_b64
-from sqlbuild.executor.shared.exceptions import ExecutorInputError
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.node_results._helpers.serialization import encode_json_b64
 from tests.unit.src.sqlbuild.executor.node_results.main._test_types import (
     NodeResultSerializationErrorTestCase,
     NodeResultSerializationTestCase,
@@ -27,7 +27,7 @@ def test_given_json_value_when_encoding_result_storage_then_returns_base64_json(
     test_case: NodeResultSerializationTestCase,
 ) -> None:
     encoded: str = encode_json_b64(
-        test_case.value,
+        value=test_case.value,
         label="payload",
         node_name="produce_result",
     )
@@ -51,7 +51,7 @@ def test_given_non_json_value_when_encoding_result_storage_then_raises_input_err
 ) -> None:
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
         encode_json_b64(
-            test_case.value,
+            value=test_case.value,
             label="payload",
             node_name="produce_result",
         )

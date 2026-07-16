@@ -4,18 +4,26 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.base.base_adapter import BaseAdapter
-from sqlbuild.adapter.shared.models import QueryResult
-from sqlbuild.executor.scenario.helpers.capture.columns import build_scenario_snapshot_columns
-from sqlbuild.executor.scenario.helpers.capture.safety import (
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import QueryResult
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
+from sqlbuild.errors.contracts.main.error_code import error_code
+from sqlbuild.executor.scenario._helpers.capture.columns import build_scenario_snapshot_columns
+from sqlbuild.executor.scenario._helpers.capture.safety import (
     capture_error_help,
     max_relation_write_bytes,
     query_capture_relation_row_count,
     validate_capture_row_limits,
 )
-from sqlbuild.executor.scenario.helpers.snapshots.core import (
+from sqlbuild.executor.scenario._helpers.snapshots.core import (
     write_scenario_snapshot_jsonl,
     write_scenario_snapshot_manifest,
+)
+from sqlbuild.executor.scenario.constants import (
+    SCENARIO_EXEC_CAPTURE_FAILED,
+    SCENARIO_EXEC_CAPTURE_INTERNAL,
 )
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureLimits,
@@ -28,13 +36,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
 )
-from sqlbuild.executor.shared.types import ExecutionStatus
-from sqlbuild.shared.constants import (
-    SCENARIO_EXEC_CAPTURE_FAILED,
-    SCENARIO_EXEC_CAPTURE_INTERNAL,
-)
-from sqlbuild.shared.helpers.identity.naming import resolve_qualified_name_parts
-from sqlbuild.shared.main.error_code import error_code
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_scenario_snapshot_capture(
@@ -117,7 +119,7 @@ def execute_scenario_snapshot_capture(
             )
         except Exception as exc:
             captured_error_code: str = error_code(
-                exc,
+                error=exc,
                 fallback_code=SCENARIO_EXEC_CAPTURE_FAILED,
             )
             result = ScenarioSnapshotCaptureRelationResult(
@@ -176,8 +178,8 @@ def _query_relation_rows(
     relation_plan: ScenarioSnapshotCaptureRelationPlan,
 ) -> tuple[dict[str, object], ...]:
     query_result: QueryResult = adapter.query(
-        connection,
-        f"SELECT * FROM {_source_relation_name(adapter=adapter, relation_plan=relation_plan)}",
+        connection=connection,
+        sql=f"SELECT * FROM {_source_relation_name(adapter=adapter, relation_plan=relation_plan)}",
         limit=None,
     )
     rows: list[dict[str, object]] = []

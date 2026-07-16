@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any
 
-from sqlbuild.adapter.shared.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.shared.types import FrameworkType
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
-from sqlbuild.compiler.compile.models.core import CompiledObjectKey
+from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.source_freshness._helpers.sql import build_read_latest_sql
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
-from sqlbuild.compiler.source_freshness.helpers.sql import build_read_latest_sql
 from sqlbuild.compiler.source_freshness.main.data_version_hash import (
     source_freshness_data_version_hash,
 )
@@ -20,8 +22,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
 )
-from sqlbuild.shared.models import RelationLookup
-from sqlbuild.spec.models.types import SourceFreshnessStrategy, SourceFreshnessValueKind
+from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
 def state_table_exists_map(
@@ -47,23 +48,32 @@ def state_table_exists_map(
 
 
 class FakeSourceFreshnessExecute:
-    def __init__(self, *, rows: list[tuple[Any, ...]], read_error: Exception | None = None) -> None:
+    def __init__(self, *, rows: list[tuple[Any, ...]]) -> None:
         self._rows: list[tuple[Any, ...]] = rows
-        self._read_error: Exception | None = read_error
         self.executed_sql: list[str] = []
 
-    def __call__(self, _connection: object, sql: str) -> Any:
+    def __call__(self, *, connection: object, sql: str) -> Any:
+        del connection
         self.executed_sql.append(sql)
-        if self._read_error is not None:
-            raise self._read_error
         return _FakeResult(self._rows)
+
+
+class FailingSourceFreshnessExecute(FakeSourceFreshnessExecute):
+    def __init__(self, *, read_error: Exception) -> None:
+        super().__init__(rows=[])
+        self._read_error = read_error
+
+    def __call__(self, *, connection: object, sql: str) -> Any:
+        del connection
+        self.executed_sql.append(sql)
+        raise self._read_error
 
 
 class FakeSourceFreshnessWriteExecute:
     def __init__(self) -> None:
         self.executed_sql: list[str] = []
 
-    def __call__(self, connection: Any, sql: str) -> None:
+    def __call__(self, *, connection: Any, sql: str) -> None:
         del connection
         self.executed_sql.append(sql)
 
@@ -77,11 +87,13 @@ class _FakeResult:
 
 
 def render_qualified_name(*, database: str | None, schema: str | None, name: str) -> str | None:
-    if schema is None:
-        return None
-    if database is not None:
-        return f"{database}.{schema}.{name}"
-    return f"{schema}.{name}"
+    names_by_parts: dict[tuple[bool, bool], str | None] = {
+        (True, False): None,
+        (True, True): None,
+        (False, True): f"{database}.{schema}.{name}",
+        (False, False): f"{schema}.{name}",
+    }
+    return names_by_parts[(schema is None, database is not None)]
 
 
 def render_read_latest_sql(*, database: str | None, schema: str) -> str:
@@ -112,8 +124,6 @@ def write_optional_previous_record(
     render_framework_type: Callable[[FrameworkType], str],
     data_version: str | None,
 ) -> None:
-    if data_version is None:
-        return
     previous_record: SourceFreshnessRecord = SourceFreshnessRecord(
         source_name="raw.orders",
         target_database=None,
@@ -122,15 +132,31 @@ def write_optional_previous_record(
         run_id="previous",
         strategy=SourceFreshnessStrategy.SQL.value,
         value_kind=SourceFreshnessValueKind.INTEGER.value,
-        data_version=data_version,
+        data_version=data_version or "",
         data_version_hash=source_freshness_data_version_hash(
             source_name="raw.orders",
             strategy=SourceFreshnessStrategy.SQL,
             value_kind=SourceFreshnessValueKind.INTEGER,
-            data_version=data_version,
+            data_version=data_version or "",
         ),
         observed_at=datetime(2026, 1, 15, 10, 0, 0),
     )
+    _OPTIONAL_PREVIOUS_RECORD_WRITERS[data_version is not None](
+        adapter,
+        connection,
+        render_qualified_name,
+        render_framework_type,
+        previous_record,
+    )
+
+
+def _write_previous_record(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+    previous_record: SourceFreshnessRecord,
+) -> None:
     write_source_freshness_records(
         connection=connection,
         execute=adapter.execute,
@@ -143,6 +169,31 @@ def write_optional_previous_record(
             render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
         ),
     )
+
+
+def _skip_previous_record(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+    previous_record: SourceFreshnessRecord,
+) -> None:
+    del adapter, connection, render_qualified_name, render_framework_type, previous_record
+
+
+_OPTIONAL_PREVIOUS_RECORD_WRITERS: MappingProxyType[
+    bool,
+    Callable[
+        [
+            DuckDbAdapter,
+            Any,
+            Callable[..., str | None],
+            Callable[[FrameworkType], str],
+            SourceFreshnessRecord,
+        ],
+        None,
+    ],
+] = MappingProxyType({False: _skip_previous_record, True: _write_previous_record})
 
 
 def write_previous_record_to_schema(
@@ -200,10 +251,13 @@ def source_freshness_identity(source_name: str) -> SourceFreshnessIdentity:
 def downstream_deps_from_edges(
     edges: dict[str, tuple[str, ...]],
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    return {
-        compiled_key(raw_key): tuple(compiled_key(raw_downstream) for raw_downstream in downstream)
-        for raw_key, downstream in edges.items()
-    }
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
+    for raw_key, downstream in edges.items():
+        compiled_downstream: list[CompiledObjectKey] = []
+        for raw_downstream in downstream:
+            compiled_downstream.append(compiled_key(raw_downstream))
+        downstream_deps[compiled_key(raw_key)] = tuple(compiled_downstream)
+    return downstream_deps
 
 
 def compiled_key(raw: str) -> CompiledObjectKey:

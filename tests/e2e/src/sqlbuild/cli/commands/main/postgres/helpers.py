@@ -5,12 +5,13 @@ from __future__ import annotations
 import subprocess
 import sys
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from sqlbuild.adapters.postgres.client import PostgresAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,
@@ -32,8 +33,19 @@ def postgres_dbt_core_executable() -> str:
     """
 
     candidate: Path = Path(sys.prefix) / "bin" / "dbt"
-    if not candidate.exists():
-        pytest.skip("dbt-core CLI is not installed in the project virtual environment")
+    candidate_actions: dict[bool, Callable[[Path], str]] = {
+        False: _skip_missing_postgres_dbt_core,
+        True: _validate_postgres_dbt_core,
+    }
+    return candidate_actions[candidate.exists()](candidate)
+
+
+def _skip_missing_postgres_dbt_core(candidate: Path) -> str:
+    del candidate
+    pytest.skip("dbt-core CLI is not installed in the project virtual environment")
+
+
+def _validate_postgres_dbt_core(candidate: Path) -> str:
     result: subprocess.CompletedProcess[str] = subprocess.run(
         (str(candidate), "--version"),
         capture_output=True,
@@ -41,11 +53,30 @@ def postgres_dbt_core_executable() -> str:
         text=True,
     )
     output: str = result.stdout + result.stderr
-    if result.returncode != 0:
-        pytest.skip(f"dbt-core CLI is not runnable: {output}")
-    if "fusion" in output.lower():
-        pytest.skip("project virtual environment dbt resolves to Fusion, which lacks Postgres")
+    validation_actions: dict[tuple[bool, bool], Callable[[Path, str], str]] = {
+        (False, False): _return_postgres_dbt_core,
+        (False, True): _skip_postgres_dbt_fusion,
+        (True, False): _skip_unrunnable_postgres_dbt_core,
+        (True, True): _skip_unrunnable_postgres_dbt_core,
+    }
+    return validation_actions[(result.returncode != 0, "fusion" in output.lower())](
+        candidate, output
+    )
+
+
+def _return_postgres_dbt_core(candidate: Path, output: str) -> str:
+    del output
     return str(candidate)
+
+
+def _skip_postgres_dbt_fusion(candidate: Path, output: str) -> str:
+    del candidate, output
+    pytest.skip("project virtual environment dbt resolves to Fusion, which lacks Postgres")
+
+
+def _skip_unrunnable_postgres_dbt_core(candidate: Path, output: str) -> str:
+    del candidate
+    pytest.skip(f"dbt-core CLI is not runnable: {output}")
 
 
 def postgres_dbt_env(*, password: str) -> dict[str, str]:
@@ -113,10 +144,9 @@ def build_postgres_virtual_project_toml(
     warehouse_schema: str,
     unsuffixed_virtual_env: str | None = None,
 ) -> str:
-    unsuffixed_line: str = (
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n'
-        if unsuffixed_virtual_env is not None
-        else ""
+    unsuffixed_line: str = {None: ""}.get(
+        unsuffixed_virtual_env,
+        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
     )
     return (
         f'name = "{project_name}"\n'
@@ -241,7 +271,7 @@ def ensure_postgres_schema_ready(*, schema_name: str, config: dict[str, object])
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+        adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
     finally:
         adapter.close(connection)
 
@@ -250,7 +280,7 @@ def cleanup_postgres_schema(*, schema_name: str, config: dict[str, object]) -> N
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
+        adapter.execute(connection=connection, sql=f"DROP SCHEMA IF EXISTS {schema_name} CASCADE")
     finally:
         adapter.close(connection)
 
@@ -260,19 +290,20 @@ def cleanup_postgres_state_schemas(*, schema_name: str, config: dict[str, object
     connection: Any = adapter.connect(config)
     try:
         adapter.execute(
-            connection, f"DROP SCHEMA IF EXISTS {quote_identifier(schema_name)} CASCADE"
+            connection=connection,
+            sql=f"DROP SCHEMA IF EXISTS {quote_identifier(schema_name)} CASCADE",
         )
         cursor: Any = adapter.execute(
-            connection,
-            "SELECT schema_name FROM information_schema.schemata "
+            connection=connection,
+            sql="SELECT schema_name FROM information_schema.schemata "
             f"WHERE schema_name LIKE '{schema_name}__backup_%'",
         )
         backup_schemas: tuple[str, ...] = tuple(str(row[0]) for row in cursor.fetchall())
         backup_schema: str
         for backup_schema in backup_schemas:
             adapter.execute(
-                connection,
-                f"DROP SCHEMA IF EXISTS {quote_identifier(backup_schema)} CASCADE",
+                connection=connection,
+                sql=f"DROP SCHEMA IF EXISTS {quote_identifier(backup_schema)} CASCADE",
             )
     finally:
         adapter.close(connection)
@@ -282,7 +313,7 @@ def fetch_postgres_rows(*, sql: str, config: dict[str, object]) -> tuple[tuple[o
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
     try:
-        cursor: Any = adapter.execute(connection, sql)
+        cursor: Any = adapter.execute(connection=connection, sql=sql)
         return tuple(tuple(row) for row in cursor.fetchall())
     finally:
         adapter.close(connection)
@@ -292,7 +323,7 @@ def execute_postgres_sql(*, sql: str, config: dict[str, object]) -> None:
     adapter: PostgresAdapter = PostgresAdapter()
     connection: Any = adapter.connect(config)
     try:
-        adapter.execute(connection, sql)
+        adapter.execute(connection=connection, sql=sql)
     finally:
         adapter.close(connection)
 

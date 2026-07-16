@@ -5,9 +5,11 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.integrations.rivers.helpers import assets as rivers_assets
-from sqlbuild.integrations.rivers.helpers.assets import build_asset_defs
-from sqlbuild.integrations.rivers.translator import SqlBuildRiversTranslator
+from sqlbuild.integrations.rivers._helpers import assets as rivers_assets
+from sqlbuild.integrations.rivers._helpers.assets import build_asset_defs
+from sqlbuild.integrations.rivers.classes.sqlbuild_rivers_translator import (
+    SqlBuildRiversTranslator,
+)
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     build_python_augmented_dagster_test_dag,
 )
@@ -60,11 +62,11 @@ def test_given_python_augmented_dag_when_building_asset_defs_then_maps_python_no
         dag=dag,
         translator=SqlBuildRiversTranslator(),
     )
-    order_def: Any = next(asset for asset in asset_defs if asset.name == "analytics__orders")
-    task_def: Any = next(asset for asset in asset_defs if asset.name == "task__prepare_orders")
-    python_asset_def: Any = next(
-        asset for asset in asset_defs if asset.name == "asset__orders_export"
-    )
+    asset_defs_by_name: dict[str, tuple[Any, ...]] = {asset.name: (asset,) for asset in asset_defs}
+    assert len(asset_defs_by_name) == len(asset_defs)
+    order_def: Any = next(iter(asset_defs_by_name.get("analytics__orders", ())))
+    task_def: Any = next(iter(asset_defs_by_name.get("task__prepare_orders", ())))
+    python_asset_def: Any = next(iter(asset_defs_by_name.get("asset__orders_export", ())))
 
     assert tuple(asset.name for asset in asset_defs) == test_case.expected_asset_names
     assert tuple(dep.name for dep in order_def.deps) == test_case.expected_order_deps

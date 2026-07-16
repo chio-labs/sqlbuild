@@ -1,1 +1,0 @@
-"""Shared adapter mixin classes."""

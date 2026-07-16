@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.integrations.dbt.helpers.planning.plan import build_dbt_interop_plan
+from sqlbuild.integrations.dbt._helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import DbtAutoInitTestCase
@@ -26,11 +26,13 @@ def prepare_dbt_auto_init_dirs(*, test_case: DbtAutoInitTestCase, tmp_path: Path
     dbt_project_dir: Path = tmp_path / "dbt_project"
     dbt_project_dir.mkdir()
     sibling_sqlbuild_dir: Path = tmp_path / "sqlbuild_project"
-    if test_case.has_current_sqlbuild_project:
-        write_minimal_sqlbuild_project(dbt_project_dir)
-    if test_case.has_sibling_sqlbuild_project:
-        sibling_sqlbuild_dir.mkdir()
-        write_minimal_sqlbuild_project(sibling_sqlbuild_dir)
+    for current_project_dir in (dbt_project_dir,) * int(test_case.has_current_sqlbuild_project):
+        write_minimal_sqlbuild_project(current_project_dir)
+    for sibling_project_dir in (sibling_sqlbuild_dir,) * int(
+        test_case.has_sibling_sqlbuild_project
+    ):
+        sibling_project_dir.mkdir()
+        write_minimal_sqlbuild_project(sibling_project_dir)
     return dbt_project_dir
 
 

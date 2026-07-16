@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.types import LifeCycleEventKind
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan
 from sqlbuild.compiler.planner.types import ScenarioArtifactKind
-from sqlbuild.executor.scenario.helpers.lifecycle.fixtures import execute_scenario_fixtures
+from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import execute_scenario_fixtures
 from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
-from sqlbuild.executor.shared.types import ExecutionStatus
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (
     ExecuteScenarioFixturesTestCase,
     ExecuteScenarioFixtureTestCase,

@@ -7,12 +7,12 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.shared.models import StatementRecorder
-from sqlbuild.adapters.duckdb.client import DuckDbAdapter
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.main.execute import execute_seed
-from sqlbuild.executor.shared.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.seed.main._test_types import (
     SeedFingerprintFailureTestCase,
 )
@@ -54,7 +54,7 @@ def test_given_seed_load_failure_when_executing_then_does_not_write_fingerprint(
     assert result.status == test_case.expected_status
     assert (
         adapter.relation_exists(
-            connection,
+            connection=connection,
             database=None,
             schema="main",
             name=FINGERPRINT_TABLE_NAME,

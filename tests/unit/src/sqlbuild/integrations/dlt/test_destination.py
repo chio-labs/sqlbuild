@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.shared.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.integrations.dlt._helpers.destination import build_dlt_destination
 from sqlbuild.integrations.dlt.constants import DLT_DESTINATION_ADAPTERS
 from sqlbuild.integrations.dlt.exceptions import DltIntegrationError
-from sqlbuild.integrations.dlt.helpers.destination import build_dlt_destination
 from sqlbuild.integrations.dlt.models import DltDestinationConfig
 from tests.unit.src.sqlbuild.integrations.dlt._test_types import (
     DltDestinationCoverageTestCase,

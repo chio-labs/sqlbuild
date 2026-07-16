@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from sqlbuild.shared.exceptions.errors import SharedInputError
+from sqlbuild.errors.contracts.exceptions import SharedInputError
 
 
 def render_project_var_text(*, value: object, label: str) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 NODE_SOURCE_WATERMARK_TABLE_NAME: str = "_sqlbuild_node_source_watermarks"
+REPORT_BLANK_LINE: str = ""
 
 COLUMN_NODE_TYPE: str = "node_type"
 COLUMN_NODE_NAME: str = "node_name"
