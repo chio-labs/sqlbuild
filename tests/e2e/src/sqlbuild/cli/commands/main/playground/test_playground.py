@@ -288,7 +288,7 @@ def test_given_dbt_playground_when_building_then_runs_dbt_without_reuse(
         assert fragment in first_output
 
     second_build: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build"),
+        command=("--no-color", "dbt", "build", "--changes-only"),
         project_dir=sqlbuild_project_dir,
     )
     assert second_build.returncode == 0, second_build.stdout + second_build.stderr

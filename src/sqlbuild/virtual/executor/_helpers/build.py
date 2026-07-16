@@ -101,8 +101,8 @@ from sqlbuild.spec.contracts.models import SnapshotsConfig
 from sqlbuild.virtual.executor._helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor._helpers.rewrite import (
     build_destination_from_physical_relation,
-    build_physical_seed_destination,
     build_rewritten_model_locations,
+    build_rewritten_seed_locations,
     build_virtual_destination,
     relation_type_for_model,
     rewrite_project_function_locations,
@@ -461,6 +461,11 @@ def _read_virtual_build_state(
             if options.changes_only
             else WorkSelectionPolicy.ALL_SELECTED
         )
+        default_model_selection: tuple[str, ...] = (
+            semantics.default_selection
+            if options.changes_only
+            else tuple(sorted(model.name for model in graph.project.models))
+        )
         selected_model_names: tuple[str, ...]
         selected_seed_names: tuple[str, ...] = ()
         if options.seed_only:
@@ -475,13 +480,19 @@ def _read_virtual_build_state(
                 graph=graph,
                 select=options.select,
                 exclude=options.exclude,
-                default_selection=semantics.default_selection,
+                default_selection=default_model_selection,
                 stale_model_names=semantics.stale_model_names,
                 include_stale_upstreams=options.include_stale_upstreams,
                 work_selection_policy=work_selection_policy,
             )
             selected_seed_names = (
-                semantics.stale_seed_names if not options.select and not options.exclude else ()
+                (
+                    semantics.stale_seed_names
+                    if options.changes_only
+                    else tuple(sorted(seed.name for seed in graph.project.seeds))
+                )
+                if not options.select and not options.exclude
+                else ()
             )
         selected_seed_names = _include_stale_upstream_seed_names(
             graph=graph,
@@ -504,11 +515,13 @@ def _read_virtual_build_state(
                 desired_seed_version_hashes=desired_seed_version_hashes,
             )
         )
-        seed_load_names: tuple[str, ...] = tuple(
-            seed_name
-            for seed_name in selected_seed_names
-            if seed_name not in available_seed_physical_relations
-        )
+        seed_load_names: tuple[str, ...] = selected_seed_names
+        if options.changes_only:
+            seed_load_names = tuple(
+                seed_name
+                for seed_name in selected_seed_names
+                if seed_name not in available_seed_physical_relations
+            )
         effective_select: tuple[str, ...] = _build_virtual_planner_select(
             graph=graph,
             selected_model_names=selected_model_names,
@@ -564,28 +577,15 @@ def _rewrite_virtual_project(
         project=graph.project,
         rewritten_locations=rewritten_locations,
     )
-    rewritten_seed_locations: dict[str, CompiledRelationLocation] = {
-        seed.name: build_physical_seed_destination(
-            adapter=adapter,
-            target=seed.destination,
-            seed_name=seed.name,
-            version_hash=seed_load_version_hashes[seed.name],
-        )
-        for seed in graph.project.seeds
-        if seed.name in seed_load_version_hashes
-    }
-    for seed in graph.project.seeds:
-        if seed.name in rewritten_seed_locations:
-            continue
-        if seed.name in semantics.bound_seed_version_hashes:
-            rewritten_seed_locations[seed.name] = build_virtual_destination(
-                adapter=adapter,
-                target=seed.destination,
-                virtual_environment_name=runtime.names.target_vde_name,
-                unsuffixed_virtual_environment_name=(
-                    runtime.names.unsuffixed_virtual_environment_name
-                ),
-            )
+    rewritten_seed_locations: dict[str, CompiledRelationLocation] = build_rewritten_seed_locations(
+        project=graph.project,
+        adapter=adapter,
+        seed_load_version_hashes=seed_load_version_hashes,
+        available_physical_relations=reads.available_seed_physical_relations,
+        bound_seed_version_hashes=semantics.bound_seed_version_hashes,
+        virtual_environment_name=runtime.names.target_vde_name,
+        unsuffixed_virtual_environment_name=runtime.names.unsuffixed_virtual_environment_name,
+    )
     rewritten_project = rewrite_project_seed_locations(
         project=rewritten_project,
         rewritten_locations=rewritten_seed_locations,
@@ -922,6 +922,7 @@ def _execute_virtual_build_plan(
             + tuple(
                 SeedExecutionResult(seed_name=seed_name, status=ExecutionStatus.SKIPPED)
                 for seed_name in sorted(reads.available_seed_physical_relations)
+                if seed_name not in reads.seed_load_names
             ),
         )
     return result

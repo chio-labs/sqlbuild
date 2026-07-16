@@ -104,12 +104,15 @@ def plan_dbt_interop_from_project(
         manifest=manifest,
         graph=resolution.graph,
         full_refresh=DBT_FULL_REFRESH_FLAG in invocation.routed.dbt_args,
-        force=invocation.effective_force,
+        changes_only=invocation.effective_changes_only,
         connection_progress=connection_progress,
         on_progress=on_progress,
     )
     plan = append_manifest_seed_warnings(plan=plan, manifest=manifest)
-    plan = apply_dbt_build_pruning(plan)
+    plan = apply_dbt_build_pruning(
+        plan=plan,
+        changes_only=invocation.effective_changes_only,
+    )
     plan = attach_sqlbuild_plan_output(
         plan=plan,
         project_dir=project_dir,

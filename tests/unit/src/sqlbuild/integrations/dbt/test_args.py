@@ -217,13 +217,13 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
             expected_sqlbuild_args=("--fail-fast",),
         ),
         DbtArgRoutingTestCase(
-            description="routes SQLBuild force flag for build",
+            description="routes SQLBuild changes-only flag for build",
             command="build",
-            parsed=DbtInteropParsedArgs(force=True),
+            parsed=DbtInteropParsedArgs(changes_only=True),
             expected_select=(),
             expected_exclude=(),
             expected_dbt_args=(),
-            expected_sqlbuild_args=("--force",),
+            expected_sqlbuild_args=("--changes-only",),
         ),
         DbtArgRoutingTestCase(
             description="routes dbt defer clone flag to wrapper only",

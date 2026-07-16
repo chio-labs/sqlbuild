@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.spec.contracts.constants import FORCE_SETTING_OVERRIDE_KEY
+from sqlbuild.spec.contracts.constants import CHANGES_ONLY_SETTING_OVERRIDE_KEY
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.models import (
     ClonePolicy,
@@ -76,7 +76,11 @@ def resolve_target_config(
             if local_target.reuse_from is not None
             else project_target.reuse_from
         ),
-        force=local_target.force if local_target.force is not None else project_target.force,
+        changes_only=(
+            local_target.changes_only
+            if local_target.changes_only is not None
+            else project_target.changes_only
+        ),
         reuse_hard_copy=(
             local_target.reuse_hard_copy
             if local_target.reuse_hard_copy is not None
@@ -100,16 +104,16 @@ def resolve_target_config(
     return target_config
 
 
-def resolve_effective_force(
+def resolve_effective_changes_only(
     *,
     project_config: ProjectConfig,
     local_config: LocalConfig,
     selected_target: str | None,
-    cli_force: bool,
+    cli_changes_only: bool,
 ) -> bool:
-    """Resolve configured force with CLI, target, and settings precedence."""
+    """Resolve changes-only selection with CLI, target, and settings precedence."""
 
-    if cli_force:
+    if cli_changes_only:
         return True
     target_name: str | None = resolve_target_name(
         project_config=project_config,
@@ -122,12 +126,12 @@ def resolve_effective_force(
             local_config=local_config,
             target_name=target_name,
         )
-        if target_config.force is not None:
-            return target_config.force
+        if target_config.changes_only is not None:
+            return target_config.changes_only
     return (
-        local_config.settings.force
-        if FORCE_SETTING_OVERRIDE_KEY in local_config.setting_overrides
-        else project_config.settings.force
+        local_config.settings.changes_only
+        if CHANGES_ONLY_SETTING_OVERRIDE_KEY in local_config.setting_overrides
+        else project_config.settings.changes_only
     )
 
 

@@ -50,7 +50,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "virtual_env": None,
     "skip_locked": False,
     "include_stale_upstreams": False,
-    "force": False,
+    "changes_only": False,
     "include_python": True,
     "load_sources": None,
     "reload": False,
@@ -165,7 +165,7 @@ class CliNamespace:
     virtual_env: str | None
     skip_locked: bool
     include_stale_upstreams: bool
-    force: bool
+    changes_only: bool
     include_python: bool
     load_sources: bool | None
     reload: bool

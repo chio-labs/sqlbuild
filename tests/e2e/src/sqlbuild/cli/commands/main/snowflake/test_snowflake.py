@@ -608,7 +608,7 @@ def test_given_built_direct_project_when_building_changes_only_on_snowflake_then
         assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
 
         changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build"),
+            command=("--no-color", "build", "--changes-only"),
             project_dir=project_dir,
         )
 

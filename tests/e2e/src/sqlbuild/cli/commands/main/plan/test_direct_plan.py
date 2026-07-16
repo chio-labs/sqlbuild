@@ -60,7 +60,7 @@ def test_given_direct_project_with_config_only_change_when_planning_then_reports
     )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--force"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
@@ -70,7 +70,7 @@ def test_given_direct_project_with_config_only_change_when_planning_then_reports
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -105,6 +105,8 @@ def test_given_built_direct_project_when_planning_changes_only_then_selects_no_u
             "sqlbuild_project.toml": (
                 'name = "direct_changes_only_plan"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
@@ -118,7 +120,7 @@ def test_given_built_direct_project_when_planning_changes_only_then_selects_no_u
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -166,7 +168,7 @@ def test_given_built_direct_project_when_planning_selected_changes_only_then_pru
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--select", "orders"),
+        command=("--no-color", "plan", "--select", "orders", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -183,7 +185,7 @@ def test_given_built_direct_project_when_planning_selected_changes_only_then_pru
     "test_case",
     [
         DirectPlanE2ETestCase(
-            description="direct force explicit select keeps unchanged selected model",
+            description="direct default explicit select keeps unchanged selected model",
             expected_fragments=(
                 "Plan ready (1 selected)",
                 "Models (1 standard run)",
@@ -194,7 +196,7 @@ def test_given_built_direct_project_when_planning_selected_changes_only_then_pru
     ],
     ids=lambda case: case.description,
 )
-def test_given_built_direct_project_when_planning_selected_with_force_then_keeps_model(
+def test_given_built_direct_project_when_planning_selected_by_default_then_keeps_model(
     test_case: DirectPlanE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -218,7 +220,7 @@ def test_given_built_direct_project_when_planning_selected_with_force_then_keeps
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--select", "orders", "--force"),
+        command=("--no-color", "plan", "--select", "orders"),
         project_dir=project_dir,
     )
 
@@ -265,7 +267,7 @@ def test_given_direct_query_change_when_planning_changes_only_then_selects_chang
         },
     )
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--force"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
@@ -275,7 +277,7 @@ def test_given_direct_query_change_when_planning_changes_only_then_selects_chang
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -338,7 +340,7 @@ def test_given_upstream_query_change_when_planning_changes_only_then_keeps_downs
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -399,7 +401,7 @@ def test_given_scoped_upstream_changes_only_build_when_planning_later_then_downs
     )
 
     scoped_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--select", "stg_orders"),
+        command=("--no-color", "build", "--select", "stg_orders", "--changes-only"),
         project_dir=project_dir,
     )
     assert scoped_build_result.returncode == 0, (
@@ -407,7 +409,7 @@ def test_given_scoped_upstream_changes_only_build_when_planning_later_then_downs
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -464,7 +466,7 @@ def test_given_direct_config_change_when_planning_changes_only_then_selects_chan
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -529,7 +531,7 @@ def test_given_direct_function_change_when_planning_changes_only_then_selects_de
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--select", "+fact_orders"),
+        command=("--no-color", "plan", "--select", "+fact_orders", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -612,7 +614,7 @@ def test_given_direct_schema_change_when_planning_changes_only_then_selects_chan
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -647,6 +649,8 @@ def test_given_unchanged_direct_model_when_planning_changes_only_then_prunes_tes
             "sqlbuild_project.toml": (
                 'name = "direct_changes_only_tests_audits_plan"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
@@ -673,7 +677,7 @@ def test_given_unchanged_direct_model_when_planning_changes_only_then_prunes_tes
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -722,7 +726,7 @@ def test_given_built_direct_project_when_planning_changes_only_json_then_selecte
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--json"),
+        command=("--no-color", "plan", "--json", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -762,6 +766,8 @@ def test_given_observable_source_freshness_when_planning_changes_only_then_reads
             "sqlbuild_project.toml": (
                 'name = "direct_changes_only_source_freshness_plan_read_only"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
@@ -877,7 +883,7 @@ def test_given_timestamp_lag_tolerance_when_planning_changes_only_then_skips_wit
         source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
     )
     within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"), project_dir=project_dir
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
     )
 
     assert within_tolerance_result.returncode == 0, (
@@ -941,6 +947,8 @@ def test_given_source_freshness_view_chain_when_planning_changes_only_then_skips
             "sqlbuild_project.toml": (
                 'name = "standard_source_freshness_view_chain_plan"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
@@ -1027,7 +1035,7 @@ def test_given_unknown_source_freshness_when_planning_changes_only_then_keeps_do
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -1070,6 +1078,8 @@ def test_given_recent_source_data_when_planning_changes_only_then_runs_despite_u
             "sqlbuild_project.toml": (
                 'name = "direct_run_despite_unchanged_plan"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
@@ -1147,6 +1157,8 @@ def test_given_old_source_data_when_planning_changes_only_then_skips_unchanged_t
             "sqlbuild_project.toml": (
                 'name = "direct_run_despite_unchanged_expired_plan"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
@@ -1222,13 +1234,13 @@ def test_given_duration_without_source_freshness_when_planning_changes_only_then
         },
     )
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--force"),
+        command=("--no-color", "build"),
         project_dir=project_dir,
     )
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
     output: str = plan_result.stdout + plan_result.stderr
@@ -1267,6 +1279,8 @@ def test_given_run_despite_unchanged_default_when_planning_changes_only_then_run
             "sqlbuild_project.toml": (
                 'name = "direct_run_despite_unchanged_default_plan"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 "[defaults]\n"
@@ -1320,6 +1334,8 @@ def test_given_run_despite_unchanged_path_default_when_planning_then_runs_matchi
             "sqlbuild_project.toml": (
                 'name = "direct_run_despite_unchanged_path_default_plan"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n\n'
                 '[path_defaults."rolling"]\n'
@@ -1376,6 +1392,8 @@ def test_given_scoped_run_despite_unchanged_when_planning_then_reports_remaining
             "sqlbuild_project.toml": (
                 'name = "direct_run_despite_unchanged_scoped_plan"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
@@ -1449,7 +1467,7 @@ def test_given_column_freshness_expression_when_planning_changes_only_then_obser
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -1516,7 +1534,7 @@ def test_given_selected_upstream_query_change_when_planning_changes_only_then_ke
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--select", "+fact_orders"),
+        command=("--no-color", "plan", "--select", "+fact_orders", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -1568,7 +1586,7 @@ def test_given_built_direct_project_when_planning_full_refresh_changes_only_then
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--full-refresh"),
+        command=("--no-color", "plan", "--full-refresh", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -1905,7 +1923,7 @@ def test_given_changed_python_identity_when_planning_changes_only_then_sql_work_
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--select", "+fact_orders"),
+        command=("--no-color", "plan", "--select", "+fact_orders", "--changes-only"),
         project_dir=project_dir,
     )
 

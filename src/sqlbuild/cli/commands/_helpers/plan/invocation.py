@@ -26,7 +26,9 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.contracts.main.resolve_effective_force import resolve_effective_force
+from sqlbuild.spec.contracts.main.resolve_effective_changes_only import (
+    resolve_effective_changes_only,
+)
 
 
 def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
@@ -38,11 +40,11 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    effective_force: bool = resolve_effective_force(
+    effective_changes_only: bool = resolve_effective_changes_only(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
         selected_target=request.selected_target,
-        cli_force=request.force,
+        cli_changes_only=request.changes_only,
     )
     enforce_no_defer_to_in_virtual_mode(
         discovered_inputs=discovered_inputs,
@@ -76,7 +78,7 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
     return PlanInvocation(
         effective_project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,
-        effective_force=effective_force,
+        effective_changes_only=effective_changes_only,
         adapter=adapter_context.adapter,
         connection_config=adapter_context.connection_config,
         use_color=use_color,

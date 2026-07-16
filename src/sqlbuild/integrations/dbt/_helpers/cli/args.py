@@ -107,7 +107,7 @@ def _route_sqlbuild_only(*, parsed: DbtInteropParsedArgs, sqlbuild_args: list[st
             sqlbuild_args.extend((flag, value))
     for flag, enabled in (
         ("--fail-fast", parsed.fail_fast),
-        ("--force", parsed.force),
+        ("--changes-only", parsed.changes_only),
         ("--hard-copy", parsed.hard_copy),
     ):
         if enabled:
@@ -159,7 +159,7 @@ def _validate_sqlbuild_flags_allowed(
         ("--defer-to", parsed.defer_to is not None),
         ("--defer-clone-from", parsed.defer_clone_from),
         ("--fail-fast", parsed.fail_fast),
-        ("--force", parsed.force),
+        ("--changes-only", parsed.changes_only),
         ("--hard-copy", parsed.hard_copy),
     ):
         if present and flag not in allowed:
@@ -181,13 +181,13 @@ def _allowed_sqlbuild_flags(command: DbtInteropCommand) -> frozenset[str]:
         "--defer-to",
         "--defer-clone-from",
         "--fail-fast",
-        "--force",
+        "--changes-only",
         "--verbose",
     )
     if command in {DbtInteropCommand.RUN, DbtInteropCommand.BUILD}:
         return frozenset(common_execution_flags)
     if command == DbtInteropCommand.PLAN:
-        return frozenset((*cursor_flags, "--defer-to", "--force"))
+        return frozenset((*cursor_flags, "--defer-to", "--changes-only"))
     if command == DbtInteropCommand.TEST:
         return frozenset()
     return frozenset()

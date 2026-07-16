@@ -219,7 +219,7 @@ def resolve_dbt_planned_work(
         ),
         selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh=DBT_FULL_REFRESH_FLAG in invocation.routed.dbt_args,
-        force=invocation.effective_force,
+        changes_only=invocation.effective_changes_only,
         hooks=ConnectionHooks(
             on_progress=request.on_progress,
             on_connection_start=connection_progress.on_connection_start,
@@ -244,14 +244,17 @@ def resolve_dbt_planned_work(
         dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
             command=request.command,
             plan=plan,
+            changes_only=invocation.effective_changes_only,
         ),
         dbt_pruned_seed_unique_ids=build_dbt_pruned_seed_unique_ids(
             command=request.command,
             plan=plan,
+            changes_only=invocation.effective_changes_only,
         ),
         dbt_pruned_test_unique_ids=build_dbt_pruned_test_unique_ids(
             command=request.command,
             plan=plan,
+            changes_only=invocation.effective_changes_only,
         ),
     )
     connection_config: dict[str, object] = resolve_connection_config(

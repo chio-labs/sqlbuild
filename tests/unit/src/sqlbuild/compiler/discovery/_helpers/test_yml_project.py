@@ -53,7 +53,7 @@ schema = "dev"
                     "defer_sources_to": None,
                     "defer_clone_from": None,
                     "reuse_from": None,
-                    "force": None,
+                    "changes_only": None,
                     "reuse_hard_copy": False,
                     "allow_as_clone_origin": False,
                     "allow_as_clone_destination": False,
@@ -81,7 +81,7 @@ sql_analysis = false
 query_change_tracking = true
 concurrency = 8
 auto_load_sources = false
-force = true
+changes_only = true
 
 [defaults]
 materialized = "table"
@@ -106,7 +106,7 @@ schema = "dev_${user}"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
 reuse_from = "prod"
-force = true
+changes_only = true
 reuse_hard_copy = true
 
 [targets.dev.connection]
@@ -172,7 +172,7 @@ git_timeout_seconds = 12
             expected_sql_analysis=False,
             expected_max_concurrency=8,
             expected_auto_load_sources=False,
-            expected_force=True,
+            expected_changes_only=True,
             expected_materialized="table",
             expected_row_diff_exclude_columns=("loaded_at",),
             expected_row_diff_tolerances={
@@ -195,7 +195,7 @@ git_timeout_seconds = 12
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
                     "reuse_from": "prod",
-                    "force": True,
+                    "changes_only": True,
                     "reuse_hard_copy": True,
                     "allow_as_clone_origin": True,
                     "allow_as_clone_destination": True,
@@ -256,7 +256,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.settings.sql_analysis is test_case.expected_sql_analysis
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
-    assert config.settings.force is test_case.expected_force
+    assert config.settings.changes_only is test_case.expected_changes_only
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
@@ -272,7 +272,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "defer_sources_to": target_config.defer_sources_to,
             "defer_clone_from": target_config.defer_clone_from,
             "reuse_from": target_config.reuse_from,
-            "force": target_config.force,
+            "changes_only": target_config.changes_only,
             "reuse_hard_copy": target_config.reuse_hard_copy,
             "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
             "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
@@ -352,7 +352,7 @@ sql_analysis = false
 sql_validation = false
 concurrency = 4
 auto_load_sources = false
-force = true
+changes_only = true
 
 [vars]
 user = "kevin"
@@ -384,13 +384,19 @@ max_total_bytes = 78
             expected_max_concurrency=4,
             expected_auto_load_sources=False,
             expected_setting_overrides=frozenset(
-                {"sql_analysis", "sql_validation", "concurrency", "auto_load_sources", "force"}
+                {
+                    "sql_analysis",
+                    "sql_validation",
+                    "concurrency",
+                    "auto_load_sources",
+                    "changes_only",
+                }
             ),
             expected_vars={"user": "kevin"},
             expected_dbt_target="pat",
             expected_dbt_vars={"shared": "local", "threads": 2},
             expected_dbt_defer_clone_from=False,
-            expected_force=True,
+            expected_changes_only=True,
             expected_scenario_local_type_overrides={
                 "snowflake": {
                     "NUMBER(*,0)": "BIGINT",
@@ -463,7 +469,7 @@ schema = "local_schema"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
 reuse_from = "prod"
-force = false
+changes_only = false
 reuse_hard_copy = true
 
 [targets.dev.connection]
@@ -494,7 +500,7 @@ allow_as_clone_destination = false
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
                     "reuse_from": "prod",
-                    "force": False,
+                    "changes_only": False,
                     "reuse_hard_copy": True,
                     "allow_as_clone_origin": True,
                     "allow_as_clone_destination": False,
@@ -524,7 +530,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.settings.sql_validation is test_case.expected_sql_validation
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
-    assert config.settings.force is test_case.expected_force
+    assert config.settings.changes_only is test_case.expected_changes_only
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
     assert config.dbt.target == test_case.expected_dbt_target
@@ -546,7 +552,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "defer_sources_to": target_config.defer_sources_to,
             "defer_clone_from": target_config.defer_clone_from,
             "reuse_from": target_config.reuse_from,
-            "force": target_config.force,
+            "changes_only": target_config.changes_only,
             "reuse_hard_copy": target_config.reuse_hard_copy,
             "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
             "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,

@@ -39,6 +39,7 @@ _DBT_BASELINE_COMMAND: tuple[str, ...] = (
 _NATIVE_EXACT_COMMAND: tuple[str, ...] = (
     "--no-color",
     "build",
+    "--changes-only",
     "--select",
     "fact_orders",
 )
@@ -46,11 +47,25 @@ _DBT_EXACT_COMMAND: tuple[str, ...] = (
     "--no-color",
     "dbt",
     "build",
+    "--changes-only",
     "--select",
     "fact_orders",
 )
-_NATIVE_REPAIR_COMMAND: tuple[str, ...] = _NATIVE_BASELINE_COMMAND
-_DBT_REPAIR_COMMAND: tuple[str, ...] = _DBT_BASELINE_COMMAND
+_NATIVE_REPAIR_COMMAND: tuple[str, ...] = (
+    "--no-color",
+    "build",
+    "--changes-only",
+    "--select",
+    "+fact_orders",
+)
+_DBT_REPAIR_COMMAND: tuple[str, ...] = (
+    "--no-color",
+    "dbt",
+    "build",
+    "--changes-only",
+    "--select",
+    "+fact_orders",
+)
 _NATIVE_DATABASE_PATH: Path = Path("warehouse.duckdb")
 _DBT_DATABASE_PATH: Path = Path("selection_staleness.duckdb")
 _NATIVE_FACT_ROWS_QUERY: str = "SELECT order_id, amount_dollars FROM fact_orders ORDER BY order_id"
@@ -286,6 +301,7 @@ _DBT_STALENESS_LABEL: str = "selected dbt model 'fact_orders' will build on"
                 (
                     "--no-color",
                     "build",
+                    "--changes-only",
                     "--select",
                     "raw_orders_model",
                     "fact_orders",
@@ -328,6 +344,7 @@ _DBT_STALENESS_LABEL: str = "selected dbt model 'fact_orders' will build on"
                     "--no-color",
                     "dbt",
                     "build",
+                    "--changes-only",
                     "--select",
                     "raw_orders_model",
                     "fact_orders",
@@ -363,6 +380,7 @@ _DBT_STALENESS_LABEL: str = "selected dbt model 'fact_orders' will build on"
                 (
                     "--no-color",
                     "build",
+                    "--changes-only",
                     "--select",
                     "selected_parent",
                     "fact_orders",
@@ -398,6 +416,7 @@ _DBT_STALENESS_LABEL: str = "selected dbt model 'fact_orders' will build on"
                     "--no-color",
                     "dbt",
                     "build",
+                    "--changes-only",
                     "--select",
                     "selected_parent",
                     "fact_orders",
@@ -645,7 +664,7 @@ _DBT_STALENESS_LABEL: str = "selected dbt model 'fact_orders' will build on"
                 amount_cents=125, fact_adjustment=0, leaf_materialization="table"
             ),
             baseline_command=_NATIVE_BASELINE_COMMAND,
-            exact_commands=(("--no-color", "plan", "--select", "fact_orders"),),
+            exact_commands=(("--no-color", "plan", "--changes-only", "--select", "fact_orders"),),
             repair_command=_NATIVE_REPAIR_COMMAND,
             expected_exact_stdout_fragments=(
                 "Plan ready (0 selected)",
