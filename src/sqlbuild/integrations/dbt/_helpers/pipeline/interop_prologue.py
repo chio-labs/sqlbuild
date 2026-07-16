@@ -6,6 +6,7 @@ import json
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -20,7 +21,7 @@ from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
     DbtCompileReferenceResolver,
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.constants import DBT_FORCE_FLAG
+from sqlbuild.integrations.dbt.constants import DBT_CHANGES_ONLY_FLAG
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.main.cli.enforce_standard_mode import (
     enforce_dbt_interop_standard_mode,
@@ -73,7 +74,9 @@ from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtSupportedResou
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.contracts.main.resolve_effective_force import resolve_effective_force
+from sqlbuild.spec.contracts.main.resolve_effective_changes_only import (
+    resolve_effective_changes_only,
+)
 from sqlbuild.spec.contracts.models import DbtProductionRefConfig
 
 
@@ -92,15 +95,15 @@ def resolve_dbt_execution_invocation(
         project_dir=request.project_dir
     )
     enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
-    effective_force: bool = resolve_effective_force(
+    effective_changes_only: bool = resolve_effective_changes_only(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
         selected_target=None,
-        cli_force=DBT_FORCE_FLAG in routed.sqlbuild_args,
+        cli_changes_only=DBT_CHANGES_ONLY_FLAG in routed.sqlbuild_args,
     )
-    effective_sqlbuild_args: tuple[str, ...] = _with_effective_force(
+    effective_sqlbuild_args: tuple[str, ...] = _with_effective_changes_only(
         args=routed.sqlbuild_args,
-        force=effective_force,
+        changes_only=effective_changes_only,
     )
     dbt_options: DbtCliOptions = resolve_dbt_plan_options(
         project_dir=request.project_dir,
@@ -118,7 +121,7 @@ def resolve_dbt_execution_invocation(
         dbt_output_stream=request.dbt_stdout_stream or output_stream,
         routed=routed,
         discovered_inputs=discovered_inputs,
-        effective_force=effective_force,
+        effective_changes_only=effective_changes_only,
         effective_sqlbuild_args=effective_sqlbuild_args,
         dbt_options=dbt_options,
         dbt_vars=dbt_vars,
@@ -228,6 +231,7 @@ def resolve_dbt_interop_plan(
             sqlbuild_executable=sqlbuild_executable,
         ),
     )
+    plan = replace(plan, changes_only=invocation.effective_changes_only)
     report_progress(
         on_progress=on_progress,
         message=f"Resolved dbt and SQLBuild selection. ({time.monotonic() - selection_start:.2f}s)",
@@ -235,10 +239,10 @@ def resolve_dbt_interop_plan(
     return DbtInteropPlanResolution(graph=graph, plan=plan)
 
 
-def _with_effective_force(*, args: tuple[str, ...], force: bool) -> tuple[str, ...]:
-    if not force or DBT_FORCE_FLAG in args:
+def _with_effective_changes_only(*, args: tuple[str, ...], changes_only: bool) -> tuple[str, ...]:
+    if not changes_only or DBT_CHANGES_ONLY_FLAG in args:
         return args
-    return (*args, DBT_FORCE_FLAG)
+    return (*args, DBT_CHANGES_ONLY_FLAG)
 
 
 def prepare_dbt_comparison_manifests(

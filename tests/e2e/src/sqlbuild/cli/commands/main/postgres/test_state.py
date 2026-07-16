@@ -2544,7 +2544,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
             config=postgres_e2e_config,
         )
         repeat_build: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build"),
+            command=("--no-color", "build", "--changes-only"),
             project_dir=project_dir,
         )
         assert repeat_build.returncode == test_case.expected_exit_code, repeat_build.stderr
@@ -2560,7 +2560,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
             == physical_rows_before
         )
         matching_plan: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "plan"),
+            command=("--no-color", "plan", "--changes-only"),
             project_dir=project_dir,
         )
         assert matching_plan.returncode == test_case.expected_exit_code, matching_plan.stderr
@@ -2569,7 +2569,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
 
         (project_dir / "models" / "stg_orders.sql").write_text("MODEL ();\n\nSELECT 2 AS id\n")
         stale_plan: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "plan"),
+            command=("--no-color", "plan", "--changes-only"),
             project_dir=project_dir,
         )
         assert stale_plan.returncode == test_case.expected_exit_code, stale_plan.stderr
@@ -2577,7 +2577,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
             assert fragment in stale_plan.stdout
         assert "dim_customers" not in stale_plan.stdout
         selected_block: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "plan", "--select", "fact_orders"),
+            command=("--no-color", "plan", "--select", "fact_orders", "--changes-only"),
             project_dir=project_dir,
         )
         assert selected_block.returncode == 1
@@ -2589,13 +2589,14 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
                 "--select",
                 "fact_orders",
                 "--include-stale-upstreams",
+                "--changes-only",
             ),
             project_dir=project_dir,
         )
         assert include_plan.returncode == test_case.expected_exit_code, include_plan.stderr
         assert test_case.expected_stdout_fragments[6] in include_plan.stdout
         json_plan: subprocess.CompletedProcess[str] = run_sqb(
-            command=("plan", "--json"),
+            command=("plan", "--json", "--changes-only"),
             project_dir=project_dir,
         )
         assert json_plan.returncode == test_case.expected_exit_code, json_plan.stderr
@@ -2633,12 +2634,12 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
             == test_case.expected_rows
         )
         final_build: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build", "--virtual-env", "pr"),
+            command=("--no-color", "build", "--virtual-env", "pr", "--changes-only"),
             project_dir=project_dir,
         )
         assert final_build.returncode == test_case.expected_exit_code, final_build.stderr
         final_plan: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "plan", "--virtual-env", "pr"),
+            command=("--no-color", "plan", "--virtual-env", "pr", "--changes-only"),
             project_dir=project_dir,
         )
         assert final_plan.returncode == test_case.expected_exit_code, final_plan.stderr

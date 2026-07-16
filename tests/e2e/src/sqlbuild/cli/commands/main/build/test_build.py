@@ -325,7 +325,7 @@ def test_given_built_direct_project_when_building_changes_only_then_prunes_uncha
     )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
+        command=("--no-color", "build", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -389,7 +389,7 @@ def test_given_direct_query_change_when_building_changes_only_then_executes_chan
     )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
+        command=("--no-color", "build", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -529,7 +529,13 @@ def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_rea
     marker_path.unlink()
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--select", "orders profile_orders"),
+        command=(
+            "--no-color",
+            "build",
+            "--select",
+            "orders profile_orders",
+            "--changes-only",
+        ),
         project_dir=project_dir,
     )
 
@@ -568,6 +574,8 @@ def test_given_source_freshness_when_building_normally_then_writes_state_after_s
             "sqlbuild_project.toml": (
                 'name = "direct_changes_only_source_freshness_build_read_only"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
@@ -746,6 +754,8 @@ def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_wit
             "sqlbuild_project.toml": (
                 'name = "direct_changes_only_source_freshness_lag_tolerance"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),

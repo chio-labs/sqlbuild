@@ -2189,14 +2189,15 @@ def query_dbt_seed_change_revenue_rows(*, project_dir: Path) -> list[tuple[objec
 
 
 def run_dbt_seed_change_build(
-    *, project_dir: Path, select: str
+    *, project_dir: Path, select: str, changes_only: bool
 ) -> subprocess.CompletedProcess[str]:
     """Run `sqb dbt build --select <select>` for the seed-change project."""
 
     from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
+    changes_only_args: tuple[str, ...] = {False: (), True: ("--changes-only",)}[changes_only]
     return run_sqb(
-        command=("--no-color", "dbt", "build", "--select", select),
+        command=("--no-color", "dbt", "build", *changes_only_args, "--select", select),
         project_dir=project_dir,
     )
 

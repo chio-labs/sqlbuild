@@ -17,17 +17,17 @@ class TargetConfigResolutionTestCase:
     expected_allow_reset: bool
     expected_reuse_from: str | None = None
     expected_defer_clone_from: str | None = None
-    expected_force: bool | None = None
+    expected_changes_only: bool | None = None
     expected_reuse_hard_copy: bool = False
 
 
 @dataclass(frozen=True)
-class EffectiveForceResolutionTestCase:
+class EffectiveChangesOnlyResolutionTestCase:
     description: str
     project_config: ProjectConfig
     local_config: LocalConfig
-    cli_force: bool
-    expected_force: bool
+    cli_changes_only: bool
+    expected_changes_only: bool
 
 
 @dataclass(frozen=True)

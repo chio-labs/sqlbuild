@@ -343,6 +343,7 @@ def _format_dbt_run_reason_sections(
         DbtModelPlanReason.FIRST_RUN,
         DbtModelPlanReason.FULL_REFRESH,
         DbtModelPlanReason.SOURCE_FRESHNESS_ERROR,
+        DbtModelPlanReason.NO_CHANGE,
     )
     reason: DbtModelPlanReason
     for reason in reason_order:
@@ -521,7 +522,7 @@ def _dbt_model_plan_reason_section_label(reason: DbtModelPlanReason) -> str:
         DbtModelPlanReason.CHECKSUM_CHANGED: "Checksum changed",
         DbtModelPlanReason.SOURCE_FRESHNESS_CHANGED: "Source freshness changed",
         DbtModelPlanReason.UPSTREAM_CHANGED: "Upstream changed",
-        DbtModelPlanReason.NO_CHANGE: "Current",
+        DbtModelPlanReason.NO_CHANGE: "Selected",
         DbtModelPlanReason.SOURCE_FRESHNESS_ERROR: "Source freshness error",
     }
     return labels[reason]

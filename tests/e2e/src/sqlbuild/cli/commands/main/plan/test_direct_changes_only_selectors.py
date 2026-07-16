@@ -109,7 +109,7 @@ def test_given_upstream_change_when_planning_with_selector_then_respects_selecto
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--select", test_case.selector),
+        command=("--no-color", "plan", "--select", test_case.selector, "--changes-only"),
         project_dir=project_dir,
     )
 

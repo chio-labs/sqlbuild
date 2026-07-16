@@ -584,7 +584,7 @@ class DbtInteropParsedArgs:
     end_cursor_int: str | None = None
     defer_to: str | None = None
     fail_fast: bool = False
-    force: bool = False
+    changes_only: bool = False
     hard_copy: bool = False
     dbt_passthrough: tuple[str, ...] = field(default_factory=tuple)
 
@@ -721,6 +721,7 @@ class DbtInteropPlan:
     dbt_pruned_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_pruned_test_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_required_selector_terms: tuple[str, ...] = field(default_factory=tuple)
+    changes_only: bool = False
     supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     dbt_skip_reason: DbtInteropSkipReason | None = None
     sqlbuild_skip_reason: DbtInteropSkipReason | None = None
@@ -756,7 +757,7 @@ class DbtInteropInvocation:
     dbt_output_stream: TextIO
     routed: DbtInteropRoutedArgs
     discovered_inputs: DiscoveredProjectInputs
-    effective_force: bool
+    effective_changes_only: bool
     effective_sqlbuild_args: tuple[str, ...]
     dbt_options: DbtCliOptions
     dbt_vars: dict[str, object]

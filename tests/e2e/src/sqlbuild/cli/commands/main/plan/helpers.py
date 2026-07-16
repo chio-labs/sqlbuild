@@ -155,7 +155,7 @@ def standard_model_version_hashes(*, db_path: Path, model_name: str) -> list[tup
 
 def plan_changes_only_json(*, project_dir: Path) -> dict[str, object]:
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--json"),
+        command=("--no-color", "plan", "--json", "--changes-only"),
         project_dir=project_dir,
     )
     assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr

@@ -737,6 +737,8 @@ def prepare_direct_changes_only_two_model_project(
             "sqlbuild_project.toml": (
                 f'name = "{project_name}"\n'
                 'adapter = "duckdb"\n\n'
+                "[settings]\n"
+                "changes_only = true\n\n"
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),

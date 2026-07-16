@@ -49,7 +49,7 @@ def test_given_changed_seed_in_closure_when_building_then_cascades_and_updates_d
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_seed_change_project(tmp_path=tmp_path)
     baseline: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=False
     )
     assert baseline.returncode == 0, baseline.stdout + baseline.stderr
     assert query_dbt_seed_change_revenue_rows(project_dir=project_dir) == [
@@ -61,7 +61,7 @@ def test_given_changed_seed_in_closure_when_building_then_cascades_and_updates_d
     append_dbt_seed_change_order(project_dir=project_dir, order_id=105, customer_id=2, amount=40)
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select=test_case.select[0]
+        project_dir=project_dir, select=test_case.select[0], changes_only=True
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -99,12 +99,12 @@ def test_given_built_seed_closure_when_rebuilding_then_no_op_proves_identity_rou
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_seed_change_project(tmp_path=tmp_path)
     first: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=False
     )
     assert first.returncode == 0, first.stdout + first.stderr
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select=test_case.select[0]
+        project_dir=project_dir, select=test_case.select[0], changes_only=True
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -150,14 +150,14 @@ def test_given_changed_seed_out_of_selection_when_building_leaf_then_no_op_with_
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_seed_change_project(tmp_path=tmp_path)
     baseline: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=False
     )
     assert baseline.returncode == 0, baseline.stdout + baseline.stderr
 
     append_dbt_seed_change_order(project_dir=project_dir, order_id=106, customer_id=1, amount=11)
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select=test_case.select[0]
+        project_dir=project_dir, select=test_case.select[0], changes_only=True
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -197,7 +197,7 @@ def test_given_leaf_change_and_out_of_selection_seed_when_building_then_runs_and
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_seed_change_project(tmp_path=tmp_path)
     baseline: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=False
     )
     assert baseline.returncode == 0, baseline.stdout + baseline.stderr
 
@@ -205,7 +205,7 @@ def test_given_leaf_change_and_out_of_selection_seed_when_building_then_runs_and
     edit_dbt_seed_change_leaf_sql(project_dir=project_dir)
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select=test_case.select[0]
+        project_dir=project_dir, select=test_case.select[0], changes_only=True
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -240,14 +240,14 @@ def test_given_config_only_seed_change_when_building_then_seed_is_detected_as_ch
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_seed_change_project(tmp_path=tmp_path)
     baseline: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=False
     )
     assert baseline.returncode == 0, baseline.stdout + baseline.stderr
 
     set_dbt_seed_change_column_types(project_dir=project_dir)
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select=test_case.select[0]
+        project_dir=project_dir, select=test_case.select[0], changes_only=True
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -289,14 +289,14 @@ def test_given_dropped_seed_relation_when_building_then_reloads_and_rebuilds(
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_seed_change_project(tmp_path=tmp_path)
     baseline: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=False
     )
     assert baseline.returncode == 0, baseline.stdout + baseline.stderr
 
     drop_dbt_seed_change_relation(project_dir=project_dir, relation="raw_orders")
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select=test_case.select[0]
+        project_dir=project_dir, select=test_case.select[0], changes_only=True
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -334,17 +334,17 @@ def test_given_config_only_seed_change_when_rebuilding_then_no_op_round_trips(
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_seed_change_project(tmp_path=tmp_path)
     baseline: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=False
     )
     assert baseline.returncode == 0, baseline.stdout + baseline.stderr
     set_dbt_seed_change_column_types(project_dir=project_dir)
     changed: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=True
     )
     assert changed.returncode == 0, changed.stdout + changed.stderr
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select=test_case.select[0]
+        project_dir=project_dir, select=test_case.select[0], changes_only=True
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -395,7 +395,7 @@ def test_given_two_seed_branches_when_one_seed_changes_then_only_its_branch_casc
     append_dbt_seed_change_order(project_dir=project_dir, order_id=105, customer_id=2, amount=40)
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select=test_case.select[0]
+        project_dir=project_dir, select=test_case.select[0], changes_only=True
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -434,7 +434,7 @@ def test_given_out_of_selection_seed_change_when_running_then_warns(
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_seed_change_project(tmp_path=tmp_path)
     baseline: subprocess.CompletedProcess[str] = run_dbt_seed_change_build(
-        project_dir=project_dir, select="+fct_customer_revenue"
+        project_dir=project_dir, select="+fct_customer_revenue", changes_only=False
     )
     assert baseline.returncode == 0, baseline.stdout + baseline.stderr
 
@@ -442,7 +442,14 @@ def test_given_out_of_selection_seed_change_when_running_then_warns(
 
     result: subprocess.CompletedProcess[str] = run_dbt_seed_change_command(
         project_dir=project_dir,
-        command=("--no-color", "dbt", "run", "--select", test_case.select[0]),
+        command=(
+            "--no-color",
+            "dbt",
+            "run",
+            "--changes-only",
+            "--select",
+            test_case.select[0],
+        ),
     )
 
     assert result.returncode == 0, result.stdout + result.stderr

@@ -82,11 +82,16 @@ def run_virtual_plan_pipeline(
             bound_seed_refs=bound.seed_refs,
             source_freshness_records=bound.source_freshness_records,
         )
+        default_model_selection: tuple[str, ...] = (
+            semantics.default_selection
+            if resolved.changes_only
+            else tuple(sorted(model.name for model in graph.project.models))
+        )
         effective_select: tuple[str, ...] = resolve_virtual_model_selection(
             graph=graph,
             select=resolved.select,
             exclude=resolved.exclude,
-            default_selection=semantics.default_selection,
+            default_selection=default_model_selection,
             stale_model_names=semantics.stale_model_names,
             include_stale_upstreams=resolved.include_stale_upstreams,
             work_selection_policy=(
@@ -96,7 +101,13 @@ def run_virtual_plan_pipeline(
             ),
         )
         selected_seed_names: tuple[str, ...] = (
-            semantics.stale_seed_names if not resolved.select and not resolved.exclude else ()
+            (
+                semantics.stale_seed_names
+                if resolved.changes_only
+                else tuple(sorted(seed.name for seed in graph.project.seeds))
+            )
+            if not resolved.select and not resolved.exclude
+            else ()
         )
         plan_output: PlanOutput = build_virtual_plan_output(
             graph=graph,

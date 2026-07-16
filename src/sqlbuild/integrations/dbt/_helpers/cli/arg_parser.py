@@ -38,7 +38,7 @@ def add_dbt_execution_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--start-cursor-int", default=None)
     parser.add_argument("--end-cursor-int", default=None)
     parser.add_argument("--fail-fast", action="store_true", default=False)
-    parser.add_argument("--force", action="store_true", default=False)
+    parser.add_argument("--changes-only", action="store_true", default=False)
     parser.add_argument("--hard-copy", action="store_true", default=False)
     parser.add_argument(
         "dbt_passthrough",
@@ -103,7 +103,7 @@ def parse_dbt_execution_args(
         start_cursor_int=namespace.start_cursor_int,
         end_cursor_int=namespace.end_cursor_int,
         fail_fast=namespace.fail_fast,
-        force=namespace.force,
+        changes_only=namespace.changes_only,
         hard_copy=namespace.hard_copy,
         dbt_passthrough=(*leading, *tail),
     )

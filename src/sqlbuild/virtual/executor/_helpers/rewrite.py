@@ -129,6 +129,47 @@ def build_destination_from_physical_relation(
     )
 
 
+def build_rewritten_seed_locations(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    seed_load_version_hashes: dict[str, str],
+    available_physical_relations: dict[str, PhysicalRelationRecord],
+    bound_seed_version_hashes: dict[str, str],
+    virtual_environment_name: str,
+    unsuffixed_virtual_environment_name: str | None,
+) -> dict[str, CompiledRelationLocation]:
+    """Resolve physical and virtual seed targets used during a virtual build."""
+
+    rewritten: dict[str, CompiledRelationLocation] = {}
+    for seed in project.seeds:
+        version_hash: str | None = seed_load_version_hashes.get(seed.name)
+        available_relation: PhysicalRelationRecord | None = available_physical_relations.get(
+            seed.name
+        )
+        if version_hash is not None:
+            rewritten[seed.name] = build_physical_seed_destination(
+                adapter=adapter,
+                target=seed.destination,
+                seed_name=seed.name,
+                version_hash=version_hash,
+            )
+        elif available_relation is not None:
+            rewritten[seed.name] = build_destination_from_physical_relation(
+                adapter=adapter,
+                relation=available_relation,
+                fallback_target=seed.destination,
+            )
+        elif seed.name in bound_seed_version_hashes:
+            rewritten[seed.name] = build_virtual_destination(
+                adapter=adapter,
+                target=seed.destination,
+                virtual_environment_name=virtual_environment_name,
+                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+            )
+    return rewritten
+
+
 def rewrite_project_model_locations(
     *,
     project: CompiledProject,
