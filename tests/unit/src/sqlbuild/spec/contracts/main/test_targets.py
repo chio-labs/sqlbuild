@@ -3,7 +3,9 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
-from sqlbuild.spec.contracts.main.resolve_effective_force import resolve_effective_force
+from sqlbuild.spec.contracts.main.resolve_effective_changes_only import (
+    resolve_effective_changes_only,
+)
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
@@ -15,7 +17,7 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
-    EffectiveForceResolutionTestCase,
+    EffectiveChangesOnlyResolutionTestCase,
     TargetConfigResolutionTestCase,
     TargetConfigReuseErrorTestCase,
     TargetConfigReuseLocalSourceTestCase,
@@ -25,65 +27,65 @@ from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
 @pytest.mark.parametrize(
     "test_case",
     [
-        EffectiveForceResolutionTestCase(
+        EffectiveChangesOnlyResolutionTestCase(
             description="uses default false when nothing is configured",
             project_config=ProjectConfig(name="demo", adapter="duckdb"),
             local_config=LocalConfig(),
-            cli_force=False,
-            expected_force=False,
+            cli_changes_only=False,
+            expected_changes_only=False,
         ),
-        EffectiveForceResolutionTestCase(
-            description="uses global settings force when target does not override",
+        EffectiveChangesOnlyResolutionTestCase(
+            description="uses global changes-only setting when target does not override",
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
                 default_target="dev",
-                settings=SettingsConfig(force=True),
+                settings=SettingsConfig(changes_only=True),
                 targets={"dev": TargetConfig()},
             ),
             local_config=LocalConfig(),
-            cli_force=False,
-            expected_force=True,
+            cli_changes_only=False,
+            expected_changes_only=True,
         ),
-        EffectiveForceResolutionTestCase(
+        EffectiveChangesOnlyResolutionTestCase(
             description="allows target false to override global true",
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
                 default_target="prod",
-                settings=SettingsConfig(force=True),
-                targets={"prod": TargetConfig(force=False)},
+                settings=SettingsConfig(changes_only=True),
+                targets={"prod": TargetConfig(changes_only=False)},
             ),
             local_config=LocalConfig(),
-            cli_force=False,
-            expected_force=False,
+            cli_changes_only=False,
+            expected_changes_only=False,
         ),
-        EffectiveForceResolutionTestCase(
-            description="allows cli force to override target false",
+        EffectiveChangesOnlyResolutionTestCase(
+            description="allows CLI changes-only to override target false",
             project_config=ProjectConfig(
                 name="demo",
                 adapter="duckdb",
                 default_target="prod",
-                targets={"prod": TargetConfig(force=False)},
+                targets={"prod": TargetConfig(changes_only=False)},
             ),
             local_config=LocalConfig(),
-            cli_force=True,
-            expected_force=True,
+            cli_changes_only=True,
+            expected_changes_only=True,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_force_config_when_resolving_effective_force_then_precedence_is_applied(
-    test_case: EffectiveForceResolutionTestCase,
+def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
+    test_case: EffectiveChangesOnlyResolutionTestCase,
 ) -> None:
-    force: bool = resolve_effective_force(
+    changes_only: bool = resolve_effective_changes_only(
         project_config=test_case.project_config,
         local_config=test_case.local_config,
         selected_target=None,
-        cli_force=test_case.cli_force,
+        cli_changes_only=test_case.cli_changes_only,
     )
 
-    assert force is test_case.expected_force
+    assert changes_only is test_case.expected_changes_only
 
 
 @pytest.mark.parametrize(
@@ -96,7 +98,7 @@ def test_given_force_config_when_resolving_effective_force_then_precedence_is_ap
                 adapter="duckdb",
                 targets={
                     "dev": TargetConfig(
-                        force=True,
+                        changes_only=True,
                         state=StateConfig(
                             backend="postgres",
                             schema="sqlbuild_state",
@@ -117,7 +119,7 @@ def test_given_force_config_when_resolving_effective_force_then_precedence_is_ap
                             connection={"database": "local-state.duckdb"},
                             allow_reset=True,
                         ),
-                        force=False,
+                        changes_only=False,
                         reuse_hard_copy=True,
                         defer_clone_from="staging",
                     )
@@ -134,7 +136,7 @@ def test_given_force_config_when_resolving_effective_force_then_precedence_is_ap
             expected_allow_reset=True,
             expected_reuse_from="prod",
             expected_defer_clone_from="staging",
-            expected_force=False,
+            expected_changes_only=False,
             expected_reuse_hard_copy=True,
         )
     ],
@@ -155,7 +157,7 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
     assert target_config.state.allow_reset is test_case.expected_allow_reset
     assert target_config.reuse_from == test_case.expected_reuse_from
     assert target_config.defer_clone_from == test_case.expected_defer_clone_from
-    assert target_config.force is test_case.expected_force
+    assert target_config.changes_only is test_case.expected_changes_only
     assert target_config.reuse_hard_copy is test_case.expected_reuse_hard_copy
 
 

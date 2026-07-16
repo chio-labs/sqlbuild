@@ -141,7 +141,7 @@ def test_given_table_reads_view_over_table_when_source_advances_then_inherits_ta
     replace_raw_orders_versions(db_path=db_path, versions=(2,))
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--force", "--select", "a"),
+        command=("--no-color", "build", "--select", "a"),
         project_dir=project_dir,
     )
 
@@ -236,7 +236,7 @@ def test_given_table_reads_two_frontier_tables_when_build_runs_then_keeps_oldest
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--force", "--select", "a"),
+        command=("--no-color", "build", "--select", "a"),
         project_dir=project_dir,
     )
 
@@ -284,7 +284,7 @@ def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then
     execute_duckdb(db_path=db_path, sql="CREATE TABLE b AS SELECT 1 AS id")
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--force", "--select", "a"),
+        command=("--no-color", "build", "--select", "a"),
         project_dir=project_dir,
     )
 

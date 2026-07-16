@@ -58,7 +58,7 @@ class LoadProjectConfigTestCase:
     expected_dbt_production_ref_git_timeout_seconds: int = 30
     expected_auto_load_sources: bool = True
     expected_virtual_environments: bool = False
-    expected_force: bool = False
+    expected_changes_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ class LoadLocalConfigTestCase:
     expected_dbt_vars: dict[str, object] = field(default_factory=dict)
     expected_dbt_defer_clone_from: bool | None = None
     expected_auto_load_sources: bool = True
-    expected_force: bool = False
+    expected_changes_only: bool = False
     expected_targets: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
     expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)

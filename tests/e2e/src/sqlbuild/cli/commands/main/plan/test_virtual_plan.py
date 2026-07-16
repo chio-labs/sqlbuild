@@ -33,7 +33,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
         VirtualPlanE2ETestCase(
             description="virtual plan shows query changed root and upstream changed descendants",
             seed_matching_refs=True,
-            command=("--no-color", "plan"),
+            command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready (2 selected)",
                 "Virtual environment",
@@ -149,8 +149,17 @@ def test_given_virtual_seed_change_when_planning_changes_only_then_selects_depen
         initial_build_result.stdout + initial_build_result.stderr
     )
 
-    unchanged_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+    default_plan_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "plan"),
+        project_dir=project_dir,
+    )
+    assert default_plan_result.returncode == 0, default_plan_result.stderr
+    assert "Plan ready (2 selected)" in default_plan_result.stdout
+    assert "order_amounts" in default_plan_result.stdout
+    assert "fact_orders" in default_plan_result.stdout
+
+    unchanged_plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
     assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
@@ -164,7 +173,7 @@ def test_given_virtual_seed_change_when_planning_changes_only_then_selects_depen
         encoding="utf-8",
     )
     changed_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -243,17 +252,17 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
         project_dir=project_dir,
     )
     assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
-    fragment: str
-    for fragment in test_case.expected_unchanged_fragments:
-        assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
+    assert "Plan ready (1 selected)" in unchanged_plan_result.stdout
+    assert "fact_orders" in unchanged_plan_result.stdout
 
     unchanged_changes_only_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
     assert unchanged_changes_only_plan_result.returncode == 0, (
         unchanged_changes_only_plan_result.stderr
     )
+    fragment: str
     for fragment in test_case.expected_unchanged_fragments:
         assert fragment in unchanged_changes_only_plan_result.stdout, (
             unchanged_changes_only_plan_result.stdout
@@ -265,7 +274,7 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
     )
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -344,7 +353,7 @@ def test_given_virtual_timestamp_lag_tolerance_when_planning_then_skips_within_t
         sql="UPDATE raw.raw_orders SET id = 8, data_version = '2026-01-01 12:05:00'",
     )
     within_tolerance_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"), project_dir=project_dir
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
     )
 
     assert within_tolerance_plan_result.returncode == 0, within_tolerance_plan_result.stderr
@@ -357,7 +366,7 @@ def test_given_virtual_timestamp_lag_tolerance_when_planning_then_skips_within_t
         sql="UPDATE raw.raw_orders SET id = 9, data_version = '2026-01-01 12:11:00'",
     )
     beyond_tolerance_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"), project_dir=project_dir
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
     )
 
     assert beyond_tolerance_plan_result.returncode == 0, beyond_tolerance_plan_result.stderr
@@ -425,7 +434,7 @@ def test_given_virtual_source_without_freshness_when_planning_then_downstream_st
     assert build_result.returncode == 0, build_result.stderr
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"), project_dir=project_dir
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
     )
 
     assert plan_result.returncode == 0, plan_result.stderr
@@ -501,7 +510,7 @@ def test_given_virtual_source_freshness_through_view_when_planning_then_selects_
     )
     assert build_result.returncode == 0, build_result.stderr
     unchanged_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"), project_dir=project_dir
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
     )
     assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
     fragment: str
@@ -513,7 +522,7 @@ def test_given_virtual_source_freshness_through_view_when_planning_then_selects_
         sql="UPDATE raw.raw_orders SET id = 8, data_version = 2",
     )
     changed_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"), project_dir=project_dir
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
     )
 
     assert changed_plan_result.returncode == 0, changed_plan_result.stderr
@@ -586,7 +595,7 @@ def test_given_virtual_source_freshness_when_planning_json_then_metadata_reports
     )
     assert build_result.returncode == 0, build_result.stderr
     unchanged_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("plan", "--json"), project_dir=project_dir
+        command=("plan", "--json", "--changes-only"), project_dir=project_dir
     )
     assert unchanged_result.returncode == 0, unchanged_result.stderr
     unchanged_payload: dict[str, object] = json.loads(unchanged_result.stdout)
@@ -626,7 +635,7 @@ def test_given_virtual_source_freshness_when_planning_json_then_metadata_reports
         VirtualPlanE2ETestCase(
             description="virtual plan shows config changed root without query diff",
             seed_matching_refs=True,
-            command=("--no-color", "plan"),
+            command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready (2 selected)",
                 "stale root set: stg_orders",
@@ -741,7 +750,7 @@ def test_given_virtual_run_despite_unchanged_when_planning_changes_only_then_sel
         assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
 
     changes_only_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
     assert changes_only_plan_result.returncode == 0, changes_only_plan_result.stderr
@@ -781,7 +790,7 @@ def test_given_virtual_expired_run_despite_unchanged_when_planning_then_skips_ta
     assert build_result.returncode == 0, build_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
     assert result.returncode == 0, result.stderr
@@ -826,7 +835,7 @@ def test_given_virtual_run_despite_unchanged_always_when_planning_then_selects_d
     assert build_result.returncode == 0, build_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
     assert result.returncode == 0, result.stderr
@@ -863,7 +872,7 @@ def test_given_virtual_run_despite_unchanged_when_planning_json_then_outputs_met
     assert build_result.returncode == 0, build_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--json"),
+        command=("--no-color", "plan", "--json", "--changes-only"),
         project_dir=project_dir,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -919,7 +928,7 @@ def test_given_virtual_scoped_run_despite_unchanged_when_planning_then_downstrea
     assert build_result.returncode == 0, build_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--select", "rolling_orders"),
+        command=("--no-color", "plan", "--select", "rolling_orders", "--changes-only"),
         project_dir=project_dir,
     )
     assert result.returncode == 0, result.stderr
@@ -973,7 +982,7 @@ def test_given_virtual_duration_without_timestamp_freshness_when_planning_then_f
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"),
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
     assert result.returncode != 0, result.stdout + result.stderr
@@ -988,7 +997,7 @@ def test_given_virtual_duration_without_timestamp_freshness_when_planning_then_f
         VirtualPlanE2ETestCase(
             description="virtual plan shows function-driven query changed root",
             seed_matching_refs=True,
-            command=("--no-color", "plan"),
+            command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready (3 selected)",
                 "stale roots: 1",
@@ -1084,7 +1093,7 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
         VirtualPlanE2ETestCase(
             description="virtual plan after build shows changed function diff",
             seed_matching_refs=False,
-            command=("--no-color", "plan"),
+            command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Changed functions (1)",
                 "is_large_order",
@@ -1165,7 +1174,7 @@ def test_given_virtual_build_then_function_change_when_running_plan_then_it_show
         VirtualPlanE2ETestCase(
             description="virtual plan selects nothing when all bound refs match expected hashes",
             seed_matching_refs=True,
-            command=("--no-color", "plan"),
+            command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready (0 selected)",
                 "Virtual environment",
@@ -1215,7 +1224,7 @@ def test_given_virtual_plan_with_matching_refs_when_running_cli_then_it_selects_
         VirtualPlanE2ETestCase(
             description="virtual plan with multiple stale roots excludes unaffected branches",
             seed_matching_refs=True,
-            command=("--no-color", "plan"),
+            command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready (3 selected)",
                 "stale roots: 2",
@@ -1286,7 +1295,7 @@ def test_given_virtual_plan_with_multiple_stale_roots_when_running_cli_then_it_e
         VirtualPlanE2ETestCase(
             description="virtual plan explicit select bypasses stale-driven selection",
             seed_matching_refs=True,
-            command=("--no-color", "plan", "--select", "dim_customers", "--force"),
+            command=("--no-color", "plan", "--select", "dim_customers"),
             expected_fragments=(
                 "Plan ready (1 selected)",
                 "Virtual environment",
@@ -1343,7 +1352,7 @@ def test_given_virtual_plan_with_explicit_select_when_running_cli_then_it_bypass
     [
         VirtualPlanSelectionGuardE2ETestCase(
             description="selected downstream with stale upstream blocks",
-            command=("--no-color", "plan", "--select", "fact_orders"),
+            command=("--no-color", "plan", "--select", "fact_orders", "--changes-only"),
             expected_exit_code=1,
             expected_fragments=(
                 "missing stale required upstream models: stg_orders",
@@ -1403,6 +1412,7 @@ def test_given_virtual_plan_selected_downstream_with_stale_upstream_when_running
                 "--select",
                 "dim_customers",
                 "--include-stale-upstreams",
+                "--changes-only",
             ),
             expected_exit_code=0,
             expected_fragments=("Plan ready (2 selected)", "stg_orders", "fact_orders"),

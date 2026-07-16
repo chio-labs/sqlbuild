@@ -56,6 +56,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtModelPlanReason,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtCandidateSelectionTestCase,
     DbtExecutionArgvPruningTestCase,
     DbtExecutionOutcomeTestCase,
     DbtExecutionTotalRenderTestCase,
@@ -106,19 +107,19 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             expected_reason=DbtModelPlanReason.CHECKSUM_CHANGED,
         ),
         DbtModelPlanningTestCase(
-            description="matching checksum and relation plans current",
+            description="changes-only plans matching checksum and relation as current",
             create_relation=True,
             fingerprint_hash="same_hash",
             expected_action=DbtModelPlanAction.CURRENT,
             expected_reason=DbtModelPlanReason.NO_CHANGE,
+            changes_only=True,
         ),
         DbtModelPlanningTestCase(
-            description="force plans matching checksum and relation for rerun",
+            description="default plans matching checksum and relation for execution",
             create_relation=True,
             fingerprint_hash="same_hash",
-            force=True,
             expected_action=DbtModelPlanAction.RUN,
-            expected_reason=DbtModelPlanReason.FORCED,
+            expected_reason=DbtModelPlanReason.NO_CHANGE,
         ),
     ),
     ids=lambda case: case.description,
@@ -164,7 +165,7 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
             project=project,
             adapter=adapter,
             connection=connection,
-            force=test_case.force,
+            changes_only=test_case.changes_only,
         )
     finally:
         adapter.close(connection)
@@ -172,6 +173,88 @@ def test_given_dbt_model_state_when_planning_then_returns_expected_action(
     assert len(result.entries) == 1
     assert result.entries[0].action == test_case.expected_action
     assert result.entries[0].reason == test_case.expected_reason
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DbtCandidateSelectionTestCase(
+            description="default includes current required candidates",
+            changes_only=False,
+            expected_actions_by_unique_id={
+                "model.analytics.orders": DbtModelPlanAction.RUN,
+                "model.analytics.payments": DbtModelPlanAction.RUN,
+            },
+        ),
+        DbtCandidateSelectionTestCase(
+            description="changes-only leaves current required candidates pruned",
+            changes_only=True,
+            expected_actions_by_unique_id={
+                "model.analytics.orders": DbtModelPlanAction.CURRENT,
+                "model.analytics.payments": DbtModelPlanAction.CURRENT,
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_current_required_dbt_candidate_when_planning_then_applies_selection_mode(
+    test_case: DbtCandidateSelectionTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect(
+        {"database": str(tmp_path / "dbt_required_candidate_plan.duckdb")}
+    )
+    project: CompiledProject = replace(
+        build_compiled_project_with_models({}),
+        effective_target_schema="main",
+        effective_target_database=None,
+    )
+    unique_ids: tuple[str, ...] = (
+        "model.analytics.orders",
+        "model.analytics.payments",
+    )
+    manifest: DbtManifestIndex = build_dbt_manifest_index(
+        raw_data=build_manifest_data(
+            nodes=tuple(
+                build_manifest_model_node(
+                    unique_id=unique_id,
+                    package_name="analytics",
+                    name=unique_id.rsplit(".", maxsplit=1)[-1],
+                    schema="main",
+                    alias=unique_id.rsplit(".", maxsplit=1)[-1],
+                    checksum="same_hash",
+                )
+                for unique_id in unique_ids
+            )
+        )
+    )
+    try:
+        adapter.execute(connection=connection, sql="CREATE TABLE main.orders AS SELECT 1 AS id")
+        adapter.execute(connection=connection, sql="CREATE TABLE main.payments AS SELECT 1 AS id")
+        unique_id: str
+        for unique_id in unique_ids:
+            write_dbt_test_fingerprint(
+                adapter=adapter,
+                connection=connection,
+                unique_id=unique_id,
+                version_hash="same_hash",
+            )
+        result: DbtModelPlanningResult = build_dbt_model_planning_result(
+            manifest=manifest,
+            candidate_unique_ids=unique_ids,
+            selected_unique_ids=("model.analytics.orders",),
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            changes_only=test_case.changes_only,
+        )
+    finally:
+        adapter.close(connection)
+
+    assert {entry.unique_id: entry.action for entry in result.entries} == (
+        test_case.expected_actions_by_unique_id
+    )
 
 
 @pytest.mark.parametrize(
@@ -535,18 +618,19 @@ def test_given_dbt_model_plan_when_building_execution_argv_then_selects_runnable
     "test_case",
     [
         DbtExecutionArgvPruningTestCase(
-            description="unchanged seed is excluded from execution argv when a model runs",
+            description="default execution includes unchanged selected seed",
             expected_argv=(
                 "dbt",
                 "build",
                 "--select",
+                "country_codes",
                 "run_me",
             ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_unchanged_seed_when_building_execution_argv_then_excludes_seed(
+def test_given_unchanged_seed_when_building_execution_argv_then_includes_seed_by_default(
     test_case: DbtExecutionArgvPruningTestCase,
 ) -> None:
     plan: DbtInteropPlan = DbtInteropPlan(
@@ -734,13 +818,19 @@ def test_given_dbt_model_plan_with_fqn_when_building_execution_argv_then_selects
     "test_case",
     [
         DbtExecutionArgvPruningTestCase(
-            description="current model plan skips dbt build when only selected tests remain",
-            expected_argv=None,
+            description="default model plan preserves selected tests",
+            expected_argv=(
+                "dbt",
+                "build",
+                "--select",
+                "current",
+                "test.analytics.not_null_current",
+            ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_current_dbt_model_plan_when_building_execution_argv_then_skips_dbt(
+def test_given_default_dbt_model_plan_when_building_execution_argv_then_preserves_test(
     test_case: DbtExecutionArgvPruningTestCase,
 ) -> None:
     plan: DbtInteropPlan = DbtInteropPlan(
@@ -762,7 +852,7 @@ def test_given_current_dbt_model_plan_when_building_execution_argv_then_skips_db
                     unique_id="model.analytics.current",
                     package_name="analytics",
                     name="current",
-                    action=DbtModelPlanAction.CURRENT,
+                    action=DbtModelPlanAction.RUN,
                     reason=DbtModelPlanReason.NO_CHANGE,
                     relation_name="main.current",
                 ),
@@ -784,13 +874,25 @@ def test_given_current_dbt_model_plan_when_building_execution_argv_then_skips_db
     "test_case",
     [
         DbtExecutionArgvPruningTestCase(
-            description="current model plan prunes selected seeds",
+            description="default model plan preserves selected seeds",
+            expected_argv=(
+                "dbt",
+                "build",
+                "--select",
+                "current",
+                "seed.analytics.country_codes",
+            ),
+        ),
+        DbtExecutionArgvPruningTestCase(
+            description="changes-only model plan prunes unchanged selected seeds",
             expected_argv=None,
-        )
+            changes_only=True,
+            model_action=DbtModelPlanAction.CURRENT,
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_current_dbt_models_and_selected_seed_when_building_execution_argv_then_prunes_seed(
+def test_given_dbt_model_plan_when_building_execution_argv_then_applies_selection_mode(
     test_case: DbtExecutionArgvPruningTestCase,
 ) -> None:
     plan: DbtInteropPlan = DbtInteropPlan(
@@ -806,13 +908,14 @@ def test_given_current_dbt_models_and_selected_seed_when_building_execution_argv
         ),
         sqlbuild_command_argvs=(),
         selection=DbtInteropSelectionResult(),
+        changes_only=test_case.changes_only,
         dbt_model_plan=DbtModelPlanningResult(
             entries=(
                 DbtModelPlanEntry(
                     unique_id="model.analytics.current",
                     package_name="analytics",
                     name="current",
-                    action=DbtModelPlanAction.CURRENT,
+                    action=test_case.model_action,
                     reason=DbtModelPlanReason.NO_CHANGE,
                     relation_name="main.current",
                 ),

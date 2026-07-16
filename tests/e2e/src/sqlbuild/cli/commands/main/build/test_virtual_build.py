@@ -197,8 +197,23 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         ),
     )
 
-    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+    default_plan_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "plan"),
+        project_dir=project_dir,
+    )
+    assert default_plan_result.returncode == 0, default_plan_result.stderr
+    assert f"Plan ready ({len(test_case.expected_ref_rows)} selected)" in default_plan_result.stdout
+
+    default_repeat_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_repeat_build_result.returncode == 0, default_repeat_build_result.stderr
+    for (model_name,) in test_case.expected_ref_rows:
+        assert str(model_name) in default_repeat_build_result.stdout
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -207,7 +222,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         assert fragment in plan_result.stdout
 
     repeat_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
+        command=("--no-color", "build", "--changes-only"),
         project_dir=project_dir,
     )
     assert repeat_build_result.returncode == 0, repeat_build_result.stderr
@@ -301,8 +316,19 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
     )
     assert len(initial_seed_ref_rows) == 1
 
-    unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
+    default_unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert default_unchanged_build_result.returncode == 0, default_unchanged_build_result.stderr
+    assert "order_amounts" in default_unchanged_build_result.stdout
+    assert "fact_orders" in default_unchanged_build_result.stdout
+    assert "OK" in default_unchanged_build_result.stdout
+    assert "seed      order_amounts" in default_unchanged_build_result.stdout
+    assert "SKIP=0" in default_unchanged_build_result.stdout
+
+    unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
         project_dir=project_dir,
     )
     assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
@@ -313,7 +339,7 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
         encoding="utf-8",
     )
     changed_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
+        command=("--no-color", "build", "--changes-only"),
         project_dir=project_dir,
     )
     assert changed_build_result.returncode == 0, (
@@ -813,7 +839,7 @@ def test_given_multi_seed_graph_when_one_seed_changes_then_only_its_closure_is_s
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan"), project_dir=project_dir
+        command=("--no-color", "plan", "--changes-only"), project_dir=project_dir
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -869,7 +895,7 @@ def test_given_model_change_with_current_seed_when_building_then_seed_is_not_rel
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"), project_dir=project_dir
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -1034,16 +1060,17 @@ def test_given_virtual_source_freshness_when_building_then_skips_until_data_vers
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
 
     unchanged_changes_only_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
+        command=("--no-color", "build", "--changes-only"),
         project_dir=project_dir,
     )
     assert unchanged_changes_only_build_result.returncode == 0, (
         unchanged_changes_only_build_result.stderr
     )
+    assert "Plan ready (0 selected)" in unchanged_changes_only_build_result.stdout
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
 
     explicit_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--select", "fact_orders", "--force"),
+        command=("--no-color", "build", "--select", "fact_orders"),
         project_dir=project_dir,
     )
     assert explicit_build_result.returncode == 0, explicit_build_result.stderr
@@ -1134,7 +1161,7 @@ def test_given_virtual_run_despite_unchanged_when_building_changes_only_then_bui
     ) == list(test_case.expected_initial_rows)
 
     changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
+        command=("--no-color", "build", "--changes-only"),
         project_dir=project_dir,
     )
     assert changes_only_result.returncode == 0, changes_only_result.stderr
@@ -1375,7 +1402,7 @@ def test_given_virtual_source_freshness_through_view_when_changed_then_downstrea
     ) == list(test_case.expected_initial_rows)
 
     unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"), project_dir=project_dir
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
     )
     assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
@@ -1456,7 +1483,7 @@ def test_given_virtual_managed_source_freshness_when_unchanged_then_build_skips_
 
     (project_dir / "raw_order_id.txt").write_text("8", encoding="utf-8")
     unchanged_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"), project_dir=project_dir
+        command=("--no-color", "build", "--changes-only"), project_dir=project_dir
     )
     assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
@@ -2456,7 +2483,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
         encoding="utf-8",
     )
     changed_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--select", "+fact_orders"),
+        command=("--no-color", "plan", "--select", "+fact_orders", "--changes-only"),
         project_dir=project_dir,
     )
     assert changed_plan_result.returncode == 0, (
@@ -3274,7 +3301,7 @@ def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs
     assert divergent_refs == list(test_case.expected_ref_rows)
 
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--virtual-env", "kevin"),
+        command=("--no-color", "plan", "--virtual-env", "kevin", "--changes-only"),
         project_dir=project_dir,
     )
 
@@ -3283,13 +3310,13 @@ def test_given_explicit_virtual_env_with_graph_selection_when_building_then_refs
         assert fragment in plan_result.stdout
 
     final_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--virtual-env", "kevin"),
+        command=("--no-color", "build", "--virtual-env", "kevin", "--changes-only"),
         project_dir=project_dir,
     )
     assert final_build_result.returncode == 0, final_build_result.stderr
 
     final_plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "plan", "--virtual-env", "kevin"),
+        command=("--no-color", "plan", "--virtual-env", "kevin", "--changes-only"),
         project_dir=project_dir,
     )
     assert final_plan_result.returncode == 0, final_plan_result.stderr

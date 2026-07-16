@@ -173,7 +173,7 @@ class BuildCommandRequest:
     debug: bool = False
     cli_vars: dict[str, object] | None = None
     include_stale_upstreams: bool = False
-    force: bool = False
+    changes_only: bool = False
     run_tests: bool = True
     run_audits: bool = True
     manifest: bool = False
@@ -198,7 +198,7 @@ class BuildInvocation:
     effective_project_dir: Path
     discovered_inputs: DiscoveredProjectInputs
     effective_defer_clone_from: str | None
-    effective_force: bool
+    effective_changes_only: bool
     adapter_name: str
     adapter: BaseAdapter
     connection_config: dict[str, object]
@@ -946,7 +946,7 @@ class PlanCommandRequest:
     verbose: bool = False
     cli_vars: dict[str, object] | None = None
     include_stale_upstreams: bool = False
-    force: bool = False
+    changes_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -955,7 +955,7 @@ class PlanInvocation:
 
     effective_project_dir: Path
     discovered_inputs: DiscoveredProjectInputs
-    effective_force: bool
+    effective_changes_only: bool
     adapter: BaseAdapter
     connection_config: dict[str, object]
     use_color: bool

@@ -115,10 +115,10 @@ def _add_plan_and_build_parsers(
     plan_parser.add_argument("--virtual-env", default=None)
     plan_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
     plan_parser.add_argument(
-        "--force",
+        "--changes-only",
         action="store_true",
         default=False,
-        help="Include selected resources even when unchanged.",
+        help="Only include resources that require execution.",
     )
     plan_parser.add_argument(
         "--no-python", dest="include_python", action="store_false", default=True
@@ -142,10 +142,10 @@ def _add_plan_and_build_parsers(
     build_parser.add_argument("--virtual-env", default=None)
     build_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
     build_parser.add_argument(
-        "--force",
+        "--changes-only",
         action="store_true",
         default=False,
-        help="Include selected resources even when unchanged.",
+        help="Only include resources that require execution.",
     )
     build_parser.add_argument(
         "--no-python", dest="include_python", action="store_false", default=True

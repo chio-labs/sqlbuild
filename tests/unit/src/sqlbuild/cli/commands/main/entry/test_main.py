@@ -2013,6 +2013,12 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
             expected_run_tests=False,
             expected_run_audits=False,
         ),
+        MainTestCase(
+            description="passes changes-only to build handler",
+            argv=["build", "--changes-only"],
+            expected_exit_code=5,
+            expected_changes_only=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -2020,7 +2026,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[bool, bool, bool, str | None, bool | None, bool, bool, bool, bool, bool, bool]
+        tuple[bool, bool, bool, str | None, bool | None, bool, bool, bool, bool, bool, bool, bool]
     ] = []
 
     def run_build(request: BuildCommandRequest) -> int:
@@ -2037,6 +2043,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 request.run_tests,
                 request.run_audits,
                 request.debug,
+                request.changes_only,
             )
         )
         return test_case.expected_exit_code
@@ -2060,6 +2067,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_run_tests,
             test_case.expected_run_audits,
             test_case.expected_debug,
+            test_case.expected_changes_only,
         )
     ]
 
@@ -2073,7 +2081,14 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             expected_exit_code=4,
             expected_no_color=True,
             expected_select=("orders",),
-        )
+            expected_exclude=("customers",),
+        ),
+        MainTestCase(
+            description="passes changes-only to plan handler",
+            argv=["plan", "--changes-only"],
+            expected_exit_code=4,
+            expected_changes_only=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -2096,6 +2111,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             tuple[str, ...],
             bool,
             dict[str, object] | None,
+            bool,
         ]
     ] = []
 
@@ -2116,6 +2132,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 request.exclude,
                 request.verbose,
                 request.cli_vars,
+                request.changes_only,
             )
         )
         return test_case.expected_exit_code
@@ -2134,9 +2151,10 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         None,
         test_case.expected_no_color,
         test_case.expected_select,
-        ("customers",),
+        test_case.expected_exclude,
         False,
         {},
+        test_case.expected_changes_only,
     )
 
 
