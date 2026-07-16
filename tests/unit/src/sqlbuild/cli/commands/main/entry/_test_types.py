@@ -17,6 +17,7 @@ class MainTestCase:
     expected_project_dir: Path | None = None
     expected_no_sql_validation: bool = False
     expected_full_refresh: bool = False
+    expected_changes_only: bool = False
     expected_virtual_env: str | None = None
     expected_load_sources: bool | None = None
     expected_reload: bool = False
@@ -37,6 +38,7 @@ class MainTestCase:
     expected_column_lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     expected_scenario_selectors: tuple[str, ...] = ()
     expected_select: tuple[str, ...] = ()
+    expected_exclude: tuple[str, ...] = ()
     expected_dbt_args: tuple[str, ...] = ()
     expected_skills_global: bool = False
     expected_skills_targets: tuple[str, ...] = ()

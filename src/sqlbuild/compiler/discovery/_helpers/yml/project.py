@@ -269,7 +269,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         key="virtual_environments",
         default=False,
     )
-    force: bool = _optional_bool(mapping=mapping, key="force", default=False)
+    changes_only: bool = _optional_bool(mapping=mapping, key="changes_only", default=False)
     concurrency_key: str = (
         LEGACY_CONFIG_CONCURRENCY_KEY
         if LEGACY_CONFIG_CONCURRENCY_KEY in mapping
@@ -289,7 +289,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         sql_validation=sql_validation,
         concurrency=concurrency,
         auto_load_sources=auto_load_sources,
-        force=force,
+        changes_only=changes_only,
         virtual_environments=virtual_environments,
         table_promotion_mode=table_promotion_mode,
         default_audit_severity=default_audit_severity,
@@ -462,7 +462,7 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
             reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
-            force=_optional_nullable_bool(mapping=target_mapping, key="force"),
+            changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
             reuse_hard_copy=_optional_bool(
                 mapping=target_mapping,
                 key="reuse_hard_copy",
@@ -529,7 +529,7 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
             reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
-            force=_optional_nullable_bool(mapping=target_mapping, key="force"),
+            changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
             reuse_hard_copy=_optional_nullable_bool(
                 mapping=target_mapping,
                 key="reuse_hard_copy",

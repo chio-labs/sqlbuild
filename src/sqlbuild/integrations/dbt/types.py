@@ -107,7 +107,6 @@ class DbtModelPlanReason(StrEnum):
     CHECKSUM_CHANGED = "checksum_changed"
     UPSTREAM_CHANGED = "upstream_changed"
     SOURCE_FRESHNESS_CHANGED = "source_freshness_changed"
-    FORCED = "forced"
     NO_CHANGE = "no_change"
     SOURCE_FRESHNESS_ERROR = "source_freshness_error"
 

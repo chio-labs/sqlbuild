@@ -91,7 +91,7 @@ def build_dbt_model_planning_result(
     project: CompiledProject,
     graph: DbtCombinedGraph | None = None,
     full_refresh: bool = False,
-    force: bool = False,
+    changes_only: bool = False,
     adapter: BaseAdapter,
     connection: Any,
 ) -> DbtModelPlanningResult:
@@ -146,7 +146,9 @@ def build_dbt_model_planning_result(
     entries_by_unique_id: dict[str, DbtModelPlanEntry] = {}
     unique_id: str
     selected_unique_ids_set: frozenset[str] = frozenset(
-        candidate_unique_ids if selected_unique_ids is None else selected_unique_ids
+        candidate_unique_ids
+        if selected_unique_ids is None or not changes_only
+        else selected_unique_ids
     )
     expected_version_hashes: dict[str, str | None] = build_expected_dbt_model_version_hashes(
         manifest=manifest,
@@ -163,11 +165,6 @@ def build_dbt_model_planning_result(
             full_refresh=full_refresh and unique_id in selected_unique_ids_set,
             expected_version_hash=expected_version_hashes.get(unique_id),
         )
-    if force:
-        entries_by_unique_id = _force_selected_current_entries(
-            entries_by_unique_id=entries_by_unique_id,
-            selected_unique_ids=selected_unique_ids_set,
-        )
     in_selection_changed_seed_unique_ids: frozenset[str] = (
         changed_seed_unique_ids & selected_unique_ids_set
     )
@@ -179,6 +176,11 @@ def build_dbt_model_planning_result(
             blocked_source_unique_ids=blocked_source_unique_ids,
             changed_source_unique_ids=changed_source_unique_ids,
             changed_seed_unique_ids=in_selection_changed_seed_unique_ids,
+        )
+    if not changes_only:
+        entries_by_unique_id = _include_selected_current_entries(
+            entries_by_unique_id=entries_by_unique_id,
+            selected_unique_ids=selected_unique_ids_set,
         )
     stale_out_of_selection_warning_messages: tuple[str, ...] = ()
     if graph is not None:
@@ -236,23 +238,23 @@ def build_dbt_model_planning_result(
     )
 
 
-def _force_selected_current_entries(
+def _include_selected_current_entries(
     *,
     entries_by_unique_id: dict[str, DbtModelPlanEntry],
     selected_unique_ids: frozenset[str],
 ) -> dict[str, DbtModelPlanEntry]:
-    forced: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
+    selected: dict[str, DbtModelPlanEntry] = dict(entries_by_unique_id)
     unique_id: str
     for unique_id in selected_unique_ids:
-        entry: DbtModelPlanEntry | None = forced.get(unique_id)
+        entry: DbtModelPlanEntry | None = selected.get(unique_id)
         if entry is None or entry.action != DbtModelPlanAction.CURRENT:
             continue
-        forced[unique_id] = replace(
+        selected[unique_id] = replace(
             entry,
             action=DbtModelPlanAction.RUN,
-            reason=DbtModelPlanReason.FORCED,
+            reason=DbtModelPlanReason.NO_CHANGE,
         )
-    return forced
+    return selected
 
 
 def _entry_version_mismatch(entry: DbtModelPlanEntry) -> bool:

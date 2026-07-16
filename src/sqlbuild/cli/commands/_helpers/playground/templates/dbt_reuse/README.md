@@ -27,7 +27,7 @@ sqb dbt init --project-dir dbt_project --profiles-dir profiles
 sqb dbt build
 
 # second build: change-aware - unchanged dbt models are pruned from the dbt run
-sqb dbt build
+sqb dbt build --changes-only
 
 # compare your dev branch against the production-shaped main branch
 sqb dbt diff --select fct_orders

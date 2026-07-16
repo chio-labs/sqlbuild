@@ -61,7 +61,7 @@ class TargetConfig:
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
     reuse_from: str | None = None
-    force: bool | None = None
+    changes_only: bool | None = None
     reuse_hard_copy: bool = False
     clone: ClonePolicy = field(default_factory=ClonePolicy)
     state: StateConfig = field(default_factory=StateConfig)
@@ -78,7 +78,7 @@ class LocalTargetConfig:
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
     reuse_from: str | None = None
-    force: bool | None = None
+    changes_only: bool | None = None
     reuse_hard_copy: bool | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
@@ -93,7 +93,7 @@ class SettingsConfig:
     sql_validation: bool = True
     concurrency: int = 1
     auto_load_sources: bool = True
-    force: bool = False
+    changes_only: bool = False
     virtual_environments: bool = False
     table_promotion_mode: str | None = None
     default_audit_severity: str | None = None

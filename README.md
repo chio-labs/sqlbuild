@@ -8,7 +8,7 @@
 
 **Valid isn't the same as correct.** Your SQL compiles, runs, and returns rows; none of that means the number is right, and a silently-wrong number a stakeholder already trusted is the bug that actually hurts.
 
-SQLBuild brings software-engineering rigor to SQL pipelines: catch errors before the warehouse runs them, test your logic locally, and only build what actually changed. It works as a standalone framework or points at your existing dbt project with no migration and no edits to your dbt files.
+SQLBuild brings software-engineering rigor to SQL pipelines: catch errors before the warehouse runs them, test your logic locally, and opt into change-aware execution when you need it. It works as a standalone framework or points at your existing dbt project with no migration and no edits to your dbt files.
 
 All state is persisted as append-only tables in the warehouse alongside your data: no external state database, no manifest files, no paid add-on. It keeps a low, dbt-like floor for SQL models and adds ingestion, Python nodes, and opt-in virtual environments as your project grows.
 
@@ -19,13 +19,25 @@ All state is persisted as append-only tables in the warehouse alongside your dat
 - **Fast and open static analysis.** SQL parsing, validation, column inference, lineage, and transpilation run on [Polyglot](https://github.com/tobilg/polyglot), a Rust SQL engine (MIT, 32+ dialects), so compile stays fast on large projects. The analysis is part of the Apache-2.0 core: no proprietary engine, no login, no paid tier.
 - **Audits that block bad data.** Audits run before data reaches the target table. Full table builds materialize into a staging table and only promote if audits pass; incremental models validate each batch before DML.
 - **Deploy reversibly (opt-in).** Virtual environments add instant low-copy branching, partial promotion, rollback, checkpoints, and reconciliation. Opt-in, not a tax you pay upfront.
-- **Build only what changed.** Models, seeds, UDFs, and Python nodes are fingerprinted, source freshness is tracked, and unchanged work (including audits that already passed) is skipped. Pass `--force` to run everything selected.
-- **Works with your existing dbt project.** Point SQLBuild at a dbt project and get change-aware builds with zero SQLBuild models. It reads the manifest and drives the `dbt` CLI as a subprocess; it never edits your dbt files. `sqb dbt clone` and `sqb dbt diff` work against a production-shaped git ref. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+- **Opt-in change-aware execution.** Models, seeds, UDFs, and Python nodes are fingerprinted, and source freshness is tracked. Commands run the selected work by default; pass `--changes-only` or set `changes_only = true` to skip work that is already current.
+- **Works with your existing dbt project.** Point SQLBuild at a dbt project and opt into change-aware builds with zero SQLBuild models. It reads the manifest and drives the `dbt` CLI as a subprocess; it never edits your dbt files. `sqb dbt clone` and `sqb dbt diff` work against a production-shaped git ref. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 - **Warehouse-native state.** All change-tracking state lives in append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) in your warehouse schemas. No external state machine, no corruption risk.
 - **Cursor-based incremental processing.** Automatic gap detection and resume, with microbatch mode for large ranges. No external checkpoint to maintain.
 - **Ingestion and Python nodes.** Load external data with Python `@loader` functions, and run `@task`, `@asset`, and `@check` nodes as first-class members of the same DAG as your SQL models.
 
 See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, zero-copy cloning, and virtual environments.
+
+Enable change-aware execution for individual commands with `--changes-only`, for a project with `[settings]`, or for one target:
+
+```toml
+[settings]
+changes_only = true
+
+[targets.dev]
+changes_only = true
+```
+
+The CLI flag takes precedence, followed by the selected target, explicit local settings, and project settings. For `plan`, `build`, and `sqb dbt` execution, the full selected scope runs when no configuration source enables changes-only mode; the former execution `--force` option is no longer used.
 
 ## Works with your existing dbt project
 
@@ -35,7 +47,11 @@ Point SQLBuild at a dbt project and run a `sqb dbt` command. The first time, it 
 sqb dbt build --select path:models/marts
 ```
 
-Run it again and the models that have not changed are skipped:
+Run it again with `--changes-only` and models that have not changed are skipped:
+
+```bash
+sqb dbt build --changes-only --select path:models/marts
+```
 
 ```
 dbt (3 selected resources)
@@ -43,7 +59,7 @@ dbt (3 selected resources)
   skipped: all planned dbt models are current
 ```
 
-Change one model and only that model, plus whatever depends on it, rebuilds. SQLBuild fingerprints your dbt models in the warehouse and prunes everything that is already current, so a second build skips the whole run. Your `--select` scope is always respected, and where it matters SQLBuild warns you about stale upstreams or downstreams left outside the selection. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+Change one model and only that model, plus whatever depends on it, rebuilds when `--changes-only` is enabled. SQLBuild fingerprints your dbt models in the warehouse and prunes everything that is already current. Your `--select` scope is always respected, and where it matters SQLBuild warns you about stale upstreams or downstreams left outside the selection. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 
 ## Quick start
 

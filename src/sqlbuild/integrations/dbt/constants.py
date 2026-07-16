@@ -58,7 +58,7 @@ DBT_EXECUTION_SUCCESS_STATUSES: frozenset[str] = frozenset(
 )
 DBT_EXECUTION_WARN_STATUSES: frozenset[str] = frozenset({"warn", "warning"})
 DBT_EXCLUDE_FLAG: str = "--exclude"
-DBT_FORCE_FLAG: str = "--force"
+DBT_CHANGES_ONLY_FLAG: str = "--changes-only"
 DBT_FULL_FLAG: str = "--full"
 DBT_FULL_REFRESH_FLAG: str = "--full-refresh"
 DBT_HARD_COPY_FLAG: str = "--hard-copy"

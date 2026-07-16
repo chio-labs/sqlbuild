@@ -276,7 +276,14 @@ class DbtModelPlanningTestCase:
     fingerprint_hash: str | None
     expected_action: DbtModelPlanAction
     expected_reason: DbtModelPlanReason
-    force: bool = False
+    changes_only: bool = False
+
+
+@dataclass(frozen=True)
+class DbtCandidateSelectionTestCase:
+    description: str
+    changes_only: bool
+    expected_actions_by_unique_id: dict[str, DbtModelPlanAction]
 
 
 @dataclass(frozen=True)
@@ -333,6 +340,8 @@ class DbtSourceFreshnessScopeTestCase:
 class DbtExecutionArgvPruningTestCase:
     description: str
     expected_argv: tuple[str, ...] | None
+    changes_only: bool = False
+    model_action: DbtModelPlanAction = DbtModelPlanAction.RUN
 
 
 @dataclass(frozen=True)

@@ -23,7 +23,7 @@ def build_dbt_model_planning_result(
     project: CompiledProject,
     graph: DbtCombinedGraph | None = None,
     full_refresh: bool = False,
-    force: bool = False,
+    changes_only: bool = False,
     adapter: BaseAdapter,
     connection: Any,
 ) -> DbtModelPlanningResult:
@@ -36,7 +36,7 @@ def build_dbt_model_planning_result(
         project=project,
         graph=graph,
         full_refresh=full_refresh,
-        force=force,
+        changes_only=changes_only,
         adapter=adapter,
         connection=connection,
     )

@@ -496,12 +496,10 @@ def build_deferred_dbt_relations(
 
 
 def build_dbt_non_model_run_unique_ids(
-    *, command: DbtInteropCommand, plan: DbtInteropPlan
+    *, command: DbtInteropCommand, plan: DbtInteropPlan, changes_only: bool
 ) -> tuple[str, ...]:
     """Return non-model dbt selected resources preserved in pruned execution."""
 
-    if plan.dbt_model_plan is None:
-        return ()
     seed_unique_ids: tuple[str, ...] = _selected_non_model_unique_ids(
         plan=plan, resource_type=DbtSupportedResourceType.SEED
     )
@@ -514,6 +512,12 @@ def build_dbt_non_model_run_unique_ids(
     if command == DbtInteropCommand.TEST:
         return tuple(sorted(frozenset((*test_unique_ids, *unit_test_unique_ids))))
     if command == DbtInteropCommand.BUILD:
+        if not changes_only:
+            return tuple(
+                sorted(frozenset((*seed_unique_ids, *test_unique_ids, *unit_test_unique_ids)))
+            )
+        if plan.dbt_model_plan is None:
+            return ()
         changed_seed_unique_ids: frozenset[str] = frozenset(seed_unique_ids) & frozenset(
             plan.dbt_model_plan.changed_seed_unique_ids
         )
@@ -526,11 +530,11 @@ def build_dbt_non_model_run_unique_ids(
 
 
 def build_dbt_pruned_test_unique_ids(
-    *, command: DbtInteropCommand, plan: DbtInteropPlan
+    *, command: DbtInteropCommand, plan: DbtInteropPlan, changes_only: bool
 ) -> tuple[str, ...]:
     """Return selected dbt tests pruned from dbt build due to no producer work."""
 
-    if command != DbtInteropCommand.BUILD or plan.dbt_model_plan is None:
+    if not changes_only or command != DbtInteropCommand.BUILD or plan.dbt_model_plan is None:
         return ()
     if plan.dbt_model_plan.run_selector_terms:
         return ()
@@ -577,11 +581,11 @@ def append_manifest_seed_warnings(
 
 
 def build_dbt_pruned_seed_unique_ids(
-    *, command: DbtInteropCommand, plan: DbtInteropPlan
+    *, command: DbtInteropCommand, plan: DbtInteropPlan, changes_only: bool
 ) -> tuple[str, ...]:
     """Return selected dbt seeds pruned from dbt build due to no producer work."""
 
-    if command != DbtInteropCommand.BUILD or plan.dbt_model_plan is None:
+    if not changes_only or command != DbtInteropCommand.BUILD or plan.dbt_model_plan is None:
         return ()
     changed: frozenset[str] = frozenset(plan.dbt_model_plan.changed_seed_unique_ids)
     return tuple(
@@ -667,6 +671,7 @@ def _planned_dbt_select_terms(
     non_model_unique_ids: tuple[str, ...] = build_dbt_non_model_run_unique_ids(
         command=command,
         plan=plan,
+        changes_only=plan.changes_only,
     )
     non_model_terms: tuple[str, ...] = _selector_terms_for_unique_ids(
         plan=plan,

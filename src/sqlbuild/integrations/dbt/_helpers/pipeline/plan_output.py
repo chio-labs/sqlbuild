@@ -41,7 +41,7 @@ from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
     build_unblocked_sqlbuild_model_names,
 )
 from sqlbuild.integrations.dbt.constants import (
-    DBT_FORCE_FLAG,
+    DBT_CHANGES_ONLY_FLAG,
     DBT_FULL_REFRESH_FLAG,
     DBT_MATERIALIZATION_VIEW,
 )
@@ -231,7 +231,7 @@ def build_sqlbuild_plan_output(
                 policies=PlannerPolicies(
                     standard_scope_pruning=(
                         StandardScopePruning.PRUNE_UNCHANGED
-                        if DBT_FORCE_FLAG not in sqlbuild_args and not disable_scope_pruning
+                        if DBT_CHANGES_ONLY_FLAG in sqlbuild_args and not disable_scope_pruning
                         else StandardScopePruning.NONE
                     ),
                 ),
@@ -273,7 +273,7 @@ def build_dbt_model_plan_output(
     candidate_unique_ids: tuple[str, ...],
     selected_unique_ids: tuple[str, ...],
     full_refresh: bool = False,
-    force: bool = False,
+    changes_only: bool = False,
     hooks: ConnectionHooks,
 ) -> DbtModelPlanningResult | None:
     project_dir: Path = environment.project_dir
@@ -317,7 +317,7 @@ def build_dbt_model_plan_output(
             project=project,
             graph=graph,
             full_refresh=full_refresh,
-            force=force,
+            changes_only=changes_only,
             adapter=adapter,
             connection=connection,
         )
@@ -514,7 +514,7 @@ def attach_dbt_model_plan(
     manifest: DbtManifestIndex,
     graph: DbtCombinedGraph,
     full_refresh: bool,
-    force: bool,
+    changes_only: bool,
     connection_progress: Any | None,
     on_progress: Callable[[str], None] | None,
 ) -> DbtInteropPlan:
@@ -542,7 +542,7 @@ def attach_dbt_model_plan(
         ),
         selected_unique_ids=plan.dbt_selected_unique_ids,
         full_refresh=full_refresh,
-        force=force,
+        changes_only=changes_only,
         hooks=_connection_progress_hooks(
             connection_progress=connection_progress, on_progress=on_progress
         ),
@@ -553,7 +553,7 @@ def attach_dbt_model_plan(
     return append_stale_out_of_selection_warning(plan=updated_plan, dbt_model_plan=dbt_model_plan)
 
 
-def apply_dbt_build_pruning(plan: DbtInteropPlan) -> DbtInteropPlan:
+def apply_dbt_build_pruning(*, plan: DbtInteropPlan, changes_only: bool) -> DbtInteropPlan:
     """Attach non-model run ids and pruned seed/test ids for build execution."""
 
     return replace(
@@ -561,14 +561,17 @@ def apply_dbt_build_pruning(plan: DbtInteropPlan) -> DbtInteropPlan:
         dbt_non_model_run_unique_ids=build_dbt_non_model_run_unique_ids(
             command=DbtInteropCommand.BUILD,
             plan=plan,
+            changes_only=changes_only,
         ),
         dbt_pruned_seed_unique_ids=build_dbt_pruned_seed_unique_ids(
             command=DbtInteropCommand.BUILD,
             plan=plan,
+            changes_only=changes_only,
         ),
         dbt_pruned_test_unique_ids=build_dbt_pruned_test_unique_ids(
             command=DbtInteropCommand.BUILD,
             plan=plan,
+            changes_only=changes_only,
         ),
     )
 

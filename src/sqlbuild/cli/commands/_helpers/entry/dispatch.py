@@ -122,7 +122,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 verbose=args.verbose,
                 cli_vars=args.vars,
                 include_stale_upstreams=args.include_stale_upstreams,
-                force=args.force,
+                changes_only=args.changes_only,
             )
         )
     if args.command == CliCommand.DBT:
@@ -163,7 +163,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 debug=args.debug,
                 cli_vars=args.vars,
                 include_stale_upstreams=args.include_stale_upstreams,
-                force=args.force,
+                changes_only=args.changes_only,
                 run_tests=args.run_tests,
                 run_audits=args.run_audits,
                 manifest=args.manifest,

@@ -38,7 +38,7 @@ def compile_build_plan(
             select=request.select,
             exclude=request.exclude,
             full_refresh=request.full_refresh,
-            changes_only=not invocation.effective_force,
+            changes_only=invocation.effective_changes_only,
             auto_load_sources=invocation.should_load_sources,
             reload_sources=request.reload_sources,
             connection_config=invocation.connection_config,

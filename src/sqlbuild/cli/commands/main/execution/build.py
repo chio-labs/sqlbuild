@@ -63,7 +63,7 @@ def run_build(request: BuildCommandRequest) -> int:
                     full_refresh=request.full_refresh,
                     virtual_environment_name=request.virtual_env,
                     include_stale_upstreams=request.include_stale_upstreams,
-                    changes_only=not invocation.effective_force,
+                    changes_only=invocation.effective_changes_only,
                     auto_load_sources=invocation.should_load_sources,
                     reload_sources=request.reload_sources,
                     include_python=request.include_python,
