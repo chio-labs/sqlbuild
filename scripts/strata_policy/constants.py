@@ -80,9 +80,6 @@ GLOBAL_REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
 )
 GRAPH_KEY_CLASS_NAMES: frozenset[str] = frozenset({"GraphNodeKey", "SelectionStalenessNodeKey"})
 MAIN_SUPPORT_PACKAGE_NAMES: frozenset[str] = frozenset({"_helpers", "classes", "shared"})
-PARAMETER_MUTATION_METHODS: frozenset[str] = frozenset(
-    {"add", "append", "clear", "extend", "insert", "pop", "remove", "setdefault", "update"}
-)
 REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "source_relation",
     "source relation",
@@ -140,6 +137,7 @@ ADAPTER_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild", "adapter")
 ADAPTERS_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild", "adapters")
 ADAPTER_PACKAGE_IMPORT_PREFIX: str = "sqlbuild.adapters."
 BASE_ADAPTER_CLASS_NAME: str = "BaseAdapter"
+BASE_ADAPTER_REFERENCE_PART_COUNT: int = 2
 CLIENT_MODULE_MIN_PARTS: int = 5
 CLIENT_MODULE_NAME: str = "client.py"
 CLASSES_PACKAGE_NAME: str = "classes"
@@ -152,10 +150,10 @@ INSERT_SQL_PREFIX: str = "INSERT INTO"
 LEGACY_DUCKDB_ADAPTER_SUFFIX: tuple[str, ...] = ("shared", "classes", "duckdb.py")
 DUCKDB_BACKED_ADAPTER_PATH: str = "src/sqlbuild/adapter/contract/classes/duckdb_backed_adapter.py"
 LOAD_PROJECT_MACROS_NAME: str = "load_project_macros"
+NAME_REFERENCE_KIND: str = "name"
 MAIN_MODULE_NAME: str = "main.py"
 MAIN_PACKAGE_NAME: str = "main"
 NESTED_HELPER_MODULE_MIN_PARTS: int = 5
-PARAMETER_RECEIVER_NAMES: frozenset[str] = frozenset({"cls", "self"})
 PLANNER_PATH_PREFIX: str = "src/sqlbuild/compiler/planner/"
 POLICY_EVALUATION_SCOPES: frozenset[str] = frozenset({"root", "tooling"})
 POLICY_IMPLEMENTATION_PATH_PREFIX: str = "scripts/strata_policy/"
@@ -171,6 +169,7 @@ PUBLIC_COLOR_ENTRY_PARTS: tuple[str, ...] = (
 ROOT_SCOPE_NAME: str = "root"
 RUNTIME_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild")
 SELECTOR_MARKER: str = "+"
+STRING_LITERAL_KIND: str = "string"
 SQL_REFERENCE_KIND_CLASS_NAME: str = "SqlReferenceKind"
-SUPER_CALL_NAME: str = "super"
 STRICT_ADAPTER_CLASS_NAME: str = "StrictAdapter"
+ATTRIBUTE_REFERENCE_KIND: str = "attribute"
