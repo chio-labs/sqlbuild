@@ -1,8 +1,18 @@
 roots = ["src/sqlbuild"]
 tests = ["tests"]
 tooling = ["scripts"]
-rule_paths = ["scripts/strata_policy/rules"]
+rule_modules = [
+    "scripts.strata_policy.rules.adapter_ownership",
+    "scripts.strata_policy.rules.canonical_operations",
+    "scripts.strata_policy.rules.module_boundaries",
+    "scripts.strata_policy.rules.orchestration_dataflow",
+    "scripts.strata_policy.rules.source_hygiene",
+]
 select = ["SF", "XSB"]
+
+[cache]
+enabled = true
+require_cacheable = true
 
 [evaluation]
 exclude = ["tests/e2e/fixtures/**"]
