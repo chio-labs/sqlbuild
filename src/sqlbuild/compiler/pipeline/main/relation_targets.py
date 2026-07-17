@@ -8,7 +8,7 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 )
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.models import SourceEntry

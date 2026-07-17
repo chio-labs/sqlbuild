@@ -67,18 +67,18 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BeforeModelMaterializeCallback
 from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
-from sqlbuild.executor.functions.main.execute import execute_function
-from sqlbuild.executor.load.main.build_execution_indexes import build_load_execution_indexes
-from sqlbuild.executor.load.main.skipped_result import skipped_load_result
+from sqlbuild.executor.functions.main._execute import execute_function
+from sqlbuild.executor.load.main._build_execution_indexes import build_load_execution_indexes
+from sqlbuild.executor.load.main._skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
-from sqlbuild.executor.scheduling.main.run_worker import run_worker_with_completion
+from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
-from sqlbuild.executor.seed.main.execute import execute_seed
+from sqlbuild.executor.seed.main._execute import execute_seed
 from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
-from sqlbuild.executor.testing.main.execute import execute_sql_test
+from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.provider.main.runtime import ProviderContainer

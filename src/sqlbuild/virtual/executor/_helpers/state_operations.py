@@ -8,8 +8,8 @@ from typing import Any
 
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.virtual.executor.models import StateOperationHandle
-from sqlbuild.virtual.state.main.environments.record_operation import record_state_operation
-from sqlbuild.virtual.state.main.locks.locks import acquire_virtual_environment_lease
+from sqlbuild.virtual.state.main.environments._record_operation import record_state_operation
+from sqlbuild.virtual.state.main.locks._locks import acquire_virtual_environment_lease
 from sqlbuild.virtual.state.models import StateLockLease
 from sqlbuild.virtual.state.types import StateOperationStatus, StateOperationType
 

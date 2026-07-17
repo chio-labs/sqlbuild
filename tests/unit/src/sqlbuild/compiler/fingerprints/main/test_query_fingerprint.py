@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.fingerprints.main._normalize_query_sql import normalize_query_sql
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
-from sqlbuild.compiler.fingerprints.main.normalize_query_sql import normalize_query_sql
 from tests.unit.src.sqlbuild.compiler.fingerprints.main._test_types import (
     ComputeQueryHashStabilityTestCase,
     ComputeQueryHashTestCase,

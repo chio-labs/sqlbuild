@@ -25,7 +25,7 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
-from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
+from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.executor.build.models import (

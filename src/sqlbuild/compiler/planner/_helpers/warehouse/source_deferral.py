@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
+from sqlbuild.compiler.compile.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.planner.constants import SOURCE_DEFERRAL_CONTEXT_FIELDS
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.references.main.quoted_reference_call_pattern import (
+from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind

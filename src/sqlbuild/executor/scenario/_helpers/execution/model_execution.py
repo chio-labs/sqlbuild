@@ -7,7 +7,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ModelPlanEntry, ScenarioExecutionPlan
 from sqlbuild.executor.run.models import ModelExecutionResult
-from sqlbuild.executor.scenario.main.execute import execute_scenario_model
+from sqlbuild.executor.scenario.main._execute import execute_scenario_model
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 

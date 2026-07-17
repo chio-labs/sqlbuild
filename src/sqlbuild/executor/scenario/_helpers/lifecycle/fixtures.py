@@ -10,10 +10,10 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.compiler.planner.models import ScenarioFixturePlan, SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_SEED_FAILED
-from sqlbuild.executor.scenario.main.fixtures import execute_scenario_fixture
+from sqlbuild.executor.scenario.main._fixtures import execute_scenario_fixture
 from sqlbuild.executor.scenario.models import ScenarioFixtureExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.executor.seed.main.execute import execute_seed
+from sqlbuild.executor.seed.main._execute import execute_seed
 
 
 def execute_scenario_fixtures(

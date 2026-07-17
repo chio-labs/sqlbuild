@@ -22,14 +22,14 @@ from sqlbuild.compiler.planner.constants import (
     SQL_IDENTIFIER_LEADING_CHARACTERS,
 )
 from sqlbuild.compiler.planner.models import CursorBounds
-from sqlbuild.compiler.references.main.quoted_reference_call_pattern import (
+from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
 from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from sqlbuild.compiler.planner.main.identity.version_identity_config import (
+from sqlbuild.compiler.planner.main.identity._version_identity_config import (
     build_version_identity_config,
 )
 

@@ -15,10 +15,10 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
+from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
 )
-from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
+from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
@@ -40,10 +40,10 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
 )
 from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
-from sqlbuild.compiler.planner.main.selection.build_model_path_index import (
+from sqlbuild.compiler.planner.main.selection._build_model_path_index import (
     build_model_path_index,
 )
-from sqlbuild.compiler.planner.main.selection.build_model_tag_index import (
+from sqlbuild.compiler.planner.main.selection._build_model_tag_index import (
     build_model_tag_index,
 )
 from sqlbuild.compiler.planner.models import (
@@ -54,7 +54,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import StandardScopePruning, WorkSelectionPolicy
-from sqlbuild.compiler.python_nodes.main.run_selection import (
+from sqlbuild.compiler.python_nodes.main._run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection

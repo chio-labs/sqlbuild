@@ -18,11 +18,11 @@ from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
-from sqlbuild.virtual.executor.main.logical_target import build_virtual_logical_destination
-from sqlbuild.virtual.executor.main.physical_target import build_virtual_physical_destination
-from sqlbuild.virtual.executor.main.relation_type import resolve_model_relation_type
+from sqlbuild.virtual.executor.main._logical_target import build_virtual_logical_destination
+from sqlbuild.virtual.executor.main._physical_target import build_virtual_physical_destination
+from sqlbuild.virtual.executor.main._relation_type import resolve_model_relation_type
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.main.environments.record_operation import record_state_operation
+from sqlbuild.virtual.state.main.environments._record_operation import record_state_operation
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,

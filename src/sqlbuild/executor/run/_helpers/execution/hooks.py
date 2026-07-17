@@ -20,7 +20,7 @@ from sqlbuild.compiler.python_nodes.main.identity import build_python_node_ident
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.python_nodes.main.fingerprinting import (
+from sqlbuild.executor.python_nodes.main._fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder

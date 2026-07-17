@@ -29,7 +29,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
 )
-from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 
 _CONTEXT: str = "SQL scenario"
 

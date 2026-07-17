@@ -16,7 +16,7 @@ from sqlbuild.executor.load._helpers.execution import (
     should_soft_skip_due_to_all_skipped_dependencies,
     skipped_load_result,
 )
-from sqlbuild.executor.load.main.execute import execute_source_load
+from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import (
     LoadDagState,
     LoadDispatchInputs,
@@ -25,11 +25,11 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.load.types import LoadProgressCallback
-from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
-from sqlbuild.executor.scheduling.main.build_in_degree import build_python_node_in_degree
-from sqlbuild.executor.scheduling.main.build_ready_queue import build_python_node_ready_queue
-from sqlbuild.executor.scheduling.main.run_worker import run_worker_with_completion
-from sqlbuild.executor.scheduling.main.unlock_downstream import unlock_downstream_python_nodes
+from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
+from sqlbuild.executor.scheduling.main._build_in_degree import build_python_node_in_degree
+from sqlbuild.executor.scheduling.main._build_ready_queue import build_python_node_ready_queue
+from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
+from sqlbuild.executor.scheduling.main._unlock_downstream import unlock_downstream_python_nodes
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry

@@ -45,27 +45,27 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_FULL_REFRESH_FLAG,
     DBT_MATERIALIZATION_VIEW,
 )
-from sqlbuild.integrations.dbt.main.graph.dbt_graph_node_key import dbt_graph_node_key
-from sqlbuild.integrations.dbt.main.graph.dbt_source_graph_node_key import (
+from sqlbuild.integrations.dbt.main.graph._dbt_graph_node_key import dbt_graph_node_key
+from sqlbuild.integrations.dbt.main.graph._dbt_source_graph_node_key import (
     dbt_source_graph_node_key,
 )
-from sqlbuild.integrations.dbt.main.graph.sqlbuild_model_graph_node_key import (
+from sqlbuild.integrations.dbt.main.graph._sqlbuild_model_graph_node_key import (
     sqlbuild_model_graph_node_key,
 )
-from sqlbuild.integrations.dbt.main.manifest.manifest_model_materialization import (
+from sqlbuild.integrations.dbt.main.manifest._manifest_model_materialization import (
     dbt_manifest_model_materialization,
 )
-from sqlbuild.integrations.dbt.main.manifest.resolve_sqlbuild_model_refs import (
+from sqlbuild.integrations.dbt.main.manifest._resolve_sqlbuild_model_refs import (
     resolve_sqlbuild_model_dbt_refs,
 )
-from sqlbuild.integrations.dbt.main.planning.build_model_planning_result import (
+from sqlbuild.integrations.dbt.main.planning._build_model_planning_result import (
     build_dbt_model_planning_result,
 )
-from sqlbuild.integrations.dbt.main.profile.resolve_connection_config import (
+from sqlbuild.integrations.dbt.main.profile._resolve_connection_config import (
     resolve_connection_config,
 )
-from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
-from sqlbuild.integrations.dbt.main.selection.adapt_project_for_sql_tests import (
+from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
+from sqlbuild.integrations.dbt.main.selection._adapt_project_for_sql_tests import (
     adapt_project_for_dbt_sql_tests,
 )
 from sqlbuild.integrations.dbt.models import (

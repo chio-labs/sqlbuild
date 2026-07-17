@@ -12,10 +12,10 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
-from sqlbuild.compiler.sql_analysis.main.skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main.skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main.skip_quoted_text import skip_quoted_text
+from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
+from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 
 _CONTEXT: str = "SQL reference"
 _REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (

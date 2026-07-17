@@ -4203,7 +4203,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff", specifier = ">=0.12.0" },
-    { name = "stratalint", specifier = ">=0.18.0" },
+    { name = "stratalint", specifier = ">=0.19.0" },
     { name = "testcontainers", specifier = ">=4.8.1" },
     { name = "ty", specifier = ">=0.0.1a19" },
 ]
@@ -4250,15 +4250,15 @@ wheels = [
 
 [[package]]
 name = "stratalint"
-version = "0.18.0"
+version = "0.19.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9e/1c/c896d6d3f319bc0745cf6ca45a658b6f6415096b1b75b31de4966e0eddec/stratalint-0.18.0.tar.gz", hash = "sha256:9f6a4021c082a7208503778b1f1014697024dff82bc98bfee5dd2184333f3abe", size = 329087, upload-time = "2026-07-17T00:43:27.505Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/ea/7994074ca2d56fc77baa2ac2985f1803bfb8eaccac674bce4e6b79b6368f/stratalint-0.19.0.tar.gz", hash = "sha256:4178707955b154f90e488fea5f85fe4d9b9f4f52c5d05aa998dbc90d2b36646c", size = 308674, upload-time = "2026-07-17T05:38:41.153Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/dd/a929c538e9ac460f34d62ca8a06a757461d5deea00c22e9af7afee181ede/stratalint-0.18.0-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:83233263b8ec8dbd0b4ce872d98447bc6c45f97eba78480928db54c25c69d2ae", size = 1785377, upload-time = "2026-07-17T00:43:17.685Z" },
-    { url = "https://files.pythonhosted.org/packages/64/f0/f01ed2e525aebae5d377b029ab8bf46e7f18f0c0be75798215f603387511/stratalint-0.18.0-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:8a980677324a5dbf054a8a1960185afcb2c07a9a5930f6366b922c10620a0ff0", size = 1755508, upload-time = "2026-07-17T00:43:20.095Z" },
-    { url = "https://files.pythonhosted.org/packages/f0/09/fad199125b274fb8ad7e2ddf257e7da93ac5b4e929c627e068970d31167c/stratalint-0.18.0-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:53a4b7d2be5ab6bdaaa27b835babaf456f56797d07c2575303b68e9b6c6c481d", size = 1830813, upload-time = "2026-07-17T00:43:21.9Z" },
-    { url = "https://files.pythonhosted.org/packages/29/ea/310bd179031db5acac4a23dfae548d9cb102f88d46285169eda29496db4c/stratalint-0.18.0-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5e30197ce42964b100e6047eeeb30ce0a017fe9d9e1a4905c7ee2e4c24823aac", size = 1859321, upload-time = "2026-07-17T00:43:23.72Z" },
-    { url = "https://files.pythonhosted.org/packages/35/d2/bfdf5ea8750951997da0823d6f4f3e5e5bf5729ce8cebee27bc58dea3f0b/stratalint-0.18.0-cp312-abi3-win_amd64.whl", hash = "sha256:b7f55001f50874ee23d45548948097911552708dba698ff792c1a29906424900", size = 1687544, upload-time = "2026-07-17T00:43:25.681Z" },
+    { url = "https://files.pythonhosted.org/packages/80/9d/5eb8795f5bfe24a73ca535a17e1f6c5014a9fa063bbe9511b5dc66b87834/stratalint-0.19.0-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:840d349ee55dcbb3b0b7263d066a6dddc9a50edf3bd0ea80eba65a4f3eb4851c", size = 1753905, upload-time = "2026-07-17T05:38:31.949Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/ae/8ec6ca571842788a97b39cc34c2fb93fa645ed2c922f042f831ae22d1a80/stratalint-0.19.0-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:2f2c1dbf1f82d3795bfc3dc9db414e9ac48e09239067256e5d647edf91c2f866", size = 1735640, upload-time = "2026-07-17T05:38:34.042Z" },
+    { url = "https://files.pythonhosted.org/packages/95/c7/939b7a556c1ef003c03b2732eda51abe3155260ef0d47632f12684a71427/stratalint-0.19.0-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a252969e327f19a15189eeb4246a62c997dbfd2feb9098426bab541b03c82db4", size = 1802649, upload-time = "2026-07-17T05:38:36.159Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/17/7bd265c2aeae56acc19ac32162fbd3c2641a78945db1d8ae1125a79cd16a/stratalint-0.19.0-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:17e941a71637271ece1250e58fedeb3d723e045f28fbf76130e84d76b0a1a278", size = 1831157, upload-time = "2026-07-17T05:38:38.023Z" },
+    { url = "https://files.pythonhosted.org/packages/30/0a/bb7570680e6ab99faa123cb36dc4a7e11bd12a533c38cc824b7ec7002dcc/stratalint-0.19.0-cp312-abi3-win_amd64.whl", hash = "sha256:afc984e04a7e562ca7de18e59b98050b7c34ac622a6818778aebd50a6344d209", size = 1659242, upload-time = "2026-07-17T05:38:39.603Z" },
 ]
 
 [[package]]

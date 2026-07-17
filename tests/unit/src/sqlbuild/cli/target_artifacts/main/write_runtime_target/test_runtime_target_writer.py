@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.target_artifacts.main.write_runtime_target import write_runtime_target
+from sqlbuild.cli.target_artifacts.main._write_runtime_target import write_runtime_target
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import BuildExecutionResult
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
