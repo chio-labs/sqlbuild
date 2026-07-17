@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
-import ast
-
-from strata import Family, Fault, RuleContext, rule
+from strata import (
+    AssignmentReferenceFact,
+    ClassDeclarationFact,
+    Family,
+    Fault,
+    NamedCallFact,
+    RuleContext,
+    rule,
+)
 
 from scripts.strata_policy._helpers.adapter_contracts import (
     abstract_adapter_method_names,
     adapter_contract_class_names,
 )
-from scripts.strata_policy.constants import BASE_ADAPTER_CLASS_NAME, SUPER_CALL_NAME
+from scripts.strata_policy.constants import (
+    BASE_ADAPTER_CLASS_NAME,
+    BASE_ADAPTER_REFERENCE_PART_COUNT,
+)
 
 
 @rule(
@@ -20,30 +29,27 @@ from scripts.strata_policy.constants import BASE_ADAPTER_CLASS_NAME, SUPER_CALL_
     message="first-class adapter methods must not alias BaseAdapter implementations",
     remediation="Copy the implementation into the owning adapter class so overrides are explicit.",
 )
-def adapter_method_alias(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def adapter_method_alias(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     checked_class_names: frozenset[str] = adapter_contract_class_names(
         path_parts=ctx.repo_relative_parts(),
-        module=module,
         ctx=ctx,
     )
     faults: list[Fault] = []
-    class_node: ast.ClassDef
-    for class_node in (node for node in module.body if isinstance(node, ast.ClassDef)):
-        if class_node.name not in checked_class_names:
+    assignment: AssignmentReferenceFact
+    for assignment in ctx.facts.assignment_references():
+        if (
+            assignment.owning_class is None
+            or assignment.owning_class.name not in checked_class_names
+            or assignment.owning_function is not None
+            or assignment.value_reference is None
+        ):
             continue
-        child: ast.stmt
-        for child in class_node.body:
-            value: ast.expr | None = None
-            if isinstance(child, ast.Assign):
-                value = child.value
-            elif isinstance(child, ast.AnnAssign):
-                value = child.value
-            if (
-                isinstance(value, ast.Attribute)
-                and isinstance(value.value, ast.Name)
-                and value.value.id == BASE_ADAPTER_CLASS_NAME
-            ):
-                faults.append(ctx.fault(node=child))
+        if (
+            assignment.value_reference.parts[:1] == (BASE_ADAPTER_CLASS_NAME,)
+            and len(assignment.value_reference.parts) == BASE_ADAPTER_REFERENCE_PART_COUNT
+        ):
+            faults.append(ctx.fault_at(location=assignment.location))
     return faults
 
 
@@ -54,31 +60,32 @@ def adapter_method_alias(*, module: ast.Module, ctx: RuleContext) -> list[Fault]
     message="first-class adapter contract methods must not delegate to super()",
     remediation="Own the complete contract method implementation in the adapter class.",
 )
-def adapter_super_delegation(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def adapter_super_delegation(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     checked_class_names: frozenset[str] = adapter_contract_class_names(
         path_parts=ctx.repo_relative_parts(),
-        module=module,
         ctx=ctx,
     )
     if not checked_class_names:
         return []
     contract_methods: frozenset[str] = abstract_adapter_method_names(ctx=ctx)
     faults: list[Fault] = []
-    class_node: ast.ClassDef
-    for class_node in (node for node in module.body if isinstance(node, ast.ClassDef)):
-        if class_node.name not in checked_class_names:
+    calls: tuple[NamedCallFact, ...] = ctx.facts.named_calls()
+    declaration: ClassDeclarationFact
+    for declaration in ctx.facts.class_declarations():
+        if not declaration.top_level or declaration.name not in checked_class_names:
             continue
-        child: ast.stmt
-        for child in class_node.body:
-            if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        for method in declaration.methods:
+            if method.name not in contract_methods:
                 continue
-            if child.name not in contract_methods:
-                continue
-            if any(
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == SUPER_CALL_NAME
-                for node in ast.walk(child)
-            ):
-                faults.append(ctx.fault(node=child))
+            method_has_super_call: bool = False
+            for call in calls:
+                if call.super_call and any(
+                    owner.name == method.name and owner.location == method.location
+                    for owner in call.enclosing_functions
+                ):
+                    method_has_super_call = True
+                    break
+            if method_has_super_call:
+                faults.append(ctx.fault_at(location=method.location))
     return faults

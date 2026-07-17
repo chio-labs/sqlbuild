@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import ast
+from strata import Family, Fault, ModuleStatementFact, RuleContext, rule
 
-from strata import Family, Fault, RuleContext, rule
-
-from scripts.strata_policy._helpers.ast_checks import top_level_class_nodes
 from scripts.strata_policy._helpers.path_checks import is_adapter_class_entry
 from scripts.strata_policy.constants import (
     CLIENT_MODULE_MIN_PARTS,
@@ -32,7 +29,8 @@ from scripts.strata_policy.constants import (
     message="development tooling must live under scripts, not product code",
     remediation="Move check, format, lint, and test tooling beneath scripts/.",
 )
-def dev_tooling_location(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def dev_tooling_location(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     if ctx.scope() != ROOT_SCOPE_NAME:
         return []
     parts: tuple[str, ...] = ctx.relative_parts()
@@ -50,7 +48,8 @@ def dev_tooling_location(*, module: ast.Module, ctx: RuleContext) -> list[Fault]
     message="generic module filenames hide SQLBuild ownership",
     remediation="Rename the module after the domain concept or operation it owns.",
 )
-def sqlbuild_generic_filename(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def sqlbuild_generic_filename(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     if ctx.scope() not in POLICY_EVALUATION_SCOPES:
         return []
     return [ctx.path_fault()] if ctx.path.name in FORBIDDEN_GENERIC_FILENAMES else []
@@ -63,7 +62,8 @@ def sqlbuild_generic_filename(*, module: ast.Module, ctx: RuleContext) -> list[F
     message="client-style packages must use client.py instead of main.py",
     remediation="Rename the primary client class entry module to client.py.",
 )
-def client_entry_filename(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def client_entry_filename(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     parts: tuple[str, ...] = ctx.repo_relative_parts()
     if (
         len(parts) >= CLIENT_MODULE_MIN_PARTS
@@ -81,7 +81,8 @@ def client_entry_filename(*, module: ast.Module, ctx: RuleContext) -> list[Fault
     message="client.py must define exactly one public top-level class",
     remediation="Keep one public client class and move other classes to their owning modules.",
 )
-def client_public_class_count(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def client_public_class_count(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     parts: tuple[str, ...] = ctx.repo_relative_parts()
     if (
         len(parts) < CLIENT_MODULE_MIN_PARTS
@@ -89,10 +90,12 @@ def client_public_class_count(*, module: ast.Module, ctx: RuleContext) -> list[F
         or parts[-1] != CLIENT_MODULE_NAME
     ):
         return []
-    public_classes: tuple[ast.ClassDef, ...] = tuple(
-        node for node in top_level_class_nodes(module) if not node.name.startswith("_")
+    public_class_names: tuple[str, ...] = tuple(
+        statement.class_name
+        for statement in ctx.facts.module_declarations().statements
+        if statement.class_name is not None and not statement.class_name.startswith("_")
     )
-    return [ctx.path_fault()] if len(public_classes) != 1 else []
+    return [ctx.path_fault()] if len(public_class_names) != 1 else []
 
 
 @rule(
@@ -102,7 +105,8 @@ def client_public_class_count(*, module: ast.Module, ctx: RuleContext) -> list[F
     message="client.py may contain only imports and top-level classes",
     remediation="Move functions and runtime statements into the class or an owned support module.",
 )
-def client_module_content(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def client_module_content(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     parts: tuple[str, ...] = ctx.repo_relative_parts()
     if (
         len(parts) < CLIENT_MODULE_MIN_PARTS
@@ -111,9 +115,9 @@ def client_module_content(*, module: ast.Module, ctx: RuleContext) -> list[Fault
     ):
         return []
     return [
-        ctx.fault(node=node)
-        for node in ctx.non_docstring_body(module)
-        if not isinstance(node, (ast.Import, ast.ImportFrom, ast.ClassDef))
+        ctx.fault_at(location=statement.location)
+        for statement in ctx.facts.module_declarations().statements
+        if not statement.import_statement and statement.class_name is None
     ]
 
 
@@ -124,14 +128,17 @@ def client_module_content(*, module: ast.Module, ctx: RuleContext) -> list[Fault
     message="adapter class entry modules must define exactly one public top-level class",
     remediation="Keep one public adapter class and move other classes to classes/.",
 )
-def adapter_entry_class_count(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def adapter_entry_class_count(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     parts: tuple[str, ...] = ctx.repo_relative_parts()
     if not is_adapter_class_entry(parts=parts):
         return []
-    public_classes: tuple[ast.ClassDef, ...] = tuple(
-        node for node in top_level_class_nodes(module) if not node.name.startswith("_")
+    public_class_names: tuple[str, ...] = tuple(
+        statement.class_name
+        for statement in ctx.facts.module_declarations().statements
+        if statement.class_name is not None and not statement.class_name.startswith("_")
     )
-    return [ctx.path_fault()] if len(public_classes) != 1 else []
+    return [ctx.path_fault()] if len(public_class_names) != 1 else []
 
 
 @rule(
@@ -141,14 +148,15 @@ def adapter_entry_class_count(*, module: ast.Module, ctx: RuleContext) -> list[F
     message="adapter class entry modules may contain only imports and top-level classes",
     remediation="Move functions and runtime statements into the adapter class or a role boundary.",
 )
-def adapter_entry_content(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def adapter_entry_content(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     parts: tuple[str, ...] = ctx.repo_relative_parts()
     if not is_adapter_class_entry(parts=parts):
         return []
     return [
-        ctx.fault(node=node)
-        for node in ctx.non_docstring_body(module)
-        if not isinstance(node, (ast.Import, ast.ImportFrom, ast.ClassDef))
+        ctx.fault_at(location=statement.location)
+        for statement in ctx.facts.module_declarations().statements
+        if not statement.import_statement and statement.class_name is None
     ]
 
 
@@ -159,19 +167,20 @@ def adapter_entry_content(*, module: ast.Module, ctx: RuleContext) -> list[Fault
     message="providers.py must contain imports and exactly one Provider class",
     remediation="Keep only the public Provider class and imports in src/sqlbuild/providers.py.",
 )
-def provider_public_surface(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def provider_public_surface(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     if ctx.repo_relative_parts() != PROVIDER_MODULE_PARTS:
         return []
     faults: list[Fault] = []
     provider_count: int = 0
-    node: ast.stmt
-    for node in ctx.non_docstring_body(module):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
+    statement: ModuleStatementFact
+    for statement in ctx.facts.module_declarations().statements:
+        if statement.import_statement:
             continue
-        if isinstance(node, ast.ClassDef) and node.name == PROVIDER_CLASS_NAME:
+        if statement.class_name == PROVIDER_CLASS_NAME:
             provider_count += 1
             continue
-        faults.append(ctx.fault(node=node))
+        faults.append(ctx.fault_at(location=statement.location))
     if provider_count != 1:
         faults.append(ctx.path_fault())
     return faults
@@ -184,7 +193,8 @@ def provider_public_surface(*, module: ast.Module, ctx: RuleContext) -> list[Fau
     message="main packages must not contain support packages",
     remediation="Move _helpers/, classes/, or shared/ beside main/.",
 )
-def main_support_placement(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def main_support_placement(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     if ctx.scope() not in POLICY_EVALUATION_SCOPES:
         return []
     parts: tuple[str, ...] = ctx.repo_relative_parts()

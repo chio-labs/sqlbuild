@@ -2,121 +2,89 @@
 
 from __future__ import annotations
 
-import ast
+from strata import LocalCallEdgeFact, NamedCallFact, RuleContext
 
-from scripts.strata_policy.constants import WAREHOUSE_METADATA_METHODS
+from scripts.strata_policy.constants import (
+    ATTRIBUTE_REFERENCE_KIND,
+    NAME_REFERENCE_KIND,
+    WAREHOUSE_METADATA_METHODS,
+)
 
 
-def metadata_bearing_helper_names(*, module: ast.Module) -> tuple[frozenset[str], frozenset[str]]:
+def metadata_bearing_helper_names(*, ctx: RuleContext) -> tuple[frozenset[str], frozenset[str]]:
     """Return local method and function names that transitively query metadata."""
 
-    parents: dict[ast.AST, ast.AST] = parent_nodes(module)
-    method_calls_by_function: dict[ast.AST, set[str]] = {}
-    function_calls_by_function: dict[ast.AST, set[str]] = {}
-    directly_bearing: set[ast.AST] = set()
-    method_names_by_function: dict[ast.AST, str] = {}
-    function_names_by_function: dict[ast.AST, str] = {}
-
-    definition: ast.AST
-    for definition in ast.walk(module):
-        if not isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        method_calls: set[str] = set()
-        function_calls: set[str] = set()
-        called: ast.AST
-        for called in ast.walk(definition):
-            if not isinstance(called, ast.Call):
-                continue
-            if isinstance(called.func, ast.Attribute):
-                method_calls.add(called.func.attr)
-                if called.func.attr in WAREHOUSE_METADATA_METHODS:
-                    directly_bearing.add(definition)
-            elif isinstance(called.func, ast.Name):
-                function_calls.add(called.func.id)
-        method_calls_by_function[definition] = method_calls
-        function_calls_by_function[definition] = function_calls
-        if is_method_definition(definition=definition, parents=parents):
-            method_names_by_function[definition] = definition.name
-        else:
-            function_names_by_function[definition] = definition.name
-
-    bearing: set[ast.AST] = set(directly_bearing)
+    edges: tuple[LocalCallEdgeFact, ...] = ctx.facts.local_call_edges()
+    bearing_callers: set[tuple[str, int, int]] = {
+        _caller_key(edge=edge)
+        for edge in edges
+        if edge.callee.kind == ATTRIBUTE_REFERENCE_KIND
+        and edge.callee.base_name in WAREHOUSE_METADATA_METHODS
+    }
     changed: bool = True
     while changed:
         changed = False
         bearing_method_names: set[str] = {
-            method_names_by_function[function]
-            for function in bearing
-            if function in method_names_by_function
+            edge.caller.name
+            for edge in edges
+            if edge.caller_class is not None and _caller_key(edge=edge) in bearing_callers
         }
         bearing_function_names: set[str] = {
-            function_names_by_function[function]
-            for function in bearing
-            if function in function_names_by_function
+            edge.caller.name
+            for edge in edges
+            if edge.caller_class is None and _caller_key(edge=edge) in bearing_callers
         }
-        function: ast.AST
-        for function in method_calls_by_function:
-            if function in bearing:
+        for edge in edges:
+            caller_key: tuple[str, int, int] = _caller_key(edge=edge)
+            if caller_key in bearing_callers:
                 continue
-            if method_calls_by_function[function] & bearing_method_names or (
-                function_calls_by_function[function] & bearing_function_names
+            if (
+                edge.callee.kind == ATTRIBUTE_REFERENCE_KIND
+                and edge.callee.base_name in bearing_method_names
+            ) or (
+                edge.callee.kind == NAME_REFERENCE_KIND
+                and edge.callee.base_name in bearing_function_names
             ):
-                bearing.add(function)
+                bearing_callers.add(caller_key)
                 changed = True
 
     return (
         frozenset(
-            method_names_by_function[function]
-            for function in bearing
-            if function in method_names_by_function
+            edge.caller.name
+            for edge in edges
+            if edge.caller_class is not None and _caller_key(edge=edge) in bearing_callers
         ),
         frozenset(
-            function_names_by_function[function]
-            for function in bearing
-            if function in function_names_by_function
+            edge.caller.name
+            for edge in edges
+            if edge.caller_class is None and _caller_key(edge=edge) in bearing_callers
         ),
     )
 
 
 def metadata_call_label(
     *,
-    node: ast.Call,
+    call: NamedCallFact,
     bearing_method_names: frozenset[str],
     bearing_function_names: frozenset[str],
 ) -> str | None:
     """Return a diagnostic label when a call reaches warehouse metadata."""
 
-    if isinstance(node.func, ast.Attribute):
-        if node.func.attr in WAREHOUSE_METADATA_METHODS:
-            return f".{node.func.attr}"
-        if node.func.attr in bearing_method_names:
-            return node.func.attr
+    if call.reference is None:
         return None
-    if isinstance(node.func, ast.Name) and node.func.id in bearing_function_names:
-        return node.func.id
+    if call.reference.kind == ATTRIBUTE_REFERENCE_KIND:
+        if call.reference.base_name in WAREHOUSE_METADATA_METHODS:
+            return f".{call.reference.base_name}"
+        if call.reference.base_name in bearing_method_names:
+            return call.reference.base_name
+        return None
+    if (
+        call.reference.kind == NAME_REFERENCE_KIND
+        and call.reference.base_name in bearing_function_names
+    ):
+        return call.reference.base_name
     return None
 
 
-def parent_nodes(module: ast.Module) -> dict[ast.AST, ast.AST]:
-    """Return direct AST parent relationships."""
-
-    parents: dict[ast.AST, ast.AST] = {}
-    parent: ast.AST
-    for parent in ast.walk(module):
-        child: ast.AST
-        for child in ast.iter_child_nodes(parent):
-            parents[child] = parent
-    return parents
-
-
-def is_method_definition(*, definition: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
-    """Return whether a function is nested beneath a class."""
-
-    current: ast.AST = definition
-    while current in parents:
-        current = parents[current]
-        if isinstance(current, ast.ClassDef):
-            return True
-        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-    return False
+def _caller_key(*, edge: LocalCallEdgeFact) -> tuple[str, int, int]:
+    return (edge.caller.name, edge.caller.location.line, edge.caller.location.column)
