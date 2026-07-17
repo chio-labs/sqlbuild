@@ -12,7 +12,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.pipeline.plan_output import (
     find_sqlbuild_models_with_missing_dbt_relations,
 )
-from sqlbuild.integrations.dbt.main.profile.resolve_connection_config import (
+from sqlbuild.integrations.dbt.main.profile._resolve_connection_config import (
     resolve_connection_config,
 )
 from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel

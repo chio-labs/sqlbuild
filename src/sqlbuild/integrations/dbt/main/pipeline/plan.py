@@ -24,7 +24,7 @@ from sqlbuild.integrations.dbt._helpers.pipeline.plan_output import (
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.constants import DBT_FULL_REFRESH_FLAG
-from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
 from sqlbuild.integrations.dbt.models import (
     DbtInteropCompiledProject,
     DbtInteropExecutionRequest,

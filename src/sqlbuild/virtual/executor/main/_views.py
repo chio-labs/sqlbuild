@@ -17,7 +17,7 @@ from sqlbuild.virtual.executor._helpers.rewrite import (
     build_destination_from_physical_relation,
     build_virtual_destination,
 )
-from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
+from sqlbuild.virtual.planner.main._targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
 

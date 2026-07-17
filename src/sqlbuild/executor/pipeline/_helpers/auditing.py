@@ -8,7 +8,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
-from sqlbuild.executor.auditing.main.execute import execute_audit
+from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 

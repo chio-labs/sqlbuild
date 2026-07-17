@@ -8,8 +8,8 @@ from sqlbuild.cli.commands.models import (
     CheckExecutionPreparation,
     CheckInvocation,
 )
-from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
-from sqlbuild.cli.target_artifacts.main.write_python_check_runtime_target import (
+from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
+from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target import (
     write_python_check_runtime_target,
 )
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult

@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.main.cli.build_compile_argv import build_dbt_compile_argv
-from sqlbuild.integrations.dbt.main.cli.build_debug_argv import build_dbt_debug_argv
-from sqlbuild.integrations.dbt.main.cli.build_deps_argv import build_dbt_deps_argv
-from sqlbuild.integrations.dbt.main.cli.build_ls_argv import build_dbt_ls_argv
-from sqlbuild.integrations.dbt.main.cli.parse_ls_json_lines import parse_dbt_ls_json_lines
-from sqlbuild.integrations.dbt.main.cli.resolve_executable import resolve_dbt_executable
+from sqlbuild.integrations.dbt.main.cli._build_compile_argv import build_dbt_compile_argv
+from sqlbuild.integrations.dbt.main.cli._build_debug_argv import build_dbt_debug_argv
+from sqlbuild.integrations.dbt.main.cli._build_deps_argv import build_dbt_deps_argv
+from sqlbuild.integrations.dbt.main.cli._build_ls_argv import build_dbt_ls_argv
+from sqlbuild.integrations.dbt.main.cli._parse_ls_json_lines import parse_dbt_ls_json_lines
+from sqlbuild.integrations.dbt.main.cli._resolve_executable import resolve_dbt_executable
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsResult
 from sqlbuild.integrations.dbt.types import DbtInvoker
 

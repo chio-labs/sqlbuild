@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
+from sqlbuild.executor.scenario.main._cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import ScenarioCleanupExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.unit.src.sqlbuild.executor.scenario.main._test_types import (

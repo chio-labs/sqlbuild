@@ -116,6 +116,14 @@ class VirtualPlanSelectionGuardE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualChangesOnlyCurrentSeedParityE2ETestCase:
+    description: str
+    expected_plan_selected_fragment: str
+    expected_kept_model: str
+    expected_pruned_seed: str
+
+
+@dataclass(frozen=True)
 class VirtualSourceFreshnessPlanE2ETestCase:
     description: str
     expected_unchanged_fragments: tuple[str, ...]

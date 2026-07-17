@@ -28,7 +28,7 @@ from sqlbuild.compiler.planner.types import (
     StandardScopePruning,
     WarningSeverity,
 )
-from sqlbuild.executor.build.main.execute import execute_build_plan
+from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     BuildRuntimeParams,

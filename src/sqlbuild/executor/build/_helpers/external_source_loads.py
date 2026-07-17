@@ -16,7 +16,7 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
     ExternalSourceLoadResults,
 )
-from sqlbuild.executor.load.main.build_execution_indexes import build_load_execution_indexes
+from sqlbuild.executor.load.main._build_execution_indexes import build_load_execution_indexes
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry

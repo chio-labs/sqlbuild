@@ -13,7 +13,7 @@ from sqlbuild.integrations.dbt.exceptions import (
     DbtInteropRuntimeError,
     DbtReuseUnavailableError,
 )
-from sqlbuild.integrations.dbt.main.reuse.compile_production_ref_manifest import (
+from sqlbuild.integrations.dbt.main.reuse._compile_production_ref_manifest import (
     compile_production_ref_dbt_manifest,
 )
 from sqlbuild.integrations.dbt.models import (

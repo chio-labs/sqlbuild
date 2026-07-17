@@ -25,15 +25,15 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_UNIQUE_ID_SEPARATOR,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.main.cli.build_command_argv import build_dbt_command_argv
-from sqlbuild.integrations.dbt.main.cli.parse_ls_json_lines import parse_dbt_ls_json_lines
-from sqlbuild.integrations.dbt.main.planning.build_downstream_model_names import (
+from sqlbuild.integrations.dbt.main.cli._build_command_argv import build_dbt_command_argv
+from sqlbuild.integrations.dbt.main.cli._parse_ls_json_lines import parse_dbt_ls_json_lines
+from sqlbuild.integrations.dbt.main.planning._build_downstream_model_names import (
     build_downstream_sqlbuild_model_names,
 )
-from sqlbuild.integrations.dbt.main.runtime.execute_json_event_stream import (
+from sqlbuild.integrations.dbt.main.runtime._execute_json_event_stream import (
     execute_dbt_json_event_stream,
 )
-from sqlbuild.integrations.dbt.main.runtime.render_node_result import render_dbt_node_result
+from sqlbuild.integrations.dbt.main.runtime._render_node_result import render_dbt_node_result
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,

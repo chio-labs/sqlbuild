@@ -17,7 +17,7 @@ from sqlbuild.cli.commands.models import (
     CheckExecutionPreparation,
     CheckInvocation,
 )
-from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
+from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.provider.classes.session import ProviderSession

@@ -18,7 +18,7 @@ from sqlbuild.cli.commands.models import (
     PlanCommandRequest,
     PlanInvocation,
 )
-from sqlbuild.cli.progress.main.build_command_progress_reporters import (
+from sqlbuild.cli.progress.main._build_command_progress_reporters import (
     build_command_progress_reporters,
 )
 from sqlbuild.cli.progress.models import CommandProgressReporters

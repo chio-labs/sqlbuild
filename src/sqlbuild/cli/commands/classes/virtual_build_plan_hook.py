@@ -14,7 +14,7 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_t
 from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
 from sqlbuild.cli.commands.models import VirtualBuildPlanHookConfig
 from sqlbuild.cli.output.main.plan import format_plan
-from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
+from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput

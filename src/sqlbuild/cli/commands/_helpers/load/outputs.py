@@ -9,9 +9,9 @@ from sqlbuild.cli.commands.models import (
     LoadInvocation,
     LoadRunOutcome,
 )
-from sqlbuild.cli.output.main.load_execution_json import format_load_execution_json
-from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
-from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
+from sqlbuild.cli.output.main._load_execution_json import format_load_execution_json
+from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
+from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.spec.contracts.models import SourceEntry

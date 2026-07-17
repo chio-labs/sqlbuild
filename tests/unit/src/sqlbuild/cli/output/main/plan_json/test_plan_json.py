@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from sqlbuild.cli.output.main.plan_json import format_plan_json
+from sqlbuild.cli.output.main._plan_json import format_plan_json
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult
 from sqlbuild.compiler.planner.types import (

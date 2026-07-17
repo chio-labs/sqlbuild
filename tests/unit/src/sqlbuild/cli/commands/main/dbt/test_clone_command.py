@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main.dbt import dbt_clone as dbt_clone_module
+from sqlbuild.cli.commands.main.dbt import _dbt_clone as dbt_clone_module
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import (
     CloneAction,

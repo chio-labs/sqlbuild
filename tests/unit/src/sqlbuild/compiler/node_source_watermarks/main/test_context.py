@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.compiler.node_source_watermarks.main.build_payload import (
+from sqlbuild.compiler.node_source_watermarks.main._build_payload import (
     build_node_source_watermark_payload,
 )
 from sqlbuild.compiler.node_source_watermarks.main.context import (

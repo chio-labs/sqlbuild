@@ -4,13 +4,13 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlReference
-from sqlbuild.integrations.dbt.main.manifest.resolve_reference_relation import (
+from sqlbuild.integrations.dbt.main.manifest._resolve_reference_relation import (
     resolve_dbt_reference_relation,
 )
-from sqlbuild.integrations.dbt.main.manifest.validate_compile_model_names import (
+from sqlbuild.integrations.dbt.main.manifest._validate_compile_model_names import (
     validate_compile_model_names,
 )
-from sqlbuild.integrations.dbt.main.manifest.validate_compile_model_reference import (
+from sqlbuild.integrations.dbt.main.manifest._validate_compile_model_reference import (
     validate_compile_model_reference,
 )
 from sqlbuild.integrations.dbt.models import DbtManifestIndex

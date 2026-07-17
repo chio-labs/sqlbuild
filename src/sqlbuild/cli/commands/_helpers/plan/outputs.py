@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands.models import PlanCommandRequest, PlanInvocation
+from sqlbuild.cli.output.main._plan_json import format_plan_json
 from sqlbuild.cli.output.main.plan import format_plan
-from sqlbuild.cli.output.main.plan_json import format_plan_json
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.presentation.models import DisplayOptions

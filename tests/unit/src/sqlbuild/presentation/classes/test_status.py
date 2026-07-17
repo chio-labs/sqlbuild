@@ -5,7 +5,7 @@ import io
 import pytest
 
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.progress_spinners_disabled import progress_spinners_disabled
+from sqlbuild.presentation.main._progress_spinners_disabled import progress_spinners_disabled
 from tests.unit.src.sqlbuild.presentation.classes._test_types import (
     ProgressSpinnersDisabledTestCase,
 )

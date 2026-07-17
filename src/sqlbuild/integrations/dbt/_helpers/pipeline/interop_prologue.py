@@ -23,33 +23,33 @@ from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.constants import DBT_CHANGES_ONLY_FLAG
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.main.cli.enforce_standard_mode import (
+from sqlbuild.integrations.dbt.main.cli._enforce_standard_mode import (
     enforce_dbt_interop_standard_mode,
 )
-from sqlbuild.integrations.dbt.main.cli.parse_execution_args import parse_dbt_execution_args
-from sqlbuild.integrations.dbt.main.cli.resolve_executable import resolve_dbt_executable
-from sqlbuild.integrations.dbt.main.cli.route_interop_args import route_dbt_interop_args
-from sqlbuild.integrations.dbt.main.config.resolve_plan_options import resolve_dbt_plan_options
-from sqlbuild.integrations.dbt.main.config.resolve_vars_mapping import resolve_dbt_vars_mapping
-from sqlbuild.integrations.dbt.main.graph.build_combined_graph import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.main.manifest.build_manifest_index import (
+from sqlbuild.integrations.dbt.main.cli._parse_execution_args import parse_dbt_execution_args
+from sqlbuild.integrations.dbt.main.cli._resolve_executable import resolve_dbt_executable
+from sqlbuild.integrations.dbt.main.cli._route_interop_args import route_dbt_interop_args
+from sqlbuild.integrations.dbt.main.config._resolve_plan_options import resolve_dbt_plan_options
+from sqlbuild.integrations.dbt.main.config._resolve_vars_mapping import resolve_dbt_vars_mapping
+from sqlbuild.integrations.dbt.main.graph._build_combined_graph import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.main.manifest._build_manifest_index import (
     build_manifest_index as build_dbt_manifest_index,
 )
-from sqlbuild.integrations.dbt.main.manifest.load_manifest_index import (
+from sqlbuild.integrations.dbt.main.manifest._load_manifest_index import (
     load_manifest_index as load_dbt_manifest_index,
 )
-from sqlbuild.integrations.dbt.main.manifest.resolve_manifest_path import (
+from sqlbuild.integrations.dbt.main.manifest._resolve_manifest_path import (
     resolve_dbt_manifest_path,
 )
-from sqlbuild.integrations.dbt.main.planning.plan_interop_command import plan_dbt_interop_command
-from sqlbuild.integrations.dbt.main.profile.resolve_connection_config import (
+from sqlbuild.integrations.dbt.main.planning._plan_interop_command import plan_dbt_interop_command
+from sqlbuild.integrations.dbt.main.profile._resolve_connection_config import (
     resolve_connection_config,
 )
-from sqlbuild.integrations.dbt.main.reuse.compile_production_ref_manifest import (
+from sqlbuild.integrations.dbt.main.reuse._compile_production_ref_manifest import (
     compile_production_ref_dbt_manifest as compile_production_ref_manifest,
 )
-from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
-from sqlbuild.integrations.dbt.main.runtime.resolve_interop_adapter import (
+from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime._resolve_interop_adapter import (
     resolve_dbt_interop_adapter,
 )
 from sqlbuild.integrations.dbt.models import (

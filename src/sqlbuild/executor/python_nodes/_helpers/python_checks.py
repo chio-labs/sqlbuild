@@ -13,7 +13,7 @@ from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIde
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.python_nodes._helpers.fingerprinting import (

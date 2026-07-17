@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.main.assemble_project import assemble_project
-from sqlbuild.compiler.compile.main.build_compile_inputs import build_compile_inputs
+from sqlbuild.compiler.compile.main._assemble_project import assemble_project
+from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileProjectInputs,

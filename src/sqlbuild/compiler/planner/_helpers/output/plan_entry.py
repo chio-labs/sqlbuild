@@ -44,7 +44,7 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.changes.model_changes import detect_model_changes
+from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -84,7 +84,7 @@ from sqlbuild.compiler.planner.types import (
     RelationReuseKind,
     StandardReuseDecisionKind,
 )
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SchemaColumn, SourceEntry
 

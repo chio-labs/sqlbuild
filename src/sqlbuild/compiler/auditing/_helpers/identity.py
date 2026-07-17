@@ -6,7 +6,7 @@ import hashlib
 import json
 
 from sqlbuild.compiler.auditing.models import AuditIdentity
-from sqlbuild.compiler.fingerprints.main.normalize_query_sql import normalize_query_sql
+from sqlbuild.compiler.fingerprints.main._normalize_query_sql import normalize_query_sql
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 
 

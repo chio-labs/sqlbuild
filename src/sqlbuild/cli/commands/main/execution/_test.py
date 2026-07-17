@@ -17,8 +17,8 @@ from sqlbuild.cli.commands.models import (
     TestExecutionPreparation,
     TestInvocation,
 )
-from sqlbuild.cli.progress.main.write_execution_header import write_execution_header
-from sqlbuild.cli.target_artifacts.main.write_test_runtime_target import write_test_runtime_target
+from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
+from sqlbuild.cli.target_artifacts.main._write_test_runtime_target import write_test_runtime_target
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 

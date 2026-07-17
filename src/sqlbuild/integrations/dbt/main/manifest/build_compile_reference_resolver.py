@@ -6,7 +6,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
     DbtCompileReferenceResolver,
 )
-from sqlbuild.integrations.dbt.main.manifest.build_compile_manifest_index import (
+from sqlbuild.integrations.dbt.main.manifest._build_compile_manifest_index import (
     build_compile_manifest_index,
 )
 

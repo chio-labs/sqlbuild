@@ -11,7 +11,7 @@ from rich.status import Status
 
 from sqlbuild.errors.contracts.exceptions import SharedInputError
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.progress_spinners_disabled import progress_spinners_disabled
+from sqlbuild.presentation.main._progress_spinners_disabled import progress_spinners_disabled
 
 
 class TransientStatusReporter:

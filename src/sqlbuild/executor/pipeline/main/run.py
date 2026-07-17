@@ -10,8 +10,8 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.executor.build.main.execute import execute_build_plan
-from sqlbuild.executor.build.main.external_source_loads import (
+from sqlbuild.executor.build.main._execute import execute_build_plan
+from sqlbuild.executor.build.main._external_source_loads import (
     run_external_source_loads_before_connections,
 )
 from sqlbuild.executor.build.models import (

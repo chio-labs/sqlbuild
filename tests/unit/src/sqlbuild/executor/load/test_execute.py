@@ -11,7 +11,7 @@ import pytest
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.executor.load.main.execute import execute_source_load
+from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import (
     LoaderContext,
     LoadExecutionResult,

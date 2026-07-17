@@ -13,7 +13,7 @@ from sqlbuild.compiler.planner.constants import (
     MODEL_POST_HOOKS_CONFIG_KEY,
     MODEL_PRE_HOOKS_CONFIG_KEY,
 )
-from sqlbuild.compiler.planner.main.identity.version_identity_metadata import (
+from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
     build_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy

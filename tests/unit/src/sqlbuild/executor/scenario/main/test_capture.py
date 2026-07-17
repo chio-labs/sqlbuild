@@ -17,7 +17,7 @@ from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_CAPTURE_FAILED,
     SCENARIO_EXEC_CAPTURE_LIMIT_EXCEEDED,
 )
-from sqlbuild.executor.scenario.main.capture import execute_scenario_snapshot_capture
+from sqlbuild.executor.scenario.main._capture import execute_scenario_snapshot_capture
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCapturePlan,

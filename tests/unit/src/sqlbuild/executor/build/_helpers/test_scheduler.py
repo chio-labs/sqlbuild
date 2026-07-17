@@ -26,7 +26,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     StandardSourceFreshnessPlanningResult,
 )
-from sqlbuild.executor.build.main.execute import execute_build_plan
+from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,

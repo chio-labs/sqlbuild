@@ -18,7 +18,7 @@ from sqlbuild.integrations.dbt._helpers.pipeline.interop_prologue import (
     resolve_selected_dbt_model_nodes,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
 from sqlbuild.integrations.dbt.models import (
     DbtComparisonPreparation,
     DbtDiffOptions,

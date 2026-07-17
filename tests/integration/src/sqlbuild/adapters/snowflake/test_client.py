@@ -24,7 +24,7 @@ from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapt
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.executor.run._helpers.reuse.core import create_relation_from_reuse_origin
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
-from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
+from sqlbuild.virtual.freshness.main._state_record import source_freshness_record_from_observation
 from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeBuildFlowTestCase,
