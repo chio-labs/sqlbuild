@@ -16,6 +16,7 @@ from sqlbuild.virtual.freshness.main.current_records import (
     build_current_virtual_source_freshness_records,
 )
 from sqlbuild.virtual.planner._helpers.planning import (
+    build_bound_seed_version_hashes,
     build_bound_version_hashes,
     build_source_freshness_unchanged_source_names,
 )
@@ -28,6 +29,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     SourceFreshnessRecord,
 )
+from sqlbuild.virtual.state.types import PhysicalArtifactType
 
 
 def resolve_virtual_environment_name(
@@ -119,6 +121,22 @@ def read_virtual_bound_state(
             )
             if relation is not None:
                 physical_relations[model_name] = relation
+        seed_locations: dict[str, CompiledRelationLocation] = {
+            seed.name: seed.destination for seed in graph.project.seeds
+        }
+        seed_physical_relations: dict[str, PhysicalRelationRecord] = {}
+        for seed_name, version_hash in build_bound_seed_version_hashes(seed_refs).items():
+            seed_relation: PhysicalRelationRecord | None = (
+                backend.get_physical_relation_for_artifact(
+                    connection=state_connection,
+                    schema=config.schema,
+                    artifact_type=PhysicalArtifactType.SEED,
+                    artifact_name=seed_name,
+                    version_hash=version_hash,
+                )
+            )
+            if seed_relation is not None:
+                seed_physical_relations[seed_name] = seed_relation
         return VirtualBoundState(
             refs=refs,
             seed_refs=seed_refs,
@@ -131,22 +149,44 @@ def read_virtual_bound_state(
                 )
             ),
             deferred_locations={
-                model_name: build_destination_from_physical_relation(
-                    adapter=adapter,
-                    relation=relation,
-                    fallback_target=model_locations[model_name],
-                )
-                for model_name, relation in physical_relations.items()
-                if model_name in model_locations
+                **{
+                    model_name: build_destination_from_physical_relation(
+                        adapter=adapter,
+                        relation=relation,
+                        fallback_target=model_locations[model_name],
+                    )
+                    for model_name, relation in physical_relations.items()
+                    if model_name in model_locations
+                },
+                **{
+                    seed_name: build_destination_from_physical_relation(
+                        adapter=adapter,
+                        relation=relation,
+                        fallback_target=seed_locations[seed_name],
+                    )
+                    for seed_name, relation in seed_physical_relations.items()
+                    if seed_name in seed_locations
+                },
             },
             deferred_relations={
-                model_name: RelationInfo(
-                    database=relation.database_name,
-                    schema=relation.schema_name,
-                    name=relation.relation_name,
-                    relation_type=relation.relation_type,
-                )
-                for model_name, relation in physical_relations.items()
+                **{
+                    model_name: RelationInfo(
+                        database=relation.database_name,
+                        schema=relation.schema_name,
+                        name=relation.relation_name,
+                        relation_type=relation.relation_type,
+                    )
+                    for model_name, relation in physical_relations.items()
+                },
+                **{
+                    seed_name: RelationInfo(
+                        database=relation.database_name,
+                        schema=relation.schema_name,
+                        name=relation.relation_name,
+                        relation_type=relation.relation_type,
+                    )
+                    for seed_name, relation in seed_physical_relations.items()
+                },
             },
             previous_function_query_sqls=read_previous_function_query_sqls(
                 backend=backend,

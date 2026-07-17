@@ -9,6 +9,7 @@ from typing import cast
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.plan._test_types import (
+    VirtualChangesOnlyCurrentSeedParityE2ETestCase,
     VirtualPlanE2ETestCase,
     VirtualPlanJsonE2ETestCase,
     VirtualPlanSelectionGuardE2ETestCase,
@@ -180,6 +181,74 @@ def test_given_virtual_seed_change_when_planning_changes_only_then_selects_depen
     assert changed_plan_result.returncode == 0, changed_plan_result.stderr
     for fragment in test_case.expected_fragments:
         assert fragment in changed_plan_result.stdout, changed_plan_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualChangesOnlyCurrentSeedParityE2ETestCase(
+            description="virtual changes-only plan matches build when a current seed is pruned",
+            expected_plan_selected_fragment="Plan ready (1 selected)",
+            expected_kept_model="fact_orders",
+            expected_pruned_seed="order_amounts",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_virtual_current_seed_when_planning_changes_only_then_matches_build(
+    test_case: VirtualChangesOnlyCurrentSeedParityE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_changes_only_current_seed_parity",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: order_amounts\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/order_amounts.csv": "order_id,amount_cents\n1,100\n",
+            "models/fact_orders.sql": (
+                'MODEL (materialized table, run_despite_unchanged "always");\n\n'
+                'SELECT order_id, amount_cents FROM __seed("order_amounts")\n'
+            ),
+        },
+    )
+
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"),
+        project_dir=project_dir,
+    )
+    assert init_result.returncode == 0, init_result.stderr
+    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert initial_build_result.returncode == 0, (
+        initial_build_result.stdout + initial_build_result.stderr
+    )
+
+    plan_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+    assert test_case.expected_plan_selected_fragment in plan_result.stdout
+    assert test_case.expected_kept_model in plan_result.stdout
+    assert "Plan ready (0 selected)" not in plan_result.stdout
+
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    assert test_case.expected_kept_model in build_result.stdout
 
 
 @pytest.mark.parametrize(

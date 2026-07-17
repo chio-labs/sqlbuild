@@ -451,10 +451,10 @@ def test_given_two_virtual_environments_when_seed_differs_then_each_reads_bound_
     "test_case",
     [
         VirtualSeedBuildE2ETestCase(
-            description="second VDE uses existing physical seed artifact",
+            description="second VDE reuses existing physical seed artifact",
             expected_initial_rows=((1, 100),),
             expected_changed_rows=((1, 100),),
-            expected_changed_fragments=("order_amounts", "SKIP=1"),
+            expected_changed_fragments=("order_amounts",),
             expected_physical_seed_count=1,
         )
     ],
