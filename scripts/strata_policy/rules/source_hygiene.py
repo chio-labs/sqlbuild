@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import ast
-
 from strata import Family, Fault, RuleContext, rule
 
 from scripts.strata_policy.constants import (
@@ -24,7 +22,8 @@ from scripts.strata_policy.constants import (
     message="clone and reuse code must use unambiguous origin and destination terminology",
     remediation="Use origin, destination, and reuse_from; source means a SQLBuild source node.",
 )
-def reuse_terminology(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def reuse_terminology(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     if ctx.scope() not in POLICY_EVALUATION_SCOPES:
         return []
     path: str = "/".join(ctx.repo_relative_parts())
@@ -59,7 +58,8 @@ def reuse_terminology(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
     message="runtime and tooling comments must be approved directives",
     remediation="Prefer clear names or docstrings; keep only recognized tool directives.",
 )
-def sqlbuild_comment_policy(*, module: ast.Module, ctx: RuleContext) -> list[Fault]:
+def sqlbuild_comment_policy(*, module: object, ctx: RuleContext) -> list[Fault]:
+    del module
     if ctx.scope() not in POLICY_EVALUATION_SCOPES:
         return []
     return [
