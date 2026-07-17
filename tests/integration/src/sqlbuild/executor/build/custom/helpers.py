@@ -426,7 +426,7 @@ def run_scheduler_build(
     from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
     from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
     from sqlbuild.compiler.planner.models import PlanOutput
-    from sqlbuild.executor.build.main.execute import execute_build_plan
+    from sqlbuild.executor.build.main._execute import execute_build_plan
     from sqlbuild.executor.build.models import (
         BuildCustomizations,
         BuildExecutionResult,

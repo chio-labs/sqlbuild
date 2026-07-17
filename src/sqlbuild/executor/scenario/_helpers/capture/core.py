@@ -17,8 +17,8 @@ from sqlbuild.executor.scenario._helpers.snapshots.core import (
     build_scenario_snapshot_manifest_shell,
 )
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
-from sqlbuild.executor.scenario.main.capture import execute_scenario_snapshot_capture
-from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
+from sqlbuild.executor.scenario.main._capture import execute_scenario_snapshot_capture
+from sqlbuild.executor.scenario.main._cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
     ScenarioCleanupExecutionResult,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.auditing.main.parse_audit_instance import parse_audit_instance
+from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
 from sqlbuild.spec.contracts.models import SchemaAuditInstance
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     ParseAuditInstanceErrorTestCase,

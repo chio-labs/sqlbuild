@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.commands.main.workspace.playground import run_playground
+from sqlbuild.cli.commands.main.workspace._playground import run_playground
 from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
 from sqlbuild.integrations.rivers._helpers.assets import build_asset_defs

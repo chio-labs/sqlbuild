@@ -15,9 +15,9 @@ from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
-from sqlbuild.virtual.freshness.main.data_version_hash import source_freshness_data_version_hash
-from sqlbuild.virtual.freshness.main.observation import observe_configured_source_freshness
-from sqlbuild.virtual.freshness.main.state_record import source_freshness_record_from_observation
+from sqlbuild.virtual.freshness.main._data_version_hash import source_freshness_data_version_hash
+from sqlbuild.virtual.freshness.main._observation import observe_configured_source_freshness
+from sqlbuild.virtual.freshness.main._state_record import source_freshness_record_from_observation
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
 from sqlbuild.virtual.state.models import SourceFreshnessRecord
 

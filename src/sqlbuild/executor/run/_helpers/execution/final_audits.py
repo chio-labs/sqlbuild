@@ -9,7 +9,7 @@ from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.executor.auditing.main.execute import execute_audit
+from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse.audit import (
     audit_plan_binding_key,

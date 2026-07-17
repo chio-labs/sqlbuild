@@ -11,10 +11,10 @@ from sqlbuild.executor.testing.constants import (
     SQL_TEST_EXECUTION_ERROR_CODE,
     SQL_TEST_TOO_LARGE_CODE,
 )
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
-from sqlbuild.executor.testing.main.sql_length import (
+from sqlbuild.executor.testing.main._sql_length import (
     validate_unit_test_sql_length,
 )
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 

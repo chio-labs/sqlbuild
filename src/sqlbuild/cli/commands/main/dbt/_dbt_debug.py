@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from sqlbuild.cli.commands.constants import DBT_NO_CONNECTION_OPTION
-from sqlbuild.cli.commands.main.inspection.debug import run_debug as run_sqlbuild_debug
+from sqlbuild.cli.commands.main.inspection._debug import run_debug as run_sqlbuild_debug
 from sqlbuild.integrations.dbt.main.pipeline.debug import debug_dbt_from_project
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.supports_color import supports_color

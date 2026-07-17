@@ -27,7 +27,7 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.run.main.execute import (
+from sqlbuild.executor.run.main._execute import (
     execute_custom_entry,
     execute_incremental_entry,
     execute_microbatch_entry,

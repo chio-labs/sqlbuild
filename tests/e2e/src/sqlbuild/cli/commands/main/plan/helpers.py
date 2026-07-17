@@ -18,7 +18,7 @@ from sqlbuild.virtual.planner._helpers.planning import (
 from sqlbuild.virtual.state._helpers.state_runtime.backend import build_state_backend
 from sqlbuild.virtual.state._helpers.state_runtime.config import resolve_state_backend_config
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
+from sqlbuild.virtual.state.main.encoding._encode_state_text import encode_state_text
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     StateBackendConfig,

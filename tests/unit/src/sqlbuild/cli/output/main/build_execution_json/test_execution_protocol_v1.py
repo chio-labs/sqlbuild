@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from sqlbuild.cli.output.main.build_execution_json import format_build_execution_json
+from sqlbuild.cli.output.main._build_execution_json import format_build_execution_json
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus

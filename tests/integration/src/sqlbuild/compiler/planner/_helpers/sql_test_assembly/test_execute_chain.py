@@ -17,7 +17,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
-from sqlbuild.executor.testing.main.execute import execute_sql_test
+from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (

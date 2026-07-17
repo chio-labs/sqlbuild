@@ -22,7 +22,7 @@ from sqlbuild.integrations.dbt.constants import (
     DBT_SELECT_FLAGS,
 )
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
-from sqlbuild.integrations.dbt.main.manifest.manifest_model_materialization import (
+from sqlbuild.integrations.dbt.main.manifest._manifest_model_materialization import (
     dbt_manifest_model_materialization,
 )
 from sqlbuild.integrations.dbt.models import (

@@ -35,7 +35,7 @@ from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
-from sqlbuild.executor.scheduling.main.unlock_downstream import unlock_downstream_python_nodes
+from sqlbuild.executor.scheduling.main._unlock_downstream import unlock_downstream_python_nodes
 from sqlbuild.executor.scheduling.models import LifecycleExecutionNode
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.types import PythonCheckSeverity

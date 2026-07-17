@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.node_results.main.read import read_node_results
+from sqlbuild.executor.node_results.main._read import read_node_results
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultQuery
 from tests.unit.src.sqlbuild.executor.node_results.main._test_types import NodeResultReadTestCase
 from tests.unit.src.sqlbuild.executor.node_results.main.helpers import (

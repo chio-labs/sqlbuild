@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 import pytest
 
-from sqlbuild.executor.scheduling.main.run_worker import run_worker_with_completion
+from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
 from tests.unit.src.sqlbuild.executor.scheduling._helpers.worker_completion._test_types import (
     WorkerCompletionTestCase,
 )

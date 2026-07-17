@@ -10,7 +10,7 @@ from sqlbuild.cli.commands._helpers.playground import (
 )
 from sqlbuild.cli.commands._helpers.playground.copy import create_playground_project
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.main.workspace.playground import run_playground
+from sqlbuild.cli.commands.main.workspace._playground import run_playground
 from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,

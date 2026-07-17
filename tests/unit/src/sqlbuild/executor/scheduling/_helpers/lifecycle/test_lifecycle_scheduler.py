@@ -6,7 +6,7 @@ import pytest
 
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.scheduling.main.run_lifecycle import run_lifecycle_scheduler
+from sqlbuild.executor.scheduling.main._run_lifecycle import run_lifecycle_scheduler
 from sqlbuild.executor.scheduling.models import (
     LifecycleExecutionNode,
     LifecycleNodeResult,

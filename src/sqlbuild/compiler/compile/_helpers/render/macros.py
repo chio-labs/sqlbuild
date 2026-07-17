@@ -24,16 +24,16 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
-from sqlbuild.compiler.sql_analysis.main.find_matching_paren import find_matching_paren
-from sqlbuild.compiler.sql_analysis.main.is_identifier_character import (
+from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
 )
-from sqlbuild.compiler.sql_analysis.main.is_identifier_start import (
+from sqlbuild.compiler.sql_analysis.main._is_identifier_start import (
     is_identifier_start as _is_identifier_start,
 )
-from sqlbuild.compiler.sql_analysis.main.skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main.skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main.skip_quoted_text import skip_quoted_text
+from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
+from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 
 _CONTEXT: str = "Macro expansion"
 

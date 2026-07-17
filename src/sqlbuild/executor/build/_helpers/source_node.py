@@ -13,10 +13,10 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
-from sqlbuild.executor.load.main.execute import execute_source_load
+from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
 from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
-from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry

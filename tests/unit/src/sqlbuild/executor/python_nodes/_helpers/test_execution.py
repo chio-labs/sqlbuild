@@ -11,7 +11,7 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
-from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
 from sqlbuild.executor.python_nodes._helpers.execution import (
     execute_python_nodes,
     execute_ready_python_node,

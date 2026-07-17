@@ -18,7 +18,7 @@ from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import (
     execute_scenario_seed_entries,
 )
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
-from sqlbuild.executor.scenario.main.cleanup import execute_scenario_cleanup
+from sqlbuild.executor.scenario.main._cleanup import execute_scenario_cleanup
 from sqlbuild.executor.scenario.models import (
     ScenarioAssertionExpectationExecutionResult,
     ScenarioCleanupExecutionResult,

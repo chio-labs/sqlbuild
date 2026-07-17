@@ -8,7 +8,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.executor._helpers.rollback import publish_function_versions
-from sqlbuild.virtual.executor.main.views import refresh_logical_vde_views
+from sqlbuild.virtual.executor.main._views import refresh_logical_vde_views
 from sqlbuild.virtual.executor.models import VirtualEnvironmentPhysicalRelations
 from sqlbuild.virtual.state.models import FunctionVersionRecord
 

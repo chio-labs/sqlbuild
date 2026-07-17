@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TextIO
 
-from sqlbuild.cli.progress.main.execution_header import format_execution_header
+from sqlbuild.cli.progress.main._execution_header import format_execution_header
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
 

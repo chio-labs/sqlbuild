@@ -51,34 +51,34 @@ from sqlbuild.integrations.dbt._helpers.pipeline.source_freshness import (
     append_dbt_source_freshness_records,
 )
 from sqlbuild.integrations.dbt.constants import DBT_FULL_REFRESH_FLAG
-from sqlbuild.integrations.dbt.main.graph.dbt_graph_node_key import dbt_graph_node_key
+from sqlbuild.integrations.dbt.main.graph._dbt_graph_node_key import dbt_graph_node_key
 from sqlbuild.integrations.dbt.main.pipeline.render_plan import render_dbt_interop_plan
-from sqlbuild.integrations.dbt.main.planning.build_expected_model_version_hashes import (
+from sqlbuild.integrations.dbt.main.planning._build_expected_model_version_hashes import (
     build_expected_dbt_model_version_hashes,
 )
-from sqlbuild.integrations.dbt.main.planning.build_write_identity_hashes import (
+from sqlbuild.integrations.dbt.main.planning._build_write_identity_hashes import (
     build_dbt_write_identity_hashes,
 )
-from sqlbuild.integrations.dbt.main.profile.resolve_connection_config import (
+from sqlbuild.integrations.dbt.main.profile._resolve_connection_config import (
     resolve_connection_config,
 )
-from sqlbuild.integrations.dbt.main.runtime.build_fingerprint_destination import (
+from sqlbuild.integrations.dbt.main.runtime._build_fingerprint_destination import (
     build_dbt_fingerprint_destination,
 )
-from sqlbuild.integrations.dbt.main.runtime.build_node_source_watermark_context import (
+from sqlbuild.integrations.dbt.main.runtime._build_node_source_watermark_context import (
     build_dbt_node_source_watermark_context,
 )
-from sqlbuild.integrations.dbt.main.runtime.record_node_source_watermark import (
+from sqlbuild.integrations.dbt.main.runtime._record_node_source_watermark import (
     record_dbt_successful_node_source_watermark,
 )
-from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
-from sqlbuild.integrations.dbt.main.runtime.write_node_fingerprint import (
+from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime._write_node_fingerprint import (
     try_write_dbt_node_fingerprint,
 )
-from sqlbuild.integrations.dbt.main.runtime.write_node_source_watermarks import (
+from sqlbuild.integrations.dbt.main.runtime._write_node_source_watermarks import (
     write_dbt_node_source_watermark_records,
 )
-from sqlbuild.integrations.dbt.main.selection.resolve_test_actions import (
+from sqlbuild.integrations.dbt.main.selection._resolve_test_actions import (
     resolve_sqlbuild_test_actions,
 )
 from sqlbuild.integrations.dbt.models import (

@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
-from sqlbuild.virtual.freshness.main.current_records import (
+from sqlbuild.virtual.freshness.main._current_records import (
     build_current_virtual_source_freshness_records,
 )
 from sqlbuild.virtual.planner._helpers.planning import (

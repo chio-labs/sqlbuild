@@ -8,7 +8,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
-from sqlbuild.executor.node_results.main.standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
 from sqlbuild.executor.python_nodes._helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
@@ -17,7 +17,7 @@ from sqlbuild.executor.python_nodes._helpers.read_side_execution import (
     _sql_result_failed,
     _sql_result_name,
 )
-from sqlbuild.executor.python_nodes.main.ready import run_ready_python_node
+from sqlbuild.executor.python_nodes.main._ready import run_ready_python_node
 from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeRunState,

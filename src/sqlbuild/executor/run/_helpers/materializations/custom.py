@@ -18,7 +18,7 @@ from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
 from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
-from sqlbuild.executor.auditing.main.execute import execute_audit
+from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import (
     MaterializationContext,

@@ -19,9 +19,9 @@ from sqlbuild.executor.diff.main.execute import execute_diff
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.diff.models import VirtualDiffOptions, VirtualDiffState
-from sqlbuild.virtual.executor.main.rewrite import rewrite_virtual_project_model_locations
-from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
-from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
+from sqlbuild.virtual.executor.main._rewrite import rewrite_virtual_project_model_locations
+from sqlbuild.virtual.planner.main._semantics import build_virtual_plan_semantics
+from sqlbuild.virtual.planner.main._targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,

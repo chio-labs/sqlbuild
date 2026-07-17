@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands.models import TestCommandRequest, TestInvocation
-from sqlbuild.cli.output.main.sql_test_execution_json import format_test_execution_json
-from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
+from sqlbuild.cli.output.main._sql_test_execution_json import format_test_execution_json
+from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.main.summary_footer import format_summary_footer

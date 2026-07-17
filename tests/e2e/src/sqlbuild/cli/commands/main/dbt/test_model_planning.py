@@ -1006,7 +1006,14 @@ def test_given_current_dbt_and_new_sqlbuild_function_when_building_then_shows_na
     add_dbt_phase11_sqlbuild_function_branch(project_dir=project_dir)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "build", "--select", "+amount_quality", "+customer_summary"),
+        command=(
+            "dbt",
+            "build",
+            "--select",
+            "+amount_quality",
+            "+customer_summary",
+            "--changes-only",
+        ),
         project_dir=project_dir,
     )
 
