@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.47.0](https://github.com/chio-labs/sqlbuild/compare/v0.46.1...v0.47.0) (2026-07-17)
+
+
+### Features
+
+* add SQLBuild Strata policies ([d097d33](https://github.com/chio-labs/sqlbuild/commit/d097d33c46b28a090acd489edee9c1450a9c8e8d))
+
+
+### Bug Fixes
+
+* make changes-only execution opt-in ([945570c](https://github.com/chio-labs/sqlbuild/commit/945570c189d34118dbaf0101ac54987a641c3660))
+* make changes-only execution opt-in ([4ffa692](https://github.com/chio-labs/sqlbuild/commit/4ffa692e82a2de6a81949ef22e8b5fb42ac8949a))
+* restore public positional API compatibility ([6c47496](https://github.com/chio-labs/sqlbuild/commit/6c4749609e5fdef3d7927393230cbe700cd980d4))
+* update playground adapter contract import ([28712b4](https://github.com/chio-labs/sqlbuild/commit/28712b48c2e22854a96fca6c73e403c0ba993f46))
+
+
+### Performance Improvements
+
+* make custom Strata rules cacheable ([0140242](https://github.com/chio-labs/sqlbuild/commit/01402429008d5cb51e96aeff717652bfa81623c2))
+* make custom Strata rules cacheable ([a17bb55](https://github.com/chio-labs/sqlbuild/commit/a17bb5555239b8e4ee0245e5d2c99e3bd8408736))
+
 ## [0.46.1](https://github.com/chio-labs/sqlbuild/compare/v0.46.0...v0.46.1) (2026-07-04)
 
 
