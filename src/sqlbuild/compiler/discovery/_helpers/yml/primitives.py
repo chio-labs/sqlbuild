@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.auditing.main.parse_audit_instance import parse_audit_instance
+from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
 from sqlbuild.spec.contracts.models import SchemaAuditInstance
 
 

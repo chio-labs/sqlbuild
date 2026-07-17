@@ -29,7 +29,7 @@ from sqlbuild.cli.commands.models import (
     FreshnessCommandRequest,
     FreshnessCommandResult,
 )
-from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
+from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph

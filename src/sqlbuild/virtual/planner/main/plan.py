@@ -26,10 +26,10 @@ from sqlbuild.virtual.planner._helpers.output import (
     rewrite_virtual_plan_entries,
 )
 from sqlbuild.virtual.planner._helpers.planning import resolve_virtual_model_selection
-from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_python_identities
-from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
-from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
-from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
+from sqlbuild.virtual.planner.main._python_identities import read_bound_virtual_python_identities
+from sqlbuild.virtual.planner.main._python_plan_entries import build_virtual_python_plan_entries
+from sqlbuild.virtual.planner.main._python_run_selection import build_virtual_python_run_selection
+from sqlbuild.virtual.planner.main._semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import (
     VirtualBoundState,
     VirtualPlanOptions,

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.progress.main.expectation_detail import format_expectation_detail
-from sqlbuild.cli.progress.main.expectation_name import format_expectation_name
+from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
+from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult

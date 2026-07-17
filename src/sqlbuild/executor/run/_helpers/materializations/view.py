@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
-from sqlbuild.executor.auditing.main.execute import execute_audit
+from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks

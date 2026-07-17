@@ -118,31 +118,31 @@ from sqlbuild.virtual.executor.models import (
     VirtualBuildPipelineResult,
     VirtualEnvironmentNames,
 )
-from sqlbuild.virtual.freshness.main.current_records import (
+from sqlbuild.virtual.freshness.main._current_records import (
     build_current_virtual_source_freshness_records,
 )
-from sqlbuild.virtual.freshness.main.runtime_observation import (
+from sqlbuild.virtual.freshness.main._runtime_observation import (
     observe_virtual_environment_source_freshness,
 )
-from sqlbuild.virtual.freshness.main.runtime_persistence import (
+from sqlbuild.virtual.freshness.main._runtime_persistence import (
     persist_virtual_environment_source_freshness,
 )
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult
-from sqlbuild.virtual.planner.main.output import apply_virtual_plan_output
-from sqlbuild.virtual.planner.main.python_identities import read_bound_virtual_python_identities
-from sqlbuild.virtual.planner.main.python_plan_entries import build_virtual_python_plan_entries
-from sqlbuild.virtual.planner.main.python_run_selection import build_virtual_python_run_selection
-from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
-from sqlbuild.virtual.planner.main.semantics import (
+from sqlbuild.virtual.planner.main._output import apply_virtual_plan_output
+from sqlbuild.virtual.planner.main._python_identities import read_bound_virtual_python_identities
+from sqlbuild.virtual.planner.main._python_plan_entries import build_virtual_python_plan_entries
+from sqlbuild.virtual.planner.main._python_run_selection import build_virtual_python_run_selection
+from sqlbuild.virtual.planner.main._selection import resolve_virtual_plan_model_selection
+from sqlbuild.virtual.planner.main._semantics import (
     build_virtual_plan_semantics,
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.checkpoints.checkpoints import (
+from sqlbuild.virtual.state.main.checkpoints._checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )
-from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
+from sqlbuild.virtual.state.main.encoding._encode_state_text import encode_state_text
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
-from sqlbuild.virtual.state.main.python_identities.python_node_identity_write import (
+from sqlbuild.virtual.state.main.python_identities._python_node_identity_write import (
     try_record_virtual_python_node_identity,
 )
 from sqlbuild.virtual.state.models import (

@@ -5,8 +5,8 @@ from sqlbuild.integrations.dagster.classes.sqlbuild_cli_resource import SqlBuild
 from sqlbuild.integrations.dagster.classes.sqlbuild_dagster_translator import (
     SqlBuildDagsterTranslator,
 )
-from sqlbuild.integrations.dagster.main.sqlbuild_assets import sqlbuild_assets
-from sqlbuild.integrations.dagster.main.sqlbuild_scenario_checks import sqlbuild_scenario_checks
+from sqlbuild.integrations.dagster.main._sqlbuild_assets import sqlbuild_assets
+from sqlbuild.integrations.dagster.main._sqlbuild_scenario_checks import sqlbuild_scenario_checks
 from sqlbuild.integrations.dagster.models import SqlBuildProject
 
 __all__ = [

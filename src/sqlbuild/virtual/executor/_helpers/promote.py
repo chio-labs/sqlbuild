@@ -17,11 +17,11 @@ from sqlbuild.virtual.executor.models import (
     PromoteSemantics,
     VirtualEnvironmentPhysicalRelations,
 )
-from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
-from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
-from sqlbuild.virtual.planner.main.upstreams import build_virtual_stale_required_upstream_closure
+from sqlbuild.virtual.planner.main._selection import resolve_virtual_plan_model_selection
+from sqlbuild.virtual.planner.main._semantics import build_virtual_plan_semantics
+from sqlbuild.virtual.planner.main._upstreams import build_virtual_stale_required_upstream_closure
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.checkpoints.checkpoints import (
+from sqlbuild.virtual.state.main.checkpoints._checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )
 from sqlbuild.virtual.state.models import (

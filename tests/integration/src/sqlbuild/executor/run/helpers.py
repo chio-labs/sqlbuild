@@ -37,7 +37,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
 )
-from sqlbuild.executor.run.main.execute import execute_table_entry
+from sqlbuild.executor.run.main._execute import execute_table_entry
 from sqlbuild.executor.run.models import (
     HookContext,
     ModelExecutionResult,

@@ -46,11 +46,11 @@ from sqlbuild.virtual.executor.models import (
     CloneVersions,
     VirtualCloneItemResult,
 )
-from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
+from sqlbuild.virtual.planner.main._semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
-from sqlbuild.virtual.state.main.encoding.encode_state_text import encode_state_text
-from sqlbuild.virtual.state.main.locks.model_version_lock import acquire_model_version_lease
-from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
+from sqlbuild.virtual.state.main.encoding._encode_state_text import encode_state_text
+from sqlbuild.virtual.state.main.locks._model_version_lock import acquire_model_version_lease
+from sqlbuild.virtual.state.main.locks._release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,

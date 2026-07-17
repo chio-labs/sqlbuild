@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.cli.commands._helpers.compile import lineage as compile_lineage
 from sqlbuild.cli.commands._helpers.compile import pipeline as compile_pipeline
 from sqlbuild.cli.commands._helpers.compile import status as compile_status
-from sqlbuild.cli.commands.main.project.compile import run_compile
+from sqlbuild.cli.commands.main.project._compile import run_compile
 from sqlbuild.cli.commands.models import CompileCommandRequest
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode

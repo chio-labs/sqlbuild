@@ -4,7 +4,7 @@ import pytest
 
 from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
-from sqlbuild.integrations.dbt.main.runtime.source_freshness import (
+from sqlbuild.integrations.dbt.main.runtime._source_freshness import (
     translate_dbt_manifest_sources_to_sqlbuild_sources,
 )
 from sqlbuild.integrations.dbt.models import DbtManifestIndex

@@ -23,7 +23,7 @@ from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshne
 from sqlbuild.virtual.freshness._helpers.state import (
     source_freshness_record_from_observation,
 )
-from sqlbuild.virtual.freshness.main.runtime_observation import (
+from sqlbuild.virtual.freshness.main._runtime_observation import (
     observe_virtual_environment_source_freshness,
 )
 from sqlbuild.virtual.freshness.models import SourceFreshnessRuntimeResult

@@ -33,7 +33,7 @@ from sqlbuild.virtual.planner._helpers.planning import (
     build_stale_seed_names,
     resolve_virtual_model_selection,
 )
-from sqlbuild.virtual.planner.main.semantics import build_virtual_plan_semantics
+from sqlbuild.virtual.planner.main._semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,

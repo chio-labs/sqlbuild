@@ -29,32 +29,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI entrypoint."""
 
     from sqlbuild.cli.commands._helpers.scenario_capture.capture import run_scenario_capture
-    from sqlbuild.cli.commands.main.dbt.dbt import run_dbt_command
-    from sqlbuild.cli.commands.main.dbt.dbt_init import run_dbt_init_command
-    from sqlbuild.cli.commands.main.execution.audit import run_audit
-    from sqlbuild.cli.commands.main.execution.build import run_build
-    from sqlbuild.cli.commands.main.execution.check import run_check
-    from sqlbuild.cli.commands.main.execution.freshness import run_freshness
-    from sqlbuild.cli.commands.main.execution.load import run_load
-    from sqlbuild.cli.commands.main.execution.scenario import run_scenario
-    from sqlbuild.cli.commands.main.execution.seed import run_seed
-    from sqlbuild.cli.commands.main.execution.test import run_test
-    from sqlbuild.cli.commands.main.inspection.clone import run_clone
-    from sqlbuild.cli.commands.main.inspection.debug import run_debug
-    from sqlbuild.cli.commands.main.inspection.diff import run_diff
-    from sqlbuild.cli.commands.main.inspection.lineage import run_lineage
-    from sqlbuild.cli.commands.main.inspection.query import run_query
-    from sqlbuild.cli.commands.main.project.compile import run_compile
-    from sqlbuild.cli.commands.main.project.dag import run_dag
-    from sqlbuild.cli.commands.main.project.plan import run_plan
-    from sqlbuild.cli.commands.main.state.janitor import run_janitor
-    from sqlbuild.cli.commands.main.state.promote import run_promote
-    from sqlbuild.cli.commands.main.state.reconcile import run_reconcile
-    from sqlbuild.cli.commands.main.state.rollback import run_rollback
-    from sqlbuild.cli.commands.main.state.state import run_state
-    from sqlbuild.cli.commands.main.workspace.init import run_init
-    from sqlbuild.cli.commands.main.workspace.playground import run_playground
-    from sqlbuild.cli.commands.main.workspace.skills import run_skills_update
+    from sqlbuild.cli.commands.main.dbt._dbt import run_dbt_command
+    from sqlbuild.cli.commands.main.dbt._dbt_init import run_dbt_init_command
+    from sqlbuild.cli.commands.main.execution._audit import run_audit
+    from sqlbuild.cli.commands.main.execution._build import run_build
+    from sqlbuild.cli.commands.main.execution._check import run_check
+    from sqlbuild.cli.commands.main.execution._freshness import run_freshness
+    from sqlbuild.cli.commands.main.execution._load import run_load
+    from sqlbuild.cli.commands.main.execution._scenario import run_scenario
+    from sqlbuild.cli.commands.main.execution._seed import run_seed
+    from sqlbuild.cli.commands.main.execution._test import run_test
+    from sqlbuild.cli.commands.main.inspection._clone import run_clone
+    from sqlbuild.cli.commands.main.inspection._debug import run_debug
+    from sqlbuild.cli.commands.main.inspection._diff import run_diff
+    from sqlbuild.cli.commands.main.inspection._lineage import run_lineage
+    from sqlbuild.cli.commands.main.inspection._query import run_query
+    from sqlbuild.cli.commands.main.project._compile import run_compile
+    from sqlbuild.cli.commands.main.project._dag import run_dag
+    from sqlbuild.cli.commands.main.project._plan import run_plan
+    from sqlbuild.cli.commands.main.state._janitor import run_janitor
+    from sqlbuild.cli.commands.main.state._promote import run_promote
+    from sqlbuild.cli.commands.main.state._reconcile import run_reconcile
+    from sqlbuild.cli.commands.main.state._rollback import run_rollback
+    from sqlbuild.cli.commands.main.state._state import run_state
+    from sqlbuild.cli.commands.main.workspace._init import run_init
+    from sqlbuild.cli.commands.main.workspace._playground import run_playground
+    from sqlbuild.cli.commands.main.workspace._skills import run_skills_update
 
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
         run_compile=run_compile,

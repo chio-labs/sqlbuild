@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.auditing.main.builtins import build_builtin_audit_resolution
+from sqlbuild.compiler.auditing.main._builtins import build_builtin_audit_resolution
 from sqlbuild.compiler.compile._helpers.attachment.audits import (
     build_audit_inputs,
     index_generic_audit_definitions,

@@ -11,10 +11,10 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.graph.main.build_lineage_downstream_deps import (
+from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
 )
-from sqlbuild.compiler.graph.main.build_lineage_upstream_deps import (
+from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
 from sqlbuild.compiler.planner._helpers.graph.auto_load import managed_source_upstream_keys

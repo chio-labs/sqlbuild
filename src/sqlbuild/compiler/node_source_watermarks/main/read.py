@@ -13,7 +13,7 @@ from sqlbuild.compiler.node_source_watermarks.constants import (
 from sqlbuild.compiler.node_source_watermarks.exceptions import (
     NodeSourceWatermarkInputError,
 )
-from sqlbuild.compiler.node_source_watermarks.main.decode_payload import (
+from sqlbuild.compiler.node_source_watermarks.main._decode_payload import (
     decode_watermark_payload,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

@@ -31,7 +31,7 @@ from sqlbuild.virtual.executor.models import (
     VirtualProjectContext,
 )
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
-from sqlbuild.virtual.state.main.locks.release_lock import release_state_lease
+from sqlbuild.virtual.state.main.locks._release_lock import release_state_lease
 from sqlbuild.virtual.state.models import StateLockLease
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 

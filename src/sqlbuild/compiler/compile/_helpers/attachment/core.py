@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
-from sqlbuild.compiler.auditing.main.parse_audit_instance import parse_audit_instance
+from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_hook_sql_syntax,
     validate_sql_syntax,

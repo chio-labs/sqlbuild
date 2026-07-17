@@ -14,20 +14,20 @@ from sqlbuild.compiler.compile.constants import (
     SQL_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main.project_var_values import render_project_var_text
+from sqlbuild.compiler.compile.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.sql_analysis.main.is_identifier_character import (
+from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
 )
-from sqlbuild.compiler.sql_analysis.main.is_identifier_start import (
+from sqlbuild.compiler.sql_analysis.main._is_identifier_start import (
     is_identifier_start as _is_identifier_start,
 )
-from sqlbuild.compiler.sql_analysis.main.skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main.skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main.skip_quoted_text import skip_quoted_text
+from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
+from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 
 _CONTEXT: str = "SQL interpolation"
 

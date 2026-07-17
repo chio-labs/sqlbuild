@@ -12,8 +12,8 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.custom.main.execute_sql import execute_sql_with_recording
-from sqlbuild.executor.custom.main.qualify_relation import qualify_custom_relation
+from sqlbuild.executor.custom.main._execute_sql import execute_sql_with_recording
+from sqlbuild.executor.custom.main._qualify_relation import qualify_custom_relation
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 
 

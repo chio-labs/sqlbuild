@@ -16,12 +16,12 @@ from duckdb import DuckDBPyConnection
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.load.selection import select_load_entries
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.main.execution.audit import run_audit
-from sqlbuild.cli.commands.main.execution.build import run_build
-from sqlbuild.cli.commands.main.execution.load import run_load
-from sqlbuild.cli.commands.main.execution.scenario import run_scenario
-from sqlbuild.cli.commands.main.execution.test import run_test
-from sqlbuild.cli.commands.main.project.plan import run_plan
+from sqlbuild.cli.commands.main.execution._audit import run_audit
+from sqlbuild.cli.commands.main.execution._build import run_build
+from sqlbuild.cli.commands.main.execution._load import run_load
+from sqlbuild.cli.commands.main.execution._scenario import run_scenario
+from sqlbuild.cli.commands.main.execution._test import run_test
+from sqlbuild.cli.commands.main.project._plan import run_plan
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     BuildCommandRequest,
@@ -30,7 +30,7 @@ from sqlbuild.cli.commands.models import (
     ScenarioTestCommandRequest,
     TestCommandRequest,
 )
-from sqlbuild.cli.output.main.load_execution_json import format_load_execution_json
+from sqlbuild.cli.output.main._load_execution_json import format_load_execution_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.planner.exceptions import PlannerInputError

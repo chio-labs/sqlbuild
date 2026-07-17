@@ -37,38 +37,38 @@ from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.integrations.dbt._helpers.pipeline.clone import execute_dbt_clone
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError, DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.main.graph.build_combined_graph import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.main.graph.combined_graph_node_is_clonable import (
+from sqlbuild.integrations.dbt.main.graph._build_combined_graph import build_dbt_combined_graph
+from sqlbuild.integrations.dbt.main.graph._combined_graph_node_is_clonable import (
     combined_graph_node_is_clonable,
 )
-from sqlbuild.integrations.dbt.main.graph.combined_graph_node_is_view import (
+from sqlbuild.integrations.dbt.main.graph._combined_graph_node_is_view import (
     combined_graph_node_is_view,
 )
-from sqlbuild.integrations.dbt.main.graph.dbt_graph_node_key import dbt_graph_node_key
-from sqlbuild.integrations.dbt.main.graph.dbt_model_graph_key import dbt_model_graph_key
-from sqlbuild.integrations.dbt.main.graph.sqlbuild_model_graph_key import (
+from sqlbuild.integrations.dbt.main.graph._dbt_graph_node_key import dbt_graph_node_key
+from sqlbuild.integrations.dbt.main.graph._dbt_model_graph_key import dbt_model_graph_key
+from sqlbuild.integrations.dbt.main.graph._sqlbuild_model_graph_key import (
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt.main.manifest.build_manifest_index import (
+from sqlbuild.integrations.dbt.main.manifest._build_manifest_index import (
     build_manifest_index as build_dbt_manifest_index,
 )
-from sqlbuild.integrations.dbt.main.planning.build_expected_model_version_hashes import (
+from sqlbuild.integrations.dbt.main.planning._build_expected_model_version_hashes import (
     build_expected_dbt_model_version_hashes,
 )
-from sqlbuild.integrations.dbt.main.planning.build_write_identity_hashes import (
+from sqlbuild.integrations.dbt.main.planning._build_write_identity_hashes import (
     build_dbt_write_identity_hashes,
 )
-from sqlbuild.integrations.dbt.main.reuse.compile_production_ref_manifest import (
+from sqlbuild.integrations.dbt.main.reuse._compile_production_ref_manifest import (
     compile_production_ref_dbt_manifest as compile_production_ref_manifest,
 )
-from sqlbuild.integrations.dbt.main.runtime.build_fingerprint_destination import (
+from sqlbuild.integrations.dbt.main.runtime._build_fingerprint_destination import (
     build_dbt_fingerprint_destination,
 )
-from sqlbuild.integrations.dbt.main.runtime.report_progress import report_progress
-from sqlbuild.integrations.dbt.main.runtime.write_node_fingerprint import (
+from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
+from sqlbuild.integrations.dbt.main.runtime._write_node_fingerprint import (
     try_write_dbt_node_fingerprint,
 )
-from sqlbuild.integrations.dbt.main.selection.dbt_fqn_selector_term import dbt_fqn_selector_term
+from sqlbuild.integrations.dbt.main.selection._dbt_fqn_selector_term import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,

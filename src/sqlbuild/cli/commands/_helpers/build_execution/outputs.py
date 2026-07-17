@@ -16,13 +16,13 @@ from sqlbuild.cli.commands.models import (
     BuildInvocation,
     BuildRunOutcome,
 )
-from sqlbuild.cli.output.main.build_execution_json import format_build_execution_json
+from sqlbuild.cli.output.main._build_execution_json import format_build_execution_json
+from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.output.main.plan import format_plan
-from sqlbuild.cli.output.main.write_execution_json_output import write_execution_json_output
-from sqlbuild.cli.target_artifacts.main.write_python_check_runtime_target import (
+from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target import (
     write_python_check_runtime_target,
 )
-from sqlbuild.cli.target_artifacts.main.write_runtime_target import write_runtime_target
+from sqlbuild.cli.target_artifacts.main._write_runtime_target import write_runtime_target
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult

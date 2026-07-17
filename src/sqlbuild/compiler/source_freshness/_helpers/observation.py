@@ -11,7 +11,7 @@ from sqlbuild.adapter.contract.models import (
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig

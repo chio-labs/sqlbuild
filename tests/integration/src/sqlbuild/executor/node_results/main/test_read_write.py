@@ -8,8 +8,8 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.executor.node_results.main.read import read_node_results
-from sqlbuild.executor.node_results.main.write import write_node_result_record
+from sqlbuild.executor.node_results.main._read import read_node_results
+from sqlbuild.executor.node_results.main._write import write_node_result_record
 from sqlbuild.executor.node_results.models import (
     NodeResultEnvelope,
     NodeResultQuery,

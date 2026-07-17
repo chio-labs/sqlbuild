@@ -31,8 +31,8 @@ from sqlbuild.virtual.executor.models import (
     RollbackResolution,
     VirtualEnvironmentPhysicalRelations,
 )
-from sqlbuild.virtual.planner.main.selection import resolve_virtual_plan_model_selection
-from sqlbuild.virtual.planner.main.targets import build_virtual_destination_from_physical_relation
+from sqlbuild.virtual.planner.main._selection import resolve_virtual_plan_model_selection
+from sqlbuild.virtual.planner.main._targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     PhysicalRelationRecord,

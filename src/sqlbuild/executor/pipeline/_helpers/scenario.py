@@ -21,12 +21,12 @@ from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_INTERNAL,
     SCENARIO_LOCAL_INTERNAL,
 )
-from sqlbuild.executor.scenario.main.capture_steps import (
+from sqlbuild.executor.scenario.main._capture_steps import (
     execute_scenario_snapshot_capture_run,
 )
-from sqlbuild.executor.scenario.main.local import execute_local_scenario_load_only_run
-from sqlbuild.executor.scenario.main.run import execute_scenario_run
-from sqlbuild.executor.scenario.main.snapshots import classify_scenario_snapshot_state
+from sqlbuild.executor.scenario.main._local import execute_local_scenario_load_only_run
+from sqlbuild.executor.scenario.main._run import execute_scenario_run
+from sqlbuild.executor.scenario.main._snapshots import classify_scenario_snapshot_state
 from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
     ScenarioRunResult,
