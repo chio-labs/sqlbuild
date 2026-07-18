@@ -4670,6 +4670,89 @@ def test_given_finalized_source_vde_when_workspace_changes_again_then_whole_prom
     "test_case",
     [
         VirtualPromoteE2ETestCase(
+            description="partial promotion preserves unrelated current source identity",
+            promote_command=(
+                "--no-color",
+                "promote",
+                "--from",
+                "pr",
+                "--to",
+                "dev",
+                "--select",
+                "independent",
+            ),
+            expected_promote_fragments=(
+                "Virtual promotion complete",
+                "promoted models        1",
+            ),
+            expected_query_results=(),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unrelated_source_model_when_promoting_partial_then_current_identity_does_not_block(
+    test_case: VirtualPromoteE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_promote_source_identity",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    schema: raw\n"
+                "    table: raw_orders\n"
+                "    freshness:\n"
+                "      strategy: column\n"
+                "      column: data_version\n"
+                "      type: integer\n"
+            ),
+            "models/source_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+            "models/independent.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "CREATE SCHEMA raw; "
+            "CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER); "
+            "INSERT INTO raw.raw_orders VALUES (1, 1)"
+        ),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    dev_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert dev_build_result.returncode == 0, dev_build_result.stdout + dev_build_result.stderr
+    (project_dir / "models" / "independent.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT 2 AS id\n",
+        encoding="utf-8",
+    )
+    pr_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr"),
+        project_dir=project_dir,
+    )
+    assert pr_build_result.returncode == 0, pr_build_result.stdout + pr_build_result.stderr
+
+    promote_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.promote_command,
+        project_dir=project_dir,
+    )
+
+    assert promote_result.returncode == 0, promote_result.stdout + promote_result.stderr
+    for fragment in test_case.expected_promote_fragments:
+        assert fragment in promote_result.stdout, promote_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualPromoteE2ETestCase(
             description="partial promotion requires explicit working target acceptance",
             blocked_command=(
                 "--no-color",

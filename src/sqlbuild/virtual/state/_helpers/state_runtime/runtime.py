@@ -15,11 +15,13 @@ def build_state_runtime(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     project_dir: Path,
+    selected_target: str | None = None,
 ) -> tuple[StateBackendConfig, StateBackend]:
     """Resolve config and construct the configured virtual state backend."""
 
     config: StateBackendConfig = resolve_state_backend_config(
         discovered_inputs=discovered_inputs,
         project_dir=project_dir,
+        selected_target=selected_target,
     )
     return config, build_state_backend(config.backend)

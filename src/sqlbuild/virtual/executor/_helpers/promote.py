@@ -28,6 +28,7 @@ from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
+    SourceFreshnessRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentNodeRefRecord,
@@ -134,6 +135,20 @@ def read_promote_environment_state(
             f"target virtual environment '{to_virtual_environment_name}' is detached",
             code="S028",
         )
+    source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+        backend.get_virtual_environment_source_freshness(
+            connection=state_connection,
+            schema=schema,
+            virtual_environment_name=from_virtual_environment_name,
+        )
+    )
+    target_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+        backend.get_virtual_environment_source_freshness(
+            connection=state_connection,
+            schema=schema,
+            virtual_environment_name=to_virtual_environment_name,
+        )
+    )
     return PromoteEnvironmentState(
         source_refs=source_refs,
         target_refs=target_refs,
@@ -142,6 +157,8 @@ def read_promote_environment_state(
         to_seed_refs=to_seed_refs,
         source_environment=source_environment,
         target_environment=target_environment,
+        source_freshness_records=source_freshness_records,
+        target_freshness_records=target_freshness_records,
     )
 
 
@@ -172,12 +189,14 @@ def build_promote_semantics(
         bound_refs=environment_state.source_refs,
         bound_model_versions=source_versions,
         bound_seed_refs=environment_state.from_seed_refs,
+        source_freshness_records=environment_state.source_freshness_records,
     )
     target_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
         graph=graph,
         bound_refs=environment_state.target_refs,
         bound_model_versions=target_versions,
         bound_seed_refs=environment_state.to_seed_refs,
+        source_freshness_records=environment_state.target_freshness_records,
     )
     return PromoteSemantics(source=source_semantics, target=target_semantics)
 

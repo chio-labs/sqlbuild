@@ -38,6 +38,7 @@ from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     PhysicalRelationRecord,
     SeedVersionRecord,
+    SourceFreshnessRecord,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
@@ -189,6 +190,7 @@ class VirtualCloneResult:
     origin_environment: str
     destination_environment: str
     destination_virtual_environment: str | None = None
+    origin_state_used: bool = False
     item_results: tuple[VirtualCloneItemResult, ...] = field(default_factory=tuple)
 
     @property
@@ -245,6 +247,8 @@ class PromoteEnvironmentState:
     to_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...]
     source_environment: VirtualEnvironmentRecord | None
     target_environment: VirtualEnvironmentRecord | None
+    source_freshness_records: tuple[SourceFreshnessRecord, ...]
+    target_freshness_records: tuple[SourceFreshnessRecord, ...]
 
 
 @dataclass(frozen=True)
@@ -344,6 +348,7 @@ class CloneVersions:
     version_hashes: dict[str, str]
     model_versions: dict[str, ModelVersionRecord]
     seed_versions: dict[str, SeedVersionRecord]
+    origin_state_used: bool = False
 
 
 @dataclass(frozen=True)

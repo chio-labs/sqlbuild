@@ -14,6 +14,12 @@ select = ["SF", "XSB"]
 enabled = true
 require_cacheable = true
 
+[experimental]
+memory = true
+
+[memory.tasks]
+archive_after_days = 7
+
 [evaluation]
 exclude = ["tests/e2e/fixtures/**"]
 

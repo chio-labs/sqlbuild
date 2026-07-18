@@ -29,3 +29,4 @@ class VirtualDiffE2ETestCase:
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
