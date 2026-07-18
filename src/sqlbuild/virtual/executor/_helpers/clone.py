@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -49,6 +50,7 @@ from sqlbuild.virtual.executor.models import (
 from sqlbuild.virtual.planner.main._semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.main.encoding._encode_state_text import encode_state_text
+from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.main.locks._model_version_lock import acquire_model_version_lease
 from sqlbuild.virtual.state.main.locks._release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
@@ -438,11 +440,30 @@ def resolve_clone_versions(
     clone_pipeline: ClonePipelineResult,
     context: CloneProjectContext,
     virtual_environment_name: str | None,
+    discovered_inputs: DiscoveredProjectInputs,
+    project_dir: Path,
+    origin_target_name: str,
 ) -> CloneVersions:
     """Resolve model and seed version records to hydrate."""
 
     if virtual_environment_name is None:
-        return _resolve_workspace_clone_versions(clone_pipeline=clone_pipeline, context=context)
+        origin_config, origin_backend = build_state_runtime(
+            discovered_inputs=discovered_inputs,
+            project_dir=project_dir,
+            selected_target=origin_target_name,
+        )
+        origin_state_connection: Any = origin_backend.connect(origin_config.connection)
+        try:
+            return _resolve_workspace_clone_versions(
+                clone_pipeline=clone_pipeline,
+                context=context,
+                backend=origin_backend,
+                state_connection=origin_state_connection,
+                schema=origin_config.schema,
+                origin_virtual_environment_name=origin_target_name,
+            )
+        finally:
+            origin_backend.close(origin_state_connection)
     return _read_virtual_environment_clone_versions(
         backend=backend,
         state_connection=state_connection,
@@ -674,13 +695,17 @@ def _resolve_workspace_clone_versions(
     *,
     clone_pipeline: ClonePipelineResult,
     context: CloneProjectContext,
+    backend: Any,
+    state_connection: Any,
+    schema: str,
+    origin_virtual_environment_name: str,
 ) -> CloneVersions:
     semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
         graph=context.destination_graph,
         bound_refs=(),
         bound_model_versions={},
     )
-    version_hashes: dict[str, str] = semantics.expected_version_hashes
+    version_hashes: dict[str, str] = dict(semantics.expected_version_hashes)
     model_versions: dict[str, ModelVersionRecord] = build_workspace_model_versions(
         project=clone_pipeline.destination_project,
         model_entries=clone_pipeline.destination_model_entries,
@@ -689,6 +714,45 @@ def _resolve_workspace_clone_versions(
         local_hashes=semantics.expected_local_hashes,
         metadata_jsons=semantics.expected_metadata_jsons,
     )
+    source_dependent_names: tuple[str, ...] = tuple(
+        name
+        for name in context.model_names
+        if name in semantics.source_freshness_incomplete_model_names
+    )
+    if source_dependent_names:
+        origin_refs: tuple[VirtualEnvironmentModelRefRecord, ...] = (
+            backend.get_virtual_environment_model_refs(
+                connection=state_connection,
+                schema=schema,
+                virtual_environment_name=origin_virtual_environment_name,
+            )
+        )
+        origin_hashes: dict[str, str] = {ref.model_name: ref.version_hash for ref in origin_refs}
+        missing_origin_refs: tuple[str, ...] = tuple(
+            name for name in source_dependent_names if name not in origin_hashes
+        )
+        if missing_origin_refs:
+            raise PlannerInputError(
+                "origin virtual state is required for source-dependent workspace clone models: "
+                + ", ".join(missing_origin_refs),
+                code="S021",
+            )
+        for name in source_dependent_names:
+            version_hash: str = origin_hashes[name]
+            version: ModelVersionRecord | None = backend.get_model_version(
+                connection=state_connection,
+                schema=schema,
+                model_name=name,
+                version_hash=version_hash,
+            )
+            if version is None:
+                raise PlannerInputError(
+                    "origin virtual state has a source-dependent ref without model version: "
+                    + name,
+                    code="S021",
+                )
+            version_hashes[name] = version_hash
+            model_versions[name] = version
     seed_versions: dict[str, SeedVersionRecord] = build_workspace_seed_versions(
         project=clone_pipeline.destination_project,
         seed_entries=clone_pipeline.destination_seed_entries,
@@ -697,10 +761,15 @@ def _resolve_workspace_clone_versions(
         metadata_jsons=semantics.seed_identity_metadata_jsons,
     )
     return CloneVersions(
-        mode="workspace fingerprints",
+        mode=(
+            "workspace fingerprints + origin VDE refs"
+            if source_dependent_names
+            else "workspace fingerprints"
+        ),
         version_hashes=version_hashes,
         model_versions=model_versions,
         seed_versions=seed_versions,
+        origin_state_used=bool(source_dependent_names),
     )
 
 

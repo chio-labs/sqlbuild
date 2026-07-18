@@ -18,6 +18,7 @@ def resolve_state_backend_config(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     project_dir: Path,
+    selected_target: str | None = None,
 ) -> StateBackendConfig:
     """Resolve state backend config from the active physical target."""
 
@@ -27,7 +28,7 @@ def resolve_state_backend_config(
     target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_target=None,
+        selected_target=selected_target,
     )
     if target_name is None:
         raise StateBackendConfigError(

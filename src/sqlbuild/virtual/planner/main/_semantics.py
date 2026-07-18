@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.virtual.planner._helpers.planning import (
+    build_source_freshness_unchanged_source_names,
+)
 from sqlbuild.virtual.planner._helpers.semantics_facts import (
     build_bound_identity_facts,
     build_expected_identity_facts,
@@ -29,6 +32,7 @@ def build_virtual_plan_semantics(
     bound_model_versions: dict[str, ModelVersionRecord | None],
     bound_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (),
     source_freshness_records: tuple[SourceFreshnessRecord, ...] = (),
+    previous_source_freshness_records: tuple[SourceFreshnessRecord, ...] = (),
 ) -> VirtualPlanSemantics:
     """Derive expected hashes, bound hashes, stale models, and stale roots."""
 
@@ -59,6 +63,12 @@ def build_virtual_plan_semantics(
         bound_previous_query_sqls=bound.previous_query_sqls,
         bound_metadata_jsons=bound.metadata_jsons,
         source_freshness_observed_source_names=expected.source_freshness_observed_source_names,
+        source_freshness_unchanged_source_names=(
+            build_source_freshness_unchanged_source_names(
+                previous_records=previous_source_freshness_records,
+                current_records=source_freshness_records,
+            )
+        ),
         source_freshness_incomplete_source_names=expected.source_freshness_incomplete_source_names,
         source_freshness_incomplete_model_names=expected.source_freshness_incomplete_model_names,
         stale_seed_names=staleness.stale_seed_names,
