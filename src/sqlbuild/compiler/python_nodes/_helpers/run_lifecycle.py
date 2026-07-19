@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonLoaderMetadata,
     PythonNodeGraph,
@@ -26,7 +27,9 @@ def build_python_sql_run_lifecycle_plan(
     )
     ingress_upstream_names: set[str] = set()
     for loader_name in selected_loader_names:
-        for upstream_name in _upstream_closure(node_name=loader_name, python_graph=python_graph):
+        for upstream_name in transitive_closure(
+            start=loader_name, edges=python_graph.upstream_deps
+        ):
             if upstream_name not in selected_python_names:
                 continue
             if python_graph.nodes_by_name[upstream_name].kind in {
@@ -52,15 +55,3 @@ def build_python_sql_run_lifecycle_plan(
 def _is_external_loader(*, node_name: str, python_graph: PythonNodeGraph) -> bool:
     loader: DiscoveredPythonLoaderMetadata | None = python_graph.nodes_by_name[node_name].loader
     return loader is not None and loader.connection_mode == LoaderConnectionMode.EXTERNAL
-
-
-def _upstream_closure(*, node_name: str, python_graph: PythonNodeGraph) -> frozenset[str]:
-    names: set[str] = set()
-    pending: list[str] = list(python_graph.upstream_deps.get(node_name, ()))
-    while pending:
-        current: str = pending.pop(0)
-        if current in names:
-            continue
-        names.add(current)
-        pending.extend(python_graph.upstream_deps.get(current, ()))
-    return frozenset(names)

@@ -28,6 +28,26 @@ from sqlbuild.virtual.state.models import PhysicalRelationRecord
 from sqlbuild.virtual.state.types import PhysicalArtifactType
 
 
+class SeedPhysicalRelationTestBackend:
+    def __init__(self, *, available_seed_names: tuple[str, ...]) -> None:
+        self.available_seed_names: frozenset[str] = frozenset(available_seed_names)
+
+    def get_physical_relation_for_artifact(
+        self,
+        *,
+        connection: object,
+        schema: str,
+        artifact_type: PhysicalArtifactType,
+        artifact_name: str,
+        version_hash: str,
+    ) -> PhysicalRelationRecord | None:
+        del connection, schema, artifact_type
+        relation: PhysicalRelationRecord = build_seed_physical_relation(
+            seed_name=artifact_name, version_hash=version_hash
+        )
+        return (None, relation)[artifact_name in self.available_seed_names]
+
+
 def build_virtual_executor_test_project() -> CompiledProject:
     stg_orders: CompiledModel = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="stg_orders"),
@@ -75,6 +95,18 @@ def build_bound_physical_relation(*, model_name: str, version_hash: str) -> Phys
         database_name=None,
         schema_name="dev__sqb_physical",
         relation_name=f"{model_name}__v_{version_hash[:8]}",
+        relation_type="table",
+    )
+
+
+def build_seed_physical_relation(*, seed_name: str, version_hash: str) -> PhysicalRelationRecord:
+    return PhysicalRelationRecord(
+        artifact_type=PhysicalArtifactType.SEED,
+        artifact_name=seed_name,
+        version_hash=version_hash,
+        database_name=None,
+        schema_name="dev__sqb_physical",
+        relation_name=f"{seed_name}__v_{version_hash[:8]}",
         relation_type="table",
     )
 

@@ -80,3 +80,18 @@ class SeedingIdempotencyTestCase:
     expected_drop_count: int
     expected_ancestry_count: int
     expected_first_sql_prefix: str
+
+
+@dataclass(frozen=True)
+class SeedPhysicalRelationLookupTestCase:
+    description: str
+    seed_version_hashes: dict[str, str]
+    available_seed_names: tuple[str, ...]
+    expected_seed_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MissingRollbackSeedRelationTestCase:
+    description: str
+    final_seed_hashes: dict[str, str]
+    expected_error_fragment: str
