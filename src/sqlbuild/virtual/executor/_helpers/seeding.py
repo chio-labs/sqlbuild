@@ -21,6 +21,32 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, PlanAction
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
+from sqlbuild.virtual.state.types import PhysicalArtifactType
+
+
+def read_seed_physical_relations(
+    *,
+    backend: Any,
+    state_connection: Any,
+    schema: str,
+    seed_version_hashes: dict[str, str],
+) -> dict[str, PhysicalRelationRecord]:
+    """Read available physical relations for seed version hashes."""
+
+    relations: dict[str, PhysicalRelationRecord] = {}
+    seed_name: str
+    version_hash: str
+    for seed_name, version_hash in seed_version_hashes.items():
+        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
+            connection=state_connection,
+            schema=schema,
+            artifact_type=PhysicalArtifactType.SEED,
+            artifact_name=seed_name,
+            version_hash=version_hash,
+        )
+        if relation is not None:
+            relations[seed_name] = relation
+    return relations
 
 
 def seed_virtual_physical_version(

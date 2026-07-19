@@ -6,6 +6,7 @@ from dataclasses import replace
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.pipeline._helpers.python_stale_selection import (
     filter_python_node_names_for_selected_sql,
 )
@@ -223,20 +224,6 @@ def _previous_identity(
     return previous_identities.get((node.identity.node_type, node.identity.node_name))
 
 
-def python_upstream_closure(*, node_name: str, python_graph: PythonNodeGraph) -> frozenset[str]:
-    """Return all upstream Python node names for one Python node."""
-
-    names: set[str] = set()
-    pending: list[str] = list(python_graph.upstream_deps.get(node_name, ()))
-    while pending:
-        current: str = pending.pop(0)
-        if current in names:
-            continue
-        names.add(current)
-        pending.extend(python_graph.upstream_deps.get(current, ()))
-    return frozenset(names)
-
-
 def build_skipped_task_asset_ingress_warnings(
     *,
     plan_output: PlanOutput,
@@ -255,7 +242,7 @@ def build_skipped_task_asset_ingress_warnings(
             continue
         upstream_name: str
         for upstream_name in sorted(
-            python_upstream_closure(node_name=loader_name, python_graph=python_graph)
+            transitive_closure(start=loader_name, edges=python_graph.upstream_deps)
         ):
             if upstream_name in run_selection.python_node_names:
                 continue

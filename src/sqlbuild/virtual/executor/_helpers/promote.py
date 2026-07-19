@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
+from sqlbuild.virtual.executor._helpers.seeding import read_seed_physical_relations
 from sqlbuild.virtual.executor.models import (
     PromoteEnvironmentState,
     PromoteRefUpdate,
@@ -35,28 +36,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
 )
-from sqlbuild.virtual.state.types import PhysicalArtifactType, VirtualEnvironmentStatus
-
-
-def read_seed_physical_relations(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
-) -> dict[str, PhysicalRelationRecord]:
-    relations: dict[str, PhysicalRelationRecord] = {}
-    for ref in refs:
-        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
-            connection=state_connection,
-            schema=schema,
-            artifact_type=PhysicalArtifactType.SEED,
-            artifact_name=ref.seed_name,
-            version_hash=ref.version_hash,
-        )
-        if relation is not None:
-            relations[ref.seed_name] = relation
-    return relations
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 
 def read_promote_environment_state(
@@ -509,7 +489,7 @@ def read_promote_physical_relations(
         backend=backend,
         state_connection=state_connection,
         schema=schema,
-        refs=update.seed_refs,
+        seed_version_hashes={ref.seed_name: ref.version_hash for ref in update.seed_refs},
     )
     return VirtualEnvironmentPhysicalRelations(
         model_relations=model_relations,
