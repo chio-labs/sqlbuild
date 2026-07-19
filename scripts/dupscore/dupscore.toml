@@ -1,0 +1,42 @@
+persisted_state_surfaces = [
+  "sqlbuild.virtual.state",
+  "sqlbuild.adapter.state_sql",
+  "sqlbuild.compiler.source_freshness",
+  "sqlbuild.compiler.node_source_watermarks",
+]
+
+[[allowlist]]
+pair = ["sqlbuild.integrations.dagster", "sqlbuild.integrations.rivers"]
+reason = "Deliberately mirrored orchestrator integrations with parallel external APIs."
+
+[[allowlist]]
+pair = ["sqlbuild.virtual.state", "sqlbuild.virtual.state"]
+reason = "DuckDB and Postgres state backends intentionally implement one storage contract."
+
+[[allowlist]]
+pair = ["sqlbuild.adapter.contract", "sqlbuild.adapters.bigquery"]
+reason = "Adapter backends intentionally conform to the shared adapter contract."
+
+[[allowlist]]
+pair = ["sqlbuild.adapter.contract", "sqlbuild.adapters.databricks"]
+reason = "Adapter backends intentionally conform to the shared adapter contract."
+
+[[allowlist]]
+pair = ["sqlbuild.adapter.contract", "sqlbuild.adapters.duckdb"]
+reason = "Adapter backends intentionally conform to the shared adapter contract."
+
+[[allowlist]]
+pair = ["sqlbuild.adapter.contract", "sqlbuild.adapters.motherduck"]
+reason = "Adapter backends intentionally conform to the shared adapter contract."
+
+[[allowlist]]
+pair = ["sqlbuild.adapter.contract", "sqlbuild.adapters.postgres"]
+reason = "Adapter backends intentionally conform to the shared adapter contract."
+
+[[allowlist]]
+pair = ["sqlbuild.adapter.contract", "sqlbuild.adapters.snowflake"]
+reason = "Adapter backends intentionally conform to the shared adapter contract."
+
+[[allowlist]]
+pair = ["sqlbuild.adapter.contract", "sqlbuild.adapters.sqlserver"]
+reason = "Adapter backends intentionally conform to the shared adapter contract."

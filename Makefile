@@ -254,6 +254,10 @@ check-type-annotation-conventions:
 	uv run check-type-annotation-conventions src tests
 
 
+dupscore:
+	uv run dupscore report
+
+
 check:
 	uv run ruff format .
 	uv run ruff check --fix .
