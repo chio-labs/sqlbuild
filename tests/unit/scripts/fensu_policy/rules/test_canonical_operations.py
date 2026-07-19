@@ -1,9 +1,9 @@
 from textwrap import dedent
 
 import pytest
-from strata import RuleCase, RuleResult, evaluate_rule
+from fensu import RuleCase, RuleResult, evaluate_rule
 
-from scripts.strata_policy.rules.canonical_operations import (
+from scripts.fensu_policy.rules.canonical_operations import (
     color_capability_entry,
     dbt_graph_projection,
     dbt_reference_resolution,
@@ -12,7 +12,7 @@ from scripts.strata_policy.rules.canonical_operations import (
     source_freshness_batch_write,
     source_freshness_sql_ownership,
 )
-from tests.unit.scripts.strata_policy.rules._test_types import CustomRuleTestCase
+from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
 
 
 @pytest.mark.parametrize(

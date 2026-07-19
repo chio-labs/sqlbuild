@@ -1,6 +1,6 @@
 """Orchestration dataflow predicates for SQLBuild custom rules."""
 
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy.constants import (
     DISCARDED_CALL_ALLOWED_NAMES,
     DISCARDED_CALL_ALLOWED_PREFIXES,
 )

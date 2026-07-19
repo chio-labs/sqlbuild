@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from strata import RuleFile
+from fensu import RuleFile
 
 
 @dataclass(frozen=True)

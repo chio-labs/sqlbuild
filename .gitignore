@@ -65,6 +65,6 @@ sqlbuild_local.toml
 # Claude Code
 .claude/
 
-.strata/cache/
-# Strata
-.strata/memory/
+# Fensu
+.fensu/cache/
+.fensu/memory/

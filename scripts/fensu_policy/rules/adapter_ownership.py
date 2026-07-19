@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from strata import (
+from fensu import (
     AssignmentReferenceFact,
     ClassDeclarationFact,
     Family,
@@ -12,11 +12,11 @@ from strata import (
     rule,
 )
 
-from scripts.strata_policy._helpers.adapter_contracts import (
+from scripts.fensu_policy._helpers.adapter_contracts import (
     abstract_adapter_method_names,
     adapter_contract_class_names,
 )
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy.constants import (
     BASE_ADAPTER_CLASS_NAME,
     BASE_ADAPTER_REFERENCE_PART_COUNT,
 )

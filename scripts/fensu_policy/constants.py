@@ -1,4 +1,4 @@
-"""Stable constants for SQLBuild custom Strata rules."""
+"""Stable constants for SQLBuild custom Fensu rules."""
 
 ADAPTER_CLASS_BOUNDARIES: frozenset[str] = frozenset(
     {"_helpers", "classes", "models", "types", "constants", "exceptions", "shared"}
@@ -26,7 +26,7 @@ ALLOWED_MACRO_LOAD_PATHS: frozenset[str] = frozenset(
 )
 ALLOWED_PARAMETER_MUTATION_COMMENT: str = "# sc: allow-param-mutation"
 ALLOWED_SOURCE_FRESHNESS_INSERT_PREFIXES: tuple[str, ...] = (
-    "scripts/strata_policy/",
+    "scripts/fensu_policy/",
     "src/sqlbuild/adapter/",
     "src/sqlbuild/adapters/",
     "src/sqlbuild/virtual/state/classes/",
@@ -156,7 +156,7 @@ MAIN_PACKAGE_NAME: str = "main"
 NESTED_HELPER_MODULE_MIN_PARTS: int = 5
 PLANNER_PATH_PREFIX: str = "src/sqlbuild/compiler/planner/"
 POLICY_EVALUATION_SCOPES: frozenset[str] = frozenset({"root", "tooling"})
-POLICY_IMPLEMENTATION_PATH_PREFIX: str = "scripts/strata_policy/"
+POLICY_IMPLEMENTATION_PATH_PREFIX: str = "scripts/fensu_policy/"
 PROVIDER_CLASS_NAME: str = "Provider"
 PROVIDER_MODULE_PARTS: tuple[str, ...] = ("src", "sqlbuild", "providers.py")
 PUBLIC_COLOR_ENTRY_PARTS: tuple[str, ...] = (

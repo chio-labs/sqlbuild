@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from strata import Family, Fault, RuleContext, rule
+from fensu import Family, Fault, RuleContext, rule
 
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy.constants import (
     ALLOWED_COMMENT_PREFIXES,
     GLOBAL_REUSE_FORBIDDEN_TERMS,
     POLICY_EVALUATION_SCOPES,

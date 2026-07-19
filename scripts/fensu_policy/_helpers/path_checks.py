@@ -1,6 +1,6 @@
-"""Repository path predicates shared by SQLBuild custom Strata rules."""
+"""Repository path predicates shared by SQLBuild custom Fensu rules."""
 
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy.constants import (
     ADAPTER_CLASS_BOUNDARIES,
     ADAPTER_CLASS_BYPASS_MODULES,
     ADAPTER_CLASS_MODULE_MIN_PARTS,

@@ -1,8 +1,8 @@
 import pytest
-from strata import RuleCase, RuleResult, evaluate_rule
+from fensu import RuleCase, RuleResult, evaluate_rule
 
-from scripts.strata_policy.rules.source_hygiene import reuse_terminology, sqlbuild_comment_policy
-from tests.unit.scripts.strata_policy.rules._test_types import CustomRuleTestCase
+from scripts.fensu_policy.rules.source_hygiene import reuse_terminology, sqlbuild_comment_policy
+from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
 
 
 @pytest.mark.parametrize(

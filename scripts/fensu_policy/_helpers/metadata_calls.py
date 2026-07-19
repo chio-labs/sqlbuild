@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from strata import LocalCallEdgeFact, NamedCallFact, RuleContext
+from fensu import LocalCallEdgeFact, NamedCallFact, RuleContext
 
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy.constants import (
     ATTRIBUTE_REFERENCE_KIND,
     NAME_REFERENCE_KIND,
     WAREHOUSE_METADATA_METHODS,

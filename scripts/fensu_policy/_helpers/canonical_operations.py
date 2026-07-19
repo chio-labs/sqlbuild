@@ -1,8 +1,8 @@
 """Canonical-operation predicates for SQLBuild custom rules."""
 
-from strata import ComparisonFact, NamedCallFact
+from fensu import ComparisonFact, NamedCallFact
 
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy.constants import (
     ATTRIBUTE_REFERENCE_KIND,
     DBT_REF_ATTRIBUTE_NAME,
     SELECTOR_MARKER,

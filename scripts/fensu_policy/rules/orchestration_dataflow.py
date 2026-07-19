@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from strata import (
+from fensu import (
     DefinitionIdentity,
     Family,
     Fault,
@@ -12,15 +12,15 @@ from strata import (
     rule,
 )
 
-from scripts.strata_policy._helpers.metadata_calls import (
+from scripts.fensu_policy._helpers.metadata_calls import (
     metadata_bearing_helper_names,
     metadata_call_label,
 )
-from scripts.strata_policy._helpers.orchestration_dataflow import (
+from scripts.fensu_policy._helpers.orchestration_dataflow import (
     discarded_call_name_is_allowed,
 )
-from scripts.strata_policy._helpers.path_checks import is_adapter_implementation_path
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy._helpers.path_checks import is_adapter_implementation_path
+from scripts.fensu_policy.constants import (
     ALLOWED_METADATA_LOOP_PATHS,
     ALLOWED_PARAMETER_MUTATION_COMMENT,
     COMPILER_EXECUTOR_DOMAIN_NAMES,
