@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.virtual.planner._helpers.targets import build_destination_from_physical_relation
 from sqlbuild.virtual.planner.main._targets import build_virtual_destination_from_physical_relation
@@ -10,7 +11,6 @@ from sqlbuild.virtual.state.types import PhysicalArtifactType
 from tests.unit.src.sqlbuild.virtual.planner._helpers._test_types import (
     PhysicalRelationDestinationTestCase,
 )
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 
 
 @pytest.mark.parametrize(
