@@ -1,13 +1,13 @@
 from textwrap import dedent
 
 import pytest
-from strata import RuleCase, RuleFile, RuleResult, evaluate_rule
+from fensu import RuleCase, RuleFile, RuleResult, evaluate_rule
 
-from scripts.strata_policy.rules.adapter_ownership import (
+from scripts.fensu_policy.rules.adapter_ownership import (
     adapter_method_alias,
     adapter_super_delegation,
 )
-from tests.unit.scripts.strata_policy.rules._test_types import CustomRuleTestCase
+from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
 
 
 @pytest.mark.parametrize(

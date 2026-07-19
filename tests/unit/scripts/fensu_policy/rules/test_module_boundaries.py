@@ -1,9 +1,9 @@
 from textwrap import dedent
 
 import pytest
-from strata import RuleCase, RuleResult, evaluate_rule
+from fensu import RuleCase, RuleResult, evaluate_rule
 
-from scripts.strata_policy.rules.module_boundaries import (
+from scripts.fensu_policy.rules.module_boundaries import (
     adapter_entry_class_count,
     adapter_entry_content,
     client_entry_filename,
@@ -14,7 +14,7 @@ from scripts.strata_policy.rules.module_boundaries import (
     provider_public_surface,
     sqlbuild_generic_filename,
 )
-from tests.unit.scripts.strata_policy.rules._test_types import CustomRuleTestCase
+from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
 
 
 @pytest.mark.parametrize(

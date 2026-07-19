@@ -1,14 +1,14 @@
 from textwrap import dedent
 
 import pytest
-from strata import RuleCase, RuleResult, evaluate_rule
+from fensu import RuleCase, RuleResult, evaluate_rule
 
-from scripts.strata_policy.rules.orchestration_dataflow import (
+from scripts.fensu_policy.rules.orchestration_dataflow import (
     main_discarded_call,
     metadata_query_loop,
     phase_parameter_mutation,
 )
-from tests.unit.scripts.strata_policy.rules._test_types import CustomRuleTestCase
+from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
 
 
 @pytest.mark.parametrize(

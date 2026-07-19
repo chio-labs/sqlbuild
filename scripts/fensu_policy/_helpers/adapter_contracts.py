@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from strata import ClassDeclarationFact, RuleContext
+from fensu import ClassDeclarationFact, RuleContext
 
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy.constants import (
     ABC_MODULE_NAME,
     ABSTRACT_METHOD_DECORATOR_NAME,
     ADAPTER_BUILTINS_PATH,

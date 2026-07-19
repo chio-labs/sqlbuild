@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from strata import Family, Fault, ModuleStatementFact, RuleContext, rule
+from fensu import Family, Fault, ModuleStatementFact, RuleContext, rule
 
-from scripts.strata_policy._helpers.path_checks import is_adapter_class_entry
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy._helpers.path_checks import is_adapter_class_entry
+from scripts.fensu_policy.constants import (
     CLIENT_MODULE_MIN_PARTS,
     CLIENT_MODULE_NAME,
     CLIENT_STYLE_PREFIXES,

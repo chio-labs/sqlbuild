@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from strata import Family, Fault, ImportFact, NamedCallFact, RuleContext, rule
+from fensu import Family, Fault, ImportFact, NamedCallFact, RuleContext, rule
 
-from scripts.strata_policy._helpers.canonical_operations import (
+from scripts.fensu_policy._helpers.canonical_operations import (
     call_parses_selector_marker,
     comparison_uses_dbt_ref,
 )
-from scripts.strata_policy.constants import (
+from scripts.fensu_policy.constants import (
     ALLOWED_DBT_REF_SCAN_PATHS,
     ALLOWED_MACRO_LOAD_PATHS,
     ALLOWED_SELECTOR_PARSE_PATH,
