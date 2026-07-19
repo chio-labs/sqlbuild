@@ -54,6 +54,7 @@ sqb = "sqlbuild.cli.commands.main.entrypoint.entry:main"
 sqlbuild = "sqlbuild.cli.commands.main.entrypoint.entry:main"
 check-test-conventions = "scripts.testing.main.check_test_conventions:check_test_conventions"
 check-type-annotation-conventions = "scripts.type_annotations.main.check_type_annotation_conventions:check_type_annotation_conventions"
+dupscore = "scripts.dupscore.main.dupscore:dupscore"
 
 [dependency-groups]
 dev = [
