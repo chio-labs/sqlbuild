@@ -109,3 +109,14 @@ class StaleRootSourceCausesTestCase:
     expected_metadata_jsons: dict[str, str]
     bound_metadata_jsons: dict[str, str]
     expected_stale_root_source_causes: dict[str, str]
+
+
+@dataclass(frozen=True)
+class PhysicalRelationDestinationTestCase:
+    description: str
+    database_name: str | None
+    schema_name: str
+    relation_name: str
+    fallback_logical_schema: str | None
+    fallback_logical_database: str | None
+    expected_qualified_name: str

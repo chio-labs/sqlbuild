@@ -16,6 +16,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
 )
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.virtual.planner.main._targets import (
+    build_virtual_destination_from_physical_relation,
+)
 from sqlbuild.virtual.state.models import PhysicalRelationRecord
 
 
@@ -106,29 +109,6 @@ def build_virtual_destination(
     )
 
 
-def build_destination_from_physical_relation(
-    *,
-    adapter: BaseAdapter,
-    relation: PhysicalRelationRecord,
-    fallback_target: CompiledRelationLocation,
-) -> CompiledRelationLocation:
-    """Rebuild a compiled relation location from a stored physical relation record."""
-
-    return CompiledRelationLocation(
-        database=relation.database_name,
-        schema=relation.schema_name,
-        name=relation.relation_name,
-        qualified_name=resolve_qualified_name_parts(
-            adapter=adapter,
-            database=relation.database_name,
-            schema=relation.schema_name,
-            name=relation.relation_name,
-        ),
-        logical_schema=fallback_target.logical_schema,
-        logical_database=fallback_target.logical_database,
-    )
-
-
 def build_rewritten_seed_locations(
     *,
     project: CompiledProject,
@@ -155,7 +135,7 @@ def build_rewritten_seed_locations(
                 version_hash=version_hash,
             )
         elif available_relation is not None:
-            rewritten[seed.name] = build_destination_from_physical_relation(
+            rewritten[seed.name] = build_virtual_destination_from_physical_relation(
                 adapter=adapter,
                 relation=available_relation,
                 fallback_target=seed.destination,
@@ -259,7 +239,7 @@ def build_rewritten_model_locations(
             continue
         bound_relation: PhysicalRelationRecord | None = bound_physical_relations.get(model.name)
         if bound_relation is not None:
-            rewritten_locations[model.name] = build_destination_from_physical_relation(
+            rewritten_locations[model.name] = build_virtual_destination_from_physical_relation(
                 adapter=adapter,
                 relation=bound_relation,
                 fallback_target=model.destination,
