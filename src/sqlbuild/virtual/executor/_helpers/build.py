@@ -34,8 +34,9 @@ from sqlbuild.compiler.pipeline.main.prepare_versions import (
 from sqlbuild.compiler.pipeline.main.relation_targets import (
     build_python_relation_targets,
 )
-from sqlbuild.compiler.pipeline.models import ProjectGraph, PythonPlanEntry
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.changes.replay_on_change import resolve_replay_on_change
 from sqlbuild.compiler.planner.main.execution.plan_entry import (
     build_plan_output_from_model_changes_phase,
 )
@@ -43,7 +44,6 @@ from sqlbuild.compiler.planner.main.execution.warehouse_snapshot import (
     build_warehouse_snapshot_phase,
 )
 from sqlbuild.compiler.planner.main.selection.build_resources import expand_build_resource_selection
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -98,18 +98,21 @@ from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import SnapshotsConfig
+from sqlbuild.virtual.executor._helpers.environment_views import write_logical_vde_views
 from sqlbuild.virtual.executor._helpers.functions import build_function_version_record
 from sqlbuild.virtual.executor._helpers.rewrite import (
-    build_destination_from_physical_relation,
     build_rewritten_model_locations,
     build_rewritten_seed_locations,
-    build_virtual_destination,
     relation_type_for_model,
     rewrite_project_function_locations,
     rewrite_project_model_locations,
     rewrite_project_seed_locations,
 )
-from sqlbuild.virtual.executor._helpers.seeding import seed_virtual_physical_version
+from sqlbuild.virtual.executor._helpers.seeding import (
+    include_stale_upstream_seed_names,
+    resolve_virtual_seed_selection,
+    seed_virtual_physical_version,
+)
 from sqlbuild.virtual.executor.classes.node_result_store import VirtualNodeResultStore
 from sqlbuild.virtual.executor.models import (
     VirtualBuildExecutionHooks,
@@ -136,10 +139,14 @@ from sqlbuild.virtual.planner.main._selection import resolve_virtual_plan_model_
 from sqlbuild.virtual.planner.main._semantics import (
     build_virtual_plan_semantics,
 )
+from sqlbuild.virtual.planner.main._targets import (
+    build_virtual_destination_from_physical_relation,
+)
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.main.checkpoints._checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )
+from sqlbuild.virtual.state.main.encoding._decode_state_text import decode_state_text
 from sqlbuild.virtual.state.main.encoding._encode_state_text import encode_state_text
 from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.main.python_identities._python_node_identity_write import (
@@ -186,6 +193,7 @@ class _VirtualBuildStateReads:
     """Bound state, semantics, and resolved selection read for one virtual build run."""
 
     bound_function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...]
+    previous_function_query_sqls: dict[str, str]
     bound_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...]
     semantics: VirtualPlanSemantics
     selected_model_names: tuple[str, ...]
@@ -214,6 +222,18 @@ class _VirtualBuildPlan:
 
 
 @dataclass(frozen=True)
+class _VirtualBuildResolution:
+    """Read-only virtual planning resolution shared by plan and build."""
+
+    runtime: _VirtualBuildRuntime
+    graph: ProjectGraph
+    reads: _VirtualBuildStateReads
+    rewritten: _RewrittenVirtualProject
+    plan: _VirtualBuildPlan
+    python_plan: _VirtualPythonPlan
+
+
+@dataclass(frozen=True)
 class _VirtualPythonPlan:
     """Python-node graph, lifecycle, plan entries, and relation targets for one run."""
 
@@ -221,6 +241,7 @@ class _VirtualPythonPlan:
     lifecycle_plan: PythonSqlRunLifecyclePlan
     plan_entries: tuple[PythonPlanEntry, ...]
     relation_targets: dict[SqlResourceRef, str]
+    selected_python_node_names: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -239,6 +260,33 @@ class _SeedPersistOutcome:
     final_seed_physical_relations: dict[str, PhysicalRelationRecord]
 
 
+def resolve_virtual_plan(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    options: VirtualBuildOptions,
+    hooks: VirtualBuildHooks,
+) -> CompilePipelineResult:
+    """Resolve the read-only virtual plan consumed by plan and build."""
+
+    resolution: _VirtualBuildResolution = _resolve_virtual_build(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        connection_config=connection_config,
+        options=options,
+        hooks=hooks,
+    )
+    return CompilePipelineResult(
+        project=resolution.rewritten.project,
+        plan_output=resolution.plan.plan_output,
+        python_node_names=resolution.python_plan.selected_python_node_names,
+        python_plan_entries=resolution.python_plan.plan_entries,
+    )
+
+
 def run_virtual_build(
     *,
     project_dir: Path,
@@ -250,52 +298,20 @@ def run_virtual_build(
 ) -> VirtualBuildPipelineResult:
     """Execute a virtual-mode build."""
 
-    graph: ProjectGraph = build_project_graph(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        selected_target=options.selected_target,
-        no_sql_validation=options.no_sql_validation,
-        cli_vars=options.cli_vars,
-        external_sql_reference_resolver=options.external_sql_reference_resolver,
-        on_progress=hooks.on_progress,
-    )
-    names: VirtualEnvironmentNames = _resolve_virtual_environment_names(
-        discovered_inputs=discovered_inputs,
-        options=options,
-    )
-    config, backend = build_state_runtime(
-        discovered_inputs=discovered_inputs,
-        project_dir=project_dir,
-    )
-    runtime: _VirtualBuildRuntime = _VirtualBuildRuntime(
+    resolution: _VirtualBuildResolution = _resolve_virtual_build(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         connection_config=connection_config,
         options=options,
         hooks=hooks,
-        backend=backend,
-        config=config,
-        names=names,
     )
-    reads: _VirtualBuildStateReads = _read_virtual_build_state(runtime=runtime, graph=graph)
-    rewritten: _RewrittenVirtualProject = _rewrite_virtual_project(
-        runtime=runtime, graph=graph, reads=reads
-    )
-    plan: _VirtualBuildPlan = _plan_virtual_build(
-        runtime=runtime,
-        graph=graph,
-        project=rewritten.project,
-        reads=reads,
-        deferred_relations=rewritten.deferred_relations,
-    )
-    python_plan: _VirtualPythonPlan = _prepare_virtual_python_execution(
-        runtime=runtime,
-        graph=graph,
-        project=rewritten.project,
-        plan_output=plan.plan_output,
-        selected_model_names=reads.selected_model_names,
-    )
+    runtime: _VirtualBuildRuntime = resolution.runtime
+    graph: ProjectGraph = resolution.graph
+    reads: _VirtualBuildStateReads = resolution.reads
+    rewritten: _RewrittenVirtualProject = resolution.rewritten
+    plan: _VirtualBuildPlan = resolution.plan
+    python_plan: _VirtualPythonPlan = resolution.python_plan
     output: PlanOutput = plan.plan_output
     entries: tuple[PythonPlanEntry, ...] = python_plan.plan_entries
     exec_hooks: VirtualBuildExecutionHooks = (
@@ -365,6 +381,71 @@ def run_virtual_build(
     )
 
 
+def _resolve_virtual_build(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    options: VirtualBuildOptions,
+    hooks: VirtualBuildHooks,
+) -> _VirtualBuildResolution:
+    graph: ProjectGraph = build_project_graph(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        selected_target=options.planning.selected_target,
+        no_sql_validation=options.planning.no_sql_validation,
+        cli_vars=options.planning.cli_vars,
+        external_sql_reference_resolver=options.planning.external_sql_reference_resolver,
+        on_progress=hooks.on_progress,
+    )
+    names: VirtualEnvironmentNames = _resolve_virtual_environment_names(
+        discovered_inputs=discovered_inputs,
+        options=options,
+    )
+    config, backend = build_state_runtime(
+        discovered_inputs=discovered_inputs,
+        project_dir=project_dir,
+    )
+    runtime: _VirtualBuildRuntime = _VirtualBuildRuntime(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        connection_config=connection_config,
+        options=options,
+        hooks=hooks,
+        backend=backend,
+        config=config,
+        names=names,
+    )
+    reads: _VirtualBuildStateReads = _read_virtual_build_state(runtime=runtime, graph=graph)
+    rewritten: _RewrittenVirtualProject = _rewrite_virtual_project(
+        runtime=runtime, graph=graph, reads=reads
+    )
+    plan: _VirtualBuildPlan = _plan_virtual_build(
+        runtime=runtime,
+        graph=graph,
+        project=rewritten.project,
+        reads=reads,
+        deferred_relations=rewritten.deferred_relations,
+    )
+    python_plan: _VirtualPythonPlan = _prepare_virtual_python_execution(
+        runtime=runtime,
+        graph=graph,
+        project=rewritten.project,
+        plan_output=plan.plan_output,
+        selected_model_names=reads.selected_model_names,
+    )
+    return _VirtualBuildResolution(
+        runtime=runtime,
+        graph=graph,
+        reads=reads,
+        rewritten=rewritten,
+        plan=plan,
+        python_plan=python_plan,
+    )
+
+
 def _resolve_virtual_environment_names(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -373,7 +454,7 @@ def _resolve_virtual_environment_names(
     physical_target_name: str | None = resolve_target_name(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
-        selected_target=options.selected_target,
+        selected_target=options.planning.selected_target,
     )
     unsuffixed_virtual_environment_name: str | None = None
     if physical_target_name is not None:
@@ -383,7 +464,9 @@ def _resolve_virtual_environment_names(
             target_name=physical_target_name,
         ).state.unsuffixed_virtual_env
     return VirtualEnvironmentNames(
-        target_vde_name=(options.virtual_environment_name or physical_target_name or "default"),
+        target_vde_name=(
+            options.planning.virtual_environment_name or physical_target_name or "default"
+        ),
         physical_target_name=physical_target_name,
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
     )
@@ -414,6 +497,20 @@ def _read_virtual_build_state(
                 virtual_environment_name=target_vde_name,
             )
         )
+        previous_function_query_sqls: dict[str, str] = {}
+        function_ref: VirtualEnvironmentFunctionRefRecord
+        for function_ref in bound_function_refs:
+            function_version: FunctionVersionRecord | None = backend.get_function_version(
+                connection=state_connection,
+                schema=config.schema,
+                function_name=function_ref.function_name,
+                version_hash=function_ref.version_hash,
+            )
+            if function_version is None:
+                continue
+            function_query_sql: str | None = decode_state_text(function_version.definition_text_b64)
+            if function_query_sql is not None:
+                previous_function_query_sqls[function_ref.function_name] = function_query_sql
         bound_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
             backend.get_virtual_environment_seed_refs(
                 connection=state_connection,
@@ -455,46 +552,47 @@ def _read_virtual_build_state(
             bound_model_versions=bound_model_versions,
             bound_seed_refs=bound_seed_refs,
             source_freshness_records=current_source_freshness_records,
+            previous_source_freshness_records=source_freshness_records,
         )
         work_selection_policy: WorkSelectionPolicy = (
             WorkSelectionPolicy.STALE_ONLY
-            if options.changes_only
+            if options.planning.changes_only
             else WorkSelectionPolicy.ALL_SELECTED
         )
         default_model_selection: tuple[str, ...] = (
             semantics.default_selection
-            if options.changes_only
+            if options.planning.changes_only
             else tuple(sorted(model.name for model in graph.project.models))
         )
         selected_model_names: tuple[str, ...]
         selected_seed_names: tuple[str, ...] = ()
         if options.seed_only:
             selected_model_names = ()
-            selected_seed_names = _resolve_virtual_seed_selection(
+            selected_seed_names = resolve_virtual_seed_selection(
                 graph=graph,
-                select=options.select,
-                exclude=options.exclude,
+                select=options.planning.select,
+                exclude=options.planning.exclude,
             )
         else:
             selected_model_names = resolve_virtual_plan_model_selection(
                 graph=graph,
-                select=options.select,
-                exclude=options.exclude,
+                select=options.planning.select,
+                exclude=options.planning.exclude,
                 default_selection=default_model_selection,
                 stale_model_names=semantics.stale_model_names,
-                include_stale_upstreams=options.include_stale_upstreams,
+                include_stale_upstreams=options.planning.include_stale_upstreams,
                 work_selection_policy=work_selection_policy,
             )
             selected_seed_names = (
                 (
                     semantics.stale_seed_names
-                    if options.changes_only
+                    if options.planning.changes_only
                     else tuple(sorted(seed.name for seed in graph.project.seeds))
                 )
-                if not options.select and not options.exclude
+                if not options.planning.select and not options.planning.exclude
                 else ()
             )
-        selected_seed_names = _include_stale_upstream_seed_names(
+        selected_seed_names = include_stale_upstream_seed_names(
             graph=graph,
             selected_model_names=selected_model_names,
             selected_seed_names=selected_seed_names,
@@ -516,7 +614,7 @@ def _read_virtual_build_state(
             )
         )
         seed_load_names: tuple[str, ...] = selected_seed_names
-        if options.changes_only:
+        if options.planning.changes_only:
             seed_load_names = tuple(
                 seed_name
                 for seed_name in selected_seed_names
@@ -537,6 +635,7 @@ def _read_virtual_build_state(
         backend.close(state_connection)
     return _VirtualBuildStateReads(
         bound_function_refs=bound_function_refs,
+        previous_function_query_sqls=previous_function_query_sqls,
         bound_seed_refs=bound_seed_refs,
         semantics=semantics,
         selected_model_names=selected_model_names,
@@ -641,8 +740,8 @@ def _plan_virtual_build(
                 connection=planning_connection,
                 select=reads.effective_select,
                 exclude=(),
-                auto_load_sources=options.auto_load_sources,
-                full_refresh=options.full_refresh,
+                auto_load_sources=options.planning.auto_load_sources,
+                full_refresh=options.planning.full_refresh,
                 deferred_relations=deferred_relations,
                 on_progress=hooks.on_progress,
             )
@@ -657,15 +756,15 @@ def _plan_virtual_build(
                     scope=warehouse_result.scope,
                     semantics=reads.semantics,
                     bound_physical_relations=reads.bound_physical_relations,
-                    full_refresh=options.full_refresh,
+                    full_refresh=options.planning.full_refresh,
                 ),
                 inputs=ModelChangesPlanInputs(
-                    cursor_overrides=options.cursor_overrides,
-                    full_refresh=options.full_refresh,
-                    reload_sources=options.reload_sources,
+                    cursor_overrides=options.planning.cursor_overrides,
+                    full_refresh=options.planning.full_refresh,
+                    reload_sources=options.planning.reload_sources,
                     project_config=runtime.discovered_inputs.project_config,
                     local_config=runtime.discovered_inputs.local_config,
-                    defer_sources_to=options.defer_sources_to,
+                    defer_sources_to=options.planning.defer_sources_to,
                     seed_version_hashes=reads.semantics.expected_seed_version_hashes,
                     seed_metadata_jsons=reads.semantics.seed_identity_metadata_jsons,
                     seed_plan_reasons=reads.semantics.seed_plan_reasons,
@@ -681,7 +780,7 @@ def _plan_virtual_build(
             selected_keys=frozenset(),
             model_locations={
                 model.name: (
-                    build_destination_from_physical_relation(
+                    build_virtual_destination_from_physical_relation(
                         adapter=adapter,
                         relation=reads.bound_physical_relations[model.name],
                         fallback_target=model.destination,
@@ -702,6 +801,7 @@ def _plan_virtual_build(
         target_name=runtime.names.target_vde_name,
         semantics=reads.semantics,
         selected_model_names=reads.selected_model_names,
+        previous_function_query_sqls=reads.previous_function_query_sqls,
     )
     return _VirtualBuildPlan(
         plan_output=plan_output,
@@ -728,10 +828,10 @@ def _prepare_virtual_python_execution(
         discovered_inputs=runtime.discovered_inputs,
         graph=graph,
         plan_output=plan_output,
-        select=options.select,
-        exclude=options.exclude,
+        select=options.planning.select,
+        exclude=options.planning.exclude,
         selected_model_names=selected_model_names,
-        include_python=options.include_python,
+        include_python=options.planning.include_python,
     )
     lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
         selection=python_selection,
@@ -741,7 +841,7 @@ def _prepare_virtual_python_execution(
         read_bound_virtual_python_identities(
             discovered_inputs=runtime.discovered_inputs,
             project_dir=runtime.project_dir,
-            virtual_environment_name=options.virtual_environment_name,
+            virtual_environment_name=options.planning.virtual_environment_name,
         )
     )
     return _VirtualPythonPlan(
@@ -757,6 +857,7 @@ def _prepare_virtual_python_execution(
             project=project,
             plan_output=plan_output,
         ),
+        selected_python_node_names=python_selection.python_node_names,
     )
 
 
@@ -813,7 +914,7 @@ def _run_ingress_python_nodes(
                     run_id=project.run_id,
                     target=runtime.names.target_vde_name,
                     vars=project.effective_vars,
-                    is_reload=options.reload_sources,
+                    is_reload=options.planning.reload_sources,
                     default_database=adapter.default_database(),
                     default_schema=adapter.default_schema(),
                     start_cursor_ts=options.start_cursor_ts,
@@ -875,7 +976,7 @@ def _execute_virtual_build_plan(
                 if options.concurrency is not None
                 else project.settings.concurrency
             ),
-            loader_is_reload=options.reload_sources,
+            loader_is_reload=options.planning.reload_sources,
             start_cursor_ts=options.start_cursor_ts,
             end_cursor_ts=options.end_cursor_ts,
             start_cursor_int=options.start_cursor_int,
@@ -1016,7 +1117,7 @@ def _run_read_side_python_nodes(
                     run_id=project.run_id,
                     target=runtime.names.target_vde_name,
                     vars=project.effective_vars,
-                    is_reload=options.reload_sources,
+                    is_reload=options.planning.reload_sources,
                     default_database=adapter.default_database(),
                     default_schema=adapter.default_schema(),
                     relation_targets=python_plan.relation_targets,
@@ -1151,7 +1252,7 @@ def _prepare_custom_virtual_version(
             placeholders=dict(entry.custom_placeholders),
             run_id=run_id,
             environment=runtime.names.target_vde_name,
-            vars=runtime.options.cli_vars or {},
+            vars=runtime.options.planning.cli_vars or {},
             unique_key=entry.unique_key,
             declared_columns=entry.declared_columns,
             statement_recorder=recorder,
@@ -1249,34 +1350,6 @@ def _read_bound_relations(
         if relation is not None:
             relations[model_name] = relation
     return relations
-
-
-def _include_stale_upstream_seed_names(
-    *,
-    graph: ProjectGraph,
-    selected_model_names: tuple[str, ...],
-    selected_seed_names: tuple[str, ...],
-    stale_seed_names: tuple[str, ...],
-) -> tuple[str, ...]:
-    selected: set[str] = set(selected_seed_names)
-    stale_seed_name_set: frozenset[str] = frozenset(stale_seed_names)
-    pending: list[CompiledObjectKey] = [
-        model.key for model in graph.project.models if model.name in selected_model_names
-    ]
-    seen: set[CompiledObjectKey] = set()
-    while pending:
-        key: CompiledObjectKey = pending.pop()
-        if key in seen:
-            continue
-        seen.add(key)
-        upstream_key: CompiledObjectKey
-        for upstream_key in graph.upstream_deps.get(key, ()):
-            if upstream_key.resource_type == CompiledResourceType.SEED:
-                if upstream_key.name in stale_seed_name_set:
-                    selected.add(upstream_key.name)
-                continue
-            pending.append(upstream_key)
-    return tuple(sorted(selected))
 
 
 def _read_available_seed_physical_relations(
@@ -1475,7 +1548,7 @@ def _persist_successful_virtual_build(
     finally:
         runtime.backend.close(state_connection)
 
-    _create_logical_vde_views(
+    write_logical_vde_views(
         project=project,
         adapter=runtime.adapter,
         connection_config=runtime.connection_config,
@@ -1830,26 +1903,6 @@ def _build_virtual_planner_select(
     return tuple(sorted(key.name for key in expanded_keys))
 
 
-def _resolve_virtual_seed_selection(
-    *,
-    graph: ProjectGraph,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
-) -> tuple[str, ...]:
-    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=select,
-        exclude=exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
-    )
-    return tuple(
-        sorted(key.name for key in selected_keys if key.resource_type == CompiledResourceType.SEED)
-    )
-
-
 def _build_virtual_model_change(
     *,
     model: CompiledModel,
@@ -1885,13 +1938,17 @@ def _build_virtual_model_change(
             previous_metadata_json=previous_metadata_json,
         )
     if root_reason in (PlanReason.QUERY_CHANGED, PlanReason.FUNCTION_CHANGED):
+        raw_replay_policy: object | None = model.config.values.get("replay_on_change")
+        replay_policy: str | None = (
+            raw_replay_policy if isinstance(raw_replay_policy, str) else None
+        )
         return ChangeDetectionResult(
             model_name=model.name,
             change_kind=ChangeKind.QUERY_CHANGED,
             query_changed=True,
             fingerprint_metadata_json=metadata_json,
             previous_metadata_json=previous_metadata_json,
-            backfill=_virtual_root_backfill(model),
+            backfill=resolve_replay_on_change(replay_on_change=replay_policy),
         )
     return ChangeDetectionResult(
         model_name=model.name,
@@ -1899,102 +1956,3 @@ def _build_virtual_model_change(
         fingerprint_metadata_json=metadata_json,
         previous_metadata_json=previous_metadata_json,
     )
-
-
-def _virtual_root_backfill(model: CompiledModel) -> BackfillResult:
-    raw_policy: object | None = model.config.values.get("replay_on_change")
-    if raw_policy == BackfillAction.FULL:
-        return BackfillResult(action=BackfillAction.FULL)
-    if isinstance(raw_policy, str) and raw_policy.startswith("bounded-"):
-        duration: str = raw_policy.removeprefix("bounded-").strip()
-        if duration:
-            return BackfillResult(action=BackfillAction.BOUNDED, duration=duration)
-    return BackfillResult(action=BackfillAction.FORWARD_ONLY)
-
-
-def _create_logical_vde_views(
-    *,
-    project: CompiledProject,
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    target_vde_name: str,
-    unsuffixed_virtual_environment_name: str | None,
-    plan_output: PlanOutput,
-    final_version_hashes: dict[str, str],
-    final_seed_physical_relations: dict[str, PhysicalRelationRecord],
-) -> None:
-    physical_targets: dict[str, CompiledRelationLocation] = {
-        model.name: plan_output.model_locations.get(model.name, model.destination)
-        for model in project.models
-    }
-    connection: Any = adapter.connect(connection_config)
-    recorder: StatementRecorder = StatementRecorder()
-    try:
-        model: CompiledModel
-        for model in project.models:
-            if model.name not in final_version_hashes:
-                continue
-            physical_target: CompiledRelationLocation | None = physical_targets.get(model.name)
-            if physical_target is None:
-                continue
-            virtual_target: CompiledRelationLocation = build_virtual_destination(
-                adapter=adapter,
-                target=model.destination,
-                virtual_environment_name=target_vde_name,
-                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
-            )
-            adapter.ensure_schema(
-                connection=connection,
-                database=virtual_target.database,
-                schema=virtual_target.schema,
-                statement_recorder=recorder,
-            )
-            adapter.create_view_as(
-                connection=connection,
-                destination=rn.resolve_relation_location_qualified_name(
-                    adapter=adapter, location=virtual_target
-                ),
-                sql=(
-                    "SELECT * FROM "
-                    + rn.resolve_relation_location_qualified_name(
-                        adapter=adapter, location=physical_target
-                    )
-                ),
-                statement_recorder=recorder,
-            )
-        for seed in project.seeds:
-            relation: PhysicalRelationRecord | None = final_seed_physical_relations.get(seed.name)
-            if relation is None:
-                continue
-            physical_target: CompiledRelationLocation = build_destination_from_physical_relation(
-                adapter=adapter,
-                relation=relation,
-                fallback_target=seed.destination,
-            )
-            virtual_target = build_virtual_destination(
-                adapter=adapter,
-                target=seed.destination,
-                virtual_environment_name=target_vde_name,
-                unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
-            )
-            adapter.ensure_schema(
-                connection=connection,
-                database=virtual_target.database,
-                schema=virtual_target.schema,
-                statement_recorder=recorder,
-            )
-            adapter.create_view_as(
-                connection=connection,
-                destination=rn.resolve_relation_location_qualified_name(
-                    adapter=adapter, location=virtual_target
-                ),
-                sql=(
-                    "SELECT * FROM "
-                    + rn.resolve_relation_location_qualified_name(
-                        adapter=adapter, location=physical_target
-                    )
-                ),
-                statement_recorder=recorder,
-            )
-    finally:
-        adapter.close(connection)

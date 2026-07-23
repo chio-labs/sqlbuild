@@ -25,6 +25,7 @@ from sqlbuild.virtual.executor._helpers.functions import (
 )
 from sqlbuild.virtual.executor._helpers.promote import selected_upstream_seed_names
 from sqlbuild.virtual.executor._helpers.rewrite import build_virtual_destination
+from sqlbuild.virtual.executor._helpers.seeding import read_seed_physical_relations
 from sqlbuild.virtual.executor.models import (
     RollbackCheckpointState,
     RollbackRefUpdate,
@@ -46,7 +47,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
 )
-from sqlbuild.virtual.state.types import PhysicalArtifactType, VirtualEnvironmentStatus
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 
 def resolve_target_checkpoint(
@@ -207,32 +208,6 @@ def read_physical_relations(
                 code="S022",
             )
         relations[ref.model_name] = relation
-    return relations
-
-
-def read_seed_physical_relations(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
-) -> dict[str, PhysicalRelationRecord]:
-    relations: dict[str, PhysicalRelationRecord] = {}
-    ref: VirtualEnvironmentCheckpointSeedRefRecord
-    for ref in refs:
-        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
-            connection=state_connection,
-            schema=schema,
-            artifact_type=PhysicalArtifactType.SEED,
-            artifact_name=ref.seed_name,
-            version_hash=ref.version_hash,
-        )
-        if relation is None:
-            raise PlannerInputError(
-                f"checkpoint references missing physical relation for seed '{ref.seed_name}'",
-                code="S022",
-            )
-        relations[ref.seed_name] = relation
     return relations
 
 
@@ -572,15 +547,16 @@ def read_rollback_physical_relations(
         backend=backend,
         state_connection=state_connection,
         schema=schema,
-        refs=tuple(
-            VirtualEnvironmentCheckpointSeedRefRecord(
-                checkpoint_id=checkpoint_id,
-                seed_name=seed_name,
-                version_hash=version_hash,
-            )
-            for seed_name, version_hash in sorted(resolution.final_seed_hashes.items())
-        ),
+        seed_version_hashes=resolution.final_seed_hashes,
     )
+    missing_seed_names: tuple[str, ...] = tuple(
+        sorted(set(resolution.final_seed_hashes) - set(seed_relations))
+    )
+    if missing_seed_names:
+        raise PlannerInputError(
+            f"checkpoint references missing physical relation for seed '{missing_seed_names[0]}'",
+            code="S022",
+        )
     return VirtualEnvironmentPhysicalRelations(
         model_relations=model_relations,
         seed_relations=seed_relations,

@@ -16,6 +16,7 @@ def apply_virtual_plan_output(
     target_name: str,
     semantics: VirtualPlanSemantics,
     selected_model_names: tuple[str, ...] = (),
+    previous_function_query_sqls: dict[str, str] | None = None,
 ) -> PlanOutput:
     """Rewrite plan entries and attach virtual environment metadata."""
 
@@ -25,6 +26,9 @@ def apply_virtual_plan_output(
         stale_root_causes=semantics.stale_root_causes,
         stale_root_cause_reasons=semantics.stale_root_cause_reasons,
         previous_query_sqls=semantics.bound_previous_query_sqls,
+        current_metadata_jsons=semantics.expected_metadata_jsons,
+        previous_metadata_jsons=semantics.bound_metadata_jsons,
+        previous_function_query_sqls=previous_function_query_sqls,
         run_despite_unchanged=semantics.run_despite_unchanged,
         seed_plan_reasons=semantics.seed_plan_reasons,
     )
@@ -37,6 +41,7 @@ def apply_virtual_plan_output(
             sorted(set(semantics.stale_model_names) - set(selected_model_names))
         ),
         source_freshness_observed_source_names=(semantics.source_freshness_observed_source_names),
+        source_freshness_unchanged_source_names=(semantics.source_freshness_unchanged_source_names),
         source_freshness_incomplete_source_names=(
             semantics.source_freshness_incomplete_source_names
         ),

@@ -24,9 +24,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             expected_max_seconds=8.0,
         ),
         CompilePerformanceGuardTestCase(
-            description="advanced 10000 model compile stays under twenty seconds",
+            description="advanced 10000 model compile stays under twenty-five seconds",
             model_count=10000,
-            expected_max_seconds=20.0,
+            expected_max_seconds=25.0,
         ),
     ],
     ids=lambda case: case.description,

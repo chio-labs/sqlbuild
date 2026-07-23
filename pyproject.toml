@@ -54,6 +54,7 @@ sqb = "sqlbuild.cli.commands.main.entrypoint.entry:main"
 sqlbuild = "sqlbuild.cli.commands.main.entrypoint.entry:main"
 check-test-conventions = "scripts.testing.main.check_test_conventions:check_test_conventions"
 check-type-annotation-conventions = "scripts.type_annotations.main.check_type_annotation_conventions:check_type_annotation_conventions"
+dupscore = "scripts.dupscore.main.dupscore:dupscore"
 
 [dependency-groups]
 dev = [
@@ -73,7 +74,7 @@ dev = [
   "pytest-cov>=7.0.0",
   "pytest-xdist>=3.8.0",
   "ruff>=0.12.0",
-  "stratalint>=0.19.0",
+  "fensu>=0.2.1",
   "testcontainers>=4.8.1",
   "ty>=0.0.1a19",
 ]
@@ -89,6 +90,7 @@ update_changelog_on_bump = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
 norecursedirs = [".venv", "dist", "*.egg-info", ".git", ".tox"]
 markers = [
   "dbt: tests that require dbt interop dependencies and dbt project setup",

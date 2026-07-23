@@ -21,7 +21,7 @@ def render_virtual_clone_output(
     doc.line(f"  mode                    {result.mode}")
     if result.destination_virtual_environment is not None:
         doc.line(f"  destination VDE         {result.destination_virtual_environment}")
-    doc.line("  origin state            not used")
+    doc.line(f"  origin state            {'used' if result.origin_state_used else 'not used'}")
     doc.line("  destination refs        unchanged")
     doc.line(f"  selected artifacts   {_count(count=result.selected_count, style=style)}")
     doc.line(f"  found in origin      {_count(count=result.found_count, style=style)}")

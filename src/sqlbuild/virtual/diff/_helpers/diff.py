@@ -183,6 +183,11 @@ def read_virtual_diff_state(
             schema=schema,
             refs=from_refs,
         ),
+        source_freshness_records=backend.get_virtual_environment_source_freshness(
+            connection=state_connection,
+            schema=schema,
+            virtual_environment_name=from_virtual_environment_name,
+        ),
     )
     to_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
         graph=graph,
@@ -192,6 +197,11 @@ def read_virtual_diff_state(
             state_connection=state_connection,
             schema=schema,
             refs=to_refs,
+        ),
+        source_freshness_records=backend.get_virtual_environment_source_freshness(
+            connection=state_connection,
+            schema=schema,
+            virtual_environment_name=to_virtual_environment_name,
         ),
     )
     if require_finalized:

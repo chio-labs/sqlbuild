@@ -12,11 +12,41 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, PlanAction
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
+from sqlbuild.virtual.state.types import PhysicalArtifactType
+
+
+def read_seed_physical_relations(
+    *,
+    backend: Any,
+    state_connection: Any,
+    schema: str,
+    seed_version_hashes: dict[str, str],
+) -> dict[str, PhysicalRelationRecord]:
+    """Read available physical relations for seed version hashes."""
+
+    relations: dict[str, PhysicalRelationRecord] = {}
+    seed_name: str
+    version_hash: str
+    for seed_name, version_hash in seed_version_hashes.items():
+        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
+            connection=state_connection,
+            schema=schema,
+            artifact_type=PhysicalArtifactType.SEED,
+            artifact_name=seed_name,
+            version_hash=version_hash,
+        )
+        if relation is not None:
+            relations[seed_name] = relation
+    return relations
 
 
 def seed_virtual_physical_version(
@@ -177,3 +207,55 @@ def _cursor_start_for_append_seed(*, entry: ModelPlanEntry) -> str:
             f"bounded append seeding for '{entry.name}' requires cursor bounds and cursor_column"
         )
     return entry.cursor_bounds.start
+
+
+def resolve_virtual_seed_selection(
+    *,
+    graph: ProjectGraph,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Resolve the seed names matched by the requested selectors."""
+
+    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
+        select=select,
+        exclude=exclude,
+        all_keys=graph.all_keys,
+        upstream_deps=graph.upstream_deps,
+        downstream_deps=graph.downstream_deps,
+        tag_index=graph.tag_index,
+        path_index=graph.path_index,
+    )
+    return tuple(
+        sorted(key.name for key in selected_keys if key.resource_type == CompiledResourceType.SEED)
+    )
+
+
+def include_stale_upstream_seed_names(
+    *,
+    graph: ProjectGraph,
+    selected_model_names: tuple[str, ...],
+    selected_seed_names: tuple[str, ...],
+    stale_seed_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Add stale seeds feeding the selected models to the selected seed names."""
+
+    selected: set[str] = set(selected_seed_names)
+    stale_seed_name_set: frozenset[str] = frozenset(stale_seed_names)
+    pending: list[CompiledObjectKey] = [
+        model.key for model in graph.project.models if model.name in selected_model_names
+    ]
+    seen: set[CompiledObjectKey] = set()
+    while pending:
+        key: CompiledObjectKey = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        upstream_key: CompiledObjectKey
+        for upstream_key in graph.upstream_deps.get(key, ()):
+            if upstream_key.resource_type == CompiledResourceType.SEED:
+                if upstream_key.name in stale_seed_name_set:
+                    selected.add(upstream_key.name)
+                continue
+            pending.append(upstream_key)
+    return tuple(sorted(selected))

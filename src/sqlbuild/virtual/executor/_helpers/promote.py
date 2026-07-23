@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import WorkSelectionPolicy
+from sqlbuild.virtual.executor._helpers.seeding import read_seed_physical_relations
 from sqlbuild.virtual.executor.models import (
     PromoteEnvironmentState,
     PromoteRefUpdate,
@@ -28,34 +29,14 @@ from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
+    SourceFreshnessRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
 )
-from sqlbuild.virtual.state.types import PhysicalArtifactType, VirtualEnvironmentStatus
-
-
-def read_seed_physical_relations(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
-) -> dict[str, PhysicalRelationRecord]:
-    relations: dict[str, PhysicalRelationRecord] = {}
-    for ref in refs:
-        relation: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
-            connection=state_connection,
-            schema=schema,
-            artifact_type=PhysicalArtifactType.SEED,
-            artifact_name=ref.seed_name,
-            version_hash=ref.version_hash,
-        )
-        if relation is not None:
-            relations[ref.seed_name] = relation
-    return relations
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 
 def read_promote_environment_state(
@@ -134,6 +115,20 @@ def read_promote_environment_state(
             f"target virtual environment '{to_virtual_environment_name}' is detached",
             code="S028",
         )
+    source_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+        backend.get_virtual_environment_source_freshness(
+            connection=state_connection,
+            schema=schema,
+            virtual_environment_name=from_virtual_environment_name,
+        )
+    )
+    target_freshness_records: tuple[SourceFreshnessRecord, ...] = (
+        backend.get_virtual_environment_source_freshness(
+            connection=state_connection,
+            schema=schema,
+            virtual_environment_name=to_virtual_environment_name,
+        )
+    )
     return PromoteEnvironmentState(
         source_refs=source_refs,
         target_refs=target_refs,
@@ -142,6 +137,8 @@ def read_promote_environment_state(
         to_seed_refs=to_seed_refs,
         source_environment=source_environment,
         target_environment=target_environment,
+        source_freshness_records=source_freshness_records,
+        target_freshness_records=target_freshness_records,
     )
 
 
@@ -172,12 +169,14 @@ def build_promote_semantics(
         bound_refs=environment_state.source_refs,
         bound_model_versions=source_versions,
         bound_seed_refs=environment_state.from_seed_refs,
+        source_freshness_records=environment_state.source_freshness_records,
     )
     target_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
         graph=graph,
         bound_refs=environment_state.target_refs,
         bound_model_versions=target_versions,
         bound_seed_refs=environment_state.to_seed_refs,
+        source_freshness_records=environment_state.target_freshness_records,
     )
     return PromoteSemantics(source=source_semantics, target=target_semantics)
 
@@ -490,7 +489,7 @@ def read_promote_physical_relations(
         backend=backend,
         state_connection=state_connection,
         schema=schema,
-        refs=update.seed_refs,
+        seed_version_hashes={ref.seed_name: ref.version_hash for ref in update.seed_refs},
     )
     return VirtualEnvironmentPhysicalRelations(
         model_relations=model_relations,

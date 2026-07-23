@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clone.helpers import (
     init_dev_state,
     insert_dev_model_version_lock,
     prepare_virtual_clone_project,
+    prepare_virtual_source_clone_project,
     prod_seed_version_hash,
     prod_version_hash,
     registered_physical_relation_artifacts,
@@ -92,6 +93,53 @@ def test_given_virtual_clone_when_source_has_workspace_versions_then_target_is_h
     assert (
         registered_physical_relation_artifacts(project_dir)
         == test_case.expected_registered_artifacts
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualCloneE2ETestCase(
+            description="source-dependent workspace clone uses authoritative origin identity",
+            command=("--no-color", "clone", "--from", "prod", "--to", "dev"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "mode                    workspace fingerprints + origin VDE refs",
+                "origin state            used",
+                "hydrated             1",
+                "missing in origin    0",
+            ),
+            expected_registered_artifacts=(("model", "source_orders"),),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_source_dependent_origin_when_cloning_workspace_then_uses_origin_vde_identity(
+    test_case: VirtualCloneE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_virtual_source_clone_project(tmp_path)
+    execute_duckdb(
+        db_path=project_dir / "prod.duckdb",
+        sql=(
+            "CREATE SCHEMA raw; "
+            "CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER); "
+            "INSERT INTO raw.raw_orders VALUES (7, 1)"
+        ),
+    )
+    build_prod_source_versions(project_dir)
+    init_dev_state(project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout
+    assert registered_physical_relation_artifacts(project_dir) == (
+        test_case.expected_registered_artifacts
     )
 
 

@@ -7,6 +7,7 @@ from dataclasses import replace
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import LoadSelectionSets, LoadSelectorSets
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.spec.contracts.models import SourceEntry, TargetConfig
 
 
@@ -470,13 +471,7 @@ def _upstream_loader_closure(
 ) -> set[str]:
     if loader_name is None:
         return set()
-    result: set[str] = {loader_name}
-    dependency: str
-    for dependency in upstream_loaders.get(loader_name, ()):
-        result.update(
-            _upstream_loader_closure(loader_name=dependency, upstream_loaders=upstream_loaders)
-        )
-    return result
+    return {loader_name, *transitive_closure(start=loader_name, edges=upstream_loaders)}
 
 
 def _downstream_closure(

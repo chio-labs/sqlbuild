@@ -68,6 +68,9 @@ def run_virtual_clone(
             clone_pipeline=clone_pipeline,
             context=context,
             virtual_environment_name=resolved_options.virtual_environment_name,
+            discovered_inputs=discovered_inputs,
+            project_dir=project_dir,
+            origin_target_name=origin_target_name,
         )
     finally:
         backend.close(state_connection)
@@ -121,5 +124,6 @@ def run_virtual_clone(
         origin_environment=origin_target_name,
         destination_environment=destination_target_name,
         destination_virtual_environment=resolved_options.virtual_environment_name,
+        origin_state_used=versions.origin_state_used,
         item_results=(*model_items, *seed_items),
     )
