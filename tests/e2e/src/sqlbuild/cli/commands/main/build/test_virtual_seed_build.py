@@ -477,13 +477,23 @@ def test_given_virtual_seed_change_when_plan_and_build_json_then_seed_reason_is_
     plan_payload: dict[str, object] = json.loads(plan_result.stdout)
     plan_seeds: list[dict[str, object]] = list(plan_payload["seeds"])
     expected_seed_name, expected_seed_reason = test_case.expected_fragments
-    assert plan_seeds == [
-        {
-            "name": expected_seed_name,
-            "reason": expected_seed_reason,
-            "qualified_name": "dev.order_amounts",
-        }
-    ]
+    physical_seed_rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT schema_name, relation_name FROM sqlbuild_state.physical_relations "
+            "WHERE artifact_type = 'seed' AND artifact_name = 'order_amounts'"
+        ),
+    )
+    assert len(physical_seed_rows) == 1
+    physical_schema, physical_name = physical_seed_rows[0]
+    assert len(plan_seeds) == 1
+    planned_seed: dict[str, object] = plan_seeds[0]
+    assert planned_seed["name"] == expected_seed_name
+    assert planned_seed["reason"] == expected_seed_reason
+    planned_qualified_name: object = planned_seed["qualified_name"]
+    assert isinstance(planned_qualified_name, str)
+    assert planned_qualified_name.startswith(f"{physical_schema}.{expected_seed_name}__v_")
+    assert planned_qualified_name != f"{physical_schema}.{physical_name}"
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("build", "--json"), project_dir=project_dir

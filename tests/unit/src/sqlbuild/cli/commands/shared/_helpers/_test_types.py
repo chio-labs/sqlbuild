@@ -81,7 +81,7 @@ class BuildProgressSpinnerLifecycleTestCase:
     description: str
     node_name: str
     node_type: ExecutionResourceKind
-    sleep_seconds: float
+    timeout_seconds: float
     completion_duration_ms: int
     expected_fragments: tuple[str, ...]
     expected_spinner_frames: tuple[str, ...]
