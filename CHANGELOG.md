@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.48.0](https://github.com/chio-labs/sqlbuild/compare/v0.47.0...v0.48.0) (2026-07-23)
+
+
+### Features
+
+* add dupscore duplication-risk advisory tool ([4b791de](https://github.com/chio-labs/sqlbuild/commit/4b791dea48f445fa4b05bcbb5d48a4001b834052))
+
+
+### Bug Fixes
+
+* converge virtual planning and lifecycle identity ([867fab7](https://github.com/chio-labs/sqlbuild/commit/867fab7c105efaf95dc17ac63d279f2c94a5840b))
+* resolve current physical seeds in virtual plan buildability ([c3f7256](https://github.com/chio-labs/sqlbuild/commit/c3f72569a5b7acc88c442836e42642cbb0bf2b28))
+
 ## [0.47.0](https://github.com/chio-labs/sqlbuild/compare/v0.46.1...v0.47.0) (2026-07-17)
 
 
