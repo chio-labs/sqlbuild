@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
@@ -32,12 +32,13 @@ from sqlbuild.virtual.executor.constants import (
     VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION,
 )
 from sqlbuild.virtual.executor.types import VirtualPlanReadyCallback
-from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.planner.models import VirtualPlanOptions, VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationRecord,
     SeedVersionRecord,
+    SourceFreshnessRecord,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
@@ -66,26 +67,13 @@ class VirtualBuildExecutionHooks:
 
 @dataclass(frozen=True)
 class VirtualBuildOptions:
-    """Planning and execution options for one virtual build run."""
+    """Execution options composing the shared virtual planning contract."""
 
-    selected_target: str | None = None
-    no_sql_validation: bool = False
-    defer_sources_to: str | None = None
-    cursor_overrides: CursorOverrides | None = None
-    full_refresh: bool = False
-    virtual_environment_name: str | None = None
-    include_stale_upstreams: bool = False
-    changes_only: bool = False
-    auto_load_sources: bool = False
-    reload_sources: bool = False
-    include_python: bool = True
+    planning: VirtualPlanOptions = field(default_factory=VirtualPlanOptions)
     seed_only: bool = False
-    select: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
     fail_fast: bool = False
     allow_snapshot_schema_change: bool = False
     concurrency: int | None = None
-    cli_vars: dict[str, object] | None = None
     run_tests: bool = True
     run_audits: bool = True
     snapshots: SnapshotsConfig | None = None
@@ -93,7 +81,6 @@ class VirtualBuildOptions:
     end_cursor_ts: datetime | None = None
     start_cursor_int: int | None = None
     end_cursor_int: int | None = None
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     providers: ProviderContainer | None = None
 
 
@@ -189,6 +176,7 @@ class VirtualCloneResult:
     origin_environment: str
     destination_environment: str
     destination_virtual_environment: str | None = None
+    origin_state_used: bool = False
     item_results: tuple[VirtualCloneItemResult, ...] = field(default_factory=tuple)
 
     @property
@@ -245,6 +233,8 @@ class PromoteEnvironmentState:
     to_seed_refs: tuple[VirtualEnvironmentSeedRefRecord, ...]
     source_environment: VirtualEnvironmentRecord | None
     target_environment: VirtualEnvironmentRecord | None
+    source_freshness_records: tuple[SourceFreshnessRecord, ...]
+    target_freshness_records: tuple[SourceFreshnessRecord, ...]
 
 
 @dataclass(frozen=True)
@@ -344,6 +334,7 @@ class CloneVersions:
     version_hashes: dict[str, str]
     model_versions: dict[str, ModelVersionRecord]
     seed_versions: dict[str, SeedVersionRecord]
+    origin_state_used: bool = False
 
 
 @dataclass(frozen=True)

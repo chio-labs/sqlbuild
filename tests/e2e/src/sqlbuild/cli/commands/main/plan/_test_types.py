@@ -124,6 +124,15 @@ class VirtualChangesOnlyCurrentSeedParityE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualPlanBuildParityE2ETestCase:
+    description: str
+    expected_plan_exit_code: int
+    expected_build_exit_code: int
+    expected_fragments: tuple[str, ...]
+    unexpected_plan_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class VirtualSourceFreshnessPlanE2ETestCase:
     description: str
     expected_unchanged_fragments: tuple[str, ...]

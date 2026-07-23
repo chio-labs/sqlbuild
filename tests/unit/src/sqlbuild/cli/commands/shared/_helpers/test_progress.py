@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-import time
+import threading
+from collections.abc import Callable
+from functools import partial
 from io import StringIO
 
 import pytest
@@ -54,6 +56,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import (
     build_audit_result,
     build_progress_snapshot_plan_output,
+    write_spinner_line_and_release,
 )
 
 
@@ -942,7 +945,7 @@ def test_given_active_top_level_node_when_reporting_progress_then_uses_spinner_g
             description="active spinner advances frames over time before completion",
             node_name="stg_orders",
             node_type=ExecutionResourceKind.VIEW,
-            sleep_seconds=0.22,
+            timeout_seconds=1.0,
             completion_duration_ms=1200,
             expected_fragments=("view", "stg_orders", "OK", "\033[?25l", "\033[?25h"),
             expected_spinner_frames=("⠋", "⠙", "⠹"),
@@ -960,16 +963,31 @@ def test_given_active_top_level_node_when_waiting_then_spinner_advances_frames(
         plan=PlanOutput(),
         use_color=False,
     )
+    spinner_updates: threading.Semaphore = threading.Semaphore(value=0)
+    write_spinner_line: Callable[[], None] = callbacks._write_spinner_line
+    monkeypatch.setattr(
+        callbacks,
+        "_write_spinner_line",
+        partial(
+            write_spinner_line_and_release,
+            write_spinner_line=write_spinner_line,
+            spinner_updates=spinner_updates,
+        ),
+    )
 
     callbacks.on_node_start(name=test_case.node_name, resource_kind=test_case.node_type)
-    time.sleep(test_case.sleep_seconds)
-    callbacks.on_node_complete(
-        ModelExecutionResult(
-            model_name=test_case.node_name,
-            status=ExecutionStatus.SUCCESS,
-            duration_ms=test_case.completion_duration_ms,
+    try:
+        _spinner_frame: str
+        for _spinner_frame in test_case.expected_spinner_frames:
+            assert spinner_updates.acquire(timeout=test_case.timeout_seconds)
+    finally:
+        callbacks.on_node_complete(
+            ModelExecutionResult(
+                model_name=test_case.node_name,
+                status=ExecutionStatus.SUCCESS,
+                duration_ms=test_case.completion_duration_ms,
+            )
         )
-    )
     output: str = stream.getvalue()
 
     expected_fragment: str

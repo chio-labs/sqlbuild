@@ -36,9 +36,9 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: strata-check
-        name: strata check
-        entry: uv run strata check
+      - id: fensu-check
+        name: fensu check
+        entry: uv run fensu check
         language: system
         pass_filenames: false
 

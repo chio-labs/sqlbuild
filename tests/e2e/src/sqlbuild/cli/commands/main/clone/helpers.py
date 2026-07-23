@@ -33,6 +33,35 @@ def prepare_virtual_clone_project(tmp_path: Path) -> Path:
     )
 
 
+def prepare_virtual_source_clone_project(tmp_path: Path) -> Path:
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_source_clone_project",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_clone_project_toml(),
+            "sqlbuild_local.toml": 'target = "dev"\n',
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    schema: raw\n"
+                "    table: raw_orders\n"
+                "    columns:\n"
+                "      - name: id\n"
+                "        type: integer\n"
+                "      - name: data_version\n"
+                "        type: integer\n"
+                "    freshness:\n"
+                "      strategy: column\n"
+                "      column: data_version\n"
+                "      type: integer\n"
+            ),
+            "models/source_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+
+
 def build_virtual_clone_project_toml() -> str:
     return (
         'name = "virtual_clone_project"\n'

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -154,9 +155,7 @@ def _validate_loader_upstream_python_is_pre_sql(*, python_graph: PythonNodeGraph
         if node.kind != PythonNodeKind.LOADER:
             continue
         upstream_name: str
-        for upstream_name in _upstream_python_closure(
-            node_name=node.name, python_graph=python_graph
-        ):
+        for upstream_name in transitive_closure(start=node.name, edges=python_graph.upstream_deps):
             upstream_node: DiscoveredPythonNode = python_graph.nodes_by_name[upstream_name]
             if upstream_node.kind not in {PythonNodeKind.TASK, PythonNodeKind.ASSET}:
                 continue
@@ -195,18 +194,6 @@ def _validate_python_sql_refs(
                     f"Python node '{node.name}' declares source('{sql_ref.name}') but "
                     f"'{sql_ref.name}' is a {sql_key.resource_type}"
                 )
-
-
-def _upstream_python_closure(*, node_name: str, python_graph: PythonNodeGraph) -> frozenset[str]:
-    names: set[str] = set()
-    pending: list[str] = list(python_graph.upstream_deps.get(node_name, ()))
-    while pending:
-        current: str = pending.pop(0)
-        if current in names:
-            continue
-        names.add(current)
-        pending.extend(python_graph.upstream_deps.get(current, ()))
-    return frozenset(names)
 
 
 def _validate_sql_model_dependencies(*, project_graph: ProjectGraph) -> None:
@@ -486,9 +473,8 @@ def _required_terminal_loader_atoms(
                 required.add(_python_atom(loader_name))
                 required.update(
                     _python_atom(name)
-                    for name in _python_upstream_closure(
-                        node_name=loader_name,
-                        python_graph=python_graph,
+                    for name in transitive_closure(
+                        start=loader_name, edges=python_graph.upstream_deps
                     )
                 )
             continue
@@ -496,10 +482,7 @@ def _required_terminal_loader_atoms(
             required.add(_python_atom(loader_name))
             required.update(
                 _python_atom(name)
-                for name in _python_upstream_closure(
-                    node_name=loader_name,
-                    python_graph=python_graph,
-                )
+                for name in transitive_closure(start=loader_name, edges=python_graph.upstream_deps)
             )
     return required
 
@@ -539,18 +522,6 @@ def _validate_selected_dependencies(
                 f"Python node '{node_name}' depends on unselected Python node "
                 f"'{upstream_name}'; select it directly or use upstream expansion"
             )
-
-
-def _python_upstream_closure(*, node_name: str, python_graph: PythonNodeGraph) -> frozenset[str]:
-    names: set[str] = set()
-    pending: list[str] = list(python_graph.upstream_deps.get(node_name, ()))
-    while pending:
-        current: str = pending.pop(0)
-        if current in names:
-            continue
-        names.add(current)
-        pending.extend(python_graph.upstream_deps.get(current, ()))
-    return frozenset(names)
 
 
 def _source_loader_by_name(*, project_graph: ProjectGraph) -> dict[str, str]:

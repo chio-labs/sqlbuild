@@ -1240,6 +1240,34 @@ wheels = [
 ]
 
 [[package]]
+name = "fensu"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fensu-cli" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/65/ea74a2e7ea330cac9fcf6f1ba713fdac94e490303f3950ff1326f958f086/fensu-0.2.1-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:391307fa6ee8af508752e51882aa576e56ed8f71ea2c2def26f19915804216e9", size = 4968954, upload-time = "2026-07-19T19:13:01.316Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/c6/fa253b8edb4e98a47b179e9010cd9dd248dca823dd4c5287dc3ae3af6935/fensu-0.2.1-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:fab45cf119a349b27bce0190ffb03546983ba3c7f7d6a4aca4ebfdfc3fa12e19", size = 4827726, upload-time = "2026-07-19T19:13:03.544Z" },
+    { url = "https://files.pythonhosted.org/packages/48/3b/8b696fd195f24293cbd667c3a93b7761efebda91c433fe9d953a8071cc05/fensu-0.2.1-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e991f3ac074f85d8b90bdf64670b521227df042a3cd64c9df7a1283406874214", size = 5218297, upload-time = "2026-07-19T19:13:05.462Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/f4/dae2287a9754b7da610252e7a54401678b64703e0321f0d1b14165f2d7a2/fensu-0.2.1-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a4874ee6357de6c7cab85dd3e8f7fd4b0874886b37afdaf7857d7ddfb7ac0a83", size = 5258151, upload-time = "2026-07-19T19:13:07.394Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/2b/74d98743f0fa2508d20a7be4a041de2ccda6f041e9ecd2bdc570ebf2ba6c/fensu-0.2.1-cp312-abi3-win_amd64.whl", hash = "sha256:f856827c6100a4676d854e97f71c40a2bf11453690e6c3dd825d7611f7aaa9af", size = 4764853, upload-time = "2026-07-19T19:13:09.461Z" },
+]
+
+[[package]]
+name = "fensu-cli"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/59/e0cfd0d215c7e76fee2bdadadf2f510193f7df33b9281e13f1454762e360/fensu_cli-0.2.1.tar.gz", hash = "sha256:e4902ffcd97edd9813ef6c4e3ce87636afcac5dbc42975e998b9e37fcd7fd0f9", size = 260135, upload-time = "2026-07-19T19:29:39.325Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/bf/b800c78164f17afed0e5b1b5d5e273f82f11ec59ba378d850b2b36987795/fensu_cli-0.2.1-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:210394fc077c8012b69cfa38bf220f62ad54b6daf44a6ec38d112fab02d0763e", size = 3201823, upload-time = "2026-07-19T19:29:30.597Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/ef/f732ede4a087bcae533f71c484be5487185f66f8be5a5d8c69496e13a1f5/fensu_cli-0.2.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:39e3b904a57dfb83b84be2c3338ebcb43ab6b4fb2abf75e0867590258238183d", size = 3093396, upload-time = "2026-07-19T19:29:32.104Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/99/a0410f2578bb98922df8e9411b006b270b9e993619eaf06a2a8631447611/fensu_cli-0.2.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:657030ddfba79db90ac631063d950e5b123e1e9c51b111269f581191c6b4e940", size = 3274416, upload-time = "2026-07-19T19:29:33.576Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/c9/efde26bd0f9bc581eff2963908967e2d04651a883d44da2f1d1cfd8bdcf7/fensu_cli-0.2.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5c629b0b09ae6a1fef5e42e8a997811955664aa0853d8370c7016f1adbbbc6d8", size = 3365941, upload-time = "2026-07-19T19:29:35.111Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/f3/672508b996926050d06d2f4ee488359d52da1fbf21a28419eefe8b256cd6/fensu_cli-0.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:e84556a259f01621ed0ab3b31bc26bb7c32ac037ecd4ec61f580d2a6901936ae", size = 3013437, upload-time = "2026-07-19T19:29:36.515Z" },
+]
+
+[[package]]
 name = "filelock"
 version = "3.29.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4152,6 +4180,7 @@ dev = [
     { name = "dbt-snowflake" },
     { name = "dbt-sqlserver" },
     { name = "dlt", extra = ["duckdb", "filesystem", "sql-database"] },
+    { name = "fensu" },
     { name = "ingestr" },
     { name = "jsonschema" },
     { name = "pre-commit" },
@@ -4159,7 +4188,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
     { name = "ruff" },
-    { name = "stratalint" },
     { name = "testcontainers" },
     { name = "ty" },
 ]
@@ -4196,6 +4224,7 @@ dev = [
     { name = "dbt-snowflake", specifier = "==1.12.0b1" },
     { name = "dbt-sqlserver", specifier = ">=1.9.0,<1.11" },
     { name = "dlt", extras = ["duckdb", "filesystem", "sql-database"], specifier = ">=1.28.0,<2" },
+    { name = "fensu", specifier = ">=0.2.1" },
     { name = "ingestr", specifier = ">=1.0.0" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "pre-commit", specifier = ">=4.3.0" },
@@ -4203,7 +4232,6 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff", specifier = ">=0.12.0" },
-    { name = "stratalint", specifier = ">=0.19.0" },
     { name = "testcontainers", specifier = ">=4.8.1" },
     { name = "ty", specifier = ">=0.0.1a19" },
 ]
@@ -4246,19 +4274,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/81/69/17425771797c36cded50b7fe44e850315d039f28b15901ab44839e70b593/starlette-1.0.0.tar.gz", hash = "sha256:6a4beaf1f81bb472fd19ea9b918b50dc3a77a6f2e190a12954b25e6ed5eea149", size = 2655289, upload-time = "2026-03-22T18:29:46.779Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/c9/584bc9651441b4ba60cc4d557d8a547b5aff901af35bda3a4ee30c819b82/starlette-1.0.0-py3-none-any.whl", hash = "sha256:d3ec55e0bb321692d275455ddfd3df75fff145d009685eb40dc91fc66b03d38b", size = 72651, upload-time = "2026-03-22T18:29:45.111Z" },
-]
-
-[[package]]
-name = "stratalint"
-version = "0.19.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/bf/ea/7994074ca2d56fc77baa2ac2985f1803bfb8eaccac674bce4e6b79b6368f/stratalint-0.19.0.tar.gz", hash = "sha256:4178707955b154f90e488fea5f85fe4d9b9f4f52c5d05aa998dbc90d2b36646c", size = 308674, upload-time = "2026-07-17T05:38:41.153Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/9d/5eb8795f5bfe24a73ca535a17e1f6c5014a9fa063bbe9511b5dc66b87834/stratalint-0.19.0-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:840d349ee55dcbb3b0b7263d066a6dddc9a50edf3bd0ea80eba65a4f3eb4851c", size = 1753905, upload-time = "2026-07-17T05:38:31.949Z" },
-    { url = "https://files.pythonhosted.org/packages/a4/ae/8ec6ca571842788a97b39cc34c2fb93fa645ed2c922f042f831ae22d1a80/stratalint-0.19.0-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:2f2c1dbf1f82d3795bfc3dc9db414e9ac48e09239067256e5d647edf91c2f866", size = 1735640, upload-time = "2026-07-17T05:38:34.042Z" },
-    { url = "https://files.pythonhosted.org/packages/95/c7/939b7a556c1ef003c03b2732eda51abe3155260ef0d47632f12684a71427/stratalint-0.19.0-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a252969e327f19a15189eeb4246a62c997dbfd2feb9098426bab541b03c82db4", size = 1802649, upload-time = "2026-07-17T05:38:36.159Z" },
-    { url = "https://files.pythonhosted.org/packages/0a/17/7bd265c2aeae56acc19ac32162fbd3c2641a78945db1d8ae1125a79cd16a/stratalint-0.19.0-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:17e941a71637271ece1250e58fedeb3d723e045f28fbf76130e84d76b0a1a278", size = 1831157, upload-time = "2026-07-17T05:38:38.023Z" },
-    { url = "https://files.pythonhosted.org/packages/30/0a/bb7570680e6ab99faa123cb36dc4a7e11bd12a533c38cc824b7ec7002dcc/stratalint-0.19.0-cp312-abi3-win_amd64.whl", hash = "sha256:afc984e04a7e562ca7de18e59b98050b7c34ac622a6818778aebd50a6344d209", size = 1659242, upload-time = "2026-07-17T05:38:39.603Z" },
 ]
 
 [[package]]

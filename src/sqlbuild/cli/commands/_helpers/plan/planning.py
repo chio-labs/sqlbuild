@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from io import StringIO
+
+from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
+    enforce_snapshot_full_refresh_policy,
+)
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -28,7 +33,7 @@ def compile_plan_pipeline(
         discovered_inputs=invocation.discovered_inputs,
     )
     if invocation.virtual_mode:
-        return run_virtual_plan_pipeline(
+        virtual_result: CompilePipelineResult = run_virtual_plan_pipeline(
             project_dir=invocation.effective_project_dir,
             discovered_inputs=invocation.discovered_inputs,
             adapter=invocation.adapter,
@@ -64,6 +69,14 @@ def compile_plan_pipeline(
                 ),
             ),
         )
+        enforce_snapshot_full_refresh_policy(
+            plan=virtual_result.plan_output,
+            snapshots_config=invocation.discovered_inputs.project_config.snapshots,
+            allow_snapshot_full_refresh=False,
+            input_stream=StringIO(),
+            output_stream=StringIO(),
+        )
+        return virtual_result
     return run_compile_pipeline(
         discovered_inputs=invocation.discovered_inputs,
         adapter=invocation.adapter,

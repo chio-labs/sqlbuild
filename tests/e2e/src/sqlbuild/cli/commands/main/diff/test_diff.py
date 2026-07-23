@@ -18,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.diff.helpers import (
     prepare_diff_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_project_toml,
     build_virtual_plan_repo_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
@@ -476,6 +477,86 @@ def test_given_virtual_diff_with_working_vde_when_running_then_it_respects_parti
         assert fragment in result.stdout, result.stdout + result.stderr
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in result.stderr, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualDiffE2ETestCase(
+            description="verbose virtual diff keeps persisted source identity current",
+            command=(
+                "--no-color",
+                "diff",
+                "dev:pr",
+                "--schema-only",
+                "--verbose",
+                "--select",
+                "source_orders",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "selected models         1",
+                "unchanged refs skipped  1",
+            ),
+            unexpected_stdout_fragments=("not current with workspace",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_source_dependent_vdes_when_diffing_verbose_then_refs_are_workspace_current(
+    test_case: VirtualDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_diff_source_identity",
+        repo_files={
+            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    schema: raw\n"
+                "    table: raw_orders\n"
+                "    freshness:\n"
+                "      strategy: column\n"
+                "      column: data_version\n"
+                "      type: integer\n"
+            ),
+            "models/source_orders.sql": (
+                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "CREATE SCHEMA raw; "
+            "CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER); "
+            "INSERT INTO raw.raw_orders VALUES (1, 1)"
+        ),
+    )
+    assert run_sqb(command=("state", "init"), project_dir=project_dir).returncode == 0
+    dev_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+    assert dev_build_result.returncode == 0, dev_build_result.stdout + dev_build_result.stderr
+    pr_build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--virtual-env", "pr", "--changes-only"),
+        project_dir=project_dir,
+    )
+    assert pr_build_result.returncode == 0, pr_build_result.stdout + pr_build_result.stderr
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout
+    for fragment in test_case.unexpected_stdout_fragments:
+        assert fragment not in result.stdout, result.stdout
 
 
 @pytest.mark.parametrize(
