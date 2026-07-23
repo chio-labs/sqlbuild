@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlbuild.compiler.auditing.types import (
@@ -15,6 +17,15 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+
+
+def write_spinner_line_and_release(
+    *,
+    write_spinner_line: Callable[[], None],
+    spinner_updates: threading.Semaphore,
+) -> None:
+    write_spinner_line()
+    spinner_updates.release()
 
 
 def build_audit_result(

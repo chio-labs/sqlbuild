@@ -90,6 +90,7 @@ update_changelog_on_bump = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
 norecursedirs = [".venv", "dist", "*.egg-info", ".git", ".tox"]
 markers = [
   "dbt: tests that require dbt interop dependencies and dbt project setup",
