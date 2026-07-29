@@ -13,8 +13,10 @@ from yaml import YAMLError
 
 from sqlbuild.compiler.discovery.constants import (
     CONFIG_CONCURRENCY_KEY,
+    DBT_DEFER_CLONE_CONFIG_KEY,
     DBT_LEGACY_REUSE_FROM_CONFIG_KEY,
     DBT_MACRO_PATH_PREFIX,
+    DBT_REPLAY_ON_CHANGE_CONFIG_KEY,
     LEGACY_CONFIG_CONCURRENCY_KEY,
     LEGACY_LOCAL_CONFIG_FILENAME,
     LEGACY_PROJECT_CONFIG_FILENAME,
@@ -687,6 +689,16 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
             f"{file_path} [dbt.reuse_from] was renamed to [dbt.production_ref]; "
             "rename the table and its keys accordingly"
         )
+    removed_keys: tuple[str, ...] = tuple(
+        key
+        for key in (DBT_DEFER_CLONE_CONFIG_KEY, DBT_REPLAY_ON_CHANGE_CONFIG_KEY)
+        if key in mapping
+    )
+    if removed_keys:
+        raise ProjectConfigError(
+            f"{file_path} [dbt] option(s) were removed: {', '.join(removed_keys)}; "
+            "use dbt-native --state/--defer or explicit sqb dbt clone"
+        )
     _validate_allowed_keys(
         mapping=mapping,
         allowed_keys=frozenset(
@@ -696,8 +708,6 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
                 "target",
                 "target_path",
                 "vars",
-                "replay_on_change",
-                "defer_clone_from",
                 "production_ref",
             }
         ),
@@ -710,12 +720,6 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
         target=_optional_str(payload=mapping, key="target"),
         target_path=_optional_str(payload=mapping, key="target_path"),
         vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
-        replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
-        defer_clone_from=_optional_bool(
-            mapping=mapping,
-            key="defer_clone_from",
-            default=False,
-        ),
         production_ref=_load_dbt_production_ref(
             payload=mapping.get("production_ref"),
             file_path=file_path,
@@ -727,16 +731,20 @@ def _load_local_dbt(*, payload: object, file_path: Path) -> LocalDbtConfig:
     """Load optional local dbt interop configuration."""
 
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
+    if DBT_DEFER_CLONE_CONFIG_KEY in mapping:
+        raise ProjectConfigError(
+            f"{file_path} [dbt].defer_clone_from was removed; "
+            "use dbt-native --state/--defer or explicit sqb dbt clone"
+        )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"target", "vars", "defer_clone_from"}),
+        allowed_keys=frozenset({"target", "vars"}),
         label="dbt",
         file_path=file_path,
     )
     return LocalDbtConfig(
         target=_optional_str(payload=mapping, key="target"),
         vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
-        defer_clone_from=_optional_nullable_bool(mapping=mapping, key="defer_clone_from"),
     )
 
 

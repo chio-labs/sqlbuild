@@ -61,14 +61,6 @@ class RealDbtCombinedGraphTestCase:
 
 
 @dataclass(frozen=True)
-class RealDbtSeedContentIdentityTestCase:
-    description: str
-    initial_seed_csv: str
-    mutated_seed_csv: str
-    expected_identity_changes: bool
-
-
-@dataclass(frozen=True)
 class RealDbtInteropPlanTestCase:
     description: str
     args: tuple[str, ...]

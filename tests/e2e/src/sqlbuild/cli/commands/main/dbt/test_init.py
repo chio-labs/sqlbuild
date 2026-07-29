@@ -12,7 +12,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtInitDuckDbE2ETestCase,
     DbtInitInteractiveE2ETestCase,
     DbtInitMissingProdRelationBuildE2ETestCase,
-    DbtInitMissingProdRelationE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     initialize_dbt_init_git_repo,
@@ -52,7 +51,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
                 "dbt_orders",
                 "OK",
             ),
-            expected_dbt_fingerprint_rows=(("dbt", "model.analytics.dbt_orders"),),
+            expected_dbt_fingerprint_rows=(),
         )
     ],
     ids=lambda case: case.description,
@@ -269,7 +268,7 @@ def test_given_tty_when_running_dbt_init_then_prompts_and_renders_color(
     [
         DbtAutoInitE2ETestCase(
             description="dbt plan auto-inits from raw dbt project and continues",
-            expected_stdout_fragments=("Plan ready", "dbt (1 selected resources)", "dbt_orders"),
+            expected_stdout_fragments=("Plan ready", "dbt (1 selected, 0 required)", "dbt_orders"),
             expected_stderr_fragments=(
                 "SQLBuild dbt setup created",
                 "Production schema macro",
@@ -322,7 +321,7 @@ def test_given_raw_dbt_project_when_running_dbt_plan_then_auto_inits_and_continu
             description="sqb project dir alias preserves dbt project profiles and target flags",
             expected_stdout_fragments=(
                 "Plan ready",
-                "dbt (1 selected resources)",
+                "dbt (1 selected, 0 required)",
                 "dbt_orders",
             ),
         )
@@ -378,65 +377,6 @@ def test_given_sqb_project_dir_alias_when_running_dbt_plan_then_preserves_dbt_fl
     expected_fragment: str
     for expected_fragment in test_case.expected_stdout_fragments:
         assert expected_fragment in plan_result.stdout
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtInitMissingProdRelationE2ETestCase(
-            description="plan rebuilds when production table does not exist",
-            expected_stdout_fragments=(
-                "Model plan",
-                "First run (1)",
-                "model.analytics.dbt_orders first run",
-            ),
-            unexpected_stdout_fragments=("Reuse plan", "Reuse (1)", "Blocked (1)", "OK     reuse"),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_generated_dbt_init_config_without_prod_table_when_planning_then_reuse_rebuilds(
-    tmp_path: Path,
-    test_case: DbtInitMissingProdRelationE2ETestCase,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    workspace: Path = prepare_dbt_init_duckdb_workspace(
-        tmp_path=tmp_path, workspace_name="missing_prod_relation_workspace"
-    )
-    initialize_dbt_init_git_repo(workspace=workspace, production_ref="prod")
-    init_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "dbt",
-            "init",
-            "--project-dir",
-            "dbt_project",
-            "--profiles-dir",
-            "profiles",
-            "--skip-dbt-debug",
-            "--prod-git-ref",
-            "prod",
-        ),
-        project_dir=workspace,
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
-    (workspace / "sqlbuild_project" / "dbt" / "macros" / "generate_schema_name.sql").write_text(
-        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
-        encoding="utf-8",
-    )
-
-    plan_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "plan", "--select", "dbt_orders"),
-        project_dir=workspace / "sqlbuild_project",
-    )
-
-    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
-    expected_fragment: str
-    for expected_fragment in test_case.expected_stdout_fragments:
-        assert expected_fragment in plan_result.stdout
-    unexpected_fragment: str
-    for unexpected_fragment in test_case.unexpected_stdout_fragments:
-        assert unexpected_fragment not in plan_result.stdout
 
 
 @pytest.mark.parametrize(

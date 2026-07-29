@@ -7,455 +7,560 @@ from typing import cast
 
 import pytest
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt._helpers.pipeline import execute as execute_helpers
-from sqlbuild.integrations.dbt._helpers.pipeline import (
-    execution_phases as execution_phases_module,
-)
+from sqlbuild.integrations.dbt._helpers.pipeline import execute as dbt_execute_module
+from sqlbuild.integrations.dbt._helpers.pipeline import execution_phases as phases_module
 from sqlbuild.integrations.dbt._helpers.pipeline import interop_prologue as prologue_module
-from sqlbuild.integrations.dbt._helpers.pipeline.defer_clone import resolve_dbt_defer_clone_from
+from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
+    build_failed_sqlbuild_model_names,
+    build_merged_dbt_execution_argv,
+)
 from sqlbuild.integrations.dbt._helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.main.pipeline import execute as execute_module
+from sqlbuild.integrations.dbt.main.pipeline import plan as plan_module
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
+    DbtCombinedGraph,
+    DbtCombinedGraphKey,
     DbtCommandExecutionResult,
-    DbtExecutionOutcome,
+    DbtInteropCompiledProject,
     DbtInteropExecutionRequest,
+    DbtInteropInvocation,
     DbtInteropPlan,
+    DbtInteropPlanResolution,
+    DbtInteropRoutedArgs,
     DbtInteropSelectionResult,
     DbtLsNode,
+    DbtManifestIndex,
     DbtNodeExecutionResult,
 )
 from sqlbuild.integrations.dbt.types import (
+    DbtCombinedGraphOwner,
+    DbtCombinedGraphResourceType,
     DbtInteropCommand,
 )
-from sqlbuild.spec.contracts.models import (
-    DbtConfig,
-    DbtProductionRefConfig,
-    LocalConfig,
-    ProjectConfig,
-    SettingsConfig,
-)
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
+    DbtArgvTestCase,
     DbtCompileFullRefreshPipelineTestCase,
-    DbtDeferCloneResolutionTestCase,
     DbtExecutionSelectionStatusTestCase,
-    DbtExecutionSpacingTestCase,
     DbtExecutionSummaryFooterTestCase,
 )
-from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
-    CompileOnlyDbtRunner,
-    emit_connection_progress,
-)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtDeferCloneResolutionTestCase(
-            description="uses project config when cli and local are absent",
-            cli_defer_clone_from=None,
-            project_defer_clone_from=True,
-            local_defer_clone_from=None,
-            expected_defer_clone_from=True,
-        ),
-        DbtDeferCloneResolutionTestCase(
-            description="uses local override before project config",
-            cli_defer_clone_from=None,
-            project_defer_clone_from=True,
-            local_defer_clone_from=False,
-            expected_defer_clone_from=False,
-        ),
-        DbtDeferCloneResolutionTestCase(
-            description="uses cli flag before local override",
-            cli_defer_clone_from=True,
-            project_defer_clone_from=False,
-            local_defer_clone_from=False,
-            expected_defer_clone_from=True,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_dbt_defer_clone_sources_when_resolving_then_precedence_is_applied(
-    test_case: DbtDeferCloneResolutionTestCase,
-) -> None:
-    defer_clone_from: bool = resolve_dbt_defer_clone_from(
-        cli_defer_clone_from=test_case.cli_defer_clone_from,
-        project_defer_clone_from=test_case.project_defer_clone_from,
-        local_defer_clone_from=test_case.local_defer_clone_from,
-    )
-
-    assert defer_clone_from is test_case.expected_defer_clone_from
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtExecutionSelectionStatusTestCase(
-            description="prints dbt execution selection status for non tty streams",
-            expected_total=2,
-            expected_output_fragment="Resolving dbt execution selection...",
-            expected_completion_fragment="Resolved dbt execution selection.",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_non_tty_stream_when_resolving_dbt_execution_total_then_prints_status(
-    test_case: DbtExecutionSelectionStatusTestCase,
-) -> None:
-    class StubRunner:
-        def invoke(self, **kwargs: object) -> object:
-            del kwargs
-            return SimpleNamespace(
-                returncode=0,
-                stdout=(
-                    '{"unique_id":"model.analytics.orders","resource_type":"model"}\n'
-                    '{"unique_id":"model.analytics.customers","resource_type":"model"}\n'
-                ),
-            )
-
-    stream: StringIO = StringIO()
-
-    total: int | None = execute_helpers._dbt_execution_expected_total(
-        runner=cast(DbtRunner, StubRunner()),
-        options=DbtCliOptions(project_dir=Path("/dbt_project")),
-        argv=("dbt", "build", "--select", "orders"),
-        stream=stream,
-        use_color=False,
-    )
-
-    assert total == test_case.expected_total
-    output: str = stream.getvalue()
-    assert test_case.expected_output_fragment in output
-    assert test_case.expected_completion_fragment in output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtExecutionSpacingTestCase(
-            description="keeps one blank line between connection and plan output",
-            expected_spacing_fragment="Connected to duckdb. (0.00s)\n\nPlan ready",
-            expected_no_work_spacing_fragment="Skipping dbt: no dbt work selected.\n\n"
-            "No SQLBuild work selected.",
-            unexpected_no_blank_fragment="Connected to duckdb. (0.00s)\nPlan ready",
-            unexpected_no_work_no_blank_fragment="Skipping dbt: no dbt work selected.\n"
-            "No SQLBuild work selected.",
-            unexpected_extra_blank_fragment="Connected to duckdb. (0.00s)\n\n\nPlan ready",
-            unexpected_no_work_extra_blank_fragment="Skipping dbt: no dbt work selected.\n\n\n"
-            "No SQLBuild work selected.",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_execution_plan_output_when_rendering_after_connection_then_keeps_one_blank_line(
-    test_case: DbtExecutionSpacingTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
-        project_config=ProjectConfig(
-            name="demo",
-            adapter="duckdb",
-            settings=SettingsConfig(query_change_tracking=False),
-            dbt=DbtConfig(
-                project_dir="../dbt_project",
-                production_ref=DbtProductionRefConfig(
-                    git_ref="main",
-                    generate_schema_name_override="dbt/macros/prod_generate_schema_name.sql",
-                ),
-            ),
-        ),
-        local_config=LocalConfig(),
-    )
-    plan: DbtInteropPlan = build_dbt_interop_plan(
-        command=DbtInteropCommand.BUILD,
-        dbt_command_argv=("dbt", "build", "--select", "missing"),
-        dbt_ls_nodes=(),
-        sqlbuild_command_argvs=(),
-        selection=DbtInteropSelectionResult(),
-    )
-    output_stream: StringIO = StringIO()
-
-    monkeypatch.setattr(
-        prologue_module, "discover_project_inputs", lambda *, project_dir: discovered_inputs
-    )
-    monkeypatch.setattr(
-        prologue_module,
-        "resolve_dbt_plan_options",
-        lambda **kwargs: DbtCliOptions(project_dir=Path("/dbt_project")),
-    )
-    monkeypatch.setattr(
-        prologue_module, "resolve_dbt_manifest_path", lambda *, options: Path("/manifest.json")
-    )
-    monkeypatch.setattr(
-        prologue_module,
-        "load_dbt_manifest_index",
-        lambda *, manifest_path: SimpleNamespace(
-            models_by_unique_id={},
-            seeds_by_unique_id={},
-            seed_identity_warnings=(),
-        ),
-    )
-    monkeypatch.setattr(
-        prologue_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb"
-    )
-    monkeypatch.setattr(
-        prologue_module, "resolve_dbt_interop_adapter", lambda *args, **kwargs: object()
-    )
-    monkeypatch.setattr(
-        prologue_module,
-        "build_compiled_project",
-        lambda **kwargs: SimpleNamespace(
-            settings=SimpleNamespace(query_change_tracking=False),
-            run_id="run",
-            effective_target_database=None,
-            effective_target_schema="main",
-            effective_target_name="dev",
-            models=(),
-        ),
-    )
-    monkeypatch.setattr(prologue_module, "build_dbt_combined_graph", lambda **kwargs: object())
-    monkeypatch.setattr(prologue_module, "plan_dbt_interop_command", lambda **kwargs: plan)
-    monkeypatch.setattr(
-        execution_phases_module, "build_dbt_model_plan_output", emit_connection_progress
-    )
-    monkeypatch.setattr(
-        execution_phases_module, "build_dbt_non_model_run_unique_ids", lambda **kwargs: ()
-    )
-    monkeypatch.setattr(
-        execution_phases_module, "build_dbt_pruned_seed_unique_ids", lambda **kwargs: ()
-    )
-    monkeypatch.setattr(
-        execution_phases_module, "build_dbt_pruned_test_unique_ids", lambda **kwargs: ()
-    )
-    monkeypatch.setattr(execute_module, "build_merged_dbt_execution_argv", lambda **kwargs: None)
-    monkeypatch.setattr(
-        execution_phases_module, "build_effective_connection_config", lambda **kwargs: {}
-    )
-    monkeypatch.setattr(execution_phases_module, "resolve_connection_config", lambda **kwargs: {})
-
-    def execute_no_dbt_work(**kwargs: object) -> DbtCommandExecutionResult:
-        output: StringIO = cast(StringIO, kwargs["progress_stream"])
-        output.write("Skipping dbt: no dbt work selected.\n")
-        return DbtCommandExecutionResult(returncode=0)
-
-    monkeypatch.setattr(execution_phases_module, "execute_dbt_commands", execute_no_dbt_work)
-    monkeypatch.setattr(
-        execute_module,
-        "build_dbt_execution_outcome",
-        lambda **kwargs: DbtExecutionOutcome(),
-    )
-
-    def write_progress(message: str) -> None:
-        output_stream.write(f"{message}\n")
-
-    exit_code: int = execute_module.execute_dbt_interop_from_project(
-        DbtInteropExecutionRequest(
-            command=DbtInteropCommand.BUILD,
-            project_dir=Path("/sqlbuild_project"),
-            args=("--select", "missing"),
-            dbt_runner=CompileOnlyDbtRunner(),
-            on_progress=write_progress,
-            progress_stream=output_stream,
-            dbt_stdout_stream=output_stream,
-            use_color=False,
-        )
-    )
-
-    rendered: str = output_stream.getvalue()
-    assert exit_code == 0
-    assert test_case.expected_spacing_fragment in rendered
-    assert test_case.expected_no_work_spacing_fragment in rendered
-    assert test_case.unexpected_no_blank_fragment not in rendered
-    assert test_case.unexpected_no_work_no_blank_fragment not in rendered
-    assert test_case.unexpected_extra_blank_fragment not in rendered
-    assert test_case.unexpected_no_work_extra_blank_fragment not in rendered
+from tests.unit.src.sqlbuild.integrations.dbt.helpers import CompileOnlyDbtRunner
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         DbtCompileFullRefreshPipelineTestCase(
-            description="dbt test compiles with full refresh",
-            command="test",
-            expected_full_refresh_values=(True,),
+            description="plan uses ordinary current dbt compile",
+            command="plan",
+            expected_full_refresh_values=(False,),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_dbt_test_command_when_executing_then_compiles_with_full_refresh(
+def test_given_ordinary_plan_when_compiling_then_never_compiles_production_ref(
     test_case: DbtCompileFullRefreshPipelineTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
-        project_config=ProjectConfig(
-            name="demo",
-            adapter="duckdb",
-            settings=SettingsConfig(query_change_tracking=False),
-            dbt=DbtConfig(
-                project_dir="../dbt_project",
-                production_ref=DbtProductionRefConfig(
-                    git_ref="main",
-                    generate_schema_name_override="dbt/macros/prod_generate_schema_name.sql",
-                ),
-            ),
-        ),
-        local_config=LocalConfig(),
+    runner: CompileOnlyDbtRunner = CompileOnlyDbtRunner()
+    manifest: DbtManifestIndex = DbtManifestIndex(
+        models_by_unique_id={},
+        models_by_name={},
+        models_by_package_and_name={},
     )
     plan: DbtInteropPlan = build_dbt_interop_plan(
-        command=DbtInteropCommand(test_case.command),
-        dbt_command_argv=("dbt", "test", "--select", "missing"),
-        dbt_ls_nodes=(
-            DbtLsNode(
-                unique_id="model.analytics.orders",
-                resource_type="model",
-                package_name="analytics",
-                name="orders",
-                fqn=("analytics", "orders"),
-            ),
-        ),
+        command=DbtInteropCommand.PLAN,
+        dbt_command_argv=("dbt", "ls"),
+        dbt_ls_nodes=(),
         sqlbuild_command_argvs=(),
         selection=DbtInteropSelectionResult(),
     )
-    runner: CompileOnlyDbtRunner = CompileOnlyDbtRunner()
+    invocation: SimpleNamespace = SimpleNamespace(
+        runner=runner,
+        dbt_options=DbtCliOptions(project_dir=Path("/dbt")),
+        discovered_inputs=SimpleNamespace(),
+        dbt_vars={},
+        effective_sqlbuild_args=(),
+    )
+    compiled: SimpleNamespace = SimpleNamespace(
+        adapter_name="duckdb", adapter=object(), project=object()
+    )
+    monkeypatch.setattr(plan_module, "resolve_dbt_execution_invocation", lambda request: invocation)
+    monkeypatch.setattr(
+        plan_module,
+        "load_compiled_dbt_manifest",
+        lambda **kwargs: (
+            runner.compile(
+                options=invocation.dbt_options,
+                full_refresh=cast(bool, kwargs["full_refresh"]),
+            ),
+            manifest,
+        )[1],
+    )
+    monkeypatch.setattr(plan_module, "compile_dbt_interop_project", lambda **kwargs: compiled)
+    monkeypatch.setattr(
+        plan_module,
+        "resolve_dbt_interop_plan",
+        lambda **kwargs: DbtInteropPlanResolution(
+            graph=cast(DbtCombinedGraph, object()), plan=plan
+        ),
+    )
+    monkeypatch.setattr(plan_module, "attach_sqlbuild_plan_output", lambda **kwargs: plan)
+    monkeypatch.setattr(
+        prologue_module,
+        "compile_production_ref_manifest",
+        lambda **kwargs: pytest.fail("ordinary plan compiled production_ref"),
+    )
 
-    monkeypatch.setattr(
-        prologue_module, "discover_project_inputs", lambda *, project_dir: discovered_inputs
+    result: DbtInteropPlan = plan_module.plan_dbt_interop_from_project(
+        project_dir=Path("/project"),
+        args=(),
+        dbt_runner=runner,
     )
-    monkeypatch.setattr(
-        prologue_module,
-        "resolve_dbt_plan_options",
-        lambda **kwargs: DbtCliOptions(project_dir=Path("/dbt_project")),
-    )
-    monkeypatch.setattr(
-        prologue_module, "resolve_dbt_manifest_path", lambda *, options: Path("/manifest.json")
-    )
-    monkeypatch.setattr(
-        prologue_module,
-        "load_dbt_manifest_index",
-        lambda *, manifest_path: SimpleNamespace(
-            models_by_unique_id={},
-            seeds_by_unique_id={},
-            seed_identity_warnings=(),
+
+    assert result is plan
+    assert tuple(runner.compile_full_refresh_values) == test_case.expected_full_refresh_values
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtCompileFullRefreshPipelineTestCase(
+            description="run uses current compile only",
+            command="run",
+            expected_full_refresh_values=(False,),
         ),
-    )
-    monkeypatch.setattr(
-        prologue_module, "resolve_effective_adapter_name", lambda **kwargs: "duckdb"
-    )
-    monkeypatch.setattr(
-        prologue_module, "resolve_dbt_interop_adapter", lambda *args, **kwargs: object()
-    )
-    monkeypatch.setattr(
-        prologue_module,
-        "build_compiled_project",
-        lambda **kwargs: SimpleNamespace(
-            settings=SimpleNamespace(query_change_tracking=False),
-            run_id="run",
-            effective_target_database=None,
-            effective_target_schema="main",
-            effective_target_name="dev",
-            models=(),
+        DbtCompileFullRefreshPipelineTestCase(
+            description="build uses current compile only",
+            command="build",
+            expected_full_refresh_values=(False,),
         ),
+        DbtCompileFullRefreshPipelineTestCase(
+            description="test keeps intentional full refresh current compile",
+            command="test",
+            expected_full_refresh_values=(True,),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_ordinary_execution_when_compiling_then_never_uses_production_ref_or_dbt_state(
+    test_case: DbtCompileFullRefreshPipelineTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command: DbtInteropCommand = DbtInteropCommand(test_case.command)
+    runner: CompileOnlyDbtRunner = CompileOnlyDbtRunner()
+    manifest: DbtManifestIndex = DbtManifestIndex(
+        models_by_unique_id={},
+        models_by_name={},
+        models_by_package_and_name={},
     )
-    monkeypatch.setattr(prologue_module, "build_dbt_combined_graph", lambda **kwargs: object())
-    monkeypatch.setattr(prologue_module, "plan_dbt_interop_command", lambda **kwargs: plan)
-    monkeypatch.setattr(
-        execution_phases_module, "build_dbt_model_plan_output", lambda **kwargs: None
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=command,
+        dbt_command_argv=("dbt", command.value),
+        dbt_ls_nodes=(),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+    )
+    invocation: DbtInteropInvocation = DbtInteropInvocation(
+        dbt_executable="dbt",
+        output_stream=StringIO(),
+        dbt_output_stream=StringIO(),
+        routed=DbtInteropRoutedArgs(command=command),
+        discovered_inputs=cast(DiscoveredProjectInputs, SimpleNamespace()),
+        effective_sqlbuild_args=(),
+        dbt_options=DbtCliOptions(project_dir=Path("/dbt")),
+        dbt_vars={},
+        runner=runner,
+    )
+    compiled: DbtInteropCompiledProject = DbtInteropCompiledProject(
+        adapter_name="duckdb",
+        adapter=cast(BaseAdapter, SimpleNamespace()),
+        project=cast(CompiledProject, SimpleNamespace()),
     )
     monkeypatch.setattr(
-        execution_phases_module, "build_dbt_non_model_run_unique_ids", lambda **kwargs: ()
-    )
-    monkeypatch.setattr(
-        execution_phases_module, "build_dbt_pruned_seed_unique_ids", lambda **kwargs: ()
-    )
-    monkeypatch.setattr(
-        execution_phases_module, "build_dbt_pruned_test_unique_ids", lambda **kwargs: ()
-    )
-    monkeypatch.setattr(execute_module, "build_merged_dbt_execution_argv", lambda **kwargs: None)
-    monkeypatch.setattr(
-        execution_phases_module, "build_effective_connection_config", lambda **kwargs: {}
-    )
-    monkeypatch.setattr(execution_phases_module, "resolve_connection_config", lambda **kwargs: {})
-    monkeypatch.setattr(
-        execution_phases_module,
-        "execute_dbt_commands",
-        lambda **kwargs: DbtCommandExecutionResult(returncode=0),
+        execute_module, "resolve_dbt_execution_invocation", lambda request: invocation
     )
     monkeypatch.setattr(
         execute_module,
-        "build_dbt_execution_outcome",
-        lambda **kwargs: DbtExecutionOutcome(),
+        "load_compiled_dbt_manifest",
+        lambda **kwargs: (
+            runner.compile(
+                options=invocation.dbt_options,
+                full_refresh=cast(bool, kwargs["full_refresh"]),
+            ),
+            manifest,
+        )[1],
+    )
+    monkeypatch.setattr(execute_module, "compile_dbt_interop_project", lambda **kwargs: compiled)
+    monkeypatch.setattr(
+        execute_module,
+        "resolve_dbt_interop_plan",
+        lambda **kwargs: DbtInteropPlanResolution(
+            graph=DbtCombinedGraph(nodes=frozenset(), upstream_deps={}, downstream_deps={}),
+            plan=plan,
+        ),
+    )
+    monkeypatch.setattr(execute_module, "write_dbt_execution_plan_text", lambda **kwargs: None)
+    monkeypatch.setattr(
+        execute_module,
+        "execute_dbt_without_state_tracking",
+        lambda **kwargs: DbtCommandExecutionResult(returncode=0),
+    )
+    monkeypatch.setattr(execute_module, "write_dbt_execution_summary", lambda **kwargs: None)
+    monkeypatch.setattr(
+        execute_module,
+        "resolve_sqlbuild_execution_plan_output",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(execute_module, "write_sqlbuild_skip_notice", lambda **kwargs: None)
+    monkeypatch.setattr(
+        prologue_module,
+        "compile_production_ref_manifest",
+        lambda **kwargs: pytest.fail("ordinary execution compiled production_ref"),
     )
 
-    output_stream: StringIO = StringIO()
-
-    exit_code: int = execute_module.execute_dbt_interop_from_project(
-        DbtInteropExecutionRequest(
-            command=DbtInteropCommand(test_case.command),
-            project_dir=Path("/sqlbuild_project"),
-            args=("--select", "missing"),
-            dbt_runner=runner,
-            progress_stream=output_stream,
-            dbt_stdout_stream=StringIO(),
-            use_color=False,
-        )
+    result: int = execute_module.execute_dbt_interop_from_project(
+        DbtInteropExecutionRequest(command=command, project_dir=Path("/project"), args=())
     )
 
-    assert exit_code == 0
+    assert result == 0
     assert tuple(runner.compile_full_refresh_values) == test_case.expected_full_refresh_values
-    assert "dbt reuse" not in output_stream.getvalue()
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         DbtExecutionSummaryFooterTestCase(
-            description="counts mixed dbt node statuses with errors into footer",
-            node_statuses=("ok", "success", "warn", "error", "skipped"),
-            expected_footer=(
-                "Completed with errors.\nPASS=2  WARN=1  FAIL=1  SKIP=1  TOTAL=5  (0.00s)"
-            ),
-        ),
-        DbtExecutionSummaryFooterTestCase(
-            description="reports warnings status when a node warns without failing",
-            node_statuses=("ok", "warn"),
-            expected_footer=(
-                "Completed with warnings.\nPASS=1  WARN=1  FAIL=0  SKIP=0  TOTAL=2  (0.00s)"
-            ),
-        ),
-        DbtExecutionSummaryFooterTestCase(
-            description="reports success status when all nodes pass",
-            node_statuses=("ok", "success"),
-            expected_footer="Completed successfully.\nPASS=2  WARN=0  FAIL=0  SKIP=0  TOTAL=2  (0.00s)",
-        ),
-        DbtExecutionSummaryFooterTestCase(
-            description="returns no footer when there are no dbt node results",
-            node_statuses=(),
-            expected_footer=None,
-        ),
+            description="ordinary dbt execution does not install a state write callback",
+            node_statuses=("success",),
+            expected_footer="no-state-callback",
+        )
     ],
     ids=lambda case: case.description,
 )
-def test_given_dbt_node_results_when_rendering_summary_footer_then_counts_statuses(
+def test_given_ordinary_dbt_events_when_executing_then_no_fingerprint_or_watermark_callback_is_used(
+    test_case: DbtExecutionSummaryFooterTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def execute_commands(**kwargs: object) -> DbtCommandExecutionResult:
+        observed.update(kwargs)
+        return DbtCommandExecutionResult(returncode=0)
+
+    monkeypatch.setattr(phases_module, "execute_dbt_commands", execute_commands)
+    command: DbtInteropCommand = DbtInteropCommand.RUN
+    invocation: DbtInteropInvocation = DbtInteropInvocation(
+        dbt_executable="dbt",
+        output_stream=StringIO(),
+        dbt_output_stream=StringIO(),
+        routed=DbtInteropRoutedArgs(command=command),
+        discovered_inputs=cast(DiscoveredProjectInputs, SimpleNamespace()),
+        effective_sqlbuild_args=(),
+        dbt_options=DbtCliOptions(project_dir=Path("/dbt")),
+        dbt_vars={},
+        runner=cast(object, SimpleNamespace()),
+    )
+
+    result: DbtCommandExecutionResult = phases_module.execute_dbt_without_state_tracking(
+        request=DbtInteropExecutionRequest(command=command, project_dir=Path("/project"), args=()),
+        invocation=invocation,
+        merged_dbt_argv=("dbt", "run"),
+        plan=build_dbt_interop_plan(
+            command=command,
+            dbt_command_argv=("dbt", "run"),
+            dbt_ls_nodes=(),
+            sqlbuild_command_argvs=(),
+            selection=DbtInteropSelectionResult(),
+        ),
+    )
+
+    assert result.returncode == 0
+    assert "on_node_result" not in observed
+    assert test_case.expected_footer == "no-state-callback"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionSummaryFooterTestCase(
+            description="actual dbt failure blocks only downstream SQLBuild models",
+            node_statuses=("error",),
+            expected_footer="local_orders",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_actual_dbt_failure_when_resolving_blockers_then_blocks_downstream_sqlbuild_work(
     test_case: DbtExecutionSummaryFooterTestCase,
 ) -> None:
-    node_results: tuple[DbtNodeExecutionResult, ...] = tuple(
-        DbtNodeExecutionResult(
-            unique_id=f"model.analytics.node_{index}",
-            resource_type="model",
-            node_name=f"node_{index}",
-            status=status,
-            index=index + 1,
-            total=len(test_case.node_statuses),
-            execution_time=0.0,
+    dbt_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
+        owner=DbtCombinedGraphOwner.DBT,
+        resource_type=DbtCombinedGraphResourceType.MODEL,
+        name="model.analytics.orders",
+    )
+    sqlbuild_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
+        owner=DbtCombinedGraphOwner.SQLBUILD,
+        resource_type=DbtCombinedGraphResourceType.MODEL,
+        name="local_orders",
+    )
+    graph: DbtCombinedGraph = DbtCombinedGraph(
+        nodes=frozenset((dbt_key, sqlbuild_key)),
+        upstream_deps={dbt_key: (), sqlbuild_key: (dbt_key,)},
+        downstream_deps={dbt_key: (sqlbuild_key,), sqlbuild_key: ()},
+    )
+
+    result: tuple[str, ...] = build_failed_sqlbuild_model_names(
+        graph=graph,
+        manifest=DbtManifestIndex(
+            models_by_unique_id={},
+            models_by_name={},
+            models_by_package_and_name={},
+        ),
+        node_results=(
+            DbtNodeExecutionResult(
+                unique_id=dbt_key.name,
+                resource_type="model",
+                node_name="orders",
+                status=test_case.node_statuses[0],
+                index=1,
+                total=1,
+                execution_time=0.1,
+            ),
+        ),
+    )
+
+    assert result == (test_case.expected_footer,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionSummaryFooterTestCase(
+            description="failed dbt test blocks SQLBuild models downstream of its tested model",
+            node_statuses=("fail",),
+            expected_footer="local_orders",
         )
-        for index, status in enumerate(test_case.node_statuses)
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failed_dbt_test_when_resolving_blockers_then_blocks_tested_model_downstream(
+    test_case: DbtExecutionSummaryFooterTestCase,
+) -> None:
+    dbt_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
+        owner=DbtCombinedGraphOwner.DBT,
+        resource_type=DbtCombinedGraphResourceType.MODEL,
+        name="model.analytics.orders",
+    )
+    sqlbuild_key: DbtCombinedGraphKey = DbtCombinedGraphKey(
+        owner=DbtCombinedGraphOwner.SQLBUILD,
+        resource_type=DbtCombinedGraphResourceType.MODEL,
+        name="local_orders",
+    )
+    graph: DbtCombinedGraph = DbtCombinedGraph(
+        nodes=frozenset((dbt_key, sqlbuild_key)),
+        upstream_deps={dbt_key: (), sqlbuild_key: (dbt_key,)},
+        downstream_deps={dbt_key: (sqlbuild_key,), sqlbuild_key: ()},
+    )
+    test_unique_id: str = "test.analytics.unique_orders.0123456789"
+    manifest: DbtManifestIndex = DbtManifestIndex(
+        models_by_unique_id={},
+        models_by_name={},
+        models_by_package_and_name={},
+        validation_depends_on_nodes_by_unique_id={test_unique_id: (dbt_key.name,)},
     )
 
-    footer: str | None = execute_helpers.render_dbt_execution_summary_footer(
-        node_results=node_results,
+    result: tuple[str, ...] = build_failed_sqlbuild_model_names(
+        graph=graph,
+        manifest=manifest,
+        node_results=(
+            DbtNodeExecutionResult(
+                unique_id=test_unique_id,
+                resource_type="test",
+                node_name="unique_orders",
+                status=test_case.node_statuses[0],
+                index=1,
+                total=1,
+                execution_time=0.1,
+            ),
+        ),
+    )
+
+    assert result == (test_case.expected_footer,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionSummaryFooterTestCase(
+            description="dbt native state and defer survive selector merging",
+            node_statuses=(),
+            expected_footer="state:modified",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dbt_native_state_when_building_execution_argv_then_preserves_native_options(
+    test_case: DbtExecutionSummaryFooterTestCase,
+) -> None:
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=DbtInteropCommand.BUILD,
+        dbt_command_argv=("dbt", "build"),
+        dbt_ls_nodes=(DbtLsNode(unique_id="model.analytics.orders"),),
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+        dbt_required_selector_terms=("fqn:analytics.required",),
+    )
+    options: DbtCliOptions = DbtCliOptions(
+        project_dir=Path("/dbt"),
+        state=Path("/state"),
+        defer=True,
+    )
+
+    selector: str = cast(str, test_case.expected_footer)
+    result: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.BUILD,
+        options=options,
+        routed_args=("--select", selector),
+        plan=plan,
+    )
+
+    assert result == (
+        "dbt",
+        "build",
+        "--project-dir",
+        "/dbt",
+        "--state",
+        "/state",
+        "--defer",
+        "--select",
+        selector,
+        "fqn:analytics.required",
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtArgvTestCase(
+            description="dbt test executes the exact tests selected during planning",
+            select=("fact_orders",),
+            exclude=(),
+            resource_types=("model", "test", "unit_test"),
+            expected_argv=(
+                "dbt",
+                "test",
+                "--project-dir",
+                "/dbt",
+                "--select",
+                "fqn:analytics.not_null_fact_orders_order_id",
+                "fqn:analytics.fact_orders_unit",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_planned_dbt_tests_when_building_execution_argv_then_replaces_model_selector(
+    test_case: DbtArgvTestCase,
+) -> None:
+    nodes: tuple[DbtLsNode, ...] = tuple(
+        DbtLsNode(
+            unique_id=f"{resource_type}.analytics.{name}",
+            resource_type=resource_type,
+            name=name,
+            fqn=("analytics", name),
+        )
+        for resource_type, name in zip(
+            test_case.resource_types,
+            ("fact_orders", "not_null_fact_orders_order_id", "fact_orders_unit"),
+            strict=True,
+        )
+    )
+    plan: DbtInteropPlan = build_dbt_interop_plan(
+        command=DbtInteropCommand.TEST,
+        dbt_command_argv=("dbt", "ls"),
+        dbt_ls_nodes=nodes,
+        sqlbuild_command_argvs=(),
+        selection=DbtInteropSelectionResult(),
+    )
+
+    result: tuple[str, ...] | None = build_merged_dbt_execution_argv(
+        command=DbtInteropCommand.TEST,
+        options=DbtCliOptions(project_dir=Path("/dbt")),
+        routed_args=("--select", *test_case.select),
+        plan=plan,
+    )
+
+    assert result == test_case.expected_argv
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtExecutionSelectionStatusTestCase(
+            description="planned dbt tests bypass execution-time selection",
+            expected_total=1,
+            expected_output_fragment="dbt execution",
+            expected_completion_fragment="Resolving dbt execution selection",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_planned_dbt_tests_when_executing_then_does_not_resolve_selection_again(
+    test_case: DbtExecutionSelectionStatusTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class NoSelectionRunner:
+        def invoke(self, **kwargs: object) -> object:
+            pytest.fail(f"unexpected execution-time dbt selection: {kwargs}")
+
+    planned_node: DbtLsNode = DbtLsNode(
+        unique_id="test.analytics.not_null_fact_orders_order_id",
+        resource_type="test",
+        name="not_null_fact_orders_order_id",
+    )
+    streamed_results: tuple[DbtNodeExecutionResult, ...] = (
+        DbtNodeExecutionResult(
+            unique_id=planned_node.unique_id,
+            resource_type="test",
+            node_name="not_null_fact_orders_order_id",
+            status="pass",
+            index=1,
+            total=1,
+            execution_time=0.1,
+        ),
+        DbtNodeExecutionResult(
+            unique_id="model.analytics.fact_orders",
+            resource_type="model",
+            node_name="fact_orders",
+            status="success",
+            index=2,
+            total=2,
+            execution_time=0.1,
+        ),
+    )
+    monkeypatch.setattr(
+        dbt_execute_module,
+        "execute_dbt_json_event_stream",
+        lambda **kwargs: (0, streamed_results),
+    )
+    progress_stream: StringIO = StringIO()
+
+    result: DbtCommandExecutionResult = dbt_execute_module.execute_dbt_commands(
+        runner=cast(DbtRunner, NoSelectionRunner()),
+        options=DbtCliOptions(project_dir=Path("/dbt")),
+        merged_argv=("dbt", "test", "--select", planned_node.unique_id),
+        progress_stream=progress_stream,
+        stdout_stream=StringIO(),
         use_color=False,
+        expected_nodes=(planned_node,),
     )
 
-    assert footer == test_case.expected_footer
+    assert len(result.node_results) == test_case.expected_total
+    assert result.node_results[0].unique_id == planned_node.unique_id
+    assert test_case.expected_output_fragment in progress_stream.getvalue()
+    assert test_case.expected_completion_fragment not in progress_stream.getvalue()

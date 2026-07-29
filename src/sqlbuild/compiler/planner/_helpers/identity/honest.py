@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner._helpers.identity.hashing import (
     compose_native_graph_identity,
     graph_key_for_compiled_resource,
 )
-from sqlbuild.compiler.planner.main.identity.graph_write_identity import (
+from sqlbuild.compiler.planner.main.identity._graph_write_identity import (
     build_graph_write_identity_hashes,
 )
 from sqlbuild.compiler.planner.models import (

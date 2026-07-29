@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.integrations.dbt.constants import (
-    DBT_DEFINITION_FINGERPRINT_EXCLUDED_CONFIG_KEYS,
     DBT_MANIFEST_CONFIG_KEY,
     DBT_MANIFEST_MATERIALIZED_KEY,
 )
@@ -23,23 +20,9 @@ from sqlbuild.integrations.dbt.models import (
 )
 from sqlbuild.integrations.dbt.types import DbtSupportedResourceType
 
-_DBT_CONFIG_CALL_CLOSE: str = ")"
-_DBT_CONFIG_CALL_OPEN: str = "("
 _INDEXED_NODE_RESOURCE_TYPES: frozenset[DbtSupportedResourceType] = frozenset(
     {DbtSupportedResourceType.MODEL, DbtSupportedResourceType.SNAPSHOT}
 )
-_DBT_RAW_CODE_KEYS: tuple[str, ...] = ("raw_code", "raw_sql")
-_DBT_DEPENDS_ON_KEY: str = "depends_on"
-_DBT_DEPENDS_ON_MACROS_KEY: str = "macros"
-_DBT_MACRO_SQL_KEY: str = "macro_sql"
-_DBT_USER_MACRO_PREFIX: str = "macro."
-_SQLBUILD_SEED_CONTENT_HASH_KEY: str = "sqlbuild_seed_content_hash"
-
-
-@dataclass(frozen=True)
-class _MacroIndex:
-    macro_sql_by_id: dict[str, str]
-    macro_deps_by_id: dict[str, tuple[str, ...]]
 
 
 def load_dbt_manifest_index(*, manifest_path: Path) -> DbtManifestIndex:
@@ -75,14 +58,18 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         raw_sources = {}
     if not isinstance(raw_sources, dict):
         raise CompileInputError("Invalid dbt manifest: sources must be an object", code="C211")
+    raw_unit_tests: object | None = manifest_data.get("unit_tests")
+    if raw_unit_tests is None:
+        raw_unit_tests = {}
+    if not isinstance(raw_unit_tests, dict):
+        raise CompileInputError("Invalid dbt manifest: unit_tests must be an object", code="C211")
 
-    macro_index: _MacroIndex = _build_macro_index(raw_macros=manifest_data.get("macros"))
     models_by_unique_id: dict[str, DbtManifestModel] = {}
     models_by_name_lists: dict[str, list[DbtManifestModel]] = {}
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel] = {}
     sources_by_unique_id: dict[str, DbtManifestSource] = {}
     seeds_by_unique_id: dict[str, DbtManifestSeed] = {}
-    seed_identity_warnings: list[str] = []
+    validation_depends_on_nodes_by_unique_id: dict[str, tuple[str, ...]] = {}
     unique_id: object
     raw_node: object
     for unique_id, raw_node in raw_nodes.items():
@@ -91,18 +78,32 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         node_data: dict[object, object] = cast(dict[object, object], raw_node)
         resource_type: object = node_data.get("resource_type")
         if resource_type in _INDEXED_NODE_RESOURCE_TYPES:
-            model: DbtManifestModel = _parse_model(
-                unique_id=unique_id, raw_node=node_data, macro_index=macro_index
-            )
+            model: DbtManifestModel = _parse_model(unique_id=unique_id, raw_node=node_data)
             models_by_unique_id[model.unique_id] = model
             models_by_name_lists.setdefault(model.name, []).append(model)
             models_by_package_and_name[(model.package_name, model.name)] = model
             continue
         if resource_type == DbtSupportedResourceType.SEED:
-            seed: DbtManifestSeed = _parse_seed(
-                unique_id=unique_id, raw_node=node_data, warnings=seed_identity_warnings
-            )
+            seed: DbtManifestSeed = _parse_seed(unique_id=unique_id, raw_node=node_data)
             seeds_by_unique_id[seed.unique_id] = seed
+            continue
+    raw_validation_nodes: dict[object, object]
+    for raw_validation_nodes in (
+        cast(dict[object, object], raw_nodes),
+        cast(dict[object, object], raw_unit_tests),
+    ):
+        for unique_id, raw_node in raw_validation_nodes.items():
+            if not isinstance(unique_id, str) or not isinstance(raw_node, dict):
+                continue
+            node_data = cast(dict[object, object], raw_node)
+            if node_data.get("resource_type") not in (
+                DbtSupportedResourceType.TEST,
+                DbtSupportedResourceType.UNIT_TEST,
+            ):
+                continue
+            validation_depends_on_nodes_by_unique_id[unique_id] = _parse_depends_on_nodes(
+                node_data.get("depends_on")
+            )
 
     for unique_id, raw_node in raw_sources.items():
         if not isinstance(unique_id, str) or not isinstance(raw_node, dict):
@@ -119,30 +120,8 @@ def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex:
         models_by_package_and_name=models_by_package_and_name,
         sources_by_unique_id=sources_by_unique_id,
         seeds_by_unique_id=seeds_by_unique_id,
-        seed_identity_warnings=tuple(seed_identity_warnings),
+        validation_depends_on_nodes_by_unique_id=validation_depends_on_nodes_by_unique_id,
     )
-
-
-def precompute_dbt_manifest_seed_content_hashes(*, raw_data: object) -> object:
-    """Return manifest JSON data with seed content hashes embedded while files exist."""
-
-    if not isinstance(raw_data, dict):
-        return raw_data
-    manifest_data: dict[str, object] = cast(dict[str, object], raw_data)
-    raw_nodes: object | None = manifest_data.get("nodes")
-    if not isinstance(raw_nodes, dict):
-        return raw_data
-    raw_node: object
-    for raw_node in raw_nodes.values():
-        if not isinstance(raw_node, dict):
-            continue
-        node_data: dict[object, object] = cast(dict[object, object], raw_node)
-        if node_data.get("resource_type") != DbtSupportedResourceType.SEED:
-            continue
-        content_hash: str | None = _read_seed_content_hash(raw_node=node_data)
-        if content_hash is not None:
-            node_data[_SQLBUILD_SEED_CONTENT_HASH_KEY] = content_hash
-    return raw_data
 
 
 def resolve_dbt_manifest_model(
@@ -200,9 +179,7 @@ def dbt_manifest_model_materialization(*, model: DbtManifestModel) -> str | None
     return materialized.strip().lower()
 
 
-def _parse_model(
-    *, unique_id: str, raw_node: dict[object, object], macro_index: _MacroIndex
-) -> DbtManifestModel:
+def _parse_model(*, unique_id: str, raw_node: dict[object, object]) -> DbtManifestModel:
     package_name: str = _required_str(value=raw_node.get("package_name"), field_name="package_name")
     name: str = _required_str(value=raw_node.get("name"), field_name="name")
     database: str | None = _optional_str(raw_node.get("database"))
@@ -223,9 +200,6 @@ def _parse_model(
         relation_name=relation_name,
         fqn=_parse_fqn(raw_node.get("fqn")),
         query_sql=_model_query_sql(raw_node=raw_node),
-        definition_fingerprint=_model_definition_fingerprint(
-            raw_node=raw_node, macro_index=macro_index
-        ),
         depends_on_nodes=depends_on_nodes,
         payload={str(key): value for key, value in raw_node.items()},
     )
@@ -245,7 +219,6 @@ def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManif
             schema=schema,
             name=identifier or name,
         )
-    freshness: dict[str, object] | None = _optional_dict(raw_node.get("freshness"))
     return DbtManifestSource(
         unique_id=unique_id,
         package_name=package_name,
@@ -255,17 +228,11 @@ def _parse_source(*, unique_id: str, raw_node: dict[object, object]) -> DbtManif
         schema=schema,
         identifier=identifier,
         relation_name=relation_name,
-        loaded_at_field=_optional_str(raw_node.get("loaded_at_field")),
-        loaded_at_query=_optional_str(raw_node.get("loaded_at_query")),
-        freshness=freshness,
-        freshness_filter=_source_freshness_filter(raw_node=raw_node, freshness=freshness),
         payload={str(key): value for key, value in raw_node.items()},
     )
 
 
-def _parse_seed(
-    *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
-) -> DbtManifestSeed:
+def _parse_seed(*, unique_id: str, raw_node: dict[object, object]) -> DbtManifestSeed:
     package_name: str = _required_str(value=raw_node.get("package_name"), field_name="package_name")
     name: str = _required_str(value=raw_node.get("name"), field_name="name")
     database: str | None = _optional_str(raw_node.get("database"))
@@ -282,94 +249,8 @@ def _parse_seed(
         schema=schema,
         alias=alias,
         relation_name=relation_name,
-        identity_hash=_seed_identity_hash(
-            unique_id=unique_id, raw_node=raw_node, warnings=warnings
-        ),
         payload={str(key): value for key, value in raw_node.items()},
     )
-
-
-def _seed_identity_hash(
-    *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
-) -> str | None:
-    checksum: str | None = _parse_checksum(raw_node.get("checksum"))
-    config: object = raw_node.get(DBT_MANIFEST_CONFIG_KEY)
-    config_mapping: dict[str, object] = (
-        cast(dict[str, object], config) if isinstance(config, dict) else {}
-    )
-    content_hash, warnings = _seed_content_hash(
-        unique_id=unique_id, raw_node=raw_node, warnings=warnings
-    )
-    identity: dict[str, object] = {
-        "checksum": checksum,
-        "config": _normalize_json_value(config_mapping),
-        "content": content_hash,
-    }
-    payload: str = json.dumps(identity, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def _seed_content_hash(
-    *, unique_id: str, raw_node: dict[object, object], warnings: list[str]
-) -> tuple[str | None, list[str]]:
-    precomputed: str | None = _optional_str(raw_node.get(_SQLBUILD_SEED_CONTENT_HASH_KEY))
-    if precomputed is not None:
-        return precomputed, warnings
-    content_hash: str | None = _read_seed_content_hash(raw_node=raw_node)
-    if content_hash is not None:
-        return content_hash, warnings
-    root_path: str | None = _optional_str(raw_node.get("root_path"))
-    relative_path: str | None = _optional_str(raw_node.get("original_file_path"))
-    if root_path is None or relative_path is None:
-        warnings.append(
-            f"seed '{unique_id}': missing manifest path; independent content change "
-            "detection is inactive (relying on dbt checksum only)"
-        )
-        return None, warnings
-    seed_file: Path = Path(root_path) / relative_path
-    try:
-        seed_file.read_text(encoding="utf-8-sig")
-    except (OSError, ValueError) as exc:
-        warnings.append(
-            f"seed '{unique_id}': could not read seed file ({exc}); independent content "
-            "change detection is inactive (relying on dbt checksum only)"
-        )
-    return None, warnings
-
-
-def _read_seed_content_hash(*, raw_node: dict[object, object]) -> str | None:
-    root_path: str | None = _optional_str(raw_node.get("root_path"))
-    relative_path: str | None = _optional_str(raw_node.get("original_file_path"))
-    if root_path is None or relative_path is None:
-        return None
-    seed_file: Path = Path(root_path) / relative_path
-    try:
-        text: str = seed_file.read_text(encoding="utf-8-sig")
-    except (OSError, ValueError):
-        return None
-    normalized: str = text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-
-
-def _normalize_json_value(value: object) -> object:
-    if isinstance(value, dict):
-        mapping: dict[object, object] = cast(dict[object, object], value)
-        return {str(k): _normalize_json_value(mapping[k]) for k in sorted(mapping, key=str)}
-    if isinstance(value, list):
-        items: list[object] = cast(list[object], value)
-        return [_normalize_json_value(item) for item in items]
-    return value
-
-
-def _source_freshness_filter(
-    *, raw_node: dict[object, object], freshness: dict[str, object] | None
-) -> str | None:
-    filter_value: str | None = _optional_str(raw_node.get("filter"))
-    if filter_value is not None:
-        return filter_value
-    if freshness is None:
-        return None
-    return _optional_str(freshness.get("filter"))
 
 
 def _render_relation_name(*, database: str | None, schema: str | None, name: str) -> str:
@@ -387,155 +268,6 @@ def _model_query_sql(*, raw_node: dict[object, object]) -> str:
     )
 
 
-def _build_macro_index(*, raw_macros: object) -> _MacroIndex:
-    macro_sql_by_id: dict[str, str] = {}
-    macro_deps_by_id: dict[str, tuple[str, ...]] = {}
-    if not isinstance(raw_macros, dict):
-        return _MacroIndex(macro_sql_by_id={}, macro_deps_by_id={})
-    macros: dict[object, object] = cast(dict[object, object], raw_macros)
-    macro_id: object
-    macro_node: object
-    for macro_id, macro_node in macros.items():
-        if not isinstance(macro_id, str) or not isinstance(macro_node, dict):
-            continue
-        node: dict[object, object] = cast(dict[object, object], macro_node)
-        macro_sql_by_id[macro_id] = _optional_str(node.get(_DBT_MACRO_SQL_KEY)) or ""
-        macro_deps_by_id[macro_id] = _parse_macro_dependencies(node.get(_DBT_DEPENDS_ON_KEY))
-    return _MacroIndex(macro_sql_by_id=macro_sql_by_id, macro_deps_by_id=macro_deps_by_id)
-
-
-def _parse_macro_dependencies(value: object) -> tuple[str, ...]:
-    if not isinstance(value, dict):
-        return ()
-    depends_on: dict[object, object] = cast(dict[object, object], value)
-    raw_macros: object | None = depends_on.get(_DBT_DEPENDS_ON_MACROS_KEY)
-    if not isinstance(raw_macros, list):
-        return ()
-    return tuple(macro for macro in raw_macros if isinstance(macro, str) and macro)
-
-
-def _transitive_macro_ids(
-    *, direct_macro_ids: tuple[str, ...], macro_index: _MacroIndex
-) -> set[str]:
-    resolved: set[str] = set()
-    pending: list[str] = list(direct_macro_ids)
-    while pending:
-        macro_id: str = pending.pop()
-        if macro_id in resolved:
-            continue
-        resolved.add(macro_id)
-        pending.extend(macro_index.macro_deps_by_id.get(macro_id, ()))
-    return resolved
-
-
-def _strip_config_block(raw_code: str) -> str:
-    """Return raw_code with leading config blocks and snapshot wrappers removed."""
-
-    body: str = raw_code
-    if _find_jinja_statement(text=body, keyword="snapshot") is not None:
-        body = _remove_jinja_statement(text=body, keyword="snapshot")
-        body = _remove_jinja_statement(text=body, keyword="endsnapshot")
-    body = _remove_config_call(body)
-    return body.strip()
-
-
-def _find_jinja_statement(*, text: str, keyword: str) -> int | None:
-    marker: str = "{%"
-    index: int = 0
-    while True:
-        start: int = text.find(marker, index)
-        if start == -1:
-            return None
-        end: int = text.find("%}", start)
-        if end == -1:
-            return None
-        if text[start + len(marker) : end].strip().split(" ")[0] == keyword:
-            return start
-        index = end + 2
-
-
-def _remove_jinja_statement(*, text: str, keyword: str) -> str:
-    start: int | None = _find_jinja_statement(text=text, keyword=keyword)
-    if start is None:
-        return text
-    end: int = text.find("%}", start)
-    return text[:start] + text[end + 2 :]
-
-
-def _remove_config_call(text: str) -> str:
-    marker: str = "{{"
-    index: int = 0
-    while True:
-        start: int = text.find(marker, index)
-        if start == -1:
-            return text
-        inner_start: int = start + len(marker)
-        call_index: int = _skip_whitespace(text=text, index=inner_start)
-        if text[call_index:].startswith("config"):
-            close: int | None = _find_config_expression_close(text=text, config_index=call_index)
-            if close is None:
-                return text
-            return text[:start] + text[close:]
-        index = start + len(marker)
-
-
-def _find_config_expression_close(*, text: str, config_index: int) -> int | None:
-    """Return the index past the config block's closing braces, skipping nested braces."""
-
-    paren_open: int = text.find("(", config_index)
-    if paren_open == -1:
-        return None
-    depth: int = 0
-    cursor: int = paren_open
-    while cursor < len(text):
-        char: str = text[cursor]
-        if char == _DBT_CONFIG_CALL_OPEN:
-            depth += 1
-        elif char == _DBT_CONFIG_CALL_CLOSE:
-            depth -= 1
-            if depth == 0:
-                close: int = text.find("}}", cursor)
-                return close + 2 if close != -1 else None
-        cursor += 1
-    return None
-
-
-def _skip_whitespace(*, text: str, index: int) -> int:
-    while index < len(text) and text[index].isspace():
-        index += 1
-    return index
-
-
-def _model_definition_fingerprint(
-    *, raw_node: dict[object, object], macro_index: _MacroIndex
-) -> str:
-    raw_code: str = ""
-    for key in _DBT_RAW_CODE_KEYS:
-        raw_code = _optional_str(raw_node.get(key)) or raw_code
-        if raw_code:
-            break
-    body: str = _strip_config_block(raw_code)
-    config: object | None = raw_node.get(DBT_MANIFEST_CONFIG_KEY)
-    config_mapping: dict[object, object] = (
-        cast(dict[object, object], config) if isinstance(config, dict) else {}
-    )
-    config_parts: list[str] = [
-        f"{key}={json.dumps(value, sort_keys=True, default=str)}"
-        for key, value in sorted(config_mapping.items(), key=lambda item: str(item[0]))
-        if str(key) not in DBT_DEFINITION_FINGERPRINT_EXCLUDED_CONFIG_KEYS
-    ]
-    direct_macro_ids: tuple[str, ...] = _parse_macro_dependencies(raw_node.get(_DBT_DEPENDS_ON_KEY))
-    macro_ids: set[str] = _transitive_macro_ids(
-        direct_macro_ids=direct_macro_ids, macro_index=macro_index
-    )
-    macro_parts: list[str] = [
-        hashlib.sha256(macro_index.macro_sql_by_id.get(macro_id, "").encode("utf-8")).hexdigest()
-        for macro_id in sorted(macro_ids)
-        if macro_id.startswith(_DBT_USER_MACRO_PREFIX)
-    ]
-    return "\n".join((body, *config_parts, *macro_parts))
-
-
 def _required_str(*, value: object, field_name: str) -> str:
     if isinstance(value, str) and value:
         return value
@@ -545,12 +277,6 @@ def _required_str(*, value: object, field_name: str) -> str:
 def _optional_str(value: object) -> str | None:
     if isinstance(value, str) and value:
         return value
-    return None
-
-
-def _optional_dict(value: object) -> dict[str, object] | None:
-    if isinstance(value, dict):
-        return {str(key): item for key, item in value.items()}
     return None
 
 

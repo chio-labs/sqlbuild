@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.node_source_watermarks.main.build_report import (
+from sqlbuild.compiler.node_source_watermarks.main._build_report import (
     build_node_source_watermark_staleness_report,
 )
-from sqlbuild.compiler.node_source_watermarks.main.render_report import (
+from sqlbuild.compiler.node_source_watermarks.main._render_report import (
     format_node_source_watermark_staleness_report,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (
